@@ -1,0 +1,28 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function hasRole(roleName) {
+      return signedIn() && request.auth.token.role == roleName;
+    }
+
+    function isStaff() {
+      return hasRole('owner') || hasRole('supervisor') || hasRole('pendamping');
+    }
+
+    // PPKS records contain sensitive personal and health-related information.
+    // Default-deny access until a trusted administrator assigns custom claims.
+    match /ppks/{recordId} {
+      allow read: if isStaff();
+      allow create, update, delete: if hasRole('owner') || hasRole('supervisor');
+    }
+
+    // Deny all collections unless a collection-specific policy is added.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
