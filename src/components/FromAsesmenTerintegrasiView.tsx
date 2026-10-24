@@ -84,14 +84,8 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
   // Photos state
   const [fotoDiri, setFotoDiri] = useState<string>(ppksList[0]?.fotoDiri || '');
   const [fotoKtp, setFotoKtp] = useState<string>(ppksList[0]?.fotoKtp || '');
-  const [fotoKk, setFotoKk] = useState<string>(
-    ppksList[0]?.fotoKk ||
-      'https://images.unsplash.com/photo-1450133064473-71024230f91b?auto=format&fit=crop&w=600&q=80'
-  );
-  const [fotoRumah, setFotoRumah] = useState<string>(
-    ppksList[0]?.fotoRumah ||
-      'https://images.unsplash.com/photo-1518780664697-55e3ad937233?auto=format&fit=crop&w=600&q=80'
-  );
+  const [fotoKk, setFotoKk] = useState<string>(ppksList[0]?.fotoKk || '');
+  const [fotoRumah, setFotoRumah] = useState<string>(ppksList[0]?.fotoRumah || '');
 
   const [activeSheetTab, setActiveSheetTab] = useState<number>(1);
   const [saveSuccess, setSaveSuccess] = useState<boolean>(false);
@@ -110,20 +104,14 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
       });
       setFotoDiri(target.fotoDiri);
       setFotoKtp(target.fotoKtp);
-      setFotoKk(
-        target.fotoKk ||
-          'https://images.unsplash.com/photo-1450133064473-71024230f91b?auto=format&fit=crop&w=600&q=80'
-      );
-      setFotoRumah(
-        target.fotoRumah ||
-          'https://images.unsplash.com/photo-1518780664697-55e3ad937233?auto=format&fit=crop&w=600&q=80'
-      );
+      setFotoKk(target.fotoKk || '');
+      setFotoRumah(target.fotoRumah || '');
     }
   };
 
   // Tombol Kosongkan Form (di tengah)
   const handleResetForm = () => {
-    if (window.confirm('Kosongkan semua isian form 6 lembar untuk asesmen baru?')) {
+    if (window.confirm('Kosongkan semua isian formulir asesmen untuk responden ini?')) {
       setFormData({
         ...defaultEmptyForm,
         nomorRegistrasi: `REG-MANUAL-${Date.now().toString().slice(-4)}`,
@@ -205,13 +193,21 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
               ))}
             </select>
           </div>
+          {currentPPKS && (
+            <div className="mt-3 grid grid-cols-2 md:grid-cols-4 gap-2 rounded-xl border border-sky-400/25 bg-sky-950/20 p-3 text-xs">
+              <div><span className="block text-[10px] uppercase tracking-wide text-sky-200">Nama PPKS</span><strong className="block break-words text-white">{currentPPKS.namaLengkap || '-'}</strong></div>
+              <div><span className="block text-[10px] uppercase tracking-wide text-sky-200">NIK</span><strong className="block break-words text-white">{currentPPKS.nik || '-'}</strong></div>
+              <div><span className="block text-[10px] uppercase tracking-wide text-sky-200">Nomor HP/WA</span><strong className="block break-words text-white">{currentPPKS.noHpWa || '-'}</strong></div>
+              <div><span className="block text-[10px] uppercase tracking-wide text-sky-200">Kabupaten/Kota</span><strong className="block break-words text-white">{currentPPKS.kotaDomisili || '-'}</strong></div>
+            </div>
+          )}
         </div>
 
         {/* Ketika user memilih salah satu nama ppks, pada halaman akan muncul foto dengan urutan:
             Foto Diri       ->>          Foto KTP
             Foto KK        ->>          Foto Rumah Tampak Depan */}
-        <div className="mb-6 p-5 rounded-2xl bg-black/50 border border-rose-500/35">
-          <div className="flex items-center justify-between mb-4 border-b border-rose-500/20 pb-2">
+        <div className="mb-4 p-3 md:p-4 rounded-xl bg-black/50 border border-rose-500/35">
+          <div className="flex items-center justify-between mb-3 border-b border-rose-500/20 pb-2">
             <h4 className="text-xs md:text-sm font-bold text-sky-200 uppercase tracking-wider flex items-center gap-2">
               <ImageIcon className="w-4 h-4 text-sky-300" />
               <span>Lampiran Berkas Foto Responden (Urutan Wajib)</span>
@@ -221,18 +217,18 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
             </span>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 gap-2 md:gap-3">
             {/* 1. Foto Diri */}
-            <div className="flex flex-col items-center p-3 rounded-xl bg-black/60 border border-emerald-500/30">
+            <div className="flex min-w-0 flex-col items-center p-2 rounded-lg bg-black/60 border border-emerald-500/30">
               <span className="text-xs font-bold text-emerald-300 mb-2">1. Foto Diri</span>
-              <div className="w-full aspect-3/4 rounded-lg overflow-hidden border border-rose-500/30 bg-black">
+              <div className="w-full aspect-[4/3] rounded-md overflow-hidden border border-rose-500/30 bg-black">
                 <img
                   src={fotoDiri}
                   alt="Foto Diri"
-                  className="w-full h-full object-cover"
+                  className="w-full h-full object-contain"
                 />
               </div>
-              <label className="mt-2 text-[10px] text-sky-300 hover:underline cursor-pointer flex items-center gap-1">
+              <label className="mt-1.5 text-[9px] md:text-[10px] text-sky-300 hover:underline cursor-pointer flex items-center gap-1">
                 <Upload className="w-3 h-3" />
                 <span>Ganti Foto Diri</span>
                 <input
@@ -804,6 +800,7 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
                   <label className="flex items-center gap-2 cursor-pointer">
                     <input
                       type="checkbox"
+                      style={{ accentColor: "#000000", width: "1.2rem", height: "1.2rem", border: "2px solid #000" }}
                       checked={formData.rekomendasiBantuanNutrisi}
                       onChange={(e) =>
                         handleFieldChange('rekomendasiBantuanNutrisi', e.target.checked)
@@ -816,6 +813,7 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
                   <label className="flex items-center gap-2 cursor-pointer">
                     <input
                       type="checkbox"
+                      style={{ accentColor: "#000000", width: "1.2rem", height: "1.2rem", border: "2px solid #000" }}
                       checked={formData.rekomendasiBantuanModalUsaha}
                       onChange={(e) =>
                         handleFieldChange('rekomendasiBantuanModalUsaha', e.target.checked)
@@ -828,6 +826,7 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
                   <label className="flex items-center gap-2 cursor-pointer">
                     <input
                       type="checkbox"
+                      style={{ accentColor: "#000000", width: "1.2rem", height: "1.2rem", border: "2px solid #000" }}
                       checked={formData.rekomendasiBantuanMedisTransport}
                       onChange={(e) =>
                         handleFieldChange('rekomendasiBantuanMedisTransport', e.target.checked)
@@ -840,6 +839,7 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
                   <label className="flex items-center gap-2 cursor-pointer">
                     <input
                       type="checkbox"
+                      style={{ accentColor: "#000000", width: "1.2rem", height: "1.2rem", border: "2px solid #000" }}
                       checked={formData.rekomendasiRujukanRehabilitasi}
                       onChange={(e) =>
                         handleFieldChange('rekomendasiRujukanRehabilitasi', e.target.checked)
