@@ -123,10 +123,7 @@ export default function App() {
   // If not logged in, render Part 1: Landing Page / Login
   if (!isAuthenticated) {
     return (
-      <LoginPage
-        onLogin={handleLogin}
-        defaultUserName={currentUserName}
-      />
+      <LoginPage onLogin={handleLogin} />
     );
   }
 
