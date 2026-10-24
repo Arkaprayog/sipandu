@@ -13,7 +13,7 @@ import { EditProfileModal } from './components/EditProfileModal';
 import { SettingsModal } from './components/SettingsModal';
 import { NotificationsModal } from './components/NotificationsModal';
 import { GoogleWorkspaceModal } from './components/GoogleWorkspaceModal';
-import { onAuthStateChanged, signOut } from 'firebase/auth';
+import { onAuthStateChanged, signOut, getIdTokenResult } from 'firebase/auth';
 import { auth } from './lib/firebase';
 
 export default function App() {
@@ -21,12 +21,42 @@ export default function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [authReady, setAuthReady] = useState(false);
   const [currentUserName, setCurrentUserName] = useState('');
+  const [currentUserRole, setCurrentUserRole] = useState('');
+  const [authError, setAuthError] = useState('');
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      setIsAuthenticated(Boolean(user));
-      setCurrentUserName(user?.displayName || user?.email || '');
-      setAuthReady(true);
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      setAuthReady(false);
+      setAuthError('');
+      if (!user) {
+        setIsAuthenticated(false);
+        setCurrentUserName('');
+        setCurrentUserRole('');
+        setAuthReady(true);
+        return;
+      }
+      try {
+        const token = await getIdTokenResult(user, true);
+        const role = token.claims.role;
+        if (role !== 'owner' && role !== 'supervisor' && role !== 'pendamping') {
+          setIsAuthenticated(false);
+          setCurrentUserRole('');
+          setAuthError('Akun berhasil dikenali, tetapi peran resmi belum ditetapkan. Hubungi administrator SIPANDU.');
+          await signOut(auth);
+        } else {
+          setIsAuthenticated(true);
+          setCurrentUserRole(role);
+          setCurrentUserName(user.displayName || user.email || '');
+        }
+      } catch (error) {
+        console.error('Gagal memverifikasi peran SIPANDU:', error);
+        setIsAuthenticated(false);
+        setCurrentUserRole('');
+        setAuthError('Sesi tidak dapat diverifikasi. Silakan masuk kembali atau hubungi administrator.');
+        await signOut(auth);
+      } finally {
+        setAuthReady(true);
+      }
     });
     return unsubscribe;
   }, []);
@@ -123,7 +153,10 @@ export default function App() {
   // If not logged in, render Part 1: Landing Page / Login
   if (!isAuthenticated) {
     return (
-      <LoginPage onLogin={handleLogin} />
+      <>
+        {authError && <div role="alert" className="fixed top-3 left-3 right-3 z-50 mx-auto max-w-lg rounded-lg border border-amber-500/50 bg-amber-950/95 p-3 text-sm text-amber-100">{authError}</div>}
+        <LoginPage onLogin={handleLogin} />
+      </>
     );
   }
 
