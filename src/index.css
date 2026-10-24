@@ -1,0 +1,60 @@
+@import "tailwindcss";
+
+@layer base {
+  body {
+    font-family: 'Plus Jakarta Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+  }
+}
+
+/* Custom glow & frame effects matching Kemensos ODHIV visual identity */
+.frame-silhouette {
+  border: 1px solid rgba(244, 63, 94, 0.35);
+  box-shadow: 0 0 18px -4px rgba(225, 29, 72, 0.18), inset 0 0 12px -6px rgba(244, 63, 94, 0.12);
+}
+
+.frame-silhouette-lg {
+  border: 1.5px solid rgba(244, 63, 94, 0.42);
+  box-shadow: 0 0 24px -4px rgba(225, 29, 72, 0.22), inset 0 0 16px -6px rgba(244, 63, 94, 0.15);
+}
+
+.frame-silhouette-subtle {
+  border: 1px solid rgba(244, 63, 94, 0.22);
+  box-shadow: 0 0 12px -4px rgba(225, 29, 72, 0.10);
+}
+
+/* Print styling for 12-page integrated assessment export */
+@media print {
+  body {
+    background-color: #ffffff !important;
+    color: #111827 !important;
+  }
+
+  /* Hide app dashboard header, bottom navigation bar, buttons */
+  .no-print, nav, header, footer, button, .app-nav-bar, .app-header {
+    display: none !important;
+  }
+
+  .print-only {
+    display: block !important;
+  }
+
+  .page-break {
+    page-break-after: always;
+    break-after: page;
+  }
+
+  .print-container {
+    padding: 0 !important;
+    margin: 0 !important;
+    max-width: 100% !important;
+    background: #ffffff !important;
+    color: #111827 !important;
+  }
+
+  .print-card {
+    border: 1px solid #d1d5db !important;
+    box-shadow: none !important;
+    background: #ffffff !important;
+    color: #111827 !important;
+  }
+}
