@@ -162,6 +162,35 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
 
   return (
     <div className="space-y-6 pb-28 text-white">
+      {/* PDF RESMI — From Asesmen Terintegrasi */}
+      <section className="rounded-2xl border border-sky-400/35 bg-black/45 p-3 md:p-5 text-white">
+        <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h3 className="text-sm md:text-base font-bold">PDF Resmi From Asesmen Terintegrasi</h3>
+            <p className="mt-1 text-xs text-neutral-300">Dokumen sumber resmi ditampilkan langsung di menu Asesmen.</p>
+          </div>
+          <a
+            href={`${import.meta.env.BASE_URL}uploads/From%20Asesmen%20Terintegrasi.pdf`}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center justify-center rounded-lg border border-sky-300/40 bg-sky-900/50 px-3 py-2 text-xs font-bold text-sky-100 hover:bg-sky-800"
+          >
+            Buka PDF di tab baru
+          </a>
+        </div>
+        <div className="overflow-hidden rounded-xl border border-white/20 bg-white">
+          <iframe
+            title="PDF resmi From Asesmen Terintegrasi"
+            src={`${import.meta.env.BASE_URL}uploads/From%20Asesmen%20Terintegrasi.pdf`}
+            className="h-[65vh] min-h-[480px] w-full"
+            loading="lazy"
+          />
+        </div>
+        <p className="mt-2 text-[11px] text-neutral-400">
+          Jika pratinjau tidak didukung browser, gunakan tombol “Buka PDF di tab baru”.
+        </p>
+      </section>
+
       {/* Bingkai Judul: From Asesmen Terintegrasi */}
       <div className="p-5 md:p-6 rounded-2xl bg-black/40 border border-rose-500/40 shadow-[0_0_24px_rgba(244,63,94,0.18)]">
         {/* Judul From Asesmen Terintegrasi */}
