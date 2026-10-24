@@ -1,0 +1,11 @@
+{
+  "name": "sipandu-admin-tools",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "set-role": "node set-user-role.mjs"
+  },
+  "dependencies": {
+    "firebase-admin": "^13.0.0"
+  }
+}
