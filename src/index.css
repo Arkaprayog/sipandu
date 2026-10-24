@@ -24,9 +24,32 @@
 
 /* Print styling for 12-page integrated assessment export */
 @media print {
+  @page { size: A4 portrait; margin: 12mm; }
+
   body {
     background-color: #ffffff !important;
     color: #111827 !important;
+  }
+
+  /* Cetak hanya isi pratinjau dokumen, bukan dashboard di belakang modal. */
+  body * {
+    visibility: hidden !important;
+  }
+
+  .print-container,
+  .print-container * {
+    visibility: visible !important;
+  }
+
+  .print-container {
+    position: absolute !important;
+    inset: 0 auto auto 0 !important;
+    width: 100% !important;
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
   }
 
   /* Hide app dashboard header, bottom navigation bar, buttons */
