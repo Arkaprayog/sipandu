@@ -20,19 +20,37 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
+      - name: Checkout repository and uploaded ZIP
         uses: actions/checkout@v4
+      - name: Verify and extract uploaded SIPANDU ZIP
+        run: |
+          test -f sipandu-odhiv.zip
+          mkdir -p build-source
+          unzip -q sipandu-odhiv.zip -d build-source
+          test -f build-source/src/components/LoginPage.tsx
+          test -f build-source/src/components/Header.tsx
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
+      - name: Configure GitHub Pages base path
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path("build-source/vite.config.ts")
+          s = p.read_text()
+          s = s.replace("return {\n    plugins:", "return {\n    base: '/sipandu/',\n    plugins:")
+          p.write_text(s)
+          PY
       - name: Install dependencies
+        working-directory: build-source
         run: bun install --frozen-lockfile
-      - name: Build Vite app
+      - name: Build Vite app from uploaded ZIP
+        working-directory: build-source
         run: bun run build
       - name: Upload Pages artifact
         if: github.event_name != 'pull_request'
         uses: actions/upload-pages-artifact@v3
         with:
-          path: dist
+          path: build-source/dist
 
   deploy:
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
