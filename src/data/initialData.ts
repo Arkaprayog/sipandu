@@ -1,31 +1,4 @@
-import { PPKSRecord, ProfileUser, SuratRecord, AppSettings, UserAccount } from '../types';
-
-export const FIXED_USER_ACCOUNTS: UserAccount[] = [
-  {
-    id: 'user-001',
-    username: 'deny',
-    displayName: 'Deny Arifin Martyon S.',
-    password: 'kemensos123',
-    nip: '19920315 202012 1 002',
-    unitKerja: 'Direktorat Rehabilitasi Sosial Korban Penyalahgunaan Narkoba & ODHIV',
-    jabatan: 'Pendamping Rehabilitasi Sosial ODHIV Prov. Sumatera Utara',
-    noHp: '081260887722',
-    photoUrl: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=400&q=80',
-    role: 'Pendamping',
-  },
-  {
-    id: 'user-002',
-    username: 'supriyanto',
-    displayName: 'Drs. Supriyanto, M.Si',
-    password: 'kemensos456',
-    nip: '19680712 199303 1 001',
-    unitKerja: 'Direktorat Rehabilitasi Sosial Korban Penyalahgunaan Narkoba & ODHIV',
-    jabatan: 'Kasubdit Rehabilitasi Sosial ODHIV / Supervisor Teknis Kemensos RI',
-    noHp: '081188992233',
-    photoUrl: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?auto=format&fit=crop&w=400&q=80',
-    role: 'Supervisor / Kasubdit',
-  },
-];
+import { PPKSRecord, ProfileUser, SuratRecord, AppSettings } from '../types';
 
 export const initialProfileUser: ProfileUser = {
   nama: 'Deny Arifin Martyon S.',
