@@ -3,6 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#0b140c" />
     <title>SIPANDU ODHIV - Layanan Terintegrasi Database PPKS ODHIV Sumatera Utara</title>
     <meta name="description" content="Sistem Informasi & Pendampingan Terpadu Layanan Terintegrasi Database PPKS ODHIV Sumatera Utara, Direktorat Rehabilitasi Sosial Korban Penyalahgunaan Narkoba & ODHIV - Kementerian Sosial RI" />
     <meta property="og:title" content="SIPANDU ODHIV - Kemensos RI" />
@@ -12,10 +13,57 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+      #sipandu-boot-error { display:none; box-sizing:border-box; margin:24px auto; padding:20px; width:calc(100% - 32px); max-width:680px; border:1px solid #b91c1c; border-radius:14px; background:#fff7f7; color:#1f2937; font:14px/1.5 system-ui,sans-serif; overflow-wrap:anywhere; }
+      #sipandu-boot-error h1 { font-size:20px; margin:0 0 8px; color:#991b1b; }
+      #sipandu-boot-error p { margin:8px 0; }
+      #sipandu-boot-error code { display:block; padding:10px; background:#fee2e2; border-radius:8px; white-space:pre-wrap; }
+      #sipandu-boot-error button { margin-top:12px; padding:10px 14px; border:0; border-radius:8px; background:#166534; color:white; font-weight:600; }
+    </style>
   </head>
   <body class="bg-[#0b140c] text-white antialiased selection:bg-emerald-600 selection:text-white">
     <div id="root"></div>
+    <section id="sipandu-boot-error" role="alert" aria-live="assertive">
+      <h1>SIPANDU gagal dimuat</h1>
+      <p>Aplikasi belum berhasil dijalankan. Informasi di bawah membantu menemukan penyebabnya; data browser tidak dihapus.</p>
+      <code id="sipandu-boot-error-detail">Menunggu aplikasi dimulai…</code>
+      <button type="button" onclick="window.location.reload()">Muat ulang</button>
+    </section>
+    <script>
+      (function () {
+        var panel = document.getElementById('sipandu-boot-error');
+        var detail = document.getElementById('sipandu-boot-error-detail');
+        var root = document.getElementById('root');
+        var showError = function (message) {
+          if (root && root.childElementCount > 0) return;
+          panel.style.display = 'block';
+          detail.textContent = String(message || 'Kesalahan tidak diketahui').slice(0, 1200);
+        };
+        window.addEventListener('error', function (event) {
+          var target = event.target;
+          if (target && target !== window && (target.src || target.href)) {
+            showError('Aset gagal dimuat: ' + (target.src || target.href));
+          } else {
+            showError((event.message || 'JavaScript gagal dijalankan') + (event.filename ? '\\n' + event.filename + ':' + event.lineno : ''));
+          }
+        }, true);
+        window.addEventListener('unhandledrejection', function (event) {
+          showError('Kesalahan proses aplikasi: ' + (event.reason && event.reason.message ? event.reason.message : event.reason));
+        });
+        var observer = new MutationObserver(function () {
+          if (root && root.childElementCount > 0) {
+            panel.style.display = 'none';
+            observer.disconnect();
+          }
+        });
+        observer.observe(root, { childList: true });
+        window.setTimeout(function () {
+          if (!root || root.childElementCount === 0) {
+            showError('Aplikasi tidak menampilkan antarmuka setelah 8 detik. Periksa koneksi, pemuatan berkas JavaScript, dan URL dasar GitHub Pages.');
+          }
+        }, 8000);
+      })();
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
-
