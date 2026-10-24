@@ -34,7 +34,16 @@ jobs:
             if [ -n "$candidates" ]; then source_dir="$(dirname "$candidates")"; fi
           fi
           test -f "$source_dir/package.json" || { echo "Could not locate package.json after extraction"; find /tmp/sipandu-import -maxdepth 3 -type f | head -n 80; exit 1; }
-          rsync -a --delete \
+
+          # Keep the repository's existing firestore.rules untouched.
+          # Store the ZIP's version separately for review instead of replacing the active rules.
+          if [ -f "$source_dir/firestore.rules" ]; then
+            mkdir -p import-review
+            cp "$source_dir/firestore.rules" import-review/firestore.rules.from-zip
+          fi
+
+          # Do not use rsync --delete: retain repository files not present in the ZIP.
+          rsync -a \
             --exclude='.git/' \
             --exclude='.github/workflows/import-zip.yml' \
             --exclude='firestore.rules' \
