@@ -1,0 +1,70 @@
+{
+  "entities": {
+    "ppks": {
+      "title": "PPKSRecord",
+      "description": "Penerima Pelayanan Kesejahteraan Sosial (PPKS) ODHIV di Sumatera Utara",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "timestamp": { "type": "string" },
+        "namaLengkap": { "type": "string" },
+        "nik": { "type": "string" },
+        "usia": { "type": "number" },
+        "jenisKelamin": { "type": "string" },
+        "kotaDomisili": { "type": "string" },
+        "alamatLengkap": { "type": "string" },
+        "noHpWa": { "type": "string" },
+        "jenisBantuan": { "type": "string" },
+        "intervensiMental": { "type": "string" },
+        "desil": { "type": "number" },
+        "fotoDiri": { "type": "string" },
+        "fotoKtp": { "type": "string" },
+        "statusAsesmen": { "type": "string" }
+      },
+      "required": ["namaLengkap", "nik", "kotaDomisili"]
+    },
+    "surat": {
+      "title": "SuratRecord",
+      "description": "Dokumen surat tugas atau berita acara pendampingan sosial Kemensos",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "nomorSurat": { "type": "string" },
+        "judul": { "type": "string" },
+        "jenis": { "type": "string" },
+        "tanggal": { "type": "string" },
+        "petugas": { "type": "string" },
+        "status": { "type": "string" }
+      },
+      "required": ["nomorSurat", "judul", "jenis"]
+    },
+    "settings": {
+      "title": "AppSettings",
+      "description": "Pengaturan integrasi Google Workspace dan kontak pengirim",
+      "type": "object",
+      "properties": {
+        "googleFormTahapAwalUrl": { "type": "string" },
+        "googleFormKesehatanMentalUrl": { "type": "string" },
+        "googleSpreadsheetUrl": { "type": "string" },
+        "googleDriveFolderUrl": { "type": "string" },
+        "senderName": { "type": "string" },
+        "senderRole": { "type": "string" },
+        "senderUnit": { "type": "string" }
+      }
+    }
+  },
+  "firestore": {
+    "/ppks/{ppksId}": {
+      "schema": "ppks",
+      "description": "Koleksi data responden PPKS ODHIV"
+    },
+    "/surat/{suratId}": {
+      "schema": "surat",
+      "description": "Koleksi dokumen dan surat dinas"
+    },
+    "/settings/{settingId}": {
+      "schema": "settings",
+      "description": "Pengaturan sistem aplikasi"
+    }
+  }
+}
