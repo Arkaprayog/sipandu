@@ -961,7 +961,7 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
       {/* MODAL PRINT PREVIEW & CETAK PDF RESMI 12 HALAMAN */}
       {showPrintModal && (
         <div className="fixed inset-0 z-50 overflow-y-auto bg-black/90 p-4 md:p-6 select-none text-neutral-900">
-          <div className="max-w-4xl mx-auto bg-white rounded-2xl shadow-2xl p-6 md:p-8 flex flex-col space-y-6">
+          <div className="print-container max-w-4xl mx-auto bg-white rounded-2xl shadow-2xl p-6 md:p-8 flex flex-col space-y-6">
             {/* Modal header with action buttons */}
             <div className="flex items-center justify-between pb-4 border-b border-neutral-300 no-print">
               <div>
@@ -1020,7 +1020,7 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
                       <div><strong>NIK:</strong> {currentPPKS?.nik}</div>
                       <div><strong>Nomor Registrasi:</strong> {formData.nomorRegistrasi}</div>
                       <div><strong>Usia / Jenis Kelamin:</strong> {currentPPKS?.usia} Thn / {currentPPKS?.jenisKelamin}</div>
-                      <div><strong>No. BPJS/KIS:</strong> {formData.noBpjs || 'Ada (PBI)'}</div>
+                      <div><strong>No. BPJS/KIS:</strong> {formData.noBpjs || '—'}</div>
                       <div><strong>Status Pernikahan:</strong> {formData.statusPernikahan}</div>
                       <div><strong>Kota Domisili:</strong> {currentPPKS?.kotaDomisili}</div>
                       <div><strong>No. HP/WA:</strong> {currentPPKS?.noHpWa}</div>
@@ -1032,12 +1032,12 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
                       BAGIAN B: KONDISI MEDIS & KEPATUHAN ARV (HALAMAN 3-4)
                     </span>
                     <div className="grid grid-cols-2 gap-2 text-[11px]">
-                      <div><strong>Tahun Diagnosa:</strong> {formData.tahunDiagnosa || '2023'}</div>
-                      <div><strong>Faskes PDP Rujukan:</strong> {formData.faskesPdpRujukan || 'RSUP H. Adam Malik'}</div>
+                      <div><strong>Tahun Diagnosa:</strong> {formData.tahunDiagnosa || '—'}</div>
+                      <div><strong>Faskes PDP Rujukan:</strong> {formData.faskesPdpRujukan || '—'}</div>
                       <div><strong>Status Terapi ARV:</strong> {formData.statusArv}</div>
                       <div><strong>Regimen ARV:</strong> {formData.regimenArv}</div>
-                      <div><strong>Nilai CD4 Terakhir:</strong> {formData.nilaiCd4Terakhir || '480 sel/mm³'}</div>
-                      <div><strong>Viral Load:</strong> {formData.viralLoadTerakhir || 'Undetectable'}</div>
+                      <div><strong>Nilai CD4 Terakhir:</strong> {formData.nilaiCd4Terakhir || '—'}</div>
+                      <div><strong>Viral Load:</strong> {formData.viralLoadTerakhir || '—'}</div>
                     </div>
                   </div>
 
@@ -1047,7 +1047,7 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
                     </span>
                     <div className="grid grid-cols-2 gap-2 text-[11px]">
                       <div><strong>Desil DTKS:</strong> Desil {formData.desilKemiskinan}</div>
-                      <div><strong>Penghasilan:</strong> {formData.penghasilanBulanan || 'Rp 1.400.000'}</div>
+                      <div><strong>Penghasilan:</strong> {formData.penghasilanBulanan || '—'}</div>
                       <div><strong>Tempat Tinggal:</strong> {formData.kondisiTempatTinggal}</div>
                       <div><strong>Dukungan Keluarga:</strong> {formData.dukunganKeluarga}</div>
                     </div>
