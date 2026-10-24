@@ -13,22 +13,23 @@ import { EditProfileModal } from './components/EditProfileModal';
 import { SettingsModal } from './components/SettingsModal';
 import { NotificationsModal } from './components/NotificationsModal';
 import { GoogleWorkspaceModal } from './components/GoogleWorkspaceModal';
+import { onAuthStateChanged, signOut } from 'firebase/auth';
+import { auth } from './lib/firebase';
 
 export default function App() {
-  // Check if autostart query param is provided
-  const queryParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
-  const isAutoStart = queryParams?.get('autostart') === '1';
+  // Firebase Authentication is the source of truth; URL/localStorage flags cannot bypass login.
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [authReady, setAuthReady] = useState(false);
+  const [currentUserName, setCurrentUserName] = useState('');
 
-  // Authentication state
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
-    if (isAutoStart) return true;
-    const stored = localStorage.getItem('sipandu_auth');
-    return stored === 'true';
-  });
-
-  const [currentUserName, setCurrentUserName] = useState<string>(() => {
-    return localStorage.getItem('sipandu_user') || 'Deny Arifin Martyon';
-  });
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      setIsAuthenticated(Boolean(user));
+      setCurrentUserName(user?.displayName || user?.email || '');
+      setAuthReady(true);
+    });
+    return unsubscribe;
+  }, []);
 
   // App Navigation tab
   const [activeTab, setActiveTab] = useState<TabKey>('beranda');
@@ -90,27 +91,16 @@ export default function App() {
   }, [settings]);
 
   // Auth Handlers
-  const handleLogin = (user: string, account?: import('./types').UserAccount) => {
-    setIsAuthenticated(true);
+  const handleLogin = (user: string) => {
+    // Firebase's auth-state observer updates the authenticated UI after sign-in.
     setCurrentUserName(user);
-    if (account) {
-      setProfile({
-        nama: account.displayName,
-        nip: account.nip,
-        unitKerja: account.unitKerja,
-        jabatan: account.jabatan,
-        noHp: account.noHp,
-        photoUrl: account.photoUrl,
-      });
-    }
-    localStorage.setItem('sipandu_auth', 'true');
-    localStorage.setItem('sipandu_user', user);
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
     if (window.confirm('Apakah Anda yakin ingin keluar dari aplikasi SIPANDU ODHIV?')) {
+      await signOut(auth);
       setIsAuthenticated(false);
-      localStorage.removeItem('sipandu_auth');
+      setCurrentUserName('');
     }
   };
 
@@ -124,6 +114,11 @@ export default function App() {
   const handleAddNewPPKS = (newPPKS: PPKSRecord) => {
     setPpksList((prev) => [newPPKS, ...prev]);
   };
+
+  // Avoid showing protected UI until Firebase has resolved the current session.
+  if (!authReady) {
+    return <div className="min-h-screen flex items-center justify-center bg-[#0a140b] text-emerald-200">Memeriksa sesi SIPANDU…</div>;
+  }
 
   // If not logged in, render Part 1: Landing Page / Login
   if (!isAuthenticated) {
