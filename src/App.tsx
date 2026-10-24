@@ -13,22 +13,53 @@ import { EditProfileModal } from './components/EditProfileModal';
 import { SettingsModal } from './components/SettingsModal';
 import { NotificationsModal } from './components/NotificationsModal';
 import { GoogleWorkspaceModal } from './components/GoogleWorkspaceModal';
+import { onAuthStateChanged, signOut, getIdTokenResult } from 'firebase/auth';
+import { auth } from './lib/firebase';
 
 export default function App() {
-  // Check if autostart query param is provided
-  const queryParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
-  const isAutoStart = queryParams?.get('autostart') === '1';
+  // Firebase Authentication is the source of truth; URL/localStorage flags cannot bypass login.
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [authReady, setAuthReady] = useState(false);
+  const [currentUserName, setCurrentUserName] = useState('');
+  const [currentUserRole, setCurrentUserRole] = useState('');
+  const [authError, setAuthError] = useState('');
 
-  // Authentication state
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
-    if (isAutoStart) return true;
-    const stored = localStorage.getItem('sipandu_auth');
-    return stored === 'true';
-  });
-
-  const [currentUserName, setCurrentUserName] = useState<string>(() => {
-    return localStorage.getItem('sipandu_user') || 'Deny Arifin Martyon';
-  });
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      setAuthReady(false);
+      setAuthError('');
+      if (!user) {
+        setIsAuthenticated(false);
+        setCurrentUserName('');
+        setCurrentUserRole('');
+        setAuthReady(true);
+        return;
+      }
+      try {
+        const token = await getIdTokenResult(user, true);
+        const role = token.claims.role;
+        if (role !== 'owner' && role !== 'supervisor' && role !== 'pendamping') {
+          setIsAuthenticated(false);
+          setCurrentUserRole('');
+          setAuthError('Akun berhasil dikenali, tetapi peran resmi belum ditetapkan. Hubungi administrator SIPANDU.');
+          await signOut(auth);
+        } else {
+          setIsAuthenticated(true);
+          setCurrentUserRole(role);
+          setCurrentUserName(user.displayName || user.email || '');
+        }
+      } catch (error) {
+        console.error('Gagal memverifikasi peran SIPANDU:', error);
+        setIsAuthenticated(false);
+        setCurrentUserRole('');
+        setAuthError('Sesi tidak dapat diverifikasi. Silakan masuk kembali atau hubungi administrator.');
+        await signOut(auth);
+      } finally {
+        setAuthReady(true);
+      }
+    });
+    return unsubscribe;
+  }, []);
 
   // App Navigation tab
   const [activeTab, setActiveTab] = useState<TabKey>('beranda');
@@ -90,27 +121,16 @@ export default function App() {
   }, [settings]);
 
   // Auth Handlers
-  const handleLogin = (user: string, account?: import('./types').UserAccount) => {
-    setIsAuthenticated(true);
+  const handleLogin = (user: string) => {
+    // Firebase's auth-state observer updates the authenticated UI after sign-in.
     setCurrentUserName(user);
-    if (account) {
-      setProfile({
-        nama: account.displayName,
-        nip: account.nip,
-        unitKerja: account.unitKerja,
-        jabatan: account.jabatan,
-        noHp: account.noHp,
-        photoUrl: account.photoUrl,
-      });
-    }
-    localStorage.setItem('sipandu_auth', 'true');
-    localStorage.setItem('sipandu_user', user);
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
     if (window.confirm('Apakah Anda yakin ingin keluar dari aplikasi SIPANDU ODHIV?')) {
+      await signOut(auth);
       setIsAuthenticated(false);
-      localStorage.removeItem('sipandu_auth');
+      setCurrentUserName('');
     }
   };
 
@@ -125,13 +145,18 @@ export default function App() {
     setPpksList((prev) => [newPPKS, ...prev]);
   };
 
+  // Avoid showing protected UI until Firebase has resolved the current session.
+  if (!authReady) {
+    return <div className="min-h-screen flex items-center justify-center bg-[#0a140b] text-emerald-200">Memeriksa sesi SIPANDU…</div>;
+  }
+
   // If not logged in, render Part 1: Landing Page / Login
   if (!isAuthenticated) {
     return (
-      <LoginPage
-        onLogin={handleLogin}
-        defaultUserName={currentUserName}
-      />
+      <>
+        {authError && <div role="alert" className="fixed top-3 left-3 right-3 z-50 mx-auto max-w-lg rounded-lg border border-amber-500/50 bg-amber-950/95 p-3 text-sm text-amber-100">{authError}</div>}
+        <LoginPage onLogin={handleLogin} />
+      </>
     );
   }
 

@@ -29,42 +29,6 @@ export function validatePassword(password: string): { valid: boolean; error?: st
 }
 
 /**
- * Authenticates user against fixed accounts or standard format
- */
-export function authenticateFixedUser(
-  userInput: string,
-  passInput: string,
-  accounts: import('../types').UserAccount[]
-): { success: boolean; account?: import('../types').UserAccount; error?: string } {
-  const trimmedUser = userInput.trim().toLowerCase();
-  
-  // Find matching fixed account
-  const matched = accounts.find((acc) => {
-    const u = acc.username.toLowerCase();
-    const d = acc.displayName.toLowerCase();
-    return u === trimmedUser || d.includes(trimmedUser) || trimmedUser.includes(u);
-  });
-
-  if (matched) {
-    if (matched.password === passInput) {
-      return { success: true, account: matched };
-    }
-    return {
-      success: false,
-      error: `Password salah untuk akun ${matched.displayName}. Gunakan password: ${matched.password}`,
-    };
-  }
-
-  // If typing generic username, validate standard password rules
-  const val = validatePassword(passInput);
-  if (!val.valid) {
-    return { success: false, error: val.error };
-  }
-
-  return { success: true };
-}
-
-/**
  * Builds the official WhatsApp text requested by Kemensos for SIPANDU ODHIV
  */
 export function buildWhatsAppMessage(
