@@ -13,8 +13,8 @@ permissions:
   id-token: write
 
 concurrency:
-  group: pages
-  cancel-in-progress: true
+  group: sipandu-github-pages
+  cancel-in-progress: false
 
 jobs:
   build:
