@@ -685,7 +685,7 @@ export default function App() {
           />
         )}
 
-        {activeTab === 'dokumen' && <DokumenView />}
+        {activeTab === 'dokumen' && <DokumenView profile={profile} />}
       </main>
 
       {/* Bottom Navigation Bar: BERANDA - DATABASE PPKS - ASESMEN - FROM ASESMEN TERINTEGRASI - DOKUMEN */}
