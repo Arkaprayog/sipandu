@@ -13,7 +13,10 @@ export const initialProfileUser: ProfileUser = {
 export const initialAppSettings: AppSettings = {
   googleFormTahapAwalUrl: GOOGLE_SIPANDU_RESOURCES.formEditorUrl,
   googleFormKesehatanMentalUrl: 'https://forms.gle/Asesmen-Kesehatan-Mental-ODHIV-Kemensos',
-  googleSpreadsheetUrl: '', // Create a separate database spreadsheet from Google Workspace Hub; do not write into Form responses.
+  googleSpreadsheetUrl: '', // Writable database target stays separate from the Google Forms response spreadsheet.
+  googleSpreadsheetSourceUrl: GOOGLE_SIPANDU_RESOURCES.responseSpreadsheetUrl,
+  googleSpreadsheetSourceName: 'Sumber Respons Google Form SIPANDU',
+  googleSpreadsheetSourceTab: '',
   googleDriveFolderUrl: GOOGLE_SIPANDU_RESOURCES.driveFolderUrl,
   senderName: 'Deny Arifin Martyon S.',
   senderRole: 'Pendamping ODHIV',
