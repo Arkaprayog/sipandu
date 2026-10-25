@@ -31,19 +31,19 @@ function normalizeAppSettings(value: unknown): AppSettings {
   }
 
   let sourceUrl = saved.googleSpreadsheetSourceUrl?.trim() || '';
-  if (!sourceUrl || sourceUrl.includes('1yA8KemensosODHIVSumut2026_LiveSync')) {
-    sourceUrl = GOOGLE_SIPANDU_RESOURCES.responseSpreadsheetUrl;
-  } else {
+  // Older builds silently defaulted to the Forms response spreadsheet. Clear that
+  // value if it was written by the old automatic default rather than user selection.
+  const wasAutoDefaultSource = saved.googleSpreadsheetSourceName === 'Sumber Respons Google Form SIPANDU';
+  if (sourceUrl.includes('1yA8KemensosODHIVSumut2026_LiveSync') || wasAutoDefaultSource) sourceUrl = '';
+  if (sourceUrl) {
     try {
       extractSpreadsheetId(sourceUrl);
     } catch {
-      sourceUrl = GOOGLE_SIPANDU_RESOURCES.responseSpreadsheetUrl;
+      sourceUrl = '';
     }
   }
 
-  const sourceName = saved.googleSpreadsheetSourceName === 'Sumber Respons Google Form SIPANDU'
-    ? ''
-    : (saved.googleSpreadsheetSourceName || '');
+  const sourceName = wasAutoDefaultSource ? '' : (saved.googleSpreadsheetSourceName || '');
 
   return {
     ...initialAppSettings,
@@ -257,7 +257,8 @@ export default function App() {
   };
 
   const handleSyncGoogleSpreadsheet = async (): Promise<number> => {
-    const sourceUrl = settings.googleSpreadsheetSourceUrl?.trim() || GOOGLE_SIPANDU_RESOURCES.responseSpreadsheetUrl;
+    const sourceUrl = settings.googleSpreadsheetSourceUrl?.trim() || '';
+    if (!sourceUrl) throw new Error('Spreadsheet sumber belum dipilih. Buka Google Workspace & Cloud Hub → Google Sheets → Cari Spreadsheet Saya, lalu pilih file Anda.');
     const imported = await importPPKSFromSpreadsheet(
       sourceUrl,
       settings.googleSpreadsheetSourceTab?.trim() || undefined
@@ -328,7 +329,7 @@ export default function App() {
         {activeTab === 'beranda' && (
           <BerandaView
             ppksList={ppksList}
-            googleSpreadsheetUrl={settings.googleSpreadsheetSourceUrl || GOOGLE_SIPANDU_RESOURCES.responseSpreadsheetUrl}
+            googleSpreadsheetUrl={settings.googleSpreadsheetSourceUrl || ''}
             googleSpreadsheetName={settings.googleSpreadsheetSourceName || ''}
             onSyncGoogleSpreadsheet={handleSyncGoogleSpreadsheet}
           />

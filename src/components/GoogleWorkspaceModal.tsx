@@ -88,7 +88,7 @@ export const GoogleWorkspaceModal: React.FC<GoogleWorkspaceModalProps> = ({
   const [sheetRows, setSheetRows] = useState<string[][]>([]);
   const [spreadsheetFiles, setSpreadsheetFiles] = useState<GoogleDriveFile[]>([]);
   const [sourceSpreadsheetUrl, setSourceSpreadsheetUrl] = useState<string>(
-    settings.googleSpreadsheetSourceUrl?.trim() || GOOGLE_SIPANDU_RESOURCES.responseSpreadsheetUrl
+    settings.googleSpreadsheetSourceUrl?.trim() || ''
   );
   const [sourceSpreadsheetTab, setSourceSpreadsheetTab] = useState<string>(
     settings.googleSpreadsheetSourceTab?.trim() || ''
@@ -238,7 +238,7 @@ export const GoogleWorkspaceModal: React.FC<GoogleWorkspaceModalProps> = ({
   }, []);
 
   useEffect(() => {
-    const configuredSource = settings.googleSpreadsheetSourceUrl?.trim() || GOOGLE_SIPANDU_RESOURCES.responseSpreadsheetUrl;
+    const configuredSource = settings.googleSpreadsheetSourceUrl?.trim() || '';
     setSourceSpreadsheetUrl(configuredSource);
     setSourceSpreadsheetTab(settings.googleSpreadsheetSourceTab?.trim() || '');
   }, [settings.googleSpreadsheetSourceUrl, settings.googleSpreadsheetSourceTab]);
@@ -337,18 +337,10 @@ export const GoogleWorkspaceModal: React.FC<GoogleWorkspaceModalProps> = ({
         setStatusMessage({ type: 'error', text: 'Google Drive dapat diakses, tetapi tidak ada Google Spreadsheet yang terlihat oleh akun ini. Periksa akun, izin berbagi, dan folder Drive Bersama.' });
         return;
       }
-      const currentId = (() => {
-        try { return extractSpreadsheetId(sourceSpreadsheetUrl); } catch { return ''; }
-      })();
-      const currentFile = files.find((file) => file.id === currentId);
-      if (!currentFile && !sourceSpreadsheetUrl.trim()) {
-        const firstFile = files[0];
-        const url = firstFile.webViewLink || `https://docs.google.com/spreadsheets/d/${firstFile.id}/edit`;
-        setSourceSpreadsheetUrl(url);
-        setSourceSpreadsheetTab('');
-        onUpdateSettings({ ...settings, googleSpreadsheetSourceUrl: url, googleSpreadsheetSourceName: firstFile.name, googleSpreadsheetSourceTab: '' });
-      }
-      setStatusMessage({ type: 'success', text: `Ditemukan ${files.length} Google Spreadsheet yang benar-benar dapat diakses akun ini. Pilih file sumber di bawah.` });
+      setStatusMessage({
+        type: 'success',
+        text: `Ditemukan ${files.length} Google Spreadsheet yang benar-benar dapat diakses akun ini. Pilih file sumber yang benar dari daftar di bawah; SIPANDU tidak akan memilih file secara otomatis.`,
+      });
     } catch (err: any) {
       setStatusMessage({ type: 'error', text: `Gagal mencari spreadsheet di Google Drive: ${err?.message || String(err)}` });
     } finally {
