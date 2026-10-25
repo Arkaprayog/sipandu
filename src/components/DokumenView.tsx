@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import { SuratRecord } from '../types';
-import { initialSuratList } from '../data/initialData';
 import { KemensosLogo } from './KemensosLogo';
 import {
   FolderArchive,
@@ -19,8 +18,8 @@ import {
 
 export const DokumenView: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'surat-tugas' | 'surat-lainnya'>('surat-tugas');
-  const [suratList, setSuratList] = useState<SuratRecord[]>(initialSuratList);
-  const [selectedSurat, setSelectedSurat] = useState<SuratRecord | null>(initialSuratList[0]);
+  const [suratList, setSuratList] = useState<SuratRecord[]>([]);
+  const [selectedSurat, setSelectedSurat] = useState<SuratRecord | null>(null);
   const [showCreateModal, setShowCreateModal] = useState<boolean>(false);
   const [showUploadModal, setShowUploadModal] = useState<boolean>(false);
 
@@ -272,7 +271,9 @@ export const DokumenView: React.FC = () => {
               </div>
             ) : (
               <div className="p-12 rounded-2xl bg-black/40 border border-dashed border-rose-500/30 text-center text-neutral-400">
-                Pilih surat di sebelah kiri untuk melihat isi dan pratinjau cetak.
+                {suratList.length === 0
+                  ? 'Belum ada dokumen tersimpan. Daftar ini tidak lagi diisi dengan surat contoh. Buat dokumen nyata atau unggah berkas resmi untuk mulai mengisi arsip.'
+                  : 'Pilih dokumen di sebelah kiri untuk melihat isi dan pratinjau cetak.'}
               </div>
             )}
           </div>
