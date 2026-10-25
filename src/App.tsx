@@ -22,7 +22,7 @@ function isSixteenDigitNIK(value: string): boolean {
   return /^\d{16}$/.test(String(value || '').replace(/\D/g, ''));
 }
 
-
+function mergePPKSRecords(localRecords: PPKSRecord[], cloudRecords: PPKSRecord[]): PPKSRecord[] {
   const merged = new Map<string, PPKSRecord>();
   const recordKey = (record: PPKSRecord) => {
     const normalizedNik = String(record.nik || '').replace(/\D/g, '');
