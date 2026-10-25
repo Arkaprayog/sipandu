@@ -17,6 +17,7 @@ import { onAuthStateChanged, signOut, getIdTokenResult } from 'firebase/auth';
 import { auth, getAccessToken, savePPKSToFirestore, googleLogout, removeLegacyDemoPPKSFromFirestore } from './lib/firebase';
 import { ensureSIPANDUDatabaseSheet, extractSpreadsheetId, importPPKSFromSpreadsheet, removeLegacyDemoRowsFromSpreadsheet, removeObviousDemoFilesFromDrive, upsertPPKSInSpreadsheet } from './lib/googleWorkspace';
 import { GOOGLE_SIPANDU_RESOURCES } from './lib/googleSIPANDUResources';
+import { parsePPKSTimestamp, sortPPKSRecordsByTimestamp } from './lib/ppksData';
 
 function isSixteenDigitNIK(value: string): boolean {
   return /^\d{16}$/.test(String(value || '').replace(/\D/g, ''));
@@ -24,10 +25,8 @@ function isSixteenDigitNIK(value: string): boolean {
 
 function mergePPKSRecords(localRecords: PPKSRecord[], cloudRecords: PPKSRecord[]): PPKSRecord[] {
   const merged = new Map<string, PPKSRecord>();
-  const recordKey = (record: PPKSRecord) => {
-    const normalizedNik = String(record.nik || '').replace(/\D/g, '');
-    return normalizedNik ? `nik:${normalizedNik}` : `id:${record.id}`;
-  };
+  // Preserve distinct Google Form submissions even when two rows share a NIK.
+  const recordKey = (record: PPKSRecord) => `id:${record.id}`;
   const mergeOne = (previous: PPKSRecord | undefined, next: PPKSRecord): PPKSRecord => {
     if (!previous) return next;
     const nextIntegrated = next.integratedForm
@@ -88,12 +87,21 @@ function mergePPKSRecords(localRecords: PPKSRecord[], cloudRecords: PPKSRecord[]
         !!name && normalizePersonText(candidate.namaLengkap) === name
       );
       // Strong matching first: identical timestamp or phone confirms the same row.
+      const timestampEpoch = parsePPKSTimestamp(timestamp);
       const strongMatch = candidateMatches.find(([, candidate]) => {
-        const sameTimestamp = !!timestamp && timestamp === String(candidate.timestamp || '').trim();
-        const candidatePhone = normalizePhone(candidate.noHpWa);
-        const samePhone = !!phone && !!candidatePhone && phone === candidatePhone;
-        return sameTimestamp || samePhone;
-      });
+        const candidateEpoch = parsePPKSTimestamp(candidate.timestamp);
+        // A timestamp proves it is the same source row. Phone alone is not
+        // enough because one respondent may submit more than once.
+        return timestampEpoch !== null && candidateEpoch !== null && timestampEpoch === candidateEpoch;
+      }) || (
+        // For legacy cache rows with no timestamps, phone is only a fallback
+        // when there is exactly one candidate and neither record has a time.
+        timestampEpoch === null && candidateMatches.length === 1 &&
+        parsePPKSTimestamp(candidateMatches[0][1].timestamp) === null &&
+        !!phone && normalizePhone(candidateMatches[0][1].noHpWa) === phone
+          ? candidateMatches[0]
+          : undefined
+      );
       if (strongMatch) {
         [existingKey, existing] = strongMatch;
       } else {
@@ -115,7 +123,7 @@ function mergePPKSRecords(localRecords: PPKSRecord[], cloudRecords: PPKSRecord[]
     if (existingKey !== key) merged.delete(existingKey);
     merged.set(key, combined);
   }
-  return Array.from(merged.values());
+  return sortPPKSRecordsByTimestamp(Array.from(merged.values()));
 }
 
 function normalizeAppSettings(value: unknown): AppSettings {
@@ -215,7 +223,7 @@ export default function App() {
             (record) => record && !isLegacySamplePPKS(record)
           );
           if (clean.length !== parsed.length) localStorage.setItem('sipandu_ppks', JSON.stringify(clean));
-          return clean;
+          return sortPPKSRecordsByTimestamp(clean);
         }
         console.warn('Cached PPKS data is not an array; starting with an empty list.');
       } catch (e) {
@@ -339,13 +347,13 @@ export default function App() {
   // Data update handlers
   const handleUpdatePPKS = (updated: PPKSRecord) => {
     setPpksList((prev) =>
-      prev.map((item) => (item.id === updated.id ? updated : item))
+      sortPPKSRecordsByTimestamp(prev.map((item) => (item.id === updated.id ? updated : item)))
     );
     void persistRecordToCloud(updated);
   };
 
   const handleAddNewPPKS = (newPPKS: PPKSRecord) => {
-    setPpksList((prev) => [newPPKS, ...prev]);
+    setPpksList((prev) => sortPPKSRecordsByTimestamp([newPPKS, ...prev]));
     void persistRecordToCloud(newPPKS);
   };
 
@@ -353,7 +361,7 @@ export default function App() {
     setPpksList((localRecords) => mergePPKSRecords(localRecords, cloudRecords));
   };
 
-  const handleSyncGoogleSpreadsheet = async (): Promise<number> => {
+  const handleSyncGoogleSpreadsheet = async (): Promise<{ records: number; sourceDataRows: number; sourceRowsWithName: number; sampleRecordsFiltered: number }> => {
     const sourceUrl = settings.googleSpreadsheetSourceUrl?.trim() || '';
     if (!sourceUrl) throw new Error('Spreadsheet sumber belum dipilih. Buka Google Workspace & Cloud Hub → Google Sheets → Cari Spreadsheet Saya, lalu pilih file Anda.');
     const imported = await importPPKSFromSpreadsheet(
@@ -376,10 +384,15 @@ export default function App() {
     const updatedAt = new Date().toLocaleString('id-ID');
     setLiveSyncState({
       type: 'success',
-      message: `Sumber “${imported.spreadsheetTitle}” dibaca: ${imported.rowsRead} baris, ${imported.records.length} responden dikenali. Pembaruan otomatis berjalan setiap 2 menit selama izin Google masih berlaku.`,
+      message: `Sumber “${imported.spreadsheetTitle}” → “${imported.selectedTab}”: ${imported.sourceDataRows} baris data (header tidak dihitung), ${imported.sourceRowsWithName} baris bernama, ${imported.records.length} PPKS dimuat; ${imported.sampleRecordsFiltered} contoh disaring; NIK terpetakan ${imported.recordsWithNIK}/${imported.records.length}. Sinkronisasi otomatis setiap 2 menit selama izin Google masih berlaku.`,
       lastUpdatedAt: updatedAt,
     });
-    return imported.records.length;
+    return {
+      records: imported.records.length,
+      sourceDataRows: imported.sourceDataRows,
+      sourceRowsWithName: imported.sourceRowsWithName,
+      sampleRecordsFiltered: imported.sampleRecordsFiltered,
+    };
   };
 
   // Poll the selected read-only Google Sheet while the dashboard is open.
@@ -435,7 +448,7 @@ export default function App() {
         });
         setLiveSyncState({
           type: 'success',
-          message: `Live sync aktif — “${imported.spreadsheetTitle}” → tab “${imported.selectedTab}”: ${imported.records.length} responden dikenali dari ${imported.rowsRead} baris; NIK terpetakan ${imported.recordsWithNIK}/${imported.records.length}.`,
+          message: `LIVE SYNC — “${imported.spreadsheetTitle}” → “${imported.selectedTab}”: ${imported.sourceDataRows} baris data, ${imported.sourceRowsWithName} baris bernama, ${imported.records.length} PPKS dimuat; ${imported.sampleRecordsFiltered} contoh disaring; NIK ${imported.recordsWithNIK}/${imported.records.length}.`,
           lastUpdatedAt: new Date().toLocaleString('id-ID'),
         });
       } catch (error) {
