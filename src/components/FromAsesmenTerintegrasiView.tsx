@@ -391,6 +391,10 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
         });
       }));
       if (document.fonts?.ready) await document.fonts.ready;
+      // The print stylesheet uses this flag to remove dashboard siblings from
+      // layout and let the ten official sections paginate in normal document flow.
+      document.body.classList.add('official-assessment-printing');
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
       setPreparingPrint(false);
       window.print();
     } catch (error) {
@@ -404,6 +408,7 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
 
   useEffect(() => {
     const cleanup = () => {
+      document.body.classList.remove('official-assessment-printing');
       releasePrintPhotoUrls();
       setPrintPhotoUrls({});
       setPrintPhotoErrors({});
@@ -533,11 +538,10 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
                 </div>
                 <div className="official-letterhead-logo official-atensi-logo">
                   <img
-                    src="https://nanasitimur.berdesa.id/desa/upload/artikel/sedang_UyLR7_1751267865_atensi.webp"
-                    alt="Logo ATENSI"
+                    src={import.meta.env.BASE_URL + 'uploads/ATENSI%20HD.png'}
+                    alt="Logo ATENSI resmi"
                     loading="eager"
                     decoding="sync"
-                    referrerPolicy="no-referrer"
                   />
                 </div>
               </div>
