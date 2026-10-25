@@ -152,6 +152,8 @@ export const AsesmenView: React.FC<AsesmenViewProps> = ({
     setFotoDiriName('');
     setFotoKtp('');
     setFotoKtpName('');
+    setKotaDomisili('');
+    setJenisKelamin('');
 
     setTimeout(() => setFormSubmitted(false), 4500);
   };
