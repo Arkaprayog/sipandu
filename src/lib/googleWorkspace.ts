@@ -1,5 +1,6 @@
 import { getAccessToken, invalidateAccessToken } from './firebase';
 import { IntegratedFormData, PPKSRecord } from '../types';
+import { isLegacySamplePPKS, isObviousDemoMarker, LEGACY_SAMPLE_PPKS_IDS, LEGACY_SAMPLE_PPKS_NAMES } from '../data/initialData';
 
 export interface GoogleDriveFile {
   id: string;
@@ -331,44 +332,78 @@ function readCellByAliases(headers: string[], row: string[], aliases: string[]):
 }
 
 /** Maps respondent NIK from the common header variants used by Google Forms/Sheets. */
-function readNIKFromSheetRow(headers: string[], row: string[]): string {
-  const normalizedHeaders = headers.map(normalizeSheetHeader);
-  const exactAliases = [
-    'nik', 'nikResponden', 'nikSesuaiKTP', 'nikSesuaiKKTP', 'nikNoKTP', 'nikKTP',
-    'nomorIndukKependudukan', 'nomorIndukKependudukanNIK', 'nomorKTP', 'noKTP',
-    'nomorKartuTandaPenduduk', 'noIndukKependudukan', 'nomorNIK', 'noNIK',
-    'noKTPNIK', 'KTPNIK',
-  ].map(normalizeSheetHeader);
+function isLikelyRespondentNIKHeader(header: string): boolean {
+  const normalized = normalizeSheetHeader(header);
+  if (!normalized) return false;
 
-  // Prefer exact semantic column names when possible.
-  for (const alias of exactAliases) {
-    const index = normalizedHeaders.indexOf(alias);
-    if (index >= 0 && row[index] !== undefined && row[index].trim() !== '') {
-      return row[index].trim();
-    }
+  // Reject identity numbers of relatives, pendamping/staff, assessors, or contacts.
+  const excludedTokens = [
+    'nikayah', 'nikibu', 'nikorangtua', 'nikwali', 'niksuami', 'nikistri',
+    'nikpasangan', 'nikkeluarga', 'nikpendamping', 'nikpetugas', 'nikasesor',
+    'nikasessor', 'niksupervisor', 'nikkontakdarurat', 'nikpenanggungjawab',
+  ];
+  if (excludedTokens.some((prefix) => normalized.startsWith(prefix))) return false;
+  if (/(ayah|ibu|orangtua|wali|suami|istri|pasangan|keluarga|pendamping|petugas|asesor|asessor|supervisor|penanggungjawab)/.test(normalized)
+      && /(nik|nomorindukkependudukan|nomorktp|noktp)/.test(normalized)) return false;
+
+  return normalized === 'nik' ||
+    normalized.startsWith('nik') ||
+    normalized.endsWith('nik') ||
+    normalized.includes('nikresponden') ||
+    normalized.includes('nikppks') ||
+    normalized.includes('nikcalonresponden') ||
+    normalized.includes('nomorindukkependudukan') ||
+    normalized.includes('nomorkartutandapenduduk') ||
+    normalized.includes('nomorktp') ||
+    normalized.includes('noktp') ||
+    normalized.includes('ktpnik') ||
+    normalized.includes('noidentitas') ||
+    normalized.includes('nomoridentitas') ||
+    normalized.includes('nokependudukan') ||
+    normalized.includes('noindukkependudukan');
+}
+
+function normalizeNIKCellValue(value: string): string {
+  const raw = String(value ?? '').trim();
+  if (!raw) return '';
+  const digits = raw.replace(/\D/g, '');
+  if (!digits) return '';
+  // NIK must be kept as text. This recovers a leading zero if Sheets coerced
+  // a 16-digit NIK to a 15-digit number; never coerce it back to Number.
+  return digits.length === 15 ? `0${digits}` : digits;
+}
+
+/** Maps respondent NIK from exact and descriptive Google Forms question headers. */
+export function readNIKFromSheetRow(headers: string[], row: string[]): string {
+  const candidates = headers
+    .map((header, index) => ({
+      header: String(header ?? '').trim(),
+      normalized: normalizeSheetHeader(String(header ?? '')),
+      value: String(row[index] ?? '').trim(),
+      index,
+    }))
+    .filter(({ header, normalized, value }) => value && normalized && isLikelyRespondentNIKHeader(header));
+
+  const score = (header: string): number => {
+    const normalized = normalizeSheetHeader(header);
+    let points = 0;
+    if (['nik', 'nikresponden', 'nikppks', 'nomorindukkependudukan', 'nomorktp', 'noktp'].includes(normalized)) points += 100;
+    if (normalized.includes('responden') || normalized.includes('ppks') || normalized.includes('calonresponden')) points += 60;
+    if (normalized.includes('nik')) points += 35;
+    if (normalized.includes('ktp')) points += 20;
+    if (normalized.includes('nomorindukkependudukan')) points += 15;
+    if (normalized.length > 100) points -= 10;
+    return points;
+  };
+
+  // Iterate every matching column: duplicate headings occur in Google Forms,
+  // and the first duplicate may be blank while a later one holds the NIK.
+  candidates.sort((a, b) => score(b.header) - score(a.header) || a.index - b.index);
+  for (const candidate of candidates) {
+    const nik = normalizeNIKCellValue(candidate.value);
+    if (nik) return nik;
   }
-
-  // Form question labels often include instructions, e.g. "NIK (16 digit, sesuai KTP)".
-  // Exclude relatives' and staff members' identity numbers.
-  const excluded = /(ayah|ibu|orangtua|wali|suami|istri|pasangan|keluarga|pendamping|petugas|asesor|asessor|supervisor|penanggungjawab)/;
-  const candidates = normalizedHeaders
-    .map((header, index) => ({ header, index, value: row[index]?.trim() || '' }))
-    .filter(({ header, value }) => value && !excluded.test(header))
-    .filter(({ header }) =>
-      header.includes('nik') ||
-      header.includes('nomorindukkependudukan') ||
-      header.includes('nomorkartutandapenduduk') ||
-      header.includes('nomorktp') ||
-      header.includes('noktp')
-    );
-
-  const score = (header: string) =>
-    (header.includes('responden') ? 50 : 0) +
-    (header.includes('nik') ? 30 : 0) +
-    (header.includes('ktp') ? 20 : 0) -
-    (header.length > 100 ? 10 : 0);
-  candidates.sort((a, b) => score(b.header) - score(a.header));
-  return candidates[0]?.value || '';
+  return '';
 }
 
 function parseSheetNumber(value: string, fallback = 0): number {
@@ -523,6 +558,9 @@ export async function importPPKSFromSpreadsheet(
   selectedTab: string;
   rowsRead: number;
   records: PPKSRecord[];
+  recordsWithNIK: number;
+  recordsMissingNIK: number;
+  nikHeadersFound: string[];
   previewRows: string[][];
 }> {
   const metadata = await getSpreadsheetMetadata(spreadsheetUrlOrId);
@@ -537,7 +575,10 @@ export async function importPPKSFromSpreadsheet(
     : (responseTab || metadata.sheetTitles[0]);
   const escapedTitle = selectedTab.replace(/'/g, "''");
   const rows = await readSpreadsheetRichData(metadata.spreadsheetId, `'${escapedTitle}'!A1:AZ2000`);
-  const records = mapRowsToPPKSRecords(rows);
+  const records = mapRowsToPPKSRecords(rows).filter((record) => !isLegacySamplePPKS(record));
+  const headers = rows[0] || [];
+  const nikHeadersFound = headers.filter((header) => isLikelyRespondentNIKHeader(header)).map((header) => header.trim());
+  const recordsWithNIK = records.filter((record) => Boolean(String(record.nik || '').trim())).length;
   return {
     spreadsheetId: metadata.spreadsheetId,
     spreadsheetTitle: metadata.title,
@@ -545,6 +586,9 @@ export async function importPPKSFromSpreadsheet(
     selectedTab,
     rowsRead: rows.length,
     records,
+    recordsWithNIK,
+    recordsMissingNIK: records.length - recordsWithNIK,
+    nikHeadersFound,
     previewRows: rows.slice(0, 8),
   };
 }
