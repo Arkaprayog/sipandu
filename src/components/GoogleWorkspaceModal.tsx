@@ -441,7 +441,12 @@ export const GoogleWorkspaceModal: React.FC<GoogleWorkspaceModalProps> = ({
 
       try {
         const drive = await removeObviousDemoFilesFromDrive(GOOGLE_SIPANDU_RESOURCES.driveFolderId);
-        results.push(`Google Drive: ${drive.filesDeleted} file/folder contoh yang dikenali dihapus dari folder SIPANDU`);
+        results.push(
+          `Google Drive: ${drive.filesDeleted} file contoh yang dikenali dihapus; ${drive.accountWideScanCompleted ? `${drive.filesScanned} file diperiksa di seluruh Drive yang dapat diakses` : 'pemindaian seluruh Drive tidak tersedia; folder SIPANDU telah diperiksa'}`
+        );
+        if (!drive.accountWideScanCompleted) {
+          errors.push('Google Drive: pemindaian seluruh Drive tidak berhasil. File contoh yang dikenali di folder SIPANDU tetap telah diperiksa.');
+        }
       } catch (error: any) {
         errors.push(`Google Drive: ${error?.message || String(error)}`);
       }
