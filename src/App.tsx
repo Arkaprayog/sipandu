@@ -223,7 +223,7 @@ export default function App() {
   });
 
   const [cloudSyncNotice, setCloudSyncNotice] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
-  const demoCleanupAttemptedRef = useRef(false);
+  const demoCleanupAttemptedRef = useRef('');
   const [liveSyncState, setLiveSyncState] = useState<{
     type: 'idle' | 'success' | 'paused' | 'error';
     message: string;
@@ -433,23 +433,42 @@ export default function App() {
   }, [isAuthenticated, settings.googleSpreadsheetSourceUrl, settings.googleSpreadsheetSourceTab]);
 
 
-  // On the first authorized app session after this update, remove only known
-  // retired demo rows/files from the configured SIPANDU source, response sheet,
-  // destination sheet, and SIPANDU Drive folder. This is idempotent and does not
-  // delete any respondent record that doesn't match an exact legacy demo marker.
+  // Remove known demo records once per configured cloud target after valid Google API authorization.
+  // The operation is repeat-safe and never clears a row/file without an exact demo marker.
   useEffect(() => {
     let active = true;
-    const cleanupFlag = 'sipandu_legacy_demo_cleanup_v1';
 
     const runCleanup = async () => {
-      if (!active || !isAuthenticated || demoCleanupAttemptedRef.current) return;
+      if (!active || !isAuthenticated) return;
+
+      const candidateUrls = [
+        GOOGLE_SIPANDU_RESOURCES.responseSpreadsheetUrl,
+        settings.googleSpreadsheetSourceUrl || '',
+        settings.googleSpreadsheetUrl || '',
+      ].filter(Boolean);
+      const uniqueSheets = new Map<string, string>();
+      const failures: string[] = [];
+      for (const url of candidateUrls) {
+        try {
+          uniqueSheets.set(extractSpreadsheetId(url), url);
+        } catch {
+          failures.push('Satu URL/ID spreadsheet dikonfigurasi tidak valid; target tersebut dilewati.');
+        }
+      }
+
+      const targetKey = [
+        ...[...uniqueSheets.keys()].sort(),
+        GOOGLE_SIPANDU_RESOURCES.driveFolderId,
+      ].join('|');
+      const cleanupFlag = 'sipandu_legacy_demo_cleanup_v1:' + targetKey;
+      if (demoCleanupAttemptedRef.current === cleanupFlag) return;
       try {
         if (localStorage.getItem(cleanupFlag)) {
-          demoCleanupAttemptedRef.current = true;
+          demoCleanupAttemptedRef.current = cleanupFlag;
           return;
         }
       } catch {
-        // Continue; cloud-side cleanup remains safely idempotent without the local flag.
+        // Continue; cloud-side cleanup is repeat-safe without local storage.
       }
 
       const accessToken = await getAccessToken();
@@ -461,25 +480,9 @@ export default function App() {
         return;
       }
 
-      demoCleanupAttemptedRef.current = true;
+      demoCleanupAttemptedRef.current = cleanupFlag;
       const messages: string[] = [];
-      const failures: string[] = [];
       let rowsCleared = 0;
-
-      const candidateUrls = [
-        GOOGLE_SIPANDU_RESOURCES.responseSpreadsheetUrl,
-        settings.googleSpreadsheetSourceUrl || '',
-        settings.googleSpreadsheetUrl || '',
-      ].filter(Boolean);
-      const uniqueSheets = new Map<string, string>();
-      for (const url of candidateUrls) {
-        try {
-          uniqueSheets.set(extractSpreadsheetId(url), url);
-        } catch {
-          failures.push('Satu URL/ID spreadsheet dikonfigurasi tidak valid; target tersebut dilewati.');
-        }
-      }
-
       for (const [spreadsheetId, url] of uniqueSheets) {
         if (!active) return;
         try {
@@ -494,7 +497,7 @@ export default function App() {
       if (active) {
         try {
           const drive = await removeObviousDemoFilesFromDrive(GOOGLE_SIPANDU_RESOURCES.driveFolderId);
-          messages.push(\`Google Drive: \${drive.filesDeleted} file/folder contoh yang dikenali dihapus\`);
+          messages.push(\`Google Drive: \${drive.filesDeleted} file contoh yang dikenali dihapus\`);
         } catch (error) {
           failures.push(\`Google Drive: \${error instanceof Error ? error.message : String(error)}\`);
         }
