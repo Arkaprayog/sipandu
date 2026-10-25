@@ -18,7 +18,11 @@ import { auth, getAccessToken, savePPKSToFirestore, googleLogout, removeLegacyDe
 import { ensureSIPANDUDatabaseSheet, extractSpreadsheetId, importPPKSFromSpreadsheet, removeLegacyDemoRowsFromSpreadsheet, removeObviousDemoFilesFromDrive, upsertPPKSInSpreadsheet } from './lib/googleWorkspace';
 import { GOOGLE_SIPANDU_RESOURCES } from './lib/googleSIPANDUResources';
 
-function mergePPKSRecords(localRecords: PPKSRecord[], cloudRecords: PPKSRecord[]): PPKSRecord[] {
+function isSixteenDigitNIK(value: string): boolean {
+  return /^\d{16}$/.test(String(value || '').replace(/\D/g, ''));
+}
+
+
   const merged = new Map<string, PPKSRecord>();
   const recordKey = (record: PPKSRecord) => {
     const normalizedNik = String(record.nik || '').replace(/\D/g, '');
@@ -71,15 +75,29 @@ function mergePPKSRecords(localRecords: PPKSRecord[], cloudRecords: PPKSRecord[]
       const name = normalizePersonText(record.namaLengkap);
       const phone = normalizePhone(record.noHpWa);
       const timestamp = String(record.timestamp || '').trim();
-      for (const [candidateKey, candidate] of merged.entries()) {
-        if (!name || normalizePersonText(candidate.namaLengkap) !== name) continue;
+      const candidateMatches = [...merged.entries()].filter(([, candidate]) =>
+        !!name && normalizePersonText(candidate.namaLengkap) === name
+      );
+      // Strong matching first: identical timestamp or phone confirms the same row.
+      const strongMatch = candidateMatches.find(([, candidate]) => {
         const sameTimestamp = !!timestamp && timestamp === String(candidate.timestamp || '').trim();
         const candidatePhone = normalizePhone(candidate.noHpWa);
-        const samePhone = !!phone && phone === candidatePhone;
-        if (sameTimestamp || samePhone) {
-          existingKey = candidateKey;
-          existing = candidate;
-          break;
+        const samePhone = !!phone && !!candidatePhone && phone === candidatePhone;
+        return sameTimestamp || samePhone;
+      });
+      if (strongMatch) {
+        [existingKey, existing] = strongMatch;
+      } else {
+        // If a corrected importer now recovers NIK, update exactly one stale
+        // same-name cache row that has no NIK. Never merge a duplicate-name
+        // person where more than one eligible cached record exists.
+        const nextNik = String(record.nik || '').replace(/\D/g, '');
+        const staleCandidates = candidateMatches.filter(([, candidate]) => {
+          const candidateNik = String(candidate.nik || '').replace(/\D/g, '');
+          return !candidateNik && isSixteenDigitNIK(nextNik);
+        });
+        if (isSixteenDigitNIK(nextNik) && staleCandidates.length === 1) {
+          [existingKey, existing] = staleCandidates[0];
         }
       }
     }
