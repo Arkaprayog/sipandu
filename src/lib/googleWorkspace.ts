@@ -828,7 +828,7 @@ function isObviousDemoDriveName(name: string): boolean {
   if ([...LEGACY_SAMPLE_PPKS_IDS].some((id) => normalized.includes(normalizeSheetHeader(id)))) return true;
   if ([...LEGACY_SAMPLE_PPKS_NAMES].some((sampleName) => normalized.includes(normalizeSheetHeader(sampleName)))) return true;
   return isObviousDemoMarker(name) ||
-    /(^|[^a-z])(demo|sample|contoh|dummy|uji[\\s_-]?coba|data[\\s_-]?uji|uji[\\s_-]?data|test[\\s_-]?data)([^a-z]|$)/i.test(name);
+    /(^|[^a-z])(demo|sample|contoh|dummy|uji[\s_-]?coba|data[\s_-]?uji|uji[\s_-]?data|test[\s_-]?data)([^a-z]|$)/i.test(name);
 }
 
 /** Lists visible Drive metadata with pagination. Only filenames/IDs are used for demo-artifact detection. */
@@ -868,7 +868,7 @@ function isSIPANDULegacyDriveArtifact(name: string): boolean {
   if (exactArtifacts.some((marker) => normalized.includes(marker))) return true;
   if ([...LEGACY_SAMPLE_PPKS_IDS].some((id) => normalized.includes(normalizeSheetHeader(id)))) return true;
   if ([...LEGACY_SAMPLE_PPKS_NAMES].some((sampleName) => normalized.includes(normalizeSheetHeader(sampleName)))) return true;
-  const hasDemoMarker = /(^|[^a-z])(demo|sample|contoh|dummy|uji\\s*coba|data\\s*uji|uji\\s*data|test\\s*data|data\\s*test)([^a-z]|$)/i.test(name);
+  const hasDemoMarker = /(^|[^a-z])(demo|sample|contoh|dummy|uji\s*coba|data\s*uji|uji\s*data|test\s*data|data\s*test)([^a-z]|$)/i.test(name);
   const identifiesSipandu = /(sipandu|ppks|odhiv|asesmen|kemensos)/i.test(name);
   return hasDemoMarker && identifiesSipandu;
 }
