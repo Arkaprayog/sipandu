@@ -1,5 +1,6 @@
 import { getAccessToken, invalidateAccessToken } from './firebase';
 import { IntegratedFormData, PPKSRecord } from '../types';
+import { isLegacySamplePPKS, LEGACY_SAMPLE_PPKS_IDS, LEGACY_SAMPLE_PPKS_NAMES } from '../data/initialData';
 
 export interface GoogleDriveFile {
   id: string;
@@ -506,6 +507,7 @@ function mapRowsToPPKSRecords(rows: string[][]): PPKSRecord[] {
       googleFormSync: true,
       integratedForm,
     };
+    if (isLegacySamplePPKS(sourceRecord)) return;
     records.push(sourceRecord);
   });
   return records;
@@ -586,4 +588,153 @@ export async function fetchFormResponses(formUrlOrId: string): Promise<GoogleFor
     pageToken = data.nextPageToken || '';
   } while (pageToken);
   return all;
+}
+
+
+/**
+ * Removes only rows whose identifier or full respondent name matches a known
+ * retired demo record. Cell formatting and all non-matching rows are untouched.
+ */
+export async function removeLegacyDemoRowsFromSpreadsheet(spreadsheetUrlOrId: string): Promise<{
+  spreadsheetId: string;
+  spreadsheetTitle: string;
+  tabsScanned: number;
+  rowsCleared: number;
+  clearedRanges: string[];
+}> {
+  const metadata = await getSpreadsheetMetadata(spreadsheetUrlOrId);
+  const rangesToClear: string[] = [];
+  for (const title of metadata.sheetTitles) {
+    const escapedTitle = title.replace(/'/g, "''");
+    const rows = await readSpreadsheetData(metadata.spreadsheetId, \`'\${escapedTitle}'!A1:AZ2000\`);
+    if (rows.length < 2 || !rows[0].some((header) => header.trim())) continue;
+    const headers = rows[0].map(normalizeSheetHeader);
+    const idColumnIndexes = headers
+      .map((header, index) => ({ header, index }))
+      .filter(({ header }) => ['id', 'idppks', 'idresponden', 'recordid', 'nomorregistrasi'].includes(header))
+      .map(({ index }) => index);
+    const nameColumnIndexes = headers
+      .map((header, index) => ({ header, index }))
+      .filter(({ header }) => ['namalengkap', 'namaresponden', 'namappks', 'namaodhiv', 'namacalonresponden'].includes(header))
+      .map(({ index }) => index);
+
+    rows.slice(1).forEach((row, index) => {
+      const idMatch = idColumnIndexes.some((columnIndex) => LEGACY_SAMPLE_PPKS_IDS.has(String(row[columnIndex] || '').trim()));
+      const nameMatch = nameColumnIndexes.some((columnIndex) =>
+        LEGACY_SAMPLE_PPKS_NAMES.has(String(row[columnIndex] || '').trim().toLocaleLowerCase('id-ID'))
+      );
+      // Also detect old rows that placed the retired synthetic ID in a differently named column.
+      const anyCellHasLegacyId = row.some((cell) => LEGACY_SAMPLE_PPKS_IDS.has(String(cell || '').trim()));
+      if (idMatch || nameMatch || anyCellHasLegacyId) {
+        const rowNumber = index + 2;
+        rangesToClear.push(\`'\${escapedTitle}'!A\${rowNumber}:AZ\${rowNumber}\`);
+      }
+    });
+  }
+
+  if (rangesToClear.length) {
+    await googleJson(
+      \`https://sheets.googleapis.com/v4/spreadsheets/\${metadata.spreadsheetId}/values:batchClear\`,
+      { method: 'POST', body: JSON.stringify({ ranges: rangesToClear }) }
+    );
+  }
+  return {
+    spreadsheetId: metadata.spreadsheetId,
+    spreadsheetTitle: metadata.title,
+    tabsScanned: metadata.sheetTitles.length,
+    rowsCleared: rangesToClear.length,
+    clearedRanges: rangesToClear,
+  };
+}
+
+function isObviousDemoDriveName(name: string): boolean {
+  const normalized = normalizeSheetHeader(name);
+  if ([...LEGACY_SAMPLE_PPKS_IDS].some((id) => normalized.includes(normalizeSheetHeader(id)))) return true;
+  if ([...LEGACY_SAMPLE_PPKS_NAMES].some((sampleName) => normalized.includes(normalizeSheetHeader(sampleName)))) return true;
+  return /(^|[^a-z])(demo|sample|contoh|dummy|uji[\s_-]?coba|data[\s_-]?uji|uji[\s_-]?data|test[\s_-]?data|data[\s_-]?test)([^a-z]|$)/i.test(name);
+}
+
+async function listDriveChildren(parentId: string): Promise<GoogleDriveFile[]> {
+  const files: GoogleDriveFile[] = [];
+  let pageToken = '';
+  do {
+    const params = new URLSearchParams({
+      q: \`'\${parentId}' in parents and trashed = false\`,
+      pageSize: '100',
+      orderBy: 'name',
+      fields: 'nextPageToken,files(id,name,mimeType,webViewLink,createdTime)',
+      includeItemsFromAllDrives: 'true',
+      supportsAllDrives: 'true',
+    });
+    if (pageToken) params.set('pageToken', pageToken);
+    const result = await googleJson<{ files?: GoogleDriveFile[]; nextPageToken?: string }>(
+      \`https://www.googleapis.com/drive/v3/files?\${params.toString()}\`
+    );
+    files.push(...(result.files || []));
+    pageToken = result.nextPageToken || '';
+  } while (pageToken);
+  return files;
+}
+
+/**
+ * Permanently deletes only files whose names explicitly identify demo data or
+ * contain one of the exact retired demo IDs/names, inside the configured SIPANDU
+ * Drive folder. Unrelated files and unrelated Drive folders are not touched.
+ */
+export async function removeObviousDemoFilesFromDrive(folderUrlOrId: string): Promise<{
+  folderId: string;
+  filesScanned: number;
+  filesDeleted: number;
+  deletedNames: string[];
+}> {
+  const rootFolderId = extractDriveFolderId(folderUrlOrId);
+  const discovered: GoogleDriveFile[] = [];
+  const visitedFolders = new Set<string>();
+
+  const visit = async (parentId: string, depth: number): Promise<void> => {
+    if (depth > 5 || visitedFolders.has(parentId)) return;
+    visitedFolders.add(parentId);
+    const children = await listDriveChildren(parentId);
+    for (const file of children) {
+      const isFolder = file.mimeType === 'application/vnd.google-apps.folder';
+      if (!isFolder && isObviousDemoDriveName(file.name)) {
+        discovered.push(file);
+        continue;
+      }
+      if (isFolder) {
+        // A folder with an explicit demo marker is itself a deliberate demo area;
+        // remove its descendants individually, then remove that now-empty folder.
+        const explicitDemoFolder = isObviousDemoDriveName(file.name);
+        await visit(file.id, depth + 1);
+        if (explicitDemoFolder) discovered.push(file);
+      }
+    }
+  };
+
+  await visit(rootFolderId, 0);
+  const deletedNames: string[] = [];
+  const unique = [...new Map(discovered.map((file) => [file.id, file])).values()];
+  for (const file of unique) {
+    // Delete files before folders (the recursive visit adds parent folders last).
+    if (file.mimeType === 'application/vnd.google-apps.folder') continue;
+    await googleJson(
+      \`https://www.googleapis.com/drive/v3/files/\${encodeURIComponent(file.id)}?supportsAllDrives=true\`,
+      { method: 'DELETE' }
+    );
+    deletedNames.push(file.name);
+  }
+  for (const file of unique) {
+    if (file.mimeType !== 'application/vnd.google-apps.folder') continue;
+    await googleJson(
+      \`https://www.googleapis.com/drive/v3/files/\${encodeURIComponent(file.id)}?supportsAllDrives=true\`,
+      { method: 'DELETE' }
+    );
+    deletedNames.push(file.name);
+  }
+  return {
+    folderId: rootFolderId,
+    filesScanned: discovered.length,
+    filesDeleted: deletedNames.length,
+    deletedNames,
+  };
 }
