@@ -183,12 +183,12 @@ export default function App() {
       try {
         const parsed: unknown = JSON.parse(cached);
         if (Array.isArray(parsed)) {
-          // Remove the exact IDs from the former built-in demo dataset. Keep
-          // every other cached record untouched; the storage effect below
-          // persists this cleaned list back to the browser cache.
-          return (parsed as PPKSRecord[]).filter(
+          // Remove the exact legacy demo IDs and persist the clean cache.
+          const clean = (parsed as PPKSRecord[]).filter(
             (record) => record && !LEGACY_SAMPLE_PPKS_IDS.has(String(record.id || ''))
           );
+          if (clean.length !== parsed.length) localStorage.setItem('sipandu_ppks', JSON.stringify(clean));
+          return clean;
         }
         console.warn('Cached PPKS data is not an array; starting with an empty list.');
       } catch (e) {
@@ -202,7 +202,12 @@ export default function App() {
     const cached = localStorage.getItem('sipandu_profile');
     if (cached) {
       try {
-        return JSON.parse(cached);
+        const parsed = JSON.parse(cached);
+        if (parsed?.nama === 'Deny Arifin Martyon S.' && parsed?.nip === '19920315 202012 1 002') {
+          localStorage.removeItem('sipandu_profile');
+          return initialProfileUser;
+        }
+        return parsed;
       } catch (e) {
         console.error('Failed to parse cached profile', e);
       }
