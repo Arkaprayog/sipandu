@@ -10,7 +10,10 @@ import {
 } from 'firebase/firestore';
 import {
   getAuth,
+  browserLocalPersistence,
+  setPersistence,
   signInWithPopup,
+  reauthenticateWithPopup,
   signInWithRedirect,
   getRedirectResult,
   GoogleAuthProvider,
@@ -46,7 +49,7 @@ googleAuthProvider.setCustomParameters({
   login_hint: GOOGLE_WORKSPACE_EMAIL,
   // Always show the account chooser: login_hint alone can silently reuse a
   // previously active Google identity in mobile browsers.
-  prompt: 'select_account consent',
+  prompt: 'select_account',
 });
 // Ask explicitly for identity scopes in addition to the Google API scopes.
 googleAuthProvider.addScope('email');
@@ -61,7 +64,7 @@ googleAuthProvider.addScope('https://www.googleapis.com/auth/forms.responses.rea
 // localStorage) so a page reload in the same tab does not force an immediate
 // reconnect, and discard them conservatively before Google's usual 1-hour expiry.
 const WORKSPACE_TOKEN_STORAGE_KEY = 'sipandu_google_workspace_token_v1';
-const WORKSPACE_TOKEN_TTL_MS = 50 * 60 * 1000;
+const WORKSPACE_TOKEN_TTL_MS = 55 * 60 * 1000;
 let cachedAccessTokenSavedAt = 0;
 
 function readStoredWorkspaceToken(): string | null {
@@ -269,12 +272,64 @@ function describeGoogleOAuthError(error: unknown): string {
  * Attempts a popup first; mobile/embedded browsers fall back to the full-page
  * redirect flow, whose result is processed after the page returns from Google.
  */
+function buildWorkspaceProvider(prompt?: 'none' | 'select_account'): GoogleAuthProvider {
+  const provider = new GoogleAuthProvider();
+  provider.setCustomParameters({
+    login_hint: GOOGLE_WORKSPACE_EMAIL,
+    ...(prompt ? { prompt } : {}),
+  });
+  provider.addScope('email');
+  provider.addScope('profile');
+  provider.addScope('https://www.googleapis.com/auth/drive');
+  provider.addScope('https://www.googleapis.com/auth/drive.file');
+  provider.addScope('https://www.googleapis.com/auth/spreadsheets');
+  provider.addScope('https://www.googleapis.com/auth/forms.body');
+  provider.addScope('https://www.googleapis.com/auth/forms.responses.readonly');
+  return provider;
+}
+
 export const googleSignIn = async (): Promise<{
   user: User;
   accessToken: string;
 } | null> => {
+  // Keep the Workspace identity across reloads; the short-lived Google API
+  // access token is still held only in sessionStorage for security.
+  await setPersistence(workspaceAuth, browserLocalPersistence);
+
+  const existingUser = workspaceAuth.currentUser;
+  if (
+    existingUser &&
+    getWorkspaceGoogleEmail(existingUser)?.toLowerCase() === GOOGLE_WORKSPACE_EMAIL.toLowerCase()
+  ) {
+    // First try to renew access with the already-authorized Google session,
+    // without forcing account selection or repeating the consent screen.
+    try {
+      const refreshed = await reauthenticateWithPopup(
+        existingUser,
+        buildWorkspaceProvider('none')
+      );
+      return await finishWorkspaceSignIn(refreshed);
+    } catch (silentRefreshError: any) {
+      const code = silentRefreshError?.code ? String(silentRefreshError.code) : '';
+      // Fall back to normal account selection, which no longer forces consent.
+      if (!code) throw new Error(describeGoogleOAuthError(silentRefreshError));
+      if (
+        code.includes('auth/user-mismatch') ||
+        code.includes('auth/invalid-credential') ||
+        code.includes('auth/unauthorized-domain') ||
+        code.includes('auth/operation-not-allowed') ||
+        code.includes('auth/web-storage-unsupported')
+      ) {
+        throw new Error(describeGoogleOAuthError(silentRefreshError));
+      }
+      // Other failures (missing SSO session, expired Google login, popup issue)
+      // continue through one normal account-selection attempt below.
+    }
+  }
+
+  const provider = buildWorkspaceProvider('select_account');
   try {
-    const result = await signInWithPopup(workspaceAuth, googleAuthProvider);
+    const result = await signInWithPopup(workspaceAuth, provider);
     return await finishWorkspaceSignIn(result);
   } catch (error: any) {
     const code = error?.code ? String(error.code) : '';
@@ -283,13 +338,12 @@ export const googleSignIn = async (): Promise<{
       code.includes('auth/operation-not-supported-in-this-environment')
     ) {
       try {
-        await signInWithRedirect(workspaceAuth, googleAuthProvider);
+        await signInWithRedirect(workspaceAuth, provider);
         return null;
       } catch (redirectError) {
         throw new Error(describeGoogleOAuthError(redirectError));
       }
     }
-    // Preserve our explicit account/scope validation messages.
     if (!code) throw error;
     throw new Error(describeGoogleOAuthError(error));
   }
