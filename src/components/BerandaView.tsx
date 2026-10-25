@@ -16,15 +16,20 @@ import {
 interface BerandaViewProps {
   ppksList: PPKSRecord[];
   googleSpreadsheetUrl?: string;
+  googleSpreadsheetName?: string;
+  onSyncGoogleSpreadsheet?: () => Promise<number>;
 }
 
 export const BerandaView: React.FC<BerandaViewProps> = ({
   ppksList,
-  googleSpreadsheetUrl = 'https://docs.google.com/spreadsheets/d/1yA8KemensosODHIVSumut2026_LiveSync',
+  googleSpreadsheetUrl = '',
+  googleSpreadsheetName = '',
+  onSyncGoogleSpreadsheet,
 }) => {
   const [selectedDistrict, setSelectedDistrict] = useState<string | null>(null);
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
-  const [lastSyncTime, setLastSyncTime] = useState<string>('Hari ini, 09:15 WIB');
+  const [lastSyncTime, setLastSyncTime] = useState<string>('');
+  const [syncMessage, setSyncMessage] = useState<string>('');
 
   // Compute live statistics based on ppksList
   const totalPPKS = ppksList.length;
@@ -32,8 +37,8 @@ export const BerandaView: React.FC<BerandaViewProps> = ({
   // Gender breakdown
   const maleCount = ppksList.filter((p) => p.jenisKelamin === 'Laki-laki').length;
   const femaleCount = ppksList.filter((p) => p.jenisKelamin === 'Perempuan').length;
-  const malePercent = totalPPKS > 0 ? Math.round((maleCount / totalPPKS) * 100) : 60;
-  const femalePercent = totalPPKS > 0 ? 100 - malePercent : 40;
+  const malePercent = totalPPKS > 0 ? Math.round((maleCount / totalPPKS) * 100) : 0;
+  const femalePercent = totalPPKS > 0 ? Math.round((femaleCount / totalPPKS) * 100) : 0;
 
   // Age brackets
   const ageBrackets = [
@@ -61,17 +66,27 @@ export const BerandaView: React.FC<BerandaViewProps> = ({
     ).length;
     return {
       ...d,
-      displayCount: d.count + listCount,
+      displayCount: listCount,
     };
   }).sort((a, b) => b.displayCount - a.displayCount);
 
-  const handleSync = () => {
+  const handleSync = async () => {
+    if (!onSyncGoogleSpreadsheet) {
+      setSyncMessage('Sinkronisasi belum dikonfigurasi. Pilih spreadsheet sumber melalui Google Workspace & Cloud Hub.');
+      return;
+    }
     setIsSyncing(true);
-    setTimeout(() => {
-      setIsSyncing(false);
+    setSyncMessage('');
+    try {
+      const count = await onSyncGoogleSpreadsheet();
       const now = new Date();
-      setLastSyncTime(`${now.getHours()}:${String(now.getMinutes()).padStart(2, '0')} WIB`);
-    }, 900);
+      setLastSyncTime(now.toLocaleString('id-ID'));
+      setSyncMessage(`Sinkronisasi nyata berhasil: ${count} responden dibaca dari spreadsheet sumber. Daftar PPKS diperbarui dan data yang cocok digabungkan agar tidak duplikat.`);
+    } catch (error) {
+      setSyncMessage(error instanceof Error ? error.message : String(error));
+    } finally {
+      setIsSyncing(false);
+    }
   };
 
   return (
@@ -87,30 +102,33 @@ export const BerandaView: React.FC<BerandaViewProps> = ({
               <span className="text-xs font-bold text-sky-300 uppercase tracking-wider">
                 Google Spreadsheet Live Sync
               </span>
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] bg-emerald-950 text-emerald-300 border border-emerald-500/30">
-                <CheckCircle2 className="w-3 h-3 text-emerald-400" />
-                Terhubung Aktif
+              <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] border ${lastSyncTime ? 'bg-emerald-950 text-emerald-300 border-emerald-500/30' : googleSpreadsheetUrl ? 'bg-amber-950 text-amber-200 border-amber-500/30' : 'bg-neutral-900 text-neutral-300 border-neutral-700'}`}>
+                {lastSyncTime ? 'Data berhasil dimuat' : googleSpreadsheetUrl ? 'Sumber dipilih · belum diuji' : 'Belum dikonfigurasi'}
               </span>
             </div>
             <p className="text-sm font-semibold text-white">
-              Database_PPKS_ODHIV_Sumut_2026.xlsx
+              {googleSpreadsheetName || (googleSpreadsheetUrl ? 'Spreadsheet sumber SIPANDU' : 'Spreadsheet belum dipilih')}
             </p>
             <p className="text-xs text-neutral-400">
-              Sinkronisasi terakhir: {lastSyncTime} • Total Terdata:{' '}
-              <span className="text-white font-bold">{totalPPKS + 180} PPKS</span> (8 Terverifikasi Lapangan)
+              Sinkronisasi terakhir: {lastSyncTime || 'Belum ada sinkronisasi terverifikasi'} • Total PPKS pada aplikasi:{' '}
+              <span className="text-white font-bold">{totalPPKS} responden</span>
             </p>
           </div>
         </div>
 
         <div className="flex items-center gap-2 self-start md:self-auto">
-          <a
-            href={googleSpreadsheetUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="px-3 py-2 rounded-xl text-xs font-medium text-sky-200 bg-sky-950/60 hover:bg-sky-900/60 border border-sky-500/30 transition flex items-center gap-1.5"
-          >
-            <span>Buka Spreadsheet</span>
-          </a>
+          {googleSpreadsheetUrl ? (
+            <a
+              href={googleSpreadsheetUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="px-3 py-2 rounded-xl text-xs font-medium text-sky-200 bg-sky-950/60 hover:bg-sky-900/60 border border-sky-500/30 transition flex items-center gap-1.5"
+            >
+              <span>Buka Spreadsheet</span>
+            </a>
+          ) : (
+            <span className="px-3 py-2 rounded-xl text-xs text-neutral-400 border border-neutral-700">Belum ada sumber</span>
+          )}
           <button
             type="button"
             onClick={handleSync}
@@ -118,10 +136,16 @@ export const BerandaView: React.FC<BerandaViewProps> = ({
             className="px-3.5 py-2 rounded-xl text-xs font-semibold text-white bg-emerald-800/80 hover:bg-emerald-700/80 border border-rose-500/40 shadow-sm flex items-center gap-1.5 active:scale-95 transition cursor-pointer"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
-            <span>{isSyncing ? 'Menyinkronkan...' : 'Sinkronkan'}</span>
+            <span>{isSyncing ? 'Memuat data...' : 'Sinkronkan dari Sheet'}</span>
           </button>
         </div>
       </div>
+
+      {syncMessage && (
+        <div role="status" aria-live="polite" className={`rounded-xl border p-3 text-xs break-words ${syncMessage.startsWith('Sinkronisasi nyata berhasil') ? 'border-emerald-500/40 bg-emerald-950/50 text-emerald-100' : 'border-amber-500/50 bg-amber-950/60 text-amber-100'}`}>
+          {syncMessage}
+        </div>
+      )}
 
       {/* Grid: Peta Sumatera Utara & Donut Jenis Kelamin */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
