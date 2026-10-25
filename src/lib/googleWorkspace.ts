@@ -220,7 +220,7 @@ export async function readSpreadsheetRichData(
   const params = new URLSearchParams({
     ranges: range,
     includeGridData: 'true',
-    fields: 'sheets(properties(title),data(rowData(values(formattedValue,hyperlink,textFormatRuns(format(link(uri)))))))',
+    fields: 'sheets(properties(title),data(rowData(values(formattedValue,userEnteredValue.stringValue,effectiveValue.stringValue,hyperlink,textFormatRuns(format(link(uri)))))))',
   });
   const data = await googleJson<{
     sheets?: {
@@ -229,6 +229,8 @@ export async function readSpreadsheetRichData(
         rowData?: {
           values?: {
             formattedValue?: string;
+            userEnteredValue?: { stringValue?: string };
+            effectiveValue?: { stringValue?: string };
             hyperlink?: string;
             textFormatRuns?: Array<{ format?: { link?: { uri?: string } } }>;
           }[];
@@ -237,13 +239,33 @@ export async function readSpreadsheetRichData(
     }[];
   }>(`https://sheets.googleapis.com/v4/spreadsheets/${id}?${params.toString()}`);
 
-  const sheet = data.sheets?.[0];
-  const rowData = sheet?.data?.[0]?.rowData || [];
-  return rowData.map((row) => (row.values || []).map((cell) => {
+  const rowData = data.sheets?.[0]?.data?.[0]?.rowData || [];
+  const headerCells = rowData[0]?.values || [];
+  const headers = headerCells.map((cell) =>
+    String(cell.userEnteredValue?.stringValue || cell.formattedValue || '')
+  );
+  const normalizedHeaders = headers.map(normalizeSheetHeader);
+  const photoColumns = new Set<number>();
+  normalizedHeaders.forEach((header, index) => {
+    if (/(foto|ktp|kartuidentitas|kartu keluarga|kartuKeluarga|rumah|lampiran|upload|dokumen)/i.test(header)) {
+      photoColumns.add(index);
+    }
+  });
+
+  return rowData.map((row) => (row.values || []).map((cell, index) => {
+    const displayValue = String(
+      cell.userEnteredValue?.stringValue ||
+      cell.effectiveValue?.stringValue ||
+      cell.formattedValue ||
+      ''
+    );
     const runLink = cell.textFormatRuns?.find((run) => run.format?.link?.uri)?.format?.link?.uri;
-    // Prefer the actual link for uploaded photo cells; otherwise preserve the
-    // formatted display value, including leading zeroes in NIK cells.
-    return String(cell.hyperlink || runLink || cell.formattedValue || '');
+    const actualLink = cell.hyperlink || runLink || '';
+    // Use underlying Drive URLs only for columns that are photo/upload/document
+    // questions. For NIK and all other text columns, keep the displayed value
+    // so a rich-text hyperlink cannot replace an identity number with its URL.
+    if (photoColumns.has(index) && actualLink) return String(actualLink);
+    return displayValue || (photoColumns.has(index) ? String(actualLink) : '');
   }));
 }
 
