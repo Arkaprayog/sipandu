@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { PPKSRecord, ProfileUser, AppSettings } from './types';
-import { initialPPKSList, initialProfileUser, initialAppSettings, LEGACY_SAMPLE_PPKS_IDS } from './data/initialData';
+import { initialPPKSList, initialProfileUser, initialAppSettings, isLegacySamplePPKS } from './data/initialData';
 import { LoginPage } from './components/LoginPage';
 import { Header } from './components/Header';
 import { BottomNav, TabKey } from './components/BottomNav';
@@ -15,7 +15,7 @@ import { NotificationsModal } from './components/NotificationsModal';
 import { GoogleWorkspaceModal } from './components/GoogleWorkspaceModal';
 import { onAuthStateChanged, signOut, getIdTokenResult } from 'firebase/auth';
 import { auth, getAccessToken, savePPKSToFirestore, googleLogout } from './lib/firebase';
-import { ensureSIPANDUDatabaseSheet, extractSpreadsheetId, importPPKSFromSpreadsheet, upsertPPKSInSpreadsheet } from './lib/googleWorkspace';
+import { ensureSIPANDUDatabaseSheet, extractSpreadsheetId, importPPKSFromSpreadsheet, removeLegacyDemoRowsFromSpreadsheet, removeObviousDemoFilesFromDrive, upsertPPKSInSpreadsheet } from './lib/googleWorkspace';
 import { GOOGLE_SIPANDU_RESOURCES } from './lib/googleSIPANDUResources';
 
 function mergePPKSRecords(localRecords: PPKSRecord[], cloudRecords: PPKSRecord[]): PPKSRecord[] {
@@ -51,7 +51,7 @@ function mergePPKSRecords(localRecords: PPKSRecord[], cloudRecords: PPKSRecord[]
   };
 
   for (const record of localRecords) {
-    if (!record || LEGACY_SAMPLE_PPKS_IDS.has(String(record.id || ''))) continue;
+    if (!record || isLegacySamplePPKS(record)) continue;
     merged.set(recordKey(record), record);
   }
   const normalizePersonText = (value: string | undefined) =>
@@ -187,7 +187,7 @@ export default function App() {
           // every other cached record untouched; the storage effect below
           // persists this cleaned list back to the browser cache.
           return (parsed as PPKSRecord[]).filter(
-            (record) => record && !LEGACY_SAMPLE_PPKS_IDS.has(String(record.id || ''))
+            (record) => record && !isLegacySamplePPKS(record)
           );
         }
         console.warn('Cached PPKS data is not an array; starting with an empty list.');
@@ -202,7 +202,12 @@ export default function App() {
     const cached = localStorage.getItem('sipandu_profile');
     if (cached) {
       try {
-        return JSON.parse(cached);
+        const parsed = JSON.parse(cached) as Partial<ProfileUser>;
+        const photoUrl = String(parsed.photoUrl || '');
+        const isKnownStockAvatar =
+          photoUrl.includes('images.unsplash.com/photo-1507003211169-0a1dd7228f2d') ||
+          photoUrl.includes('images.unsplash.com/photo-1534528741775-53994a69daeb');
+        return { ...initialProfileUser, ...parsed, photoUrl: isKnownStockAvatar ? '' : photoUrl };
       } catch (e) {
         console.error('Failed to parse cached profile', e);
       }
@@ -223,6 +228,7 @@ export default function App() {
   });
 
   const [cloudSyncNotice, setCloudSyncNotice] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const demoCleanupAttemptedRef = useRef('');
   const [liveSyncState, setLiveSyncState] = useState<{
     type: 'idle' | 'success' | 'paused' | 'error';
     message: string;
