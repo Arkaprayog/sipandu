@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   googleSignIn,
+  getWorkspaceGoogleEmail,
   googleLogout,
   getAccessToken,
   initAuthListener,
@@ -130,17 +131,18 @@ export const GoogleWorkspaceModal: React.FC<GoogleWorkspaceModalProps> = ({
       });
 
       const expectedWorkspaceEmail = GOOGLE_WORKSPACE_EMAIL.toLowerCase();
-      const workspaceAccountOk = !!googleUser && (googleUser.email || '').toLowerCase() === expectedWorkspaceEmail;
+      const activeGoogleEmail = getWorkspaceGoogleEmail(googleUser);
+      const workspaceAccountOk = !!activeGoogleEmail && activeGoogleEmail.toLowerCase() === expectedWorkspaceEmail;
       let accessToken: string | null = null;
       if (!googleUser) {
         addResult('Akun Google Workspace', false, 'Belum masuk dengan akun Google pada sesi ini.');
       } else if (!workspaceAccountOk) {
-        addResult('Akun Google Workspace', false, `Akun yang tersambung adalah ${googleUser.email || 'akun tanpa email'}, sedangkan sumber data dibagikan ke ${GOOGLE_WORKSPACE_EMAIL}. Pilih akun yang menerima izin berbagi tersebut.`);
+        addResult('Akun Google Workspace', false, `Akun yang tersambung adalah ${activeGoogleEmail || 'profil Google yang tidak membagikan alamat email'}, sedangkan sumber data SIPANDU dibagikan ke ${GOOGLE_WORKSPACE_EMAIL}. Keluar dari akun Google yang salah, lalu masuk kembali dan pilih alamat tersebut.`);
       } else {
         try {
           accessToken = await getAccessToken();
           addResult('Akun Google Workspace', !!accessToken, accessToken
-            ? `Identitas Google cocok (${googleUser.email}) dan token API tersedia; akses sumber data tetap diuji terpisah.`
+            ? `Identitas Google cocok (${activeGoogleEmail}) dan token API tersedia; akses sumber data tetap diuji terpisah.`
             : 'Identitas Google cocok, tetapi token API tidak tersedia atau sudah kedaluwarsa. Tekan “Pulihkan Izin Google API”.');
         } catch (error: any) {
           addResult('Akun Google Workspace', false, error?.message || String(error));
@@ -229,7 +231,7 @@ export const GoogleWorkspaceModal: React.FC<GoogleWorkspaceModalProps> = ({
       if (res) {
         setGoogleUser(res.user);
         setToken(res.accessToken);
-        setStatusMessage({ type: 'success', text: `Berhasil terhubung dengan Google (${res.user.email})` });
+        setStatusMessage({ type: 'success', text: `Berhasil terhubung dengan Google (${getWorkspaceGoogleEmail(res.user) || GOOGLE_WORKSPACE_EMAIL})` });
       }
     } catch (err: any) {
       console.error(err);
@@ -563,7 +565,7 @@ export const GoogleWorkspaceModal: React.FC<GoogleWorkspaceModalProps> = ({
                       {googleUser ? googleUser.displayName : 'Google Workspace Belum Terhubung'}
                     </h4>
                     <p className="text-neutral-300 text-[11px]">
-                      {googleUser ? googleUser.email : 'Hubungkan akun Google untuk sinkronisasi Drive, Sheets, dan Forms.'}
+                      {googleUser ? (getWorkspaceGoogleEmail(googleUser) || 'Profil Google tidak membagikan alamat email') : 'Hubungkan akun Google untuk sinkronisasi Drive, Sheets, dan Forms.'}
                     </p>
                     <span className="text-[10px] text-sky-300 font-mono">
                       Status Token: {token ? 'Tersedia di sesi ini; validitas diuji saat API dipanggil' : (googleUser ? 'Perlu otorisasi ulang' : 'Belum diotorisasi')}
