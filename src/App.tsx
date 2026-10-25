@@ -463,13 +463,10 @@ export default function App() {
         ...[...uniqueSheets.keys()].sort(),
         GOOGLE_SIPANDU_RESOURCES.driveFolderId,
       ].join('|');
+      // Keep this guard only in memory for the current page session. Do not
+      // trust a permanent localStorage flag: demo rows/files may be reintroduced
+      // or a previous run may have been unable to scan every cloud target.
       if (demoCleanupAttemptedRef.current === cleanupKey) return;
-      try {
-        if (localStorage.getItem(cleanupKey)) {
-          demoCleanupAttemptedRef.current = cleanupKey;
-          return;
-        }
-      } catch { /* Continue; cloud cleanup itself is repeat-safe. */ }
 
       const token = await getAccessToken();
       if (!token) {
