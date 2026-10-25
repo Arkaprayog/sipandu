@@ -698,6 +698,46 @@ export async function removeObviousDemoFilesFromDrive(folderUrlOrId: string): Pr
   const rootFolderId = extractDriveFolderId(folderUrlOrId);
   const discovered: GoogleDriveFile[] = [];
   const visitedFolders = new Set<string>();
+  let filesScanned = 0;
+
+  const visit = async (parentId: string, depth: number, insideMarkedDemoFolder = false): Promise<void> => {
+    if (depth > 5 || visitedFolders.has(parentId)) return;
+    visitedFolders.add(parentId);
+    const children = await listDriveChildren(parentId);
+    filesScanned += children.length;
+    for (const file of children) {
+      const isFolder = file.mimeType === 'application/vnd.google-apps.folder';
+      if (isFolder) {
+        // A clearly demo-labelled folder marks its descendants as demo data,
+        // but the folder itself is preserved to avoid deleting unrelated files
+        // or permissions attached to that folder.
+        await visit(file.id, depth + 1, insideMarkedDemoFolder || isObviousDemoDriveName(file.name));
+      } else if (insideMarkedDemoFolder || isObviousDemoDriveName(file.name)) {
+        discovered.push(file);
+      }
+    }
+  };
+
+  await visit(rootFolderId, 0);
+  const deletedNames: string[] = [];
+  const unique = [...new Map(discovered.map((file) => [file.id, file])).values()];
+  for (const file of unique) {
+    await googleJson(
+      \`https://www.googleapis.com/drive/v3/files/\${encodeURIComponent(file.id)}?supportsAllDrives=true\`,
+      { method: 'DELETE' }
+    );
+    deletedNames.push(file.name);
+  }
+  return {
+    folderId: rootFolderId,
+    filesScanned,
+    filesDeleted: deletedNames.length,
+    deletedNames,
+  };
+}> {
+  const rootFolderId = extractDriveFolderId(folderUrlOrId);
+  const discovered: GoogleDriveFile[] = [];
+  const visitedFolders = new Set<string>();
 
   const visit = async (parentId: string, depth: number): Promise<void> => {
     if (depth > 5 || visitedFolders.has(parentId)) return;
