@@ -335,8 +335,8 @@ function readCellByAliases(headers: string[], row: string[], aliases: string[]):
 function readNIKFromSheetRow(headers: string[], row: string[]): string {
   const normalizedHeaders = headers.map(normalizeSheetHeader);
   const exactAliases = [
-    'nik', 'nikresponden', 'niksesuaiktp', 'niksesuaikktp', 'niknoktp', 'nikktp',
-    'nomorindukkependudukan', 'nomorindukkependudukannik', 'nomorktp', 'noktp',
+    'nik', 'nikresponden', 'nik16digit', 'nik16digitsesuaiktp', 'niksesuaiktp', 'niksesuaikktp', 'niknoktp', 'nikktp',
+    'nomorindukkependudukan', 'nomorindukkependudukannik', 'nomoridentitas', 'noidentitas', 'nomorktp', 'noktp',
     'nomorkartutandapenduduk', 'noindukkependudukan', 'nomorNIK', 'noNIK', 'noKTPNIK', 'KTPNIK',
   ].map(normalizeSheetHeader);
   // Exact semantic header names are safest and take priority.
@@ -358,7 +358,9 @@ function readNIKFromSheetRow(headers: string[], row: string[]): string {
       header.includes('nomorindukkependudukan') ||
       header.includes('nomorkartutandapenduduk') ||
       header.includes('nomorktp') ||
-      header.includes('noktp')
+      header.includes('noktp') ||
+      header.includes('nomoridentitas') ||
+      header.includes('noidentitas')
     );
   const best = candidates.sort((a, b) => {
     const score = (header: string) =>
