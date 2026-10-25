@@ -560,6 +560,34 @@ function mapRowsToPPKSRecords(rows: string[][]): PPKSRecord[] {
 
     const timestamp = readCellByAliases(headers, row, ['timestamp', 'capWaktu', 'waktuPengiriman', 'waktuPengisian', 'tanggalWaktu', 'createTime']);
     let nik = readNIKFromSheetRow(headers, row);
+    // Google Forms can append helper text/asterisks and may label the NIK as
+    // "NIK / No. KTP", "Nomor KTP (16 digit)" or a numbered official-PDF field.
+    // Use a second conservative pass over respondent identity headers before
+    // mapping the canonical answer, without ever treating a photo-upload column as NIK.
+    if (!nik) {
+      const identityCandidates = headers
+        .map((header, index) => ({ header: String(header ?? ''), value: String(row[index] ?? '').trim() }))
+        .filter(({ header, value }) =>
+          value &&
+          !/(foto|photo|gambar|image|upload|unggah|lampiran|scan|dokumen|berkas|file|tautan|linkdrive)/i.test(header) &&
+          isLikelyRespondentNIKHeader(header)
+        )
+        .sort((a, b) => {
+          const score = (header: string) => {
+            const h = normalizeNIKHeader(header);
+            return (h === 'nik' ? 100 : 0) +
+              (h.includes('nomorindukkependudukan') ? 80 : 0) +
+              (h.includes('responden') || h.includes('ppks') ? 40 : 0) +
+              (h.includes('ktp') ? 20 : 0) -
+              (/(ayah|ibu|wali|suami|istri|keluarga|pendamping|petugas|asesor)/i.test(h) ? 1000 : 0);
+          };
+          return score(b.header) - score(a.header);
+        });
+      for (const candidate of identityCandidates) {
+        const normalized = normalizeNIKCellValue(candidate.value);
+        if (normalized) { nik = normalized; break; }
+      }
+    }
     // Preserve answers from a spreadsheet whose headers are numbered like the official PDF.
     // For unnumbered Google Forms headers, resolve the unambiguous identity fields explicitly.
     const officialAssessment: Record<string, string | string[]> = {};
