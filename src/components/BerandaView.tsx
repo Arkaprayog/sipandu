@@ -91,23 +91,24 @@ export const BerandaView: React.FC<BerandaViewProps> = ({
   const blankRegionCount = regionAssignments.filter((item) => !item.original).length;
 
   // Map pins show only counts calculated from imported/local records; no demo totals.
+  // The map emphasizes selected reference points; counts are taken from the
+  // same normalized 33-district aggregation used by the full chart below.
   const mapHotspots = [
-    { name: 'Medan', x: 380, y: 110, main: true, matches: ['medan'] },
-    { name: 'Deli Serdang', x: 420, y: 130, main: false, matches: ['deli serdang', 'deliserdang'] },
-    { name: 'Binjai', x: 340, y: 115, main: false, matches: ['binjai'] },
-    { name: 'P. Siantar', x: 375, y: 175, main: false, matches: ['pematangsiantar', 'pematang siantar'] },
-    { name: 'Asahan', x: 440, y: 195, main: false, matches: ['asahan'] },
-    { name: 'Karo', x: 310, y: 145, main: false, matches: ['karo'] },
-    { name: 'Tap. Utara', x: 330, y: 250, main: false, matches: ['tapanuli utara', 'tapanuliutara'] },
-    { name: 'Tj. Balai', x: 470, y: 200, main: false, matches: ['tanjungbalai', 'tanjung balai'] },
-    { name: 'Labuhanbatu', x: 490, y: 260, main: false, matches: ['labuhanbatu', 'labuhan batu'] },
-    { name: 'Simalungun', x: 385, y: 210, main: false, matches: ['simalungun'] },
-    { name: 'Tebing Tinggi', x: 410, y: 160, main: false, matches: ['tebing tinggi', 'tebingtinggi'] },
+    { name: 'Medan', districtId: 'medan', x: 380, y: 110, main: true },
+    { name: 'Deli Serdang', districtId: 'deliserdang', x: 420, y: 130, main: false },
+    { name: 'Binjai', districtId: 'binjai', x: 340, y: 115, main: false },
+    { name: 'P. Siantar', districtId: 'pematangsiantar', x: 375, y: 175, main: false },
+    { name: 'Asahan', districtId: 'asahan', x: 440, y: 195, main: false },
+    { name: 'Karo', districtId: 'karo', x: 310, y: 145, main: false },
+    { name: 'Tap. Utara', districtId: 'tapanuliutara', x: 330, y: 250, main: false },
+    { name: 'Tj. Balai', districtId: 'tanjungbalai', x: 470, y: 200, main: false },
+    { name: 'Labuhanbatu', districtId: 'labuhanbatu', x: 490, y: 260, main: false },
+    { name: 'Labusel', districtId: 'labuhanbatuselatan', x: 525, y: 290, main: false },
+    { name: 'Simalungun', districtId: 'simalungun', x: 385, y: 210, main: false },
+    { name: 'Tebing Tinggi', districtId: 'tebingtinggi', x: 410, y: 160, main: false },
   ].map((loc) => ({
     ...loc,
-    count: ppksList.filter((record) => loc.matches.some((part) =>
-      (record.kotaDomisili || '').toLowerCase().includes(part)
-    )).length,
+    count: cityCounts.find((district) => district.id === loc.districtId)?.displayCount || 0,
   }));
 
   const handleSync = async () => {
