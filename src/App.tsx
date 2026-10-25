@@ -510,15 +510,8 @@ export default function App() {
         demoCleanupAttemptedRef.current === cleanupFlag ||
         demoCleanupInProgressRef.current === cleanupFlag
       ) return;
-      try {
-        if (localStorage.getItem(cleanupFlag)) {
-          demoCleanupAttemptedRef.current = cleanupFlag;
-          return;
-        }
-      } catch {
-        // Continue; cloud-side cleanup is repeat-safe without local storage.
-      }
-
+      // Do not trust a permanent browser flag for cleanup: retired demo rows/files
+      // can be reintroduced by an old copy. The exact-marker scan is idempotent.
       const accessToken = await getAccessToken();
       if (!accessToken) {
         setCloudSyncNotice({
