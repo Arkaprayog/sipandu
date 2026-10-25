@@ -95,7 +95,7 @@ export const SUMUT_DISTRICTS = [
   { id: 'padanglawas', name: 'Kab. Padang Lawas', aliases: ['Palas', 'Sibuhuan'], lat: 1.0, lng: 99.8 },
   { id: 'labuhanbatuselatan', name: 'Kab. Labuhanbatu Selatan', aliases: ['Labuhan Batu Selatan', 'Labuhanbatu Selatan', 'Labusel', 'Kota Pinang', 'Kotapinang'], lat: 1.7, lng: 100.1 },
   { id: 'labuhanbatuutara', name: 'Kab. Labuhanbatu Utara', aliases: ['Labuhan Batu Utara', 'Labura', 'Aek Kanopan'], lat: 2.5, lng: 99.8 },
-  { id: 'nias utara', name: 'Kab. Nias Utara', aliases: ['Nias Utara', 'Lotu'], lat: 1.3, lng: 97.4 },
+  { id:'niasutar a', name: 'Kab. Nias Utara', aliases: ['Nias Utara', 'Lotu'], lat: 1.3, lng: 97.4 },
   { id: 'niasbarat', name: 'Kab. Nias Barat', aliases: ['Nias Barat', 'Lahomi'], lat: 1.1, lng: 97.3 },
   { id: 'sibolga', name: 'Kota Sibolga', aliases: ['Sibolga'], lat: 1.74, lng: 98.78 },
   { id: 'tanjungbalai', name: 'Kota Tanjungbalai', aliases: ['Tanjung Balai', 'Tanjungbalai'], lat: 2.9667, lng: 99.8 },
