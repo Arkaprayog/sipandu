@@ -202,7 +202,16 @@ export default function App() {
     const cached = localStorage.getItem('sipandu_profile');
     if (cached) {
       try {
-        return JSON.parse(cached);
+        const parsed = JSON.parse(cached) as Partial<ProfileUser>;
+        const photoUrl = String(parsed.photoUrl || '');
+        const isKnownStockAvatar =
+          photoUrl.includes('images.unsplash.com/photo-1507003211169-0a1dd7228f2d') ||
+          photoUrl.includes('images.unsplash.com/photo-1534528741775-53994a69daeb');
+        return {
+          ...initialProfileUser,
+          ...parsed,
+          photoUrl: isKnownStockAvatar ? '' : photoUrl,
+        };
       } catch (e) {
         console.error('Failed to parse cached profile', e);
       }
