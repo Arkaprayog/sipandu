@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { PPKSRecord, AppSettings } from '../types';
 import { KemensosQRCode } from './KemensosQRCode';
 import { CameraCaptureModal } from './CameraCaptureModal';
+import { PrivateDriveImage } from './PrivateDriveImage';
 import {
   buildWhatsAppMessage,
   createWhatsAppLink,
@@ -41,8 +42,8 @@ export const AsesmenView: React.FC<AsesmenViewProps> = ({
   const [namaLengkap, setNamaLengkap] = useState<string>('');
   const [nik, setNik] = useState<string>('');
   const [usia, setUsia] = useState<string>('');
-  const [jenisKelamin, setJenisKelamin] = useState<'Laki-laki' | 'Perempuan'>('Laki-laki');
-  const [kotaDomisili, setKotaDomisili] = useState<string>('Kota Medan');
+  const [jenisKelamin, setJenisKelamin] = useState<'Laki-laki' | 'Perempuan' | ''>('');
+  const [kotaDomisili, setKotaDomisili] = useState<string>('');
   const [fotoDiri, setFotoDiri] = useState<string>('');
   const [fotoDiriName, setFotoDiriName] = useState<string>('');
   const [fotoKtp, setFotoKtp] = useState<string>('');
@@ -97,29 +98,37 @@ export const AsesmenView: React.FC<AsesmenViewProps> = ({
   const handleSubmitTahapAwal = (e: React.FormEvent) => {
     e.preventDefault();
 
+    // Never invent respondent facts or identity details.
+    const cleanedNik = nik.replace(/\D/g, '');
+    const ageValue = Number(usia);
+    if (!namaLengkap.trim() || !/^\d{16}$/.test(cleanedNik) || !Number.isInteger(ageValue) || ageValue < 1 || ageValue > 100 || !jenisKelamin || !kotaDomisili || !noHpWa.trim()) {
+      alert('Lengkapi nama, NIK 16 digit, usia yang benar, jenis kelamin, domisili, dan nomor HP/WA sebelum menyimpan.');
+      return;
+    }
+
     // Timestamp automatically generated when respondent/user presses complete/kirim
     const now = new Date();
     const formattedTimestamp = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
 
     const newPPKS: PPKSRecord = {
-      id: `PPKS-SU-2026-${String(ppksList.length + 1).padStart(3, '0')}`,
+      id: `PPKS-SU-${now.getTime()}`,
       timestamp: formattedTimestamp,
       namaLengkap,
-      nik,
-      usia: parseInt(usia, 10) || 30,
-      jenisKelamin,
+      nik: cleanedNik,
+      usia: ageValue,
+      jenisKelamin: jenisKelamin as 'Laki-laki' | 'Perempuan',
       kotaDomisili,
-      alamatLengkap: `${kotaDomisili}, Sumatera Utara`,
+      alamatLengkap: '',
       noHpWa: noHpWa.trim(),
       jenisBantuan: jenisBantuan.trim(),
-      intervensiMental: 'Perlu asesmen lanjutan kesehatan mental ODHIV dan kepatuhan ARV',
-      desil: 2,
+      intervensiMental: '',
+      desil: 0,
       // Never insert stock/demo images as a respondent's identity documents.
       // Empty photo fields remain visibly missing until a genuine upload is supplied.
       fotoDiri,
       fotoKtp,
       statusAsesmen: 'Tahap Awal',
-      googleFormSync: true,
+      googleFormSync: false,
     };
 
     onAddNewPPKS(newPPKS);
@@ -129,6 +138,8 @@ export const AsesmenView: React.FC<AsesmenViewProps> = ({
     setNamaLengkap('');
     setNik('');
     setUsia('');
+    setJenisKelamin('');
+    setKotaDomisili('');
     setJenisBantuan('');
     setNoHpWa('');
     setFotoDiri('');
@@ -341,8 +352,10 @@ export const AsesmenView: React.FC<AsesmenViewProps> = ({
                     <input
                       type="text"
                       maxLength={16}
+                      inputMode="numeric"
+                      pattern="[0-9]{16}"
                       value={nik}
-                      onChange={(e) => setNik(e.target.value)}
+                      onChange={(e) => setNik(e.target.value.replace(/\D/g, "").slice(0, 16))}
                       placeholder="1271xxxxxxxxxxxx"
                       className="w-full p-2.5 rounded-lg bg-black/60 border border-rose-500/30 text-white text-xs focus:outline-none focus:border-sky-400 font-mono"
                       required
@@ -373,9 +386,11 @@ export const AsesmenView: React.FC<AsesmenViewProps> = ({
                     </label>
                     <select
                       value={jenisKelamin}
-                      onChange={(e) => setJenisKelamin(e.target.value as any)}
+                      onChange={(e) => setJenisKelamin(e.target.value as 'Laki-laki' | 'Perempuan' | '')}
+                      required
                       className="w-full p-2.5 rounded-lg bg-black/60 border border-rose-500/30 text-white text-xs focus:outline-none focus:border-sky-400"
                     >
+                      <option value="" disabled>Pilih jenis kelamin</option>
                       <option value="Laki-laki">Laki-laki (Hijau Lumut)</option>
                       <option value="Perempuan">Perempuan (Pink)</option>
                     </select>
@@ -389,8 +404,10 @@ export const AsesmenView: React.FC<AsesmenViewProps> = ({
                     <select
                       value={kotaDomisili}
                       onChange={(e) => setKotaDomisili(e.target.value)}
+                      required
                       className="w-full p-2.5 rounded-lg bg-black/60 border border-rose-500/30 text-white text-xs focus:outline-none focus:border-sky-400"
                     >
+                      <option value="" disabled>Pilih kabupaten/kota</option>
                       <option value="Kota Medan">Kota Medan</option>
                       <option value="Kab. Deli Serdang">Kab. Deli Serdang</option>
                       <option value="Kota Binjai">Kota Binjai</option>
@@ -737,19 +754,21 @@ export const AsesmenView: React.FC<AsesmenViewProps> = ({
                   </td>
                   <td className="py-3 px-2">
                     <div className="w-10 h-10 rounded-lg overflow-hidden border border-rose-500/35 mx-auto bg-black">
-                      <img
-                        src={ppks.fotoDiri}
-                        alt="Diri"
-                        className="w-full h-full object-cover"
+                      <PrivateDriveImage
+                        source={ppks.fotoDiri}
+                        alt={`Foto diri ${ppks.namaLengkap}`}
+                        className="h-full w-full rounded-none border-0"
+                        objectFit="cover"
                       />
                     </div>
                   </td>
                   <td className="py-3 px-2">
                     <div className="w-12 h-8 rounded border border-rose-500/35 overflow-hidden mx-auto bg-black">
-                      <img
-                        src={ppks.fotoKtp}
-                        alt="KTP"
-                        className="w-full h-full object-cover"
+                      <PrivateDriveImage
+                        source={ppks.fotoKtp}
+                        alt={`Foto KTP ${ppks.namaLengkap}`}
+                        className="h-full w-full rounded-none border-0"
+                        objectFit="contain"
                       />
                     </div>
                   </td>
