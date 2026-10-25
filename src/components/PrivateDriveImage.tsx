@@ -43,9 +43,16 @@ export const PrivateDriveImage: React.FC<PrivateDriveImageProps> = ({
   const [imageUrl, setImageUrl] = useState('');
   const [status, setStatus] = useState<'idle' | 'loading' | 'ready' | 'missing' | 'error'>('idle');
   const [errorText, setErrorText] = useState('');
+  const [workspaceTokenRevision, setWorkspaceTokenRevision] = useState(0);
 
   const cleanedSource = source ? firstLink(String(source)) : '';
   const driveId = cleanedSource ? driveFileId(cleanedSource) : null;
+
+  useEffect(() => {
+    const onTokenUpdated = () => setWorkspaceTokenRevision((revision) => revision + 1);
+    window.addEventListener('sipandu-workspace-token-updated', onTokenUpdated);
+    return () => window.removeEventListener('sipandu-workspace-token-updated', onTokenUpdated);
+  }, []);
 
   useEffect(() => {
     const element = containerRef.current;
@@ -123,7 +130,7 @@ export const PrivateDriveImage: React.FC<PrivateDriveImageProps> = ({
       active = false;
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
-  }, [cleanedSource, driveId, shouldLoad]);
+  }, [cleanedSource, driveId, shouldLoad, workspaceTokenRevision]);
 
   return (
     <div ref={containerRef} className={`relative overflow-hidden rounded-lg bg-black/40 border border-white/15 ${className}`}>
