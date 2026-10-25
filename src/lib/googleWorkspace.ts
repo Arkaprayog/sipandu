@@ -617,7 +617,11 @@ export async function removeLegacyDemoRowsFromSpreadsheet(spreadsheetUrlOrId: st
       .map(({ index }) => index);
     const nameColumnIndexes = headers
       .map((header, index) => ({ header, index }))
-      .filter(({ header }) => ['namalengkap', 'namaresponden', 'namappks', 'namaodhiv', 'namacalonresponden'].includes(header))
+      .filter(({ header }) =>
+        ['namalengkap', 'namaresponden', 'namappks', 'namaodhiv', 'namacalonresponden'].includes(header) ||
+        header.includes('namalengkapsesuaiktp') ||
+        header.includes('namaresponden')
+      )
       .map(({ index }) => index);
 
     rows.slice(1).forEach((row, index) => {
