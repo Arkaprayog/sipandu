@@ -44,7 +44,7 @@ export function buildWhatsAppMessage(
   const waktu = getWaktuGreeting().toLowerCase();
   const namaResponden = ppks.namaLengkap || 'Bapak/Ibu';
   const senderName = settings.senderName || 'Deny Arifin Martyon S.';
-  const senderShortName = senderName.replace(/\\s+S\\.$/, '');
+  const senderShortName = senderName.endsWith(' S.') ? senderName.slice(0, -3) : senderName;
   const senderRole = settings.senderRole || 'Pendamping ODHIV';
   const senderUnit =
     settings.senderUnit ||
