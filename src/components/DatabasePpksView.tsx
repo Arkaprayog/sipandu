@@ -299,34 +299,6 @@ export const DatabasePpksView: React.FC<DatabasePpksViewProps> = ({
               </div>
             </div>
 
-            <section className="mt-6 rounded-xl border border-sky-400/30 bg-black/30 p-4">
-              <div className="mb-3 flex flex-col gap-1 border-b border-sky-400/20 pb-3 sm:flex-row sm:items-center sm:justify-between">
-                <h4 className="text-sm font-bold text-white">Identitas & Foto Responden</h4>
-                <p className="text-xs font-mono font-semibold text-sky-200">NIK: {currentPPKS.nik || 'Belum tersedia'}</p>
-              </div>
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                {[
-                  { label: 'Foto Diri', source: currentPPKS.fotoDiri },
-                  { label: 'Foto KTP', source: currentPPKS.fotoKtp },
-                  { label: 'Foto Kartu Keluarga', source: currentPPKS.fotoKk || '' },
-                  { label: 'Foto Rumah Tampak Depan', source: currentPPKS.fotoRumah || '' },
-                ].map((photo) => (
-                  <div key={photo.label} className="rounded-lg border border-white/10 bg-black/30 p-2">
-                    <p className="mb-2 text-xs font-semibold text-sky-100">{photo.label}</p>
-                    <PrivateDriveImage
-                      source={photo.source}
-                      alt={`${photo.label} — ${currentPPKS.namaLengkap}`}
-                      className="h-48 w-full"
-                      objectFit="contain"
-                    />
-                  </div>
-                ))}
-              </div>
-              <p className="mt-3 text-[10px] text-neutral-400">
-                Foto Google Drive privat dimuat menggunakan izin akun Workspace aktif. Jika foto belum tersedia, pastikan kolom sumber berisi tautan/ID file dan akun memiliki akses ke file tersebut.
-              </p>
-            </section>
-
             {/* Dibawah kolom profil: Tombol WHATSAPP, lalu tombol SIMPAN */}
             <div className="mt-8 pt-5 border-t border-rose-500/30 flex flex-col items-center gap-3 max-w-lg mx-auto">
               {/* Tombol WhatsApp */}
