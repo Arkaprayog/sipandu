@@ -105,65 +105,83 @@ export const GoogleWorkspaceModal: React.FC<GoogleWorkspaceModalProps> = ({
     setDiagnosticsRunning(true);
     setStatusMessage(null);
     const results: Array<{service: string; ok: boolean; message: string; checkedAt: string}> = [];
+    const addResult = (service: string, ok: boolean, message: string) => {
+      results.push({ service, ok, message, checkedAt: new Date().toISOString() });
+    };
+    const runCheck = async (service: string, check: () => Promise<string>) => {
+      try {
+        addResult(service, true, await check());
+      } catch (error: any) {
+        addResult(service, false, error?.message || String(error) || 'Kesalahan tidak diketahui.');
+      }
+    };
+
     try {
-      results.push(await testFirebaseAuthConnection());
-      results.push(await testFirestoreConnection());
-      const accessToken = await getAccessToken();
-      const now = new Date().toISOString();
-      const expectedWorkspaceEmail = GOOGLE_WORKSPACE_EMAIL;
+      // Isolate checks so a single failure never hides the remaining service results.
+      await runCheck('Firebase Auth', async () => {
+        const result = await testFirebaseAuthConnection();
+        if (!result.ok) throw new Error(result.message);
+        return result.message;
+      });
+      await runCheck('Firestore', async () => {
+        const result = await testFirestoreConnection();
+        if (!result.ok) throw new Error(result.message);
+        return result.message;
+      });
 
+      const expectedWorkspaceEmail = GOOGLE_WORKSPACE_EMAIL.toLowerCase();
+      const workspaceAccountOk = !!googleUser && (googleUser.email || '').toLowerCase() === expectedWorkspaceEmail;
+      let accessToken: string | null = null;
       if (!googleUser) {
-        results.push({ service: 'Akun Google Workspace', ok: false, message: 'Belum masuk dengan akun Google pada sesi ini.', checkedAt: now });
-      } else if ((googleUser.email || '').toLowerCase() !== expectedWorkspaceEmail) {
-        results.push({
-          service: 'Akun Google Workspace',
-          ok: false,
-          message: `Akun yang tersambung adalah ${googleUser.email || 'akun tanpa email'}, sedangkan sumber data dibagikan ke ${expectedWorkspaceEmail}. Sambungkan akun yang menerima izin berbagi tersebut.`,
-          checkedAt: now,
-        });
-      } else if (!accessToken) {
-        results.push({
-          service: 'Akun Google Workspace',
-          ok: false,
-          message: 'Identitas Google tersimpan, tetapi token API belum tersedia atau sudah kedaluwarsa. Hubungkan ulang hanya bila diperlukan; token yang masih berlaku kini dipertahankan saat halaman dimuat ulang.',
-          checkedAt: now,
-        });
+        addResult('Akun Google Workspace', false, 'Belum masuk dengan akun Google pada sesi ini.');
+      } else if (!workspaceAccountOk) {
+        addResult('Akun Google Workspace', false, `Akun yang tersambung adalah ${googleUser.email || 'akun tanpa email'}, sedangkan sumber data dibagikan ke ${GOOGLE_WORKSPACE_EMAIL}. Pilih akun yang menerima izin berbagi tersebut.`);
       } else {
-        results.push({
-          service: 'Akun Google Workspace',
-          ok: true,
-          message: `Akun yang benar terhubung: ${googleUser.email}. Token akses tersedia untuk pengujian layanan.`,
-          checkedAt: now,
-        });
-
-        // Verify actual shared-resource access; a token's mere presence is not proof
-        // that Drive, Sheets and Forms permissions are correct.
         try {
-          const files = await listDriveFiles('', GOOGLE_SIPANDU_RESOURCES.driveFolderId);
-          results.push({ service: 'Google Drive sumber', ok: true, message: `Folder sumber dapat dibaca; ${files.length} berkas ditemukan pada daftar pertama.`, checkedAt: new Date().toISOString() });
+          accessToken = await getAccessToken();
+          addResult('Akun Google Workspace', !!accessToken, accessToken
+            ? `Identitas Google cocok (${googleUser.email}) dan token API tersedia; akses sumber data tetap diuji terpisah.`
+            : 'Identitas Google cocok, tetapi token API tidak tersedia atau sudah kedaluwarsa. Tekan “Pulihkan Izin Google API”.');
         } catch (error: any) {
-          results.push({ service: 'Google Drive sumber', ok: false, message: error?.message || String(error), checkedAt: new Date().toISOString() });
-        }
-        try {
-          const titles = await getSpreadsheetSheetTitles(GOOGLE_SIPANDU_RESOURCES.responseSpreadsheetId);
-          results.push({ service: 'Google Sheets respons', ok: true, message: `Spreadsheet respons dapat dibaca; tab terdeteksi: ${titles.join(', ') || '(tanpa nama tab)'}.`, checkedAt: new Date().toISOString() });
-        } catch (error: any) {
-          results.push({ service: 'Google Sheets respons', ok: false, message: error?.message || String(error), checkedAt: new Date().toISOString() });
-        }
-        try {
-          const responses = await fetchFormResponses(GOOGLE_SIPANDU_RESOURCES.formId);
-          results.push({ service: 'Google Forms respons', ok: true, message: `Form sumber dapat diakses melalui API; ${responses.length} respons terbaca.`, checkedAt: new Date().toISOString() });
-        } catch (error: any) {
-          results.push({ service: 'Google Forms respons', ok: false, message: error?.message || String(error), checkedAt: new Date().toISOString() });
+          addResult('Akun Google Workspace', false, error?.message || String(error));
         }
       }
+
+      if (!accessToken || !workspaceAccountOk) {
+        const reason = !workspaceAccountOk
+          ? 'Tidak diuji karena akun Google yang benar belum tersambung.'
+          : 'Tidak diuji karena token Google API tidak tersedia.';
+        addResult('Google Drive sumber', false, reason);
+        addResult('Google Sheets respons', false, reason);
+        addResult('Google Forms respons', false, reason);
+      } else {
+        await runCheck('Google Drive sumber', async () => {
+          const files = await listDriveFiles('', GOOGLE_SIPANDU_RESOURCES.driveFolderId);
+          return `Folder sumber dapat dibaca; ${files.length} berkas ditemukan pada halaman pertama.`;
+        });
+        await runCheck('Google Sheets respons', async () => {
+          const titles = await getSpreadsheetSheetTitles(GOOGLE_SIPANDU_RESOURCES.responseSpreadsheetId);
+          if (!titles.length) throw new Error('Tidak ada tab spreadsheet yang terbaca. Periksa ID dan izin berbagi.');
+          return `Spreadsheet respons dapat dibaca; tab: ${titles.join(', ')}.`;
+        });
+        await runCheck('Google Forms respons', async () => {
+          const responses = await fetchFormResponses(GOOGLE_SIPANDU_RESOURCES.formId);
+          return `Form sumber dapat diakses melalui API; ${responses.length} respons terbaca.`;
+        });
+      }
+
       setDiagnosticResults(results);
-      const failures = results.filter((r) => !r.ok).length;
-      setStatusMessage({ type: failures ? 'error' : 'success', text: failures ? `Pemeriksaan selesai: ${failures} dari ${results.length} pemeriksaan perlu perhatian. Lihat rincian di bawah.` : 'Pemeriksaan dasar selesai. Periksa layanan Google satu per satu untuk memastikan izin API.' });
+      const failures = results.filter((result) => !result.ok).length;
+      setStatusMessage({
+        type: failures ? 'error' : 'success',
+        text: failures
+          ? `Pemeriksaan selesai: ${failures} dari ${results.length} layanan perlu perhatian. Setiap layanan menampilkan penyebabnya sendiri.`
+          : `Semua ${results.length} pemeriksaan koneksi berhasil.`,
+      });
     } catch (error: any) {
       const message = error?.message || String(error) || 'Kesalahan tidak diketahui saat pemeriksaan.';
-      setDiagnosticResults([{ service: 'Pemeriksaan', ok: false, message, checkedAt: new Date().toISOString() }]);
-      setStatusMessage({ type: 'error', text: `Pemeriksaan gagal: ${message}` });
+      setDiagnosticResults([...results, { service: 'Diagnostik', ok: false, message, checkedAt: new Date().toISOString() }]);
+      setStatusMessage({ type: 'error', text: `Diagnostik mengalami kesalahan: ${message}` });
     } finally {
       setDiagnosticsRunning(false);
     }
