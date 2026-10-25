@@ -341,6 +341,10 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
   };
 
   const handlePrint = async () => {
+    if (!currentPPKS) {
+      setStatusMessage({ type: 'error', text: 'Pilih responden PPKS terlebih dahulu agar lembar asesmen dan empat lampiran foto terikat pada responden yang benar.' });
+      return;
+    }
     setPreparingPrint(true);
     setStatusMessage(null);
     releasePrintPhotoUrls();
@@ -494,7 +498,7 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
           <button type="button" onClick={handleSave} disabled={!currentPPKS} className="inline-flex items-center gap-2 rounded-lg bg-emerald-700 px-4 py-2 text-xs font-bold text-white disabled:opacity-50">
             <Save className="h-4 w-4" /> Simpan Form
           </button>
-          <button type="button" onClick={() => { void handlePrint(); }} disabled={preparingPrint} className="inline-flex items-center gap-2 rounded-lg border border-sky-400/40 bg-sky-950/50 px-4 py-2 text-xs font-bold text-white disabled:opacity-60">
+          <button type="button" onClick={() => { void handlePrint(); }} disabled={preparingPrint || !currentPPKS} className="inline-flex items-center gap-2 rounded-lg border border-sky-400/40 bg-sky-950/50 px-4 py-2 text-xs font-bold text-white disabled:opacity-60">
             <Printer className="h-4 w-4" /> {preparingPrint ? 'Menyiapkan 10 halaman…' : 'Cetak / Simpan PDF'}
           </button>
           <button type="button" onClick={handleReset} className="inline-flex items-center gap-2 rounded-lg border border-rose-400/40 bg-rose-950/40 px-4 py-2 text-xs font-bold text-white">
