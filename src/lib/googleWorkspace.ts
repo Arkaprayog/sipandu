@@ -93,6 +93,15 @@ export async function createDriveFolder(folderName: string): Promise<GoogleDrive
   });
 }
 
+/** Returns actual tab titles from the spreadsheet metadata; does not assume a tab name. */
+export async function getSpreadsheetSheetTitles(spreadsheetIdOrUrl: string): Promise<string[]> {
+  const id = extractSpreadsheetId(spreadsheetIdOrUrl);
+  const data = await googleJson<{ sheets?: { properties?: { title?: string } }[] }>(
+    `https://sheets.googleapis.com/v4/spreadsheets/${id}?fields=sheets.properties.title`
+  );
+  return (data.sheets || []).map(sheet => sheet.properties?.title || '').filter(Boolean);
+}
+
 /** GOOGLE SHEETS API */
 export async function readSpreadsheetData(spreadsheetIdOrUrl: string, range = 'Sheet1!A1:Z100'): Promise<string[][]> {
   const id = extractSpreadsheetId(spreadsheetIdOrUrl);
