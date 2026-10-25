@@ -561,7 +561,7 @@ export const GoogleWorkspaceModal: React.FC<GoogleWorkspaceModalProps> = ({
                     <Database className="w-4 h-4 text-sky-300" />
                     <span className="font-bold text-white">Firebase Firestore Database</span>
                   </div>
-                  <span className={`px-2 py-0.5 rounded text-[10px] border ${firestoreBadgeClass}}>
+                  <span className={"px-2 py-0.5 rounded text-[10px] border " + firestoreBadgeClass}>
                     {firestoreBadgeLabel}
                   </span>
                 </div>
