@@ -539,7 +539,7 @@ export async function importPPKSFromSpreadsheet(
     ? preferred
     : (responseTab || metadata.sheetTitles[0]);
   const escapedTitle = selectedTab.replace(/'/g, "''");
-  const rows = await readSpreadsheetRichData(metadata.spreadsheetId, `'${escapedTitle}'!A1:AZ2000`);
+  const rows = await readSpreadsheetRichData(metadata.spreadsheetId, `'${escapedTitle}'!A1:ZZ2000`);
   const records = mapRowsToPPKSRecords(rows);
   return {
     spreadsheetId: metadata.spreadsheetId,
@@ -608,7 +608,7 @@ export async function removeLegacyDemoRowsFromSpreadsheet(spreadsheetUrlOrId: st
   const rangesToClear: string[] = [];
   for (const title of metadata.sheetTitles) {
     const escapedTitle = title.replace(/'/g, "''");
-    const rows = await readSpreadsheetData(metadata.spreadsheetId, \`'\${escapedTitle}'!A1:AZ2000\`);
+    const rows = await readSpreadsheetData(metadata.spreadsheetId, `'${escapedTitle}'!A1:AZ2000`);
     if (rows.length < 2 || !rows[0].some((header) => header.trim())) continue;
     const headers = rows[0].map(normalizeSheetHeader);
     const idColumnIndexes = headers
@@ -633,14 +633,14 @@ export async function removeLegacyDemoRowsFromSpreadsheet(spreadsheetUrlOrId: st
       const anyCellHasLegacyId = row.some((cell) => LEGACY_SAMPLE_PPKS_IDS.has(String(cell || '').trim()));
       if (idMatch || nameMatch || anyCellHasLegacyId) {
         const rowNumber = index + 2;
-        rangesToClear.push(\`'\${escapedTitle}'!A\${rowNumber}:AZ\${rowNumber}\`);
+        rangesToClear.push(`'${escapedTitle}'!A${rowNumber}:ZZ${rowNumber}`);
       }
     });
   }
 
   if (rangesToClear.length) {
     await googleJson(
-      \`https://sheets.googleapis.com/v4/spreadsheets/\${metadata.spreadsheetId}/values:batchClear\`,
+      `https://sheets.googleapis.com/v4/spreadsheets/${metadata.spreadsheetId}/values:batchClear`,
       { method: 'POST', body: JSON.stringify({ ranges: rangesToClear }) }
     );
   }
@@ -673,7 +673,7 @@ async function listDriveChildren(parentId: string): Promise<GoogleDriveFile[]> {
   let pageToken = '';
   do {
     const params = new URLSearchParams({
-      q: \`'\${parentId}' in parents and trashed = false\`,
+      q: `'${parentId}' in parents and trashed = false`,
       pageSize: '100',
       orderBy: 'name',
       fields: 'nextPageToken,files(id,name,mimeType,webViewLink,createdTime)',
@@ -682,7 +682,7 @@ async function listDriveChildren(parentId: string): Promise<GoogleDriveFile[]> {
     });
     if (pageToken) params.set('pageToken', pageToken);
     const result = await googleJson<{ files?: GoogleDriveFile[]; nextPageToken?: string }>(
-      \`https://www.googleapis.com/drive/v3/files?\${params.toString()}\`
+      `https://www.googleapis.com/drive/v3/files?${params.toString()}`
     );
     files.push(...(result.files || []));
     pageToken = result.nextPageToken || '';
@@ -729,7 +729,7 @@ export async function removeObviousDemoFilesFromDrive(folderUrlOrId: string): Pr
   const unique = [...new Map(discovered.map((file) => [file.id, file])).values()];
   for (const file of unique) {
     await googleJson(
-      \`https://www.googleapis.com/drive/v3/files/\${encodeURIComponent(file.id)}?supportsAllDrives=true\`,
+      `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(file.id)}?supportsAllDrives=true`,
       { method: 'DELETE' }
     );
     deletedNames.push(file.name);
@@ -772,7 +772,7 @@ export async function removeObviousDemoFilesFromDrive(folderUrlOrId: string): Pr
     // Delete files before folders (the recursive visit adds parent folders last).
     if (file.mimeType === 'application/vnd.google-apps.folder') continue;
     await googleJson(
-      \`https://www.googleapis.com/drive/v3/files/\${encodeURIComponent(file.id)}?supportsAllDrives=true\`,
+      `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(file.id)}?supportsAllDrives=true`,
       { method: 'DELETE' }
     );
     deletedNames.push(file.name);
@@ -780,7 +780,7 @@ export async function removeObviousDemoFilesFromDrive(folderUrlOrId: string): Pr
   for (const file of unique) {
     if (file.mimeType !== 'application/vnd.google-apps.folder') continue;
     await googleJson(
-      \`https://www.googleapis.com/drive/v3/files/\${encodeURIComponent(file.id)}?supportsAllDrives=true\`,
+      `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(file.id)}?supportsAllDrives=true`,
       { method: 'DELETE' }
     );
     deletedNames.push(file.name);
