@@ -759,6 +759,48 @@ function isObviousDemoDriveName(name: string): boolean {
     /(^|[^a-z])(demo|sample|contoh|dummy|uji[\\s_-]?coba|data[\\s_-]?uji|uji[\\s_-]?data|test[\\s_-]?data)([^a-z]|$)/i.test(name);
 }
 
+/** Lists visible Drive metadata with pagination. Only filenames/IDs are used for demo-artifact detection. */
+async function listAllVisibleDriveFiles(): Promise<GoogleDriveFile[]> {
+  const files: GoogleDriveFile[] = [];
+  let pageToken = '';
+  do {
+    const params = new URLSearchParams({
+      q: 'trashed = false',
+      pageSize: '1000',
+      orderBy: 'modifiedTime desc',
+      fields: 'nextPageToken,files(id,name,mimeType,webViewLink,createdTime)',
+      corpora: 'user',
+      includeItemsFromAllDrives: 'true',
+      supportsAllDrives: 'true',
+    });
+    if (pageToken) params.set('pageToken', pageToken);
+    const page = await googleJson<{ files?: GoogleDriveFile[]; nextPageToken?: string }>(
+      `https://www.googleapis.com/drive/v3/files?${params.toString()}`
+    );
+    files.push(...(page.files || []));
+    pageToken = page.nextPageToken || '';
+  } while (pageToken);
+  return files;
+}
+
+/** Broad marker checks are permitted account-wide only when the file name identifies SIPANDU. */
+function isSIPANDULegacyDriveArtifact(name: string): boolean {
+  const normalized = normalizeSheetHeader(name);
+  const exactArtifacts = [
+    'Database_PPKS_ODHIV_Sumut_2026.xlsx',
+    'SRT-ST-001',
+    'SRT-BA-002',
+    'SRT-SP-003',
+    '1yA8KemensosODHIVSumut2026_LiveSync',
+  ].map(normalizeSheetHeader);
+  if (exactArtifacts.some((marker) => normalized.includes(marker))) return true;
+  if ([...LEGACY_SAMPLE_PPKS_IDS].some((id) => normalized.includes(normalizeSheetHeader(id)))) return true;
+  if ([...LEGACY_SAMPLE_PPKS_NAMES].some((sampleName) => normalized.includes(normalizeSheetHeader(sampleName)))) return true;
+  const hasDemoMarker = /(^|[^a-z])(demo|sample|contoh|dummy|uji\\s*coba|data\\s*uji|uji\\s*data|test\\s*data|data\\s*test)([^a-z]|$)/i.test(name);
+  const identifiesSipandu = /(sipandu|ppks|odhiv|asesmen|kemensos)/i.test(name);
+  return isObviousDemoMarker(name) || (hasDemoMarker && identifiesSipandu);
+}
+
 async function listDriveChildren(parentId: string): Promise<GoogleDriveFile[]> {
   const files: GoogleDriveFile[] = [];
   let pageToken = '';
@@ -791,17 +833,18 @@ export async function removeObviousDemoFilesFromDrive(folderUrlOrId: string): Pr
   filesScanned: number;
   filesDeleted: number;
   deletedNames: string[];
+  accountWideScanCompleted: boolean;
 }> {
   const rootFolderId = extractDriveFolderId(folderUrlOrId);
   const discovered: GoogleDriveFile[] = [];
   const visitedFolders = new Set<string>();
-  let filesScanned = 0;
+  const scannedIds = new Set<string>();
 
   const visit = async (parentId: string, depth: number, insideMarkedDemoFolder = false): Promise<void> => {
     if (depth > 5 || visitedFolders.has(parentId)) return;
     visitedFolders.add(parentId);
     const children = await listDriveChildren(parentId);
-    filesScanned += children.length;
+    children.forEach((file) => scannedIds.add(file.id));
     for (const file of children) {
       const isFolder = file.mimeType === 'application/vnd.google-apps.folder';
       if (isFolder) {
@@ -813,6 +856,26 @@ export async function removeObviousDemoFilesFromDrive(folderUrlOrId: string): Pr
   };
 
   await visit(rootFolderId, 0);
+
+  // Some retired examples were created outside the designated SIPANDU folder.
+  // Scan metadata from the authorized account, but outside that folder only
+  // delete specific legacy SIPANDU demo artifacts, never generic "test" files.
+  let accountWideScanCompleted = false;
+  try {
+    const allVisible = await listAllVisibleDriveFiles();
+    accountWideScanCompleted = true;
+    allVisible.forEach((file) => scannedIds.add(file.id));
+    for (const file of allVisible) {
+      if (
+        file.mimeType !== 'application/vnd.google-apps.folder' &&
+        isSIPANDULegacyDriveArtifact(file.name)
+      ) discovered.push(file);
+    }
+  } catch {
+    // Preserve the folder cleanup if Google does not allow an account-wide scan.
+    // The result tells the caller that global coverage was incomplete.
+  }
+
   const unique = [...new Map(discovered.map((file) => [file.id, file])).values()];
   const deletedNames: string[] = [];
   for (const file of unique) {
@@ -824,8 +887,9 @@ export async function removeObviousDemoFilesFromDrive(folderUrlOrId: string): Pr
   }
   return {
     folderId: rootFolderId,
-    filesScanned,
+    filesScanned: scannedIds.size,
     filesDeleted: deletedNames.length,
     deletedNames,
+    accountWideScanCompleted,
   };
 }
