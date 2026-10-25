@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { PPKSRecord, ProfileUser, AppSettings } from './types';
-import { initialPPKSList, initialProfileUser, initialAppSettings } from './data/initialData';
+import { initialPPKSList, initialProfileUser, initialAppSettings, LEGACY_SAMPLE_PPKS_IDS } from './data/initialData';
 import { LoginPage } from './components/LoginPage';
 import { Header } from './components/Header';
 import { BottomNav, TabKey } from './components/BottomNav';
@@ -71,7 +71,16 @@ export default function App() {
     const cached = localStorage.getItem('sipandu_ppks');
     if (cached) {
       try {
-        return JSON.parse(cached);
+        const parsed: unknown = JSON.parse(cached);
+        if (Array.isArray(parsed)) {
+          // Remove the exact IDs from the former built-in demo dataset. Keep
+          // every other cached record untouched; the storage effect below
+          // persists this cleaned list back to the browser cache.
+          return (parsed as PPKSRecord[]).filter(
+            (record) => record && !LEGACY_SAMPLE_PPKS_IDS.has(String(record.id || ''))
+          );
+        }
+        console.warn('Cached PPKS data is not an array; starting with an empty list.');
       } catch (e) {
         console.error('Failed to parse cached PPKS list', e);
       }
@@ -194,8 +203,14 @@ export default function App() {
   const handleLoadPPKSFromCloud = (cloudRecords: PPKSRecord[]) => {
     setPpksList((localRecords) => {
       const merged = new Map<string, PPKSRecord>();
-      localRecords.forEach((record) => merged.set(record.id, record));
-      cloudRecords.forEach((record) => merged.set(record.id, record));
+      localRecords
+        .filter((record) => !LEGACY_SAMPLE_PPKS_IDS.has(String(record.id || '')))
+        .forEach((record) => merged.set(record.id, record));
+      // Old demo IDs are also excluded on cloud import so they do not return
+      // after a sync, even if an earlier test uploaded them to a remote source.
+      cloudRecords
+        .filter((record) => !LEGACY_SAMPLE_PPKS_IDS.has(String(record.id || '')))
+        .forEach((record) => merged.set(record.id, record));
       return Array.from(merged.values());
     });
   };
