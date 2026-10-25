@@ -115,7 +115,12 @@ export interface SuratRecord {
 export interface AppSettings {
   googleFormTahapAwalUrl: string;
   googleFormKesehatanMentalUrl: string;
+  /** Writable SIPANDU database spreadsheet (must not be the Google Forms response sheet). */
   googleSpreadsheetUrl: string;
+  /** Read-only source spreadsheet used to import PPKS / integrated assessment responses. */
+  googleSpreadsheetSourceUrl?: string;
+  googleSpreadsheetSourceName?: string;
+  googleSpreadsheetSourceTab?: string;
   googleDriveFolderUrl: string;
   senderName: string;
   senderRole: string;
