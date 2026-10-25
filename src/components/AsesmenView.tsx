@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { PPKSRecord, AppSettings } from '../types';
 import { KemensosQRCode } from './KemensosQRCode';
 import { CameraCaptureModal } from './CameraCaptureModal';
+import { PrivateDriveImage } from './PrivateDriveImage';
 import {
   buildWhatsAppMessage,
   createWhatsAppLink,
@@ -753,19 +754,21 @@ export const AsesmenView: React.FC<AsesmenViewProps> = ({
                   </td>
                   <td className="py-3 px-2">
                     <div className="w-10 h-10 rounded-lg overflow-hidden border border-rose-500/35 mx-auto bg-black">
-                      <img
-                        src={ppks.fotoDiri}
-                        alt="Diri"
-                        className="w-full h-full object-cover"
+                      <PrivateDriveImage
+                        source={ppks.fotoDiri}
+                        alt={`Foto diri ${ppks.namaLengkap}`}
+                        className="h-full w-full rounded-none border-0"
+                        objectFit="cover"
                       />
                     </div>
                   </td>
                   <td className="py-3 px-2">
                     <div className="w-12 h-8 rounded border border-rose-500/35 overflow-hidden mx-auto bg-black">
-                      <img
-                        src={ppks.fotoKtp}
-                        alt="KTP"
-                        className="w-full h-full object-cover"
+                      <PrivateDriveImage
+                        source={ppks.fotoKtp}
+                        alt={`Foto KTP ${ppks.namaLengkap}`}
+                        className="h-full w-full rounded-none border-0"
+                        objectFit="contain"
                       />
                     </div>
                   </td>
