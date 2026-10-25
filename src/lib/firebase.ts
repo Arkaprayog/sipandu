@@ -50,6 +50,7 @@ googleAuthProvider.addScope('https://www.googleapis.com/auth/forms.responses.rea
 // reconnect, and discard them conservatively before Google's usual 1-hour expiry.
 const WORKSPACE_TOKEN_STORAGE_KEY = 'sipandu_google_workspace_token_v1';
 const WORKSPACE_TOKEN_TTL_MS = 50 * 60 * 1000;
+let cachedAccessTokenSavedAt = 0;
 
 function readStoredWorkspaceToken(): string | null {
   if (typeof window === 'undefined') return null;
@@ -66,6 +67,7 @@ function readStoredWorkspaceToken(): string | null {
       window.sessionStorage.removeItem(WORKSPACE_TOKEN_STORAGE_KEY);
       return null;
     }
+    cachedAccessTokenSavedAt = saved.savedAt;
     return saved.token;
   } catch {
     // Storage can be unavailable in privacy-restricted browser contexts.
@@ -75,6 +77,7 @@ function readStoredWorkspaceToken(): string | null {
 
 function cacheWorkspaceToken(token: string | null): void {
   cachedAccessToken = token;
+  cachedAccessTokenSavedAt = token ? Date.now() : 0;
   if (typeof window === 'undefined') return;
   try {
     if (!token) {
@@ -220,6 +223,9 @@ export const googleSignIn = async (): Promise<{
 };
 
 export const getAccessToken = async (): Promise<string | null> => {
+  if (cachedAccessToken && Date.now() - cachedAccessTokenSavedAt >= WORKSPACE_TOKEN_TTL_MS) {
+    cacheWorkspaceToken(null);
+  }
   if (!cachedAccessToken) cachedAccessToken = readStoredWorkspaceToken();
   return cachedAccessToken;
 };
