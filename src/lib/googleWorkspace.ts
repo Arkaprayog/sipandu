@@ -241,18 +241,28 @@ export async function readSpreadsheetRichData(
 
   const sheet = data.sheets?.[0];
   const rowData = sheet?.data?.[0]?.rowData || [];
-  return rowData.map((row) => (row.values || []).map((cell) => {
+  const headerCells = rowData[0]?.values || [];
+  const headers = headerCells.map((cell) =>
+    normalizeSheetHeader(
+      String(cell.userEnteredValue?.stringValue || cell.effectiveValue?.stringValue || cell.formattedValue || '')
+    )
+  );
+
+  return rowData.map((row, rowIndex) => (row.values || []).map((cell, columnIndex) => {
     const runLink = cell.textFormatRuns?.find((run) => run.format?.link?.uri)?.format?.link?.uri;
-    // Prefer the actual link for uploaded photo cells; otherwise preserve the
-    // formatted display value, including leading zeroes in NIK cells.
-    return String(
-      cell.hyperlink ||
-      runLink ||
-      cell.userEnteredValue?.stringValue ||
-      cell.effectiveValue?.stringValue ||
-      cell.formattedValue ||
+    const displayValue = String(
+      cell.userEnteredValue?.stringValue ??
+      cell.effectiveValue?.stringValue ??
+      cell.formattedValue ??
       ''
     );
+    const header = headers[columnIndex] || '';
+    const isFileOrPhotoColumn = /(foto|photo|gambar|image|upload|unggah|lampiran|scan|dokumen|berkas|file|tautan|linkdrive)/.test(header);
+    // Only replace displayed text with its hyperlink on file/photo columns.
+    // This prevents a rich-text NIK/name cell from turning into the link URL
+    // instead of the respondent value displayed in Google Sheets.
+    if (rowIndex > 0 && isFileOrPhotoColumn) return String(cell.hyperlink || runLink || displayValue);
+    return displayValue;
   }));
 }
 
