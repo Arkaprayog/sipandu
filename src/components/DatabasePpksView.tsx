@@ -209,8 +209,8 @@ export const DatabasePpksView: React.FC<DatabasePpksViewProps> = ({
                       <td className="py-2.5 px-3 font-bold text-sky-200 bg-[#112415]">
                         NIK
                       </td>
-                      <td className="py-2.5 px-3 font-mono text-sky-200 font-semibold tracking-wider">
-                        {currentPPKS.nik}
+                      <td className="py-2.5 px-3 font-mono text-sky-200 font-semibold tracking-wider break-all">
+                        {currentPPKS.nik || 'NIK belum terpetakan dari spreadsheet sumber'}
                       </td>
                     </tr>
 

@@ -54,10 +54,39 @@ function mergePPKSRecords(localRecords: PPKSRecord[], cloudRecords: PPKSRecord[]
     if (!record || LEGACY_SAMPLE_PPKS_IDS.has(String(record.id || ''))) continue;
     merged.set(recordKey(record), record);
   }
+  const normalizePersonText = (value: string | undefined) =>
+    String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  const normalizePhone = (value: string | undefined) => String(value || '').replace(/\D/g, '');
+
   for (const record of cloudRecords) {
     if (!record || LEGACY_SAMPLE_PPKS_IDS.has(String(record.id || ''))) continue;
     const key = recordKey(record);
-    merged.set(key, mergeOne(merged.get(key), record));
+    let existingKey = key;
+    let existing = merged.get(key);
+
+    // NIK may become recognizable after a mapper fix. Match the older cached
+    // version by the same respondent name plus timestamp or phone, then replace
+    // it with the corrected key instead of showing the respondent twice.
+    if (!existing) {
+      const name = normalizePersonText(record.namaLengkap);
+      const phone = normalizePhone(record.noHpWa);
+      const timestamp = String(record.timestamp || '').trim();
+      for (const [candidateKey, candidate] of merged.entries()) {
+        if (!name || normalizePersonText(candidate.namaLengkap) !== name) continue;
+        const sameTimestamp = !!timestamp && timestamp === String(candidate.timestamp || '').trim();
+        const candidatePhone = normalizePhone(candidate.noHpWa);
+        const samePhone = !!phone && phone === candidatePhone;
+        if (sameTimestamp || samePhone) {
+          existingKey = candidateKey;
+          existing = candidate;
+          break;
+        }
+      }
+    }
+
+    const combined = mergeOne(existing, record);
+    if (existingKey !== key) merged.delete(existingKey);
+    merged.set(key, combined);
   }
   return Array.from(merged.values());
 }
