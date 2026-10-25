@@ -125,9 +125,13 @@ function normalizeAppSettings(value: unknown): AppSettings {
 
   const sourceName = wasAutoDefaultSource ? '' : (saved.googleSpreadsheetSourceName || '');
 
+  const healthFormUrl = saved.googleFormKesehatanMentalUrl?.trim() || '';
+  const legacyHealthFormPlaceholder = 'https://forms.gle/Asesmen-Kesehatan-Mental-ODHIV-Kemensos';
+
   return {
     ...initialAppSettings,
     ...saved,
+    googleFormKesehatanMentalUrl: healthFormUrl === legacyHealthFormPlaceholder ? '' : healthFormUrl,
     googleSpreadsheetUrl: databaseUrl,
     googleSpreadsheetSourceUrl: sourceUrl,
     googleSpreadsheetSourceName: sourceName,
