@@ -496,40 +496,53 @@ export default function App() {
       if (demoCleanupAttemptedRef.current === cleanupKey) return;
 
       const token = await getAccessToken();
-      if (!token) {
-        setCloudSyncNotice({
-          type: 'error',
-          text: 'Pembersihan otomatis menunggu izin Google API. Sesi SIPANDU tetap aktif; pulihkan izin Google melalui Google Workspace & Cloud Hub untuk membersihkan data contoh di Sheets/Drive.',
-        });
-        return;
-      }
 
       demoCleanupRunningRef.current = true;
       const messages: string[] = [];
+      let firestoreDeleted = 0;
       let rowsCleared = 0;
       let filesDeleted = 0;
       try {
-        for (const [spreadsheetId, url] of uniqueSheets) {
-          if (!active) return;
-          try {
-            const cleaned = await removeLegacyDemoRowsFromSpreadsheet(url);
-            rowsCleared += cleaned.rowsCleared;
-            messages.push(`Sheets “${cleaned.spreadsheetTitle}”: ${cleaned.rowsCleared} baris contoh dibersihkan dari ${cleaned.tabsScanned} tab`);
-          } catch (error) {
-            failures.push(`Spreadsheet ${spreadsheetId}: ${error instanceof Error ? error.message : String(error)}`);
+        // Firestore cleanup uses the already-authenticated SIPANDU staff account,
+        // so it must not be blocked by the separate Google Workspace API token.
+        if (active) {
+          if (currentUserRole === 'owner' || currentUserRole === 'supervisor') {
+            try {
+              firestoreDeleted = await removeLegacyDemoPPKSFromFirestore();
+              messages.push(`Firestore: ${firestoreDeleted} dokumen PPKS contoh dihapus`);
+            } catch (error) {
+              failures.push(`Firestore: ${error instanceof Error ? error.message : String(error)}`);
+            }
+          } else {
+            failures.push('Firestore: pembersihan otomatis memerlukan peran owner/supervisor; data lainnya tidak diubah.');
           }
         }
 
-        if (active) {
-          try {
-            const drive = await removeObviousDemoFilesFromDrive(GOOGLE_SIPANDU_RESOURCES.driveFolderId);
-            filesDeleted = drive.filesDeleted;
-            messages.push(`Drive: ${drive.filesDeleted} file contoh dihapus; ${drive.filesScanned} file diperiksa; pemindaian seluruh Drive ${drive.accountWideScanCompleted ? 'berhasil' : 'tidak lengkap'}`);
-            if (!drive.accountWideScanCompleted) {
-              failures.push('Google Drive: pemindaian seluruh akun tidak berhasil. File contoh pada folder SIPANDU sudah diperiksa; pemindaian akan diulangi pada sesi berikutnya.');
+        if (!token) {
+          failures.push('Google Sheets/Drive: pembersihan menunggu izin Google API. Setelah izin dipulihkan, pembersihan akan berjalan otomatis tanpa meminta login lagi dari proses ini.');
+        } else {
+          for (const [spreadsheetId, url] of uniqueSheets) {
+            if (!active) return;
+            try {
+              const cleaned = await removeLegacyDemoRowsFromSpreadsheet(url);
+              rowsCleared += cleaned.rowsCleared;
+              messages.push(`Sheets “${cleaned.spreadsheetTitle}”: ${cleaned.rowsCleared} baris contoh dibersihkan dari ${cleaned.tabsScanned} tab`);
+            } catch (error) {
+              failures.push(`Spreadsheet ${spreadsheetId}: ${error instanceof Error ? error.message : String(error)}`);
             }
-          } catch (error) {
-            failures.push(`Google Drive: ${error instanceof Error ? error.message : String(error)}`);
+          }
+
+          if (active) {
+            try {
+              const drive = await removeObviousDemoFilesFromDrive(GOOGLE_SIPANDU_RESOURCES.driveFolderId);
+              filesDeleted = drive.filesDeleted;
+              messages.push(`Drive: ${drive.filesDeleted} file contoh dihapus; ${drive.filesScanned} file diperiksa; pemindaian seluruh Drive ${drive.accountWideScanCompleted ? 'berhasil' : 'tidak lengkap'}`);
+              if (!drive.accountWideScanCompleted) {
+                failures.push('Google Drive: pemindaian seluruh akun tidak berhasil. File contoh pada folder SIPANDU sudah diperiksa; pemindaian akan diulangi pada sesi berikutnya.');
+              }
+            } catch (error) {
+              failures.push(`Google Drive: ${error instanceof Error ? error.message : String(error)}`);
+            }
           }
         }
       } finally {
@@ -545,10 +558,10 @@ export default function App() {
       setCloudSyncNotice({
         type: failures.length ? 'error' : 'success',
         text: [
-          `Pembersihan data contoh ${failures.length ? 'sebagian selesai' : 'selesai'}: ${rowsCleared} baris contoh dihapus dari Google Sheets; ${filesDeleted} file contoh dihapus dari Google Drive.`,
+          `Pembersihan data contoh ${failures.length ? 'sebagian selesai' : 'selesai'}: Firestore ${firestoreDeleted} dokumen, Google Sheets ${rowsCleared} baris, Google Drive ${filesDeleted} file contoh.`,
           ...messages,
           ...(failures.length ? [`Target yang belum selesai: ${failures.join(' · ')}`] : []),
-          'Data non-demo dipertahankan. Respons di dalam Google Form asli tidak dihapus karena API Google Forms tidak menyediakan operasi hapus respons.',
+          'Data non-demo dipertahankan. Respons di dalam Google Form asli tidak dihapus karena Google Forms API tidak menyediakan operasi hapus respons individual; baris contoh pada spreadsheet respons tertaut dibersihkan secara terpisah.',
         ].join(' | '),
       });
     };
@@ -560,7 +573,7 @@ export default function App() {
       active = false;
       window.removeEventListener('sipandu-workspace-token-updated', onTokenUpdated);
     };
-  }, [isAuthenticated, settings.googleSpreadsheetSourceUrl, settings.googleSpreadsheetUrl]);
+  }, [isAuthenticated, currentUserRole, settings.googleSpreadsheetSourceUrl, settings.googleSpreadsheetUrl]);
 
   // Avoid showing protected UI until Firebase has resolved the current session.
   if (!authReady) {
