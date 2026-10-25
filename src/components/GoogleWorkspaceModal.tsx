@@ -8,6 +8,7 @@ import {
   initAuthListener,
   savePPKSToFirestore,
   fetchPPKSFromFirestore,
+  removeLegacyDemoPPKSFromFirestore,
   testFirestoreConnection,
   testFirebaseAuthConnection,
 } from '../lib/firebase';
@@ -411,6 +412,13 @@ export const GoogleWorkspaceModal: React.FC<GoogleWorkspaceModalProps> = ({
     try {
       if (!(await getAccessToken())) {
         throw new Error('Izin Google API belum tersedia. Pulihkan izin Google terlebih dahulu; pembersihan tidak akan membuka popup login otomatis.');
+      }
+
+      try {
+        const firestoreDeleted = await removeLegacyDemoPPKSFromFirestore();
+        results.push(`Firebase Firestore: ${firestoreDeleted} dokumen PPKS contoh yang dikenali dihapus; data lainnya dipertahankan.`);
+      } catch (error: any) {
+        errors.push(`Firebase Firestore: ${error?.message || String(error)}`);
       }
 
       const candidates = [
