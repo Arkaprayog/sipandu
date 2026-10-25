@@ -117,7 +117,7 @@ export const AsesmenView: React.FC<AsesmenViewProps> = ({
     const formattedTimestamp = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
 
     const newPPKS: PPKSRecord = {
-      id: `PPKS-SU-${Date.now()}`,
+      id: `PPKS-SU-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       timestamp: formattedTimestamp,
       namaLengkap: namaLengkap.trim(),
       nik: cleanNik,
@@ -414,6 +414,7 @@ export const AsesmenView: React.FC<AsesmenViewProps> = ({
                       required
                       className="w-full p-2.5 rounded-lg bg-black/60 border border-rose-500/30 text-white text-xs focus:outline-none focus:border-sky-400"
                     >
+                      <option value="">Pilih kota/kabupaten responden</option>
                       <option value="Kota Medan">Kota Medan</option>
                       <option value="Kab. Deli Serdang">Kab. Deli Serdang</option>
                       <option value="Kota Binjai">Kota Binjai</option>
