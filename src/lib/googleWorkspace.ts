@@ -1,6 +1,7 @@
 import { getAccessToken, invalidateAccessToken } from './firebase';
 import { IntegratedFormData, PPKSRecord } from '../types';
 import { normalizeExactNumericNIK } from './nikNumeric';
+import { sortPPKSRecordsByTimestamp } from './ppksData';
 import { isLegacySamplePPKS, isObviousDemoMarker, LEGACY_SAMPLE_PPKS_IDS, LEGACY_SAMPLE_PPKS_NAMES } from '../data/initialData';
 
 export interface GoogleDriveFile {
@@ -350,6 +351,29 @@ function normalizeSheetHeader(value: string): string {
   return String(value ?? '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/^\s*\d{1,2}[\s.)\-:]+/, '').replace(/[^a-z0-9]/g, '');
 }
 
+function readRespondentName(headers: string[], row: string[]): string {
+  const direct = readCellByAliases(headers, row, [
+    'namaLengkap', 'namaResponden', 'namaCalonResponden', 'namaPPKS',
+    'namaCalonPPKS', 'namaODHIV', 'namaLengkapSesuaiKTP', 'namaSesuaiKTP',
+    'namaRespondenSesuaiKTP', 'nama',
+  ]);
+  if (direct) return direct;
+
+  const excluded = /(ayah|ibu|orangtua|wali|suami|istri|pasangan|keluarga|pendamping|petugas|asesor|asessor|supervisor|kontakdarurat|kontakemergensi|orangterdekat)/;
+  const candidates = headers
+    .map((header, index) => ({ header: String(header || '').trim(), normalized: normalizeSheetHeader(header), value: String(row[index] ?? '').trim(), index }))
+    .filter(({ normalized, value }) => normalized.includes('nama') && value && !excluded.test(normalized))
+    .sort((a, b) => {
+      const score = (header: string, normalized: string) =>
+        (normalized.startsWith('namalengkap') ? 100 : 0) +
+        (/(responden|calonppks|calonresponden|odhiv|ppks)/.test(normalized) ? 65 : 0) +
+        (/(sesuaiktp|sesuaikartuidentitas)/.test(normalized) ? 25 : 0) -
+        (normalized.length > 120 ? 10 : 0);
+      return score(b.header, b.normalized) - score(a.header, a.normalized) || a.index - b.index;
+    });
+  return candidates[0]?.value || '';
+}
+
 function readCellByAliases(headers: string[], row: string[], aliases: string[]): string {
   const normalizedHeaders = headers.map(normalizeSheetHeader);
   const normalizedAliases = [...aliases].map(normalizeSheetHeader).sort((a, b) => b.length - a.length);
@@ -553,9 +577,7 @@ function mapRowsToPPKSRecords(rows: string[][]): PPKSRecord[] {
 
   rows.slice(1).forEach((sourceRow, rowIndex) => {
     const row = sourceRow.map((value) => String(value ?? '').trim());
-    const namaLengkap = readCellByAliases(headers, row, [
-      'namaLengkap', 'namaResponden', 'namaPPKS', 'namaODHIV', 'namaLengkapSesuaiKTP', 'nama',
-    ]);
+    const namaLengkap = readRespondentName(headers, row);
     if (!namaLengkap) return;
 
     const timestamp = readCellByAliases(headers, row, ['timestamp', 'capWaktu', 'waktuPengiriman', 'waktuPengisian', 'tanggalWaktu', 'createTime']);
@@ -615,15 +637,28 @@ function mapRowsToPPKSRecords(rows: string[][]): PPKSRecord[] {
       nik = normalizeNIKCellValue(officialAssessment.q23);
     }
     if (nik) officialAssessment.q23 = nik;
-    const externalId = readCellByAliases(headers, row, ['idPPKS', 'recordId', 'id']);
-    const stableSource = [timestamp, nik, namaLengkap, ...row].join('|');
+    // Use only fields that identify a specific submission, not a generic "ID"
+    // or NIK that may be repeated across multiple submitted rows.
+    const externalId = readCellByAliases(headers, row, [
+      'formResponseId', 'responseId', 'responseID', 'submissionId', 'idSubmission', 'idRespon',
+    ]);
+    const stableSource = [timestamp, nik, normalizeSheetHeader(namaLengkap), `row:${rowIndex + 2}`].join('|');
     let hash = 2166136261;
     for (let i = 0; i < stableSource.length; i++) {
       hash ^= stableSource.charCodeAt(i);
       hash = Math.imul(hash, 16777619);
     }
-    const recordId = externalId || (nik ? `SHEET-NIK-${nik.replace(/\D/g, '')}` : `SHEET-${(hash >>> 0).toString(36)}`);
-    if (seen.has(recordId)) return;
+    const baseRecordId = externalId
+      ? `SHEET-RESP-${externalId.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 80)}`
+      : `SHEET-${(hash >>> 0).toString(36)}`;
+    // Never drop an otherwise valid row because a source ID is repeated.
+    // A collision receives a stable row-position suffix and is still counted.
+    let recordId = baseRecordId;
+    if (seen.has(recordId)) recordId = `${baseRecordId}-ROW-${rowIndex + 2}`;
+    let collisionSuffix = 2;
+    while (seen.has(recordId)) {
+      recordId = `${baseRecordId}-ROW-${rowIndex + 2}-${collisionSuffix++}`;
+    }
     seen.add(recordId);
 
     const usia = parseSheetNumber(readCellByAliases(headers, row, ['usia', 'umur', 'umurTahun', 'usiaSaatIni', 'umurSaatIni']), 0);
@@ -678,7 +713,7 @@ function mapRowsToPPKSRecords(rows: string[][]): PPKSRecord[] {
     };
     records.push(sourceRecord);
   });
-  return records;
+  return sortPPKSRecordsByTimestamp(records);
 }
 
 /** Imports respondent records from an authorized spreadsheet without writing to the source. */
@@ -691,6 +726,11 @@ export async function importPPKSFromSpreadsheet(
   sheetTitles: string[];
   selectedTab: string;
   rowsRead: number;
+  sourceDataRows: number;
+  sourceRowsWithName: number;
+  rowsWithoutRecognizedName: number;
+  recordsBeforeDemoFilter: number;
+  sampleRecordsFiltered: number;
   records: PPKSRecord[];
   recordsWithNIK: number;
   recordsMissingNIK: number;
@@ -716,8 +756,12 @@ export async function importPPKSFromSpreadsheet(
     : (responseTab || metadata.sheetTitles[0]);
   const escapedTitle = selectedTab.replace(/'/g, "''");
   const rows = await readSpreadsheetRichData(metadata.spreadsheetId, `'${escapedTitle}'!A1:ZZ2000`);
-  const records = mapRowsToPPKSRecords(rows).filter((record) => !isLegacySamplePPKS(record));
   const headers = rows[0] || [];
+  const dataRows = rows.slice(1);
+  const sourceRowsWithName = dataRows.filter((row) => Boolean(readRespondentName(headers, row))).length;
+  const allMappedRecords = mapRowsToPPKSRecords(rows);
+  const records = allMappedRecords.filter((record) => !isLegacySamplePPKS(record));
+  const sampleRecordsFiltered = allMappedRecords.length - records.length;
   const nikHeadersFound = headers.filter((header) => isLikelyRespondentNIKHeader(header)).map((header) => header.trim());
   const recordsWithNIK = records.filter((record) => Boolean(String(record.nik || '').trim())).length;
   // Diagnose the source headers and value quality without returning any actual NIK values.
@@ -740,6 +784,11 @@ export async function importPPKSFromSpreadsheet(
     sheetTitles: metadata.sheetTitles,
     selectedTab,
     rowsRead: rows.length,
+    sourceDataRows: dataRows.length,
+    sourceRowsWithName,
+    rowsWithoutRecognizedName: Math.max(0, dataRows.length - sourceRowsWithName),
+    recordsBeforeDemoFilter: allMappedRecords.length,
+    sampleRecordsFiltered,
     records,
     recordsWithNIK,
     recordsMissingNIK: records.length - recordsWithNIK,
