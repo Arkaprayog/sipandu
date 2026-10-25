@@ -150,7 +150,20 @@ export const googleSignIn = async (): Promise<{
   } catch (error: any) {
     const code = error?.code ? String(error.code) : '';
     if (code.includes('auth/unauthorized-domain')) {
-      throw new Error('Domain aplikasi belum diizinkan pada Firebase Authentication → Settings → Authorized domains.');
+      const hostname = typeof window !== 'undefined' ? window.location.hostname : '';
+      const projectId = auth.app.options.projectId || 'gen-lang-client-0197631978';
+      const projectSettingsUrl = `https://console.firebase.google.com/project/${projectId}/authentication/settings`;
+      const domainToAdd = hostname || '(hostname aplikasi belum terdeteksi)';
+      throw new Error(
+        `Domain aplikasi "${domainToAdd}" belum diizinkan pada Firebase Authentication.\n\n` +
+        `PERBAIKAN ADMIN FIREBASE:\n` +
+        `1. Buka ${projectSettingsUrl}\n` +
+        `2. Cari "Authorized domains", lalu pilih "Add domain".\n` +
+        `3. Tambahkan hanya hostname: ${domainToAdd} (tanpa https://, tanpa path, dan tanpa port).\n` +
+        `4. Simpan perubahan, muat ulang SIPANDU, lalu ulangi otorisasi Google.\n\n` +
+        `Untuk URL GitHub Pages https://arkaprayog.github.io/sipandu/, domain yang benar adalah arkaprayog.github.io — bukan arkaprayog.github.io/sipandu.\n` +
+        `Proyek Firebase yang digunakan aplikasi ini: ${projectId}.`
+      );
     }
     if (code.includes('auth/popup-blocked')) {
       throw new Error('Popup Google diblokir browser. Izinkan pop-up untuk situs SIPANDU, lalu tekan Pulihkan Izin Google API.');
