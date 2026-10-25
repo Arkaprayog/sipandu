@@ -37,6 +37,8 @@ export const BerandaView: React.FC<BerandaViewProps> = ({
   // Gender breakdown
   const maleCount = ppksList.filter((p) => p.jenisKelamin === 'Laki-laki').length;
   const femaleCount = ppksList.filter((p) => p.jenisKelamin === 'Perempuan').length;
+  const workingAgeCount = ppksList.filter((p) => p.usia >= 26 && p.usia <= 45).length;
+  const workingAgePercent = totalPPKS > 0 ? Math.round((workingAgeCount / totalPPKS) * 100) : 0;
   const malePercent = totalPPKS > 0 ? Math.round((maleCount / totalPPKS) * 100) : 0;
   const femalePercent = totalPPKS > 0 ? Math.round((femaleCount / totalPPKS) * 100) : 0;
 
@@ -410,7 +412,7 @@ export const BerandaView: React.FC<BerandaViewProps> = ({
               </h3>
             </div>
             <span className="text-xs text-sky-300 font-semibold">
-              Usia Produktif 26-45 Thn (75%)
+              Usia 26-45 Thn ({workingAgePercent}%)
             </span>
           </div>
 
