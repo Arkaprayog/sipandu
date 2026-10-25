@@ -18,6 +18,50 @@ import { auth, getAccessToken, savePPKSToFirestore, googleLogout } from './lib/f
 import { ensureSIPANDUDatabaseSheet, extractSpreadsheetId, importPPKSFromSpreadsheet, upsertPPKSInSpreadsheet } from './lib/googleWorkspace';
 import { GOOGLE_SIPANDU_RESOURCES } from './lib/googleSIPANDUResources';
 
+function mergePPKSRecords(localRecords: PPKSRecord[], cloudRecords: PPKSRecord[]): PPKSRecord[] {
+  const merged = new Map<string, PPKSRecord>();
+  const recordKey = (record: PPKSRecord) => {
+    const normalizedNik = String(record.nik || '').replace(/\D/g, '');
+    return normalizedNik ? `nik:${normalizedNik}` : `id:${record.id}`;
+  };
+  const mergeOne = (previous: PPKSRecord | undefined, next: PPKSRecord): PPKSRecord => {
+    if (!previous) return next;
+    const nextIntegrated = next.integratedForm
+      ? Object.fromEntries(Object.entries(next.integratedForm).filter(([, value]) => value !== '' && value !== undefined))
+      : {};
+    return {
+      ...previous,
+      ...next,
+      nik: next.nik || previous.nik,
+      usia: next.usia || previous.usia,
+      alamatLengkap: next.alamatLengkap || previous.alamatLengkap,
+      kotaDomisili: next.kotaDomisili || previous.kotaDomisili,
+      noHpWa: next.noHpWa || previous.noHpWa,
+      jenisBantuan: next.jenisBantuan || previous.jenisBantuan,
+      intervensiMental: next.intervensiMental || previous.intervensiMental,
+      fotoDiri: next.fotoDiri || previous.fotoDiri,
+      fotoKtp: next.fotoKtp || previous.fotoKtp,
+      fotoKk: next.fotoKk || previous.fotoKk,
+      fotoRumah: next.fotoRumah || previous.fotoRumah,
+      integratedForm: next.integratedForm
+        ? ({ ...(previous.integratedForm || {}), ...nextIntegrated } as NonNullable<PPKSRecord['integratedForm']>)
+        : previous.integratedForm,
+      statusAsesmen: next.integratedForm ? 'Terintegrasi' : (previous.statusAsesmen || next.statusAsesmen),
+    };
+  };
+
+  for (const record of localRecords) {
+    if (!record || LEGACY_SAMPLE_PPKS_IDS.has(String(record.id || ''))) continue;
+    merged.set(recordKey(record), record);
+  }
+  for (const record of cloudRecords) {
+    if (!record || LEGACY_SAMPLE_PPKS_IDS.has(String(record.id || ''))) continue;
+    const key = recordKey(record);
+    merged.set(key, mergeOne(merged.get(key), record));
+  }
+  return Array.from(merged.values());
+}
+
 function normalizeAppSettings(value: unknown): AppSettings {
   const saved = value && typeof value === 'object' ? value as Partial<AppSettings> : {};
   let databaseUrl = saved.googleSpreadsheetUrl?.trim() || '';
@@ -150,6 +194,11 @@ export default function App() {
   });
 
   const [cloudSyncNotice, setCloudSyncNotice] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [liveSyncState, setLiveSyncState] = useState<{
+    type: 'idle' | 'success' | 'paused' | 'error';
+    message: string;
+    lastUpdatedAt?: string;
+  }>({ type: 'idle', message: 'Sinkronisasi otomatis belum dimulai.' });
 
   // Modals state
   const [isEditProfileOpen, setIsEditProfileOpen] = useState<boolean>(false);
@@ -238,22 +287,7 @@ export default function App() {
   };
 
   const handleLoadPPKSFromCloud = (cloudRecords: PPKSRecord[]) => {
-    setPpksList((localRecords) => {
-      const merged = new Map<string, PPKSRecord>();
-      const recordKey = (record: PPKSRecord) => {
-        const normalizedNik = String(record.nik || '').replace(/\D/g, '');
-        return normalizedNik ? `nik:${normalizedNik}` : `id:${record.id}`;
-      };
-      localRecords
-        .filter((record) => !LEGACY_SAMPLE_PPKS_IDS.has(String(record.id || '')))
-        .forEach((record) => merged.set(recordKey(record), record));
-      // Cloud/source records overwrite an older local record with the same NIK,
-      // preventing duplicate respondents when an imported row has a new ID.
-      cloudRecords
-        .filter((record) => !LEGACY_SAMPLE_PPKS_IDS.has(String(record.id || '')))
-        .forEach((record) => merged.set(recordKey(record), record));
-      return Array.from(merged.values());
-    });
+    setPpksList((localRecords) => mergePPKSRecords(localRecords, cloudRecords));
   };
 
   const handleSyncGoogleSpreadsheet = async (): Promise<number> => {
@@ -270,14 +304,103 @@ export default function App() {
       );
     }
     handleLoadPPKSFromCloud(imported.records);
-    setSettings({
-      ...settings,
+    setSettings((current) => ({
+      ...current,
       googleSpreadsheetSourceUrl: sourceUrl,
       googleSpreadsheetSourceName: imported.spreadsheetTitle,
       googleSpreadsheetSourceTab: imported.selectedTab,
+    }));
+    const updatedAt = new Date().toLocaleString('id-ID');
+    setLiveSyncState({
+      type: 'success',
+      message: `Sumber “${imported.spreadsheetTitle}” dibaca: ${imported.rowsRead} baris, ${imported.records.length} responden dikenali. Pembaruan otomatis berjalan setiap 2 menit selama izin Google masih berlaku.`,
+      lastUpdatedAt: updatedAt,
     });
     return imported.records.length;
   };
+
+  // Poll the selected read-only Google Sheet while the dashboard is open.
+  // Polling is paused rather than prompting repeatedly when the OAuth token expires.
+  useEffect(() => {
+    const sourceUrl = settings.googleSpreadsheetSourceUrl?.trim() || '';
+    const sourceTab = settings.googleSpreadsheetSourceTab?.trim() || undefined;
+    if (!isAuthenticated || !sourceUrl) {
+      setLiveSyncState({
+        type: 'idle',
+        message: isAuthenticated
+          ? 'Pilih spreadsheet sumber di Google Workspace & Cloud Hub untuk mengaktifkan live sync.'
+          : 'Live sync aktif setelah akun SIPANDU masuk.',
+      });
+      return;
+    }
+
+    let active = true;
+    let running = false;
+    const syncOnce = async () => {
+      if (!active || running || document.visibilityState === 'hidden') return;
+      running = true;
+      try {
+        const token = await getAccessToken();
+        if (!token) {
+          if (active) setLiveSyncState({
+            type: 'paused',
+            message: 'Live sync dijeda karena izin Google API perlu dipulihkan. Sesi SIPANDU tetap aktif; buka Koneksi Akun lalu tekan Pulihkan Izin Google API.',
+          });
+          return;
+        }
+        const imported = await importPPKSFromSpreadsheet(sourceUrl, sourceTab);
+        if (!active) return;
+        if (!imported.records.length) {
+          setLiveSyncState({
+            type: 'error',
+            message: `Spreadsheet “${imported.spreadsheetTitle}” terbaca (${imported.rowsRead} baris), tetapi tidak ditemukan baris dengan kolom nama responden yang dikenali. Periksa tab dan judul kolom.`,
+          });
+          return;
+        }
+        setPpksList((current) => mergePPKSRecords(current, imported.records));
+        setSettings((current) => {
+          if (
+            current.googleSpreadsheetSourceName === imported.spreadsheetTitle &&
+            current.googleSpreadsheetSourceTab === imported.selectedTab
+          ) return current;
+          return {
+            ...current,
+            googleSpreadsheetSourceUrl: sourceUrl,
+            googleSpreadsheetSourceName: imported.spreadsheetTitle,
+            googleSpreadsheetSourceTab: imported.selectedTab,
+          };
+        });
+        setLiveSyncState({
+          type: 'success',
+          message: `Live sync aktif — “${imported.spreadsheetTitle}” → tab “${imported.selectedTab}”: ${imported.records.length} responden dikenali dari ${imported.rowsRead} baris.`,
+          lastUpdatedAt: new Date().toLocaleString('id-ID'),
+        });
+      } catch (error) {
+        if (!active) return;
+        setLiveSyncState({
+          type: 'error',
+          message: error instanceof Error ? error.message : String(error),
+        });
+      } finally {
+        running = false;
+      }
+    };
+
+    void syncOnce();
+    const timer = window.setInterval(() => { void syncOnce(); }, 2 * 60 * 1000);
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') void syncOnce();
+    };
+    const onWorkspaceTokenUpdated = () => { void syncOnce(); };
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    window.addEventListener('sipandu-workspace-token-updated', onWorkspaceTokenUpdated);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+      window.removeEventListener('sipandu-workspace-token-updated', onWorkspaceTokenUpdated);
+    };
+  }, [isAuthenticated, settings.googleSpreadsheetSourceUrl, settings.googleSpreadsheetSourceTab]);
 
   // Avoid showing protected UI until Firebase has resolved the current session.
   if (!authReady) {
@@ -326,6 +449,24 @@ export default function App() {
             </div>
           </div>
         )}
+
+        <div
+          role="status"
+          aria-live="polite"
+          className={`mb-4 rounded-xl border p-3 text-xs break-words ${
+            liveSyncState.type === 'success' ? 'border-emerald-500/35 bg-emerald-950/40 text-emerald-100' :
+            liveSyncState.type === 'paused' || liveSyncState.type === 'error' ? 'border-amber-500/40 bg-amber-950/40 text-amber-100' :
+            'border-white/10 bg-black/20 text-neutral-300'
+          }`}
+        >
+          <div className="flex items-start justify-between gap-3">
+            <span>
+              <strong>{liveSyncState.type === 'success' ? 'LIVE SYNC' : liveSyncState.type === 'paused' ? 'SYNC DIJEDA' : liveSyncState.type === 'error' ? 'SYNC PERLU DIPERIKSA' : 'LIVE SYNC'}</strong>
+              <span className="ml-2">{liveSyncState.message}</span>
+              {liveSyncState.lastUpdatedAt && <span className="ml-2 text-[10px] opacity-80">Pembaruan terakhir: {liveSyncState.lastUpdatedAt}</span>}
+            </span>
+          </div>
+        </div>
         {activeTab === 'beranda' && (
           <BerandaView
             ppksList={ppksList}

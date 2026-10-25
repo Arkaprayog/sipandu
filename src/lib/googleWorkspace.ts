@@ -210,6 +210,44 @@ export async function readSpreadsheetData(spreadsheetIdOrUrl: string, range = 'S
   return (data.values || []).map(row => row.map(value => String(value ?? '')));
 }
 
+/** Reads displayed cell values plus hyperlink URLs (Google Forms file-upload cells often store links as cell hyperlinks). */
+export async function readSpreadsheetRichData(
+  spreadsheetIdOrUrl: string,
+  range: string,
+): Promise<string[][]> {
+  const id = extractSpreadsheetId(spreadsheetIdOrUrl);
+  const params = new URLSearchParams({
+    ranges: range,
+    includeGridData: 'true',
+    fields: 'sheets(properties(title),data(rowData(values(formattedValue,hyperlink,textFormatRuns(format(link(uri)))))))',
+  });
+  const data = await googleJson<{
+    sheets?: {
+      properties?: { title?: string };
+      data?: {
+        rowData?: {
+          values?: {
+            formattedValue?: string;
+            hyperlink?: string;
+            textFormatRuns?: Array<{ format?: { link?: { uri?: string } } }>;
+          }[];
+        }[];
+      }[];
+    }[];
+  }>(`https://sheets.googleapis.com/v4/spreadsheets/${id}?${params.toString()}`);
+
+  const sheet = data.sheets?.[0];
+  const rowData = sheet?.data?.[0]?.rowData || [];
+  return rowData.map((row) => (row.values || []).map((cell) => {
+    const runLink = cell.textFormatRuns?.find((run) => run.format?.link?.uri)?.format?.link?.uri;
+    // Prefer the actual link for uploaded photo cells; otherwise preserve the
+    // formatted display value, including leading zeroes in NIK cells.
+    return String(cell.hyperlink || runLink || cell.formattedValue || '');
+  }));
+}
+
+
+
 /**
  * Appends a SIPANDU database row to a dedicated SIPANDU data sheet only.
  * Do not point this at the Google Form's response tab: that tab is owned by Forms.
@@ -367,7 +405,7 @@ function mapRowsToPPKSRecords(rows: string[][]): PPKSRecord[] {
     if (!namaLengkap) return;
 
     const timestamp = readCellByAliases(headers, row, ['timestamp', 'capWaktu', 'waktuPengiriman', 'waktuPengisian', 'tanggalWaktu', 'createTime']);
-    const nik = readCellByAliases(headers, row, ['nik', 'nomorIndukKependudukan', 'nomorKTP', 'NIKKTP', 'noKTPNIK', 'KTPNIK']);
+    const nik = readCellByAliases(headers, row, ['nik', 'nikResponden', 'NIKNoKTP', 'nomorIndukKependudukan', 'nomorKTP', 'nomorKTPNIK', 'NIKKTP', 'noKTPNIK', 'KTPNIK']);
     const externalId = readCellByAliases(headers, row, ['idPPKS', 'recordId', 'id']);
     const stableSource = [timestamp, nik, namaLengkap, ...row].join('|');
     let hash = 2166136261;
@@ -403,10 +441,10 @@ function mapRowsToPPKSRecords(rows: string[][]): PPKSRecord[] {
       ? (integratedValues as IntegratedFormData)
       : undefined;
     const desil = parseSheetNumber(readCellByAliases(headers, row, ['desil', 'desilKemiskinan', 'desilDTKS', 'desilEkonomi']), 0);
-    const fotoDiri = readCellByAliases(headers, row, ['fotoDiri', 'fotoResponden', 'uploadFotoDiri', 'foto']);
-    const fotoKtp = readCellByAliases(headers, row, ['fotoKtp', 'fotoKTP', 'uploadFotoKTP', 'dokumenKTP']);
-    const fotoKk = readCellByAliases(headers, row, ['fotoKk', 'fotoKK', 'uploadFotoKK', 'dokumenKK']);
-    const fotoRumah = readCellByAliases(headers, row, ['fotoRumah', 'fotoRumahTampakDepan', 'uploadFotoRumah']);
+    const fotoDiri = readCellByAliases(headers, row, ['fotoDiri', 'fotoDiriPPKS', 'fotoResponden', 'uploadFotoDiri', 'tautanFotoDiri', 'linkFotoDiri', 'fotoDiriCloseUp', 'fotoDiriResponden', 'foto']);
+    const fotoKtp = readCellByAliases(headers, row, ['fotoKtp', 'fotoKTP', 'uploadFotoKTP', 'dokumenKTP', 'tautanFotoKTP', 'linkFotoKTP', 'fotoKartuIdentitas', 'scanKTP']);
+    const fotoKk = readCellByAliases(headers, row, ['fotoKk', 'fotoKK', 'uploadFotoKK', 'dokumenKK', 'tautanFotoKK', 'linkFotoKK', 'scanKK']);
+    const fotoRumah = readCellByAliases(headers, row, ['fotoRumah', 'fotoRumahTampakDepan', 'uploadFotoRumah', 'tautanFotoRumah', 'linkFotoRumah', 'fotoDepanRumah', 'fotoTampakDepanRumah']);
     const sourceRecord: PPKSRecord = {
       id: recordId || `SHEET-ROW-${rowIndex + 2}`,
       timestamp,
@@ -457,7 +495,7 @@ export async function importPPKSFromSpreadsheet(
     ? preferred
     : (responseTab || metadata.sheetTitles[0]);
   const escapedTitle = selectedTab.replace(/'/g, "''");
-  const rows = await readSpreadsheetData(metadata.spreadsheetId, `'${escapedTitle}'!A1:ZZ2000`);
+  const rows = await readSpreadsheetRichData(metadata.spreadsheetId, `'${escapedTitle}'!A1:AZ2000`);
   const records = mapRowsToPPKSRecords(rows);
   return {
     spreadsheetId: metadata.spreadsheetId,

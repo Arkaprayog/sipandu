@@ -110,16 +110,14 @@ export const AsesmenView: React.FC<AsesmenViewProps> = ({
       jenisKelamin,
       kotaDomisili,
       alamatLengkap: `${kotaDomisili}, Sumatera Utara`,
-      noHpWa: noHpWa || '081234567890',
-      jenisBantuan: jenisBantuan || 'Bantuan Nutrisi & Pemulihan Fisik/Psikososial',
+      noHpWa: noHpWa.trim(),
+      jenisBantuan: jenisBantuan.trim(),
       intervensiMental: 'Perlu asesmen lanjutan kesehatan mental ODHIV dan kepatuhan ARV',
       desil: 2,
-      fotoDiri:
-        fotoDiri ||
-        'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80',
-      fotoKtp:
-        fotoKtp ||
-        'https://images.unsplash.com/photo-1589829545856-d10d557cf95f?auto=format&fit=crop&w=600&q=80',
+      // Never insert stock/demo images as a respondent's identity documents.
+      // Empty photo fields remain visibly missing until a genuine upload is supplied.
+      fotoDiri,
+      fotoKtp,
       statusAsesmen: 'Tahap Awal',
       googleFormSync: true,
     };

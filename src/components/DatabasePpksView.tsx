@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { PPKSRecord, AppSettings } from '../types';
+import { PrivateDriveImage } from './PrivateDriveImage';
 import {
   buildWhatsAppMessage,
   createWhatsAppLink,
@@ -164,14 +165,11 @@ export const DatabasePpksView: React.FC<DatabasePpksViewProps> = ({
               {/* Foto Diri PPKS di sebelah kiri */}
               <div className="md:col-span-4 flex flex-col items-center">
                 <div className="relative w-48 h-56 md:w-56 md:h-64 rounded-2xl overflow-hidden border-2 border-rose-500/60 shadow-[0_0_20px_rgba(244,63,94,0.25)] bg-black/70">
-                  <img
-                    src={currentPPKS.fotoDiri}
-                    alt={currentPPKS.namaLengkap}
-                    className="w-full h-full object-cover"
-                    onError={(e) => {
-                      (e.target as HTMLImageElement).src =
-                        'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80';
-                    }}
+                  <PrivateDriveImage
+                    source={currentPPKS.fotoDiri}
+                    alt={`Foto diri responden ${currentPPKS.namaLengkap}`}
+                    className="h-full w-full rounded-none border-0"
+                    objectFit="cover"
                   />
                   <div className="absolute top-2 right-2 px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-900/90 text-white border border-emerald-400">
                     ID: {currentPPKS.id}
@@ -301,6 +299,34 @@ export const DatabasePpksView: React.FC<DatabasePpksViewProps> = ({
               </div>
             </div>
 
+            <section className="mt-6 rounded-xl border border-sky-400/30 bg-black/30 p-4">
+              <div className="mb-3 flex flex-col gap-1 border-b border-sky-400/20 pb-3 sm:flex-row sm:items-center sm:justify-between">
+                <h4 className="text-sm font-bold text-white">Identitas & Foto Responden</h4>
+                <p className="text-xs font-mono font-semibold text-sky-200">NIK: {currentPPKS.nik || 'Belum tersedia'}</p>
+              </div>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                {[
+                  { label: 'Foto Diri', source: currentPPKS.fotoDiri },
+                  { label: 'Foto KTP', source: currentPPKS.fotoKtp },
+                  { label: 'Foto Kartu Keluarga', source: currentPPKS.fotoKk || '' },
+                  { label: 'Foto Rumah Tampak Depan', source: currentPPKS.fotoRumah || '' },
+                ].map((photo) => (
+                  <div key={photo.label} className="rounded-lg border border-white/10 bg-black/30 p-2">
+                    <p className="mb-2 text-xs font-semibold text-sky-100">{photo.label}</p>
+                    <PrivateDriveImage
+                      source={photo.source}
+                      alt={`${photo.label} — ${currentPPKS.namaLengkap}`}
+                      className="h-48 w-full"
+                      objectFit="contain"
+                    />
+                  </div>
+                ))}
+              </div>
+              <p className="mt-3 text-[10px] text-neutral-400">
+                Foto Google Drive privat dimuat menggunakan izin akun Workspace aktif. Jika foto belum tersedia, pastikan kolom sumber berisi tautan/ID file dan akun memiliki akses ke file tersebut.
+              </p>
+            </section>
+
             {/* Dibawah kolom profil: Tombol WHATSAPP, lalu tombol SIMPAN */}
             <div className="mt-8 pt-5 border-t border-rose-500/30 flex flex-col items-center gap-3 max-w-lg mx-auto">
               {/* Tombol WhatsApp */}
@@ -363,6 +389,50 @@ export const DatabasePpksView: React.FC<DatabasePpksViewProps> = ({
               )}
             </div>
           </div>
+        )}
+
+        {ppksList.length > 0 && (
+          <section className="mt-6 rounded-2xl border border-sky-400/30 bg-black/35 p-4 md:p-5">
+            <div className="mb-4 flex flex-col gap-1 border-b border-sky-400/20 pb-3">
+              <h3 className="text-base font-black text-white">Galeri Semua Responden</h3>
+              <p className="text-xs text-neutral-300">
+                Daftar foto diri, KTP, rumah tampak depan, dan NIK untuk setiap responden yang telah dimuat. Foto privat dimuat saat kartu terlihat agar halaman tetap ringan.
+              </p>
+            </div>
+            <div className="space-y-4">
+              {ppksList.map((record) => (
+                <article key={record.id} className="rounded-xl border border-white/10 bg-black/25 p-3">
+                  <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
+                    <div>
+                      <h4 className="text-sm font-bold text-white">{record.namaLengkap || 'Nama belum tersedia'}</h4>
+                      <p className="text-[10px] font-mono text-neutral-400">ID: {record.id}</p>
+                    </div>
+                    <div className="rounded-lg border border-sky-400/25 bg-sky-950/20 px-3 py-2">
+                      <span className="block text-[9px] uppercase tracking-wide text-sky-200">NIK Responden</span>
+                      <span className="font-mono text-xs font-bold tracking-wider text-white">{record.nik || 'Belum tersedia di sumber'}</span>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                    {[
+                      { label: 'Foto Diri', source: record.fotoDiri },
+                      { label: 'Foto KTP', source: record.fotoKtp },
+                      { label: 'Foto Rumah Tampak Depan', source: record.fotoRumah || '' },
+                    ].map((photo) => (
+                      <div key={photo.label} className="rounded-lg border border-white/10 bg-black/30 p-2">
+                        <p className="mb-2 text-[11px] font-semibold text-sky-100">{photo.label}</p>
+                        <PrivateDriveImage
+                          source={photo.source}
+                          alt={`${photo.label} — ${record.namaLengkap}`}
+                          className="h-36 w-full"
+                          objectFit="contain"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </article>
+              ))}
+            </div>
+          </section>
         )}
       </div>
     </div>

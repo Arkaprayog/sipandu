@@ -20,6 +20,7 @@ import {
   Award,
 } from 'lucide-react';
 import { KemensosLogo } from './KemensosLogo';
+import { PrivateDriveImage } from './PrivateDriveImage';
 
 interface FromAsesmenTerintegrasiViewProps {
   ppksList: PPKSRecord[];
@@ -280,11 +281,7 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
             <div className="flex min-w-0 flex-col items-center p-2 rounded-lg bg-black/60 border border-emerald-500/30">
               <span className="text-xs font-bold text-emerald-300 mb-2">1. Foto Diri</span>
               <div className="w-full aspect-[4/3] rounded-md overflow-hidden border border-rose-500/30 bg-black">
-                <img
-                  src={fotoDiri}
-                  alt="Foto Diri"
-                  className="w-full h-full object-contain"
-                />
+                <PrivateDriveImage source={fotoDiri} alt="Foto Diri" className="h-full w-full rounded-none border-0" objectFit="contain" />
               </div>
               <label className="mt-1.5 text-[9px] md:text-[10px] text-sky-300 hover:underline cursor-pointer flex items-center gap-1">
                 <Upload className="w-3 h-3" />
@@ -302,11 +299,7 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
             <div className="flex flex-col items-center p-3 rounded-xl bg-black/60 border border-emerald-500/30">
               <span className="text-xs font-bold text-emerald-300 mb-2">2. Foto KTP</span>
               <div className="w-full aspect-3/4 rounded-lg overflow-hidden border border-rose-500/30 bg-black">
-                <img
-                  src={fotoKtp}
-                  alt="Foto KTP"
-                  className="w-full h-full object-cover"
-                />
+                <PrivateDriveImage source={fotoKtp} alt="Foto KTP" className="h-full w-full rounded-none border-0" objectFit="contain" />
               </div>
               <label className="mt-2 text-[10px] text-sky-300 hover:underline cursor-pointer flex items-center gap-1">
                 <Upload className="w-3 h-3" />
@@ -324,11 +317,7 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
             <div className="flex flex-col items-center p-3 rounded-xl bg-black/60 border border-emerald-500/30">
               <span className="text-xs font-bold text-emerald-300 mb-2">3. Foto KK</span>
               <div className="w-full aspect-3/4 rounded-lg overflow-hidden border border-rose-500/30 bg-black">
-                <img
-                  src={fotoKk}
-                  alt="Foto KK"
-                  className="w-full h-full object-cover"
-                />
+                <PrivateDriveImage source={fotoKk} alt="Foto KK" className="h-full w-full rounded-none border-0" objectFit="contain" />
               </div>
               <label className="mt-2 text-[10px] text-sky-300 hover:underline cursor-pointer flex items-center gap-1">
                 <Upload className="w-3 h-3" />
@@ -348,11 +337,7 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
                 4. Foto Rumah Tampak Depan
               </span>
               <div className="w-full aspect-3/4 rounded-lg overflow-hidden border border-rose-500/30 bg-black">
-                <img
-                  src={fotoRumah}
-                  alt="Foto Rumah Tampak Depan"
-                  className="w-full h-full object-cover"
-                />
+                <PrivateDriveImage source={fotoRumah} alt="Foto Rumah Tampak Depan" className="h-full w-full rounded-none border-0" objectFit="contain" />
               </div>
               <label className="mt-2 text-[10px] text-sky-300 hover:underline cursor-pointer flex items-center gap-1">
                 <Upload className="w-3 h-3" />
