@@ -1,6 +1,6 @@
 import { getAccessToken, invalidateAccessToken } from './firebase';
 import { IntegratedFormData, PPKSRecord } from '../types';
-import { isLegacySamplePPKS, LEGACY_SAMPLE_PPKS_IDS, LEGACY_SAMPLE_PPKS_NAMES } from '../data/initialData';
+import { isLegacySamplePPKS, isObviousDemoMarker, LEGACY_SAMPLE_PPKS_IDS, LEGACY_SAMPLE_PPKS_NAMES } from '../data/initialData';
 
 export interface GoogleDriveFile {
   id: string;
@@ -671,10 +671,14 @@ export async function removeLegacyDemoRowsFromSpreadsheet(spreadsheetUrlOrId: st
       .map(({ index }) => index);
 
     rows.slice(1).forEach((row, index) => {
-      const idMatch = idColumnIndexes.some((columnIndex) => LEGACY_SAMPLE_PPKS_IDS.has(String(row[columnIndex] || '').trim()));
-      const nameMatch = nameColumnIndexes.some((columnIndex) =>
-        LEGACY_SAMPLE_PPKS_NAMES.has(String(row[columnIndex] || '').trim().toLocaleLowerCase('id-ID'))
-      );
+      const idMatch = idColumnIndexes.some((columnIndex) => {
+        const value = String(row[columnIndex] || '').trim();
+        return LEGACY_SAMPLE_PPKS_IDS.has(value) || isObviousDemoMarker(value);
+      });
+      const nameMatch = nameColumnIndexes.some((columnIndex) => {
+        const value = String(row[columnIndex] || '').trim();
+        return LEGACY_SAMPLE_PPKS_NAMES.has(value.toLocaleLowerCase('id-ID')) || isObviousDemoMarker(value);
+      });
       // Also detect old rows that placed the retired synthetic ID in a differently named column.
       const anyCellHasLegacyId = row.some((cell) => LEGACY_SAMPLE_PPKS_IDS.has(String(cell || '').trim()));
       if (idMatch || nameMatch || anyCellHasLegacyId) {
