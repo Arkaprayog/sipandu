@@ -128,7 +128,8 @@ test('buildWhatsAppMessage never invents Google Form links or claims verificatio
     fotoKtp: '',
     statusAsesmen: 'Tahap Awal',
   });
-  assert.doesNotMatch(message, /forms\\.gle\\/(?:SIPANDU-ODHIV-Lanjutan-Sumut|Asesmen-Kesehatan-Mental-ODHIV-Kemensos)/);
+  assert.equal(message.includes('forms.gle/SIPANDU-ODHIV-Lanjutan-Sumut'), false);
+  assert.equal(message.includes('forms.gle/Asesmen-Kesehatan-Mental-ODHIV-Kemensos'), false);
   assert.match(message, /Tautan asesmen lanjutan belum dikonfigurasi/);
   assert.doesNotMatch(message, /Data Anda telah berhasil kami terima dan terverifikasi/);
 });
