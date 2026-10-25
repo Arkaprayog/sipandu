@@ -4,6 +4,7 @@ import {
   findNIKHeaders,
   isLikelyRespondentNIKHeader,
   normalizeNIKCellValue,
+  normalizeExactNumericNIK,
   readNIKFromSheetRow,
 } from './nikMapping';
 
@@ -54,4 +55,11 @@ test('normalizes separators but refuses scientific notation and ambiguous values
   assert.equal(normalizeNIKCellValue('1.27101150592000E+15'), '');
   assert.equal(normalizeNIKCellValue('1271011505920003 / 3276017001950001'), '');
   assert.equal(normalizeNIKCellValue('1271011505'), '');
+});
+
+test('recovers numeric NIK only when the underlying number is safe and exactly 16 digits', () => {
+  assert.equal(normalizeExactNumericNIK(1271011505920003), '1271011505920003');
+  assert.equal(normalizeExactNumericNIK(9007199254740992), '');
+  assert.equal(normalizeExactNumericNIK(12345), '');
+  assert.equal(normalizeExactNumericNIK('1271011505920003'), '');
 });
