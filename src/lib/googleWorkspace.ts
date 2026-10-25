@@ -798,7 +798,7 @@ function isSIPANDULegacyDriveArtifact(name: string): boolean {
   if ([...LEGACY_SAMPLE_PPKS_NAMES].some((sampleName) => normalized.includes(normalizeSheetHeader(sampleName)))) return true;
   const hasDemoMarker = /(^|[^a-z])(demo|sample|contoh|dummy|uji\\s*coba|data\\s*uji|uji\\s*data|test\\s*data|data\\s*test)([^a-z]|$)/i.test(name);
   const identifiesSipandu = /(sipandu|ppks|odhiv|asesmen|kemensos)/i.test(name);
-  return isObviousDemoMarker(name) || (hasDemoMarker && identifiesSipandu);
+  return hasDemoMarker && identifiesSipandu;
 }
 
 async function listDriveChildren(parentId: string): Promise<GoogleDriveFile[]> {
