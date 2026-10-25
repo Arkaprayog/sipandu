@@ -1,4 +1,5 @@
 import { PPKSRecord, ProfileUser, SuratRecord, AppSettings } from '../types';
+import { GOOGLE_SIPANDU_RESOURCES } from '../lib/googleSIPANDUResources';
 
 export const initialProfileUser: ProfileUser = {
   nama: 'Deny Arifin Martyon S.',
@@ -10,10 +11,10 @@ export const initialProfileUser: ProfileUser = {
 };
 
 export const initialAppSettings: AppSettings = {
-  googleFormTahapAwalUrl: 'https://forms.gle/SIPANDU-ODHIV-Lanjutan-Sumut',
+  googleFormTahapAwalUrl: GOOGLE_SIPANDU_RESOURCES.formEditorUrl,
   googleFormKesehatanMentalUrl: 'https://forms.gle/Asesmen-Kesehatan-Mental-ODHIV-Kemensos',
-  googleSpreadsheetUrl: 'https://docs.google.com/spreadsheets/d/1yA8KemensosODHIVSumut2026_LiveSync',
-  googleDriveFolderUrl: 'https://drive.google.com/drive/folders/1Kemensos_Sumut_Berkas_PPKS_ODHIV',
+  googleSpreadsheetUrl: '', // Create a separate database spreadsheet from Google Workspace Hub; do not write into Form responses.
+  googleDriveFolderUrl: GOOGLE_SIPANDU_RESOURCES.driveFolderUrl,
   senderName: 'Deny Arifin Martyon S.',
   senderRole: 'Pendamping ODHIV',
   senderUnit: 'Direktorat Rehabilitasi Sosial Korban Penyalahgunaan Narkoba & ODHIV',
