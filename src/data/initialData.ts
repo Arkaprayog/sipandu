@@ -7,7 +7,7 @@ export const initialProfileUser: ProfileUser = {
   unitKerja: 'Direktorat Rehabilitasi Sosial Korban Penyalahgunaan Narkoba & ODHIV',
   jabatan: 'Pendamping Rehabilitasi Sosial ODHIV Prov. Sumatera Utara',
   noHp: '081260887722',
-  photoUrl: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=400&q=80',
+  photoUrl: '',
 };
 
 export const initialAppSettings: AppSettings = {
@@ -38,61 +38,42 @@ export const LEGACY_SAMPLE_PPKS_IDS: ReadonlySet<string> = new Set([
   'PPKS-SU-2026-008',
 ]);
 
+/** Exact placeholder respondent names previously shipped in demo data and notifications. */
+export const LEGACY_SAMPLE_PPKS_NAMES: ReadonlySet<string> = new Set([
+  'rahmat hidayat simanjuntak',
+  'dewi sartika lubis',
+  'ferry ardiansyah harahap',
+  'sri wahyuni siregar',
+  'johan marbun',
+  'melati anggraini sinaga',
+  'tigor pangaribuan',
+  'aisyah putri tanjung',
+  'budi santoso',
+]);
+
+export function isLegacySamplePPKS(record: Pick<PPKSRecord, 'id' | 'namaLengkap'> | null | undefined): boolean {
+  if (!record) return false;
+  if (LEGACY_SAMPLE_PPKS_IDS.has(String(record.id || '').trim())) return true;
+  return LEGACY_SAMPLE_PPKS_NAMES.has(String(record.namaLengkap || '').trim().toLocaleLowerCase('id-ID'));
+}
+
 // Start with an empty database; real PPKS records must be entered or loaded from an authorized source.
 export const initialPPKSList: PPKSRecord[] = [];
 
-export const initialSuratList: SuratRecord[] = [
-  {
-    id: 'SRT-ST-001',
-    nomorSurat: 'ST.03.02/REHSOS-ODHIV/10/2026',
-    judul: 'Surat Tugas Pendampingan & Verifikasi Lapangan PPKS ODHIV Wilayah Medan & Deli Serdang',
-    jenis: 'Surat Tugas',
-    tanggal: '2026-10-20',
-    petugas: 'Deny Arifin Martyon S.',
-    nipPetugas: '19920315 202012 1 002',
-    lokasi: 'Kota Medan & Kab. Deli Serdang',
-    status: 'Aktif',
-    deskripsi: 'Melakukan asesmen komprehensif 6 lembar, verifikasi berkas administrasi dan fasilitasi bantuan ATENSI Kemensos bagi 24 responden ODHIV.',
-  },
-  {
-    id: 'SRT-BA-002',
-    nomorSurat: 'BA.08.01/ATENSI-ODHIV/10/2026',
-    judul: 'Berita Acara Serah Terima Bantuan Kebutuhan Dasar & Nutrisi ODHIV',
-    jenis: 'Berita Acara',
-    tanggal: '2026-10-18',
-    petugas: 'Deny Arifin Martyon S.',
-    nipPetugas: '19920315 202012 1 002',
-    lokasi: 'Sentra Bahagia / Wilayah Binaan Sumut',
-    status: 'Aktif',
-    deskripsi: 'Penyerahan paket nutrisi tambahan daya tahan tubuh (susu khusus, multivitamin kompleks, sembako) untuk PPKS rentan.',
-  },
-  {
-    id: 'SRT-SP-003',
-    nomorSurat: 'SP.01.04/DAMPING-ODHIV/09/2026',
-    judul: 'Surat Pernyataan Kesediaan Didampingi Program Rehabilitasi Sosial ODHIV',
-    jenis: 'Surat Pernyataan',
-    tanggal: '2026-09-28',
-    petugas: 'Deny Arifin Martyon S.',
-    nipPetugas: '19920315 202012 1 002',
-    lokasi: 'Sumatera Utara',
-    status: 'Arsip',
-    deskripsi: 'Pernyataan sukarela kerahasiaan data medis dan komitmen kepatuhan pengobatan ARV.',
-  },
-];
-
+// Do not seed the Documents module with fictitious official letters.\nexport const initialSuratList: SuratRecord[] = [];\n
 export const SUMUT_DISTRICTS = [
-  { id: 'medan', name: 'Kota Medan', count: 48, lat: 3.5952, lng: 98.6722 },
-  { id: 'deliserdang', name: 'Kab. Deli Serdang', count: 32, lat: 3.5542, lng: 98.8631 },
-  { id: 'binjai', name: 'Kota Binjai', count: 18, lat: 3.6006, lng: 98.4854 },
-  { id: 'pematangsiantar', name: 'Kota Pematangsiantar', count: 21, lat: 2.9599, lng: 99.0687 },
-  { id: 'asahan', name: 'Kab. Asahan', count: 15, lat: 2.9833, lng: 99.6167 },
-  { id: 'karo', name: 'Kab. Karo', count: 12, lat: 3.1167, lng: 98.5000 },
-  { id: 'tapanuliutara', name: 'Kab. Tapanuli Utara', count: 11, lat: 2.0167, lng: 99.0000 },
-  { id: 'tanjungbalai', name: 'Kota Tanjungbalai', count: 14, lat: 2.9667, lng: 99.8000 },
-  { id: 'labuhanbatu', name: 'Kab. Labuhanbatu', count: 13, lat: 2.1667, lng: 100.0000 },
-  { id: 'simalungun', name: 'Kab. Simalungun', count: 16, lat: 2.9167, lng: 99.0500 },
-  { id: 'tebingtinggi', name: 'Kota Tebing Tinggi', count: 9, lat: 3.3283, lng: 99.1625 },
-  { id: 'dairi', name: 'Kab. Dairi', count: 7, lat: 2.7500, lng: 98.3000 },
-  { id: 'toba', name: 'Kab. Toba', count: 8, lat: 2.3500, lng: 99.1000 },
-  { id: 'nias', name: 'Kepulauan Nias', count: 6, lat: 1.2833, lng: 97.6167 },
+  { id: 'medan', name: 'Kota Medan', lat: 3.5952, lng: 98.6722 },
+  { id: 'deliserdang', name: 'Kab. Deli Serdang', lat: 3.5542, lng: 98.8631 },
+  { id: 'binjai', name: 'Kota Binjai', lat: 3.6006, lng: 98.4854 },
+  { id: 'pematangsiantar', name: 'Kota Pematangsiantar', lat: 2.9599, lng: 99.0687 },
+  { id: 'asahan', name: 'Kab. Asahan', lat: 2.9833, lng: 99.6167 },
+  { id: 'karo', name: 'Kab. Karo', lat: 3.1167, lng: 98.5000 },
+  { id: 'tapanuliutara', name: 'Kab. Tapanuli Utara', lat: 2.0167, lng: 99.0000 },
+  { id: 'tanjungbalai', name: 'Kota Tanjungbalai', lat: 2.9667, lng: 99.8000 },
+  { id: 'labuhanbatu', name: 'Kab. Labuhanbatu', lat: 2.1667, lng: 100.0000 },
+  { id: 'simalungun', name: 'Kab. Simalungun', lat: 2.9167, lng: 99.0500 },
+  { id: 'tebingtinggi', name: 'Kota Tebing Tinggi', lat: 3.3283, lng: 99.1625 },
+  { id: 'dairi', name: 'Kab. Dairi', lat: 2.7500, lng: 98.3000 },
+  { id: 'toba', name: 'Kab. Toba', lat: 2.3500, lng: 99.1000 },
+  { id: 'nias', name: 'Kepulauan Nias', lat: 1.2833, lng: 97.6167 },
 ];
