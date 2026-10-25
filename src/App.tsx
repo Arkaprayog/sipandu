@@ -14,7 +14,7 @@ import { SettingsModal } from './components/SettingsModal';
 import { NotificationsModal } from './components/NotificationsModal';
 import { GoogleWorkspaceModal } from './components/GoogleWorkspaceModal';
 import { onAuthStateChanged, signOut, getIdTokenResult } from 'firebase/auth';
-import { auth } from './lib/firebase';
+import { auth, savePPKSToFirestore } from './lib/firebase';
 
 export default function App() {
   // Firebase Authentication is the source of truth; URL/localStorage flags cannot bypass login.
@@ -101,6 +101,8 @@ export default function App() {
     return initialAppSettings;
   });
 
+  const [cloudSyncNotice, setCloudSyncNotice] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
   // Modals state
   const [isEditProfileOpen, setIsEditProfileOpen] = useState<boolean>(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
@@ -134,15 +136,40 @@ export default function App() {
     }
   };
 
+  // Local-first save with an explicit visible result for the Firebase write.
+  const persistRecordToFirestore = async (record: PPKSRecord) => {
+    try {
+      await savePPKSToFirestore(record);
+      setCloudSyncNotice({ type: 'success', text: `Record ${record.id} tersimpan di Firebase Firestore.` });
+    } catch (error: any) {
+      console.error('PPKS Firestore sync failed:', error);
+      setCloudSyncNotice({
+        type: 'error',
+        text: `Record ${record.id} tersimpan di browser, tetapi belum masuk Firebase: ${error?.message || String(error)}`,
+      });
+    }
+  };
+
   // Data update handlers
   const handleUpdatePPKS = (updated: PPKSRecord) => {
     setPpksList((prev) =>
       prev.map((item) => (item.id === updated.id ? updated : item))
     );
+    void persistRecordToFirestore(updated);
   };
 
   const handleAddNewPPKS = (newPPKS: PPKSRecord) => {
     setPpksList((prev) => [newPPKS, ...prev]);
+    void persistRecordToFirestore(newPPKS);
+  };
+
+  const handleLoadPPKSFromCloud = (cloudRecords: PPKSRecord[]) => {
+    setPpksList((localRecords) => {
+      const merged = new Map<string, PPKSRecord>();
+      localRecords.forEach((record) => merged.set(record.id, record));
+      cloudRecords.forEach((record) => merged.set(record.id, record));
+      return Array.from(merged.values());
+    });
   };
 
   // Avoid showing protected UI until Firebase has resolved the current session.
@@ -184,6 +211,14 @@ export default function App() {
 
       {/* Main Dashboard Content Area */}
       <main className="relative z-10 flex-1 max-w-7xl w-full mx-auto p-4 md:p-6 pb-28">
+        {cloudSyncNotice && (
+          <div role="status" aria-live="polite" className={`mb-4 rounded-xl border p-3 text-xs break-words ${cloudSyncNotice.type === 'success' ? 'border-emerald-500/40 bg-emerald-950/70 text-emerald-100' : 'border-amber-500/50 bg-amber-950/80 text-amber-100'}`}>
+            <div className="flex items-start justify-between gap-3">
+              <span>{cloudSyncNotice.text}</span>
+              <button type="button" className="shrink-0 underline" onClick={() => setCloudSyncNotice(null)}>Tutup</button>
+            </div>
+          </div>
+        )}
         {activeTab === 'beranda' && (
           <BerandaView
             ppksList={ppksList}
@@ -246,6 +281,7 @@ export default function App() {
         ppksList={ppksList}
         settings={settings}
         onUpdateSettings={(updated) => setSettings(updated)}
+        onLoadPPKSFromCloud={handleLoadPPKSFromCloud}
       />
     </div>
   );
