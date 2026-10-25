@@ -41,6 +41,13 @@
     visibility: visible !important;
   }
 
+  /* The official assessment uses its own 6-page print layout. Keep it visible
+     despite the generic print-container rule hiding the rest of the application. */
+  .official-assessment-shell,
+  .official-assessment-shell * {
+    visibility: visible !important;
+  }
+
   .print-container {
     position: absolute !important;
     inset: 0 auto auto 0 !important;
