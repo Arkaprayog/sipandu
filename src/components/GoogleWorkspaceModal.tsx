@@ -21,7 +21,7 @@ import {
   fetchFormResponses,
   GoogleDriveFile,
 } from '../lib/googleWorkspace';
-import { GOOGLE_SIPANDU_RESOURCES } from '../lib/googleSIPANDUResources';
+import { GOOGLE_SIPANDU_RESOURCES, GOOGLE_WORKSPACE_EMAIL } from '../lib/googleSIPANDUResources';
 import { PPKSRecord, AppSettings } from '../types';
 import {
   X,
@@ -110,7 +110,7 @@ export const GoogleWorkspaceModal: React.FC<GoogleWorkspaceModalProps> = ({
       results.push(await testFirestoreConnection());
       const accessToken = await getAccessToken();
       const now = new Date().toISOString();
-      const expectedWorkspaceEmail = 'aryprayoga139@gmail.com';
+      const expectedWorkspaceEmail = GOOGLE_WORKSPACE_EMAIL;
 
       if (!googleUser) {
         results.push({ service: 'Akun Google Workspace', ok: false, message: 'Belum masuk dengan akun Google pada sesi ini.', checkedAt: now });
