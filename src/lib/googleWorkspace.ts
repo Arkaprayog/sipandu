@@ -407,14 +407,14 @@ export function isLikelyRespondentNIKHeader(header: string): boolean {
 /** NIK is an identity string, never a numeric calculation. Preserve text zeros,
  * reject rounded scientific notation, and only return validated 16-digit values. */
 function normalizeNIKCellValue(value: string): string {
-  const raw = String(value ?? '').trim().replace(/^['\\`]/, '').replace(/\\.0+$/, '');
+  // Google Sheets can format text and number cells differently. Remove only
+  // wrappers/separators; never guess a missing digit or expand rounded notation.
+  const raw = String(value ?? '').trim().replace(/^['\u0060]/, '').replace(/\.0+$/, '');
   if (!raw) return '';
-  if (/^[+-]?\\d+(?:[.,]\\d+)?e[+-]?\\d+$/i.test(raw)) return '';
-  const digits = raw.replace(/\\D/g, '');
-  const normalized = digits.length === 15 ? '0' + digits : digits;
-  return /^\\d{16}$/.test(normalized) ? normalized : '';
+  if (/^[+-]?\d+(?:[.,]\d+)?e[+-]?\d+$/i.test(raw)) return '';
+  const digits = raw.replace(/\D/g, '');
+  return /^\d{16}$/.test(digits) ? digits : '';
 }
-
 /** Maps respondent NIK from descriptive Google Forms/Sheets headers. */
 export function readNIKFromSheetRow(headers: string[], row: string[]): string {
   const candidates = headers
@@ -605,6 +605,13 @@ export async function importPPKSFromSpreadsheet(
   recordsWithNIK: number;
   recordsMissingNIK: number;
   nikHeadersFound: string[];
+  /** Counts only; never returns actual NIK values in diagnostics. */
+  nikColumnDiagnostics: Array<{
+    header: string;
+    nonEmptyValues: number;
+    validNIKValues: number;
+    scientificNotationValues: number;
+  }>;
   previewRows: string[][];
 }> {
   const metadata = await getSpreadsheetMetadata(spreadsheetUrlOrId);
@@ -618,11 +625,25 @@ export async function importPPKSFromSpreadsheet(
     ? preferred
     : (responseTab || metadata.sheetTitles[0]);
   const escapedTitle = selectedTab.replace(/'/g, "''");
-  const rows = await readSpreadsheetRichData(metadata.spreadsheetId, `'${escapedTitle}'!A1:AZ2000`);
+  const rows = await readSpreadsheetRichData(metadata.spreadsheetId, `'${escapedTitle}'!A1:ZZ2000`);
   const records = mapRowsToPPKSRecords(rows).filter((record) => !isLegacySamplePPKS(record));
   const headers = rows[0] || [];
   const nikHeadersFound = headers.filter((header) => isLikelyRespondentNIKHeader(header)).map((header) => header.trim());
   const recordsWithNIK = records.filter((record) => Boolean(String(record.nik || '').trim())).length;
+  // Diagnose the source headers and value quality without returning any actual NIK values.
+  const nikColumnDiagnostics = headers
+    .map((header, index) => ({ header: String(header || '').trim(), normalized: normalizeSheetHeader(String(header || '')), index }))
+    .filter(({ normalized }) => /(nik|ktp|kependudukan|identitas|indukpenduduk|kartutandapenduduk)/.test(normalized))
+    .slice(0, 20)
+    .map(({ header, index }) => {
+      const values = rows.slice(1).map((row) => String(row[index] ?? '').trim());
+      return {
+        header,
+        nonEmptyValues: values.filter(Boolean).length,
+        validNIKValues: values.filter((value) => Boolean(normalizeNIKCellValue(value))).length,
+        scientificNotationValues: values.filter((value) => /^[+-]?\d+(?:[.,]\d+)?e[+-]?\d+$/i.test(value)).length,
+      };
+    });
   return {
     spreadsheetId: metadata.spreadsheetId,
     spreadsheetTitle: metadata.title,
@@ -633,6 +654,7 @@ export async function importPPKSFromSpreadsheet(
     recordsWithNIK,
     recordsMissingNIK: records.length - recordsWithNIK,
     nikHeadersFound,
+    nikColumnDiagnostics,
     previewRows: rows.slice(0, 8),
   };
 }
