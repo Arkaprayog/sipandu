@@ -795,17 +795,18 @@ export async function removeObviousDemoFilesFromDrive(folderUrlOrId: string): Pr
   filesScanned: number;
   filesDeleted: number;
   deletedNames: string[];
+  accountWideScanCompleted: boolean;
 }> {
   const rootFolderId = extractDriveFolderId(folderUrlOrId);
   const discovered: GoogleDriveFile[] = [];
   const visitedFolders = new Set<string>();
-  let filesScanned = 0;
+  const scannedFileIds = new Set<string>();
 
   const visit = async (parentId: string, depth: number, insideMarkedDemoFolder = false): Promise<void> => {
     if (depth > 5 || visitedFolders.has(parentId)) return;
     visitedFolders.add(parentId);
     const children = await listDriveChildren(parentId);
-    filesScanned += children.length;
+    children.forEach((file) => scannedFileIds.add(file.id));
     for (const file of children) {
       const isFolder = file.mimeType === 'application/vnd.google-apps.folder';
       if (isFolder) {
@@ -828,7 +829,7 @@ export async function removeObviousDemoFilesFromDrive(folderUrlOrId: string): Pr
   try {
     const allVisible = await listAllVisibleDriveFiles();
     accountWideScanCompleted = true;
-    filesScanned += allVisible.length;
+    allVisible.forEach((file) => scannedFileIds.add(file.id));
     for (const file of allVisible) {
       if (
         file.mimeType !== 'application/vnd.google-apps.folder' &&
@@ -851,7 +852,7 @@ export async function removeObviousDemoFilesFromDrive(folderUrlOrId: string): Pr
   }
   return {
     folderId: rootFolderId,
-    filesScanned,
+    filesScanned: scannedFileIds.size,
     filesDeleted: deletedNames.length,
     deletedNames,
     accountWideScanCompleted,
