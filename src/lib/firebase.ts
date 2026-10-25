@@ -97,15 +97,17 @@ function cacheWorkspaceToken(token: string | null): void {
   try {
     if (!token) {
       window.sessionStorage.removeItem(WORKSPACE_TOKEN_STORAGE_KEY);
-      return;
+    } else {
+      window.sessionStorage.setItem(
+        WORKSPACE_TOKEN_STORAGE_KEY,
+        JSON.stringify({ token, savedAt: Date.now() })
+      );
     }
-    window.sessionStorage.setItem(
-      WORKSPACE_TOKEN_STORAGE_KEY,
-      JSON.stringify({ token, savedAt: Date.now() })
-    );
   } catch {
     // Keep the current-page session working even when browser storage is blocked.
   }
+  // Wake the in-page live-sync worker immediately after authorization is restored.
+  window.dispatchEvent(new Event('sipandu-workspace-token-updated'));
 }
 
 let cachedAccessToken: string | null = readStoredWorkspaceToken();
