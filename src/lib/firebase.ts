@@ -40,7 +40,15 @@ export const workspaceAuth = getAuth(workspaceApp);
 
 // Configure Google Auth Provider with Workspace scopes
 export const googleAuthProvider = new GoogleAuthProvider();
-googleAuthProvider.setCustomParameters({ login_hint: GOOGLE_WORKSPACE_EMAIL });
+googleAuthProvider.setCustomParameters({
+  login_hint: GOOGLE_WORKSPACE_EMAIL,
+  // Always show the account chooser: login_hint alone can silently reuse a
+  // previously active Google identity in mobile browsers.
+  prompt: 'select_account',
+});
+// Ask explicitly for identity scopes in addition to the Google API scopes.
+googleAuthProvider.addScope('email');
+googleAuthProvider.addScope('profile');
 googleAuthProvider.addScope('https://www.googleapis.com/auth/drive');
 googleAuthProvider.addScope('https://www.googleapis.com/auth/drive.file');
 googleAuthProvider.addScope('https://www.googleapis.com/auth/spreadsheets');
@@ -106,6 +114,16 @@ export type ConnectionCheckResult = {
 
 const VALID_ROLES = ['owner', 'supervisor', 'pendamping'] as const;
 type SipanduRole = typeof VALID_ROLES[number];
+
+/** Resolve the Google email from the primary Firebase user field or Google provider profile. */
+export function getWorkspaceGoogleEmail(user: User | null | undefined): string | null {
+  if (!user) return null;
+  const directEmail = user.email?.trim();
+  if (directEmail) return directEmail;
+  const googleProfile = user.providerData.find((profile) => profile.providerId === 'google.com');
+  const providerEmail = googleProfile?.email?.trim();
+  return providerEmail || null;
+}
 
 function getErrorParts(error: unknown): { code: string; message: string } {
   const e = error as { code?: string; message?: string };
@@ -189,10 +207,18 @@ export const googleSignIn = async (): Promise<{
 } | null> => {
   try {
     const result = await signInWithPopup(workspaceAuth, googleAuthProvider);
-    if ((result.user.email || '').toLowerCase() !== GOOGLE_WORKSPACE_EMAIL) {
-      await signOut(workspaceAuth);
+    const selectedEmail = getWorkspaceGoogleEmail(result.user);
+    if (!selectedEmail) {
+      try { await signOut(workspaceAuth); } catch { /* retain the actionable email-scope error below */ }
       cacheWorkspaceToken(null);
-      throw new Error(`Sumber data SIPANDU telah dibagikan ke ${GOOGLE_WORKSPACE_EMAIL}. Akun yang dipilih adalah ${result.user.email || 'akun tanpa email'}; pilih akun yang benar lalu ulangi.`);
+      throw new Error(
+        'Google berhasil membuka sesi, tetapi alamat email tidak dikirim ke SIPANDU. Batalkan koneksi, pilih akun Google yang benar pada jendela pemilih akun, lalu ulangi. Jika tetap terjadi, admin perlu memeriksa konfigurasi Google provider dan izin email/profile pada Firebase Authentication.'
+      );
+    }
+    if (selectedEmail.toLowerCase() !== GOOGLE_WORKSPACE_EMAIL.toLowerCase()) {
+      try { await signOut(workspaceAuth); } catch { /* preserve account-mismatch message */ }
+      cacheWorkspaceToken(null);
+      throw new Error(`Sumber data SIPANDU dibagikan ke ${GOOGLE_WORKSPACE_EMAIL}. Akun yang dipilih adalah ${selectedEmail}; pilih ${GOOGLE_WORKSPACE_EMAIL} pada pemilih akun Google lalu ulangi.`);
     }
     const credential = GoogleAuthProvider.credentialFromResult(result);
     if (!credential?.accessToken) {
@@ -219,7 +245,19 @@ export const googleSignIn = async (): Promise<{
       );
     }
     if (code.includes('auth/popup-blocked')) {
-      throw new Error('Popup Google diblokir browser. Izinkan pop-up untuk situs SIPANDU, lalu tekan Pulihkan Izin Google API.');
+      throw new Error('Popup Google diblokir browser. Izinkan pop-up untuk situs SIPANDU, lalu tekan Masuk dengan Google lagi.');
+    }
+    if (code.includes('auth/operation-not-supported-in-this-environment')) {
+      throw new Error('Browser saat ini tidak mendukung login Google melalui popup. Buka https://arkaprayog.github.io/sipandu/ langsung di Chrome atau browser eksternal (bukan browser di dalam aplikasi), lalu ulangi.');
+    }
+    if (code.includes('auth/operation-not-allowed')) {
+      throw new Error('Penyedia Google belum diaktifkan pada Firebase Authentication. Admin perlu membuka Firebase Console > Authentication > Sign-in method dan mengaktifkan Google untuk proyek gen-lang-client-0197631978.');
+    }
+    if (code.includes('auth/network-request-failed')) {
+      throw new Error('Permintaan login Google gagal karena jaringan atau pemblokiran browser. Periksa koneksi internet, nonaktifkan pemblokir popup untuk situs SIPANDU, lalu ulangi.');
+    }
+    if (code.includes('auth/cancelled-popup-request')) {
+      throw new Error('Permintaan popup Google sebelumnya masih berlangsung. Tutup popup duplikat, lalu tekan Masuk dengan Google sekali saja.');
     }
     if (code.includes('auth/popup-closed-by-user')) {
       throw new Error('Jendela otorisasi Google ditutup sebelum selesai.');
