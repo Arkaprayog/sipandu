@@ -406,7 +406,7 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
                     type="text"
                     value={formData.nomorRegistrasi}
                     onChange={(e) => handleFieldChange('nomorRegistrasi', e.target.value)}
-                    placeholder="REG-ODHIV-MDN-001"
+                    placeholder=""
                     className="w-full p-2 rounded bg-black/70 border border-rose-500/30 text-white font-mono"
                   />
                 </div>
@@ -419,7 +419,7 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
                     type="text"
                     value={formData.noBpjs}
                     onChange={(e) => handleFieldChange('noBpjs', e.target.value)}
-                    placeholder="0001xxxxxxxxxx"
+                    placeholder=""
                     className="w-full p-2 rounded bg-black/70 border border-rose-500/30 text-white font-mono"
                   />
                 </div>
@@ -433,6 +433,7 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
                     onChange={(e) => handleFieldChange('statusPernikahan', e.target.value)}
                     className="w-full p-2 rounded bg-black/70 border border-rose-500/30 text-white"
                   >
+                    <option value="">Pilih status pernikahan</option>
                     <option value="Belum Menikah">Belum Menikah</option>
                     <option value="Menikah (Pasangan Positif)">Menikah (Pasangan Positif)</option>
                     <option value="Menikah (Pasangan Negatif/Diskordan)">Menikah (Pasangan Negatif/Diskordan)</option>
@@ -449,7 +450,7 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
                     type="text"
                     value={formData.pekerjaan}
                     onChange={(e) => handleFieldChange('pekerjaan', e.target.value)}
-                    placeholder="Buruh, Pedagang, Ojek, dsb."
+                    placeholder=""
                     className="w-full p-2 rounded bg-black/70 border border-rose-500/30 text-white"
                   />
                 </div>
@@ -462,7 +463,7 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
                     type="text"
                     value={formData.kontakDaruratNama}
                     onChange={(e) => handleFieldChange('kontakDaruratNama', e.target.value)}
-                    placeholder="Nama orang tua/pasangan/kerabat"
+                    placeholder=""
                     className="w-full p-2 rounded bg-black/70 border border-rose-500/30 text-white"
                   />
                 </div>
@@ -475,7 +476,7 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
                     type="text"
                     value={formData.kontakDaruratNoHp}
                     onChange={(e) => handleFieldChange('kontakDaruratNoHp', e.target.value)}
-                    placeholder="0812xxxxxxxx"
+                    placeholder=""
                     className="w-full p-2 rounded bg-black/70 border border-rose-500/30 text-white font-mono"
                   />
                 </div>
