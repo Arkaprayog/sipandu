@@ -1,7 +1,7 @@
 import { getAccessToken, invalidateAccessToken } from './firebase';
 import { IntegratedFormData, PPKSRecord } from '../types';
 import { isLegacySamplePPKS, isObviousDemoMarker, LEGACY_SAMPLE_PPKS_IDS, LEGACY_SAMPLE_PPKS_NAMES } from '../data/initialData';
-import { findNIKHeaders, isLikelyRespondentNIKHeader, readNIKFromSheetRow } from './nikMapping';
+import { findNIKHeaders, isLikelyRespondentNIKHeader, normalizeExactNumericNIK, readNIKFromSheetRow } from './nikMapping';
 
 export interface GoogleDriveFile {
   id: string;
@@ -268,13 +268,8 @@ export async function readSpreadsheetRichData(
     // it is an exact safe integer and the header is the respondent's NIK.
     if (rowIndex > 0 && isLikelyRespondentNIKHeader(header)) {
       const numberValue = cell.effectiveValue?.numberValue ?? cell.userEnteredValue?.numberValue;
-      if (
-        typeof numberValue === 'number' &&
-        Number.isSafeInteger(numberValue) &&
-        String(numberValue).length === 16
-      ) {
-        return String(numberValue);
-      }
+      const exactNumericNIK = normalizeExactNumericNIK(numberValue);
+      if (exactNumericNIK) return exactNumericNIK;
     }
     return displayValue;
   }));
