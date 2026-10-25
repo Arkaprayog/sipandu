@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { PPKSRecord, ProfileUser, AppSettings } from './types';
-import { initialPPKSList, initialProfileUser, initialAppSettings, LEGACY_SAMPLE_PPKS_IDS } from './data/initialData';
+import { initialPPKSList, initialProfileUser, initialAppSettings, isLegacySamplePPKS } from './data/initialData';
 import { LoginPage } from './components/LoginPage';
 import { Header } from './components/Header';
 import { BottomNav, TabKey } from './components/BottomNav';
@@ -15,7 +15,7 @@ import { NotificationsModal } from './components/NotificationsModal';
 import { GoogleWorkspaceModal } from './components/GoogleWorkspaceModal';
 import { onAuthStateChanged, signOut, getIdTokenResult } from 'firebase/auth';
 import { auth, getAccessToken, savePPKSToFirestore, googleLogout } from './lib/firebase';
-import { ensureSIPANDUDatabaseSheet, extractSpreadsheetId, importPPKSFromSpreadsheet, upsertPPKSInSpreadsheet } from './lib/googleWorkspace';
+import { ensureSIPANDUDatabaseSheet, extractSpreadsheetId, importPPKSFromSpreadsheet, removeLegacyDemoRowsFromSpreadsheet, removeObviousDemoFilesFromDrive, upsertPPKSInSpreadsheet } from './lib/googleWorkspace';
 import { GOOGLE_SIPANDU_RESOURCES } from './lib/googleSIPANDUResources';
 
 function mergePPKSRecords(localRecords: PPKSRecord[], cloudRecords: PPKSRecord[]): PPKSRecord[] {
@@ -51,7 +51,7 @@ function mergePPKSRecords(localRecords: PPKSRecord[], cloudRecords: PPKSRecord[]
   };
 
   for (const record of localRecords) {
-    if (!record || LEGACY_SAMPLE_PPKS_IDS.has(String(record.id || ''))) continue;
+    if (!record || isLegacySamplePPKS(record)) continue;
     merged.set(recordKey(record), record);
   }
   const normalizePersonText = (value: string | undefined) =>
@@ -185,7 +185,7 @@ export default function App() {
         if (Array.isArray(parsed)) {
           // Remove the exact legacy demo IDs and persist the clean cache.
           const clean = (parsed as PPKSRecord[]).filter(
-            (record) => record && !LEGACY_SAMPLE_PPKS_IDS.has(String(record.id || ''))
+            (record) => record && !isLegacySamplePPKS(record)
           );
           if (clean.length !== parsed.length) localStorage.setItem('sipandu_ppks', JSON.stringify(clean));
           return clean;
@@ -227,6 +227,8 @@ export default function App() {
     return initialAppSettings;
   });
 
+  const demoCleanupAttemptedRef = useRef('');
+  const demoCleanupRunningRef = useRef(false);
   const [cloudSyncNotice, setCloudSyncNotice] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [liveSyncState, setLiveSyncState] = useState<{
     type: 'idle' | 'success' | 'paused' | 'error';
@@ -406,7 +408,7 @@ export default function App() {
         });
         setLiveSyncState({
           type: 'success',
-          message: `Live sync aktif — “${imported.spreadsheetTitle}” → tab “${imported.selectedTab}”: ${imported.records.length} responden dikenali dari ${imported.rowsRead} baris.`,
+          message: `Live sync aktif — “${imported.spreadsheetTitle}” → tab “${imported.selectedTab}”: ${imported.records.length} responden dikenali dari ${imported.rowsRead} baris; NIK terpetakan ${imported.recordsWithNIK}/${imported.records.length}.`,
           lastUpdatedAt: new Date().toLocaleString('id-ID'),
         });
       } catch (error) {
@@ -436,6 +438,103 @@ export default function App() {
     };
   }, [isAuthenticated, settings.googleSpreadsheetSourceUrl, settings.googleSpreadsheetSourceTab]);
 
+  // Automatically remove clearly marked legacy demo rows/files after a Google API
+  // token is already available. This never opens an OAuth popup by itself.
+  useEffect(() => {
+    let active = true;
+    const runCleanup = async () => {
+      if (!active || !isAuthenticated || demoCleanupRunningRef.current) return;
+      const candidates = [
+        GOOGLE_SIPANDU_RESOURCES.responseSpreadsheetUrl,
+        settings.googleSpreadsheetSourceUrl || '',
+        settings.googleSpreadsheetUrl || '',
+      ].filter(Boolean);
+      const uniqueSheets = new Map<string, string>();
+      const failures: string[] = [];
+      for (const url of candidates) {
+        try {
+          uniqueSheets.set(extractSpreadsheetId(url), url);
+        } catch {
+          failures.push('Konfigurasi spreadsheet dilewati karena URL/ID tidak valid.');
+        }
+      }
+
+      const cleanupKey = 'sipandu_legacy_demo_cleanup_v2:' + [
+        ...[...uniqueSheets.keys()].sort(),
+        GOOGLE_SIPANDU_RESOURCES.driveFolderId,
+      ].join('|');
+      if (demoCleanupAttemptedRef.current === cleanupKey) return;
+      try {
+        if (localStorage.getItem(cleanupKey)) {
+          demoCleanupAttemptedRef.current = cleanupKey;
+          return;
+        }
+      } catch { /* Continue; cloud cleanup itself is repeat-safe. */ }
+
+      const token = await getAccessToken();
+      if (!token) {
+        setCloudSyncNotice({
+          type: 'error',
+          text: 'Pembersihan otomatis menunggu izin Google API. Sesi SIPANDU tetap aktif; pulihkan izin Google melalui Google Workspace & Cloud Hub untuk membersihkan data contoh di Sheets/Drive.',
+        });
+        return;
+      }
+
+      demoCleanupRunningRef.current = true;
+      const messages: string[] = [];
+      let rowsCleared = 0;
+      let filesDeleted = 0;
+      try {
+        for (const [spreadsheetId, url] of uniqueSheets) {
+          if (!active) return;
+          try {
+            const cleaned = await removeLegacyDemoRowsFromSpreadsheet(url);
+            rowsCleared += cleaned.rowsCleared;
+            messages.push(`Sheets “${cleaned.spreadsheetTitle}”: ${cleaned.rowsCleared} baris contoh dibersihkan dari ${cleaned.tabsScanned} tab`);
+          } catch (error) {
+            failures.push(`Spreadsheet ${spreadsheetId}: ${error instanceof Error ? error.message : String(error)}`);
+          }
+        }
+
+        if (active) {
+          try {
+            const drive = await removeObviousDemoFilesFromDrive(GOOGLE_SIPANDU_RESOURCES.driveFolderId);
+            filesDeleted = drive.filesDeleted;
+            messages.push(`Drive: ${drive.filesDeleted} file contoh dihapus; ${drive.filesScanned} file diperiksa`);
+          } catch (error) {
+            failures.push(`Google Drive: ${error instanceof Error ? error.message : String(error)}`);
+          }
+        }
+      } finally {
+        demoCleanupRunningRef.current = false;
+      }
+
+      if (!active) return;
+      setPpksList((current) => mergePPKSRecords(current, []));
+      if (failures.length === 0) {
+        demoCleanupAttemptedRef.current = cleanupKey;
+        try { localStorage.setItem(cleanupKey, new Date().toISOString()); } catch { /* optional cache */ }
+      }
+      setCloudSyncNotice({
+        type: failures.length ? 'error' : 'success',
+        text: [
+          `Pembersihan data contoh ${failures.length ? 'sebagian selesai' : 'selesai'}: ${rowsCleared} baris contoh dihapus dari Google Sheets; ${filesDeleted} file contoh dihapus dari Google Drive.`,
+          ...messages,
+          ...(failures.length ? [`Target yang belum selesai: ${failures.join(' · ')}`] : []),
+          'Data non-demo dipertahankan. Respons di dalam Google Form asli tidak dihapus karena API Google Forms tidak menyediakan operasi hapus respons.',
+        ].join(' | '),
+      });
+    };
+
+    const onTokenUpdated = () => { void runCleanup(); };
+    void runCleanup();
+    window.addEventListener('sipandu-workspace-token-updated', onTokenUpdated);
+    return () => {
+      active = false;
+      window.removeEventListener('sipandu-workspace-token-updated', onTokenUpdated);
+    };
+  }, [isAuthenticated, settings.googleSpreadsheetSourceUrl, settings.googleSpreadsheetUrl]);
+
   // Avoid showing protected UI until Firebase has resolved the current session.
   if (!authReady) {
     return <div className="min-h-screen flex items-center justify-center bg-[#0a140b] text-emerald-200">Memeriksa sesi SIPANDU…</div>;
@@ -464,7 +563,7 @@ export default function App() {
         <Header
           currentUser={currentUserName}
           profile={profile}
-          unreadNotificationsCount={2}
+          unreadNotificationsCount={0}
           onOpenEditProfile={() => setIsEditProfileOpen(true)}
           onOpenSettings={() => setIsSettingsOpen(true)}
           onOpenNotifications={() => setIsNotificationsOpen(true)}

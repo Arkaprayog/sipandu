@@ -1,5 +1,6 @@
 import { getAccessToken, invalidateAccessToken } from './firebase';
 import { IntegratedFormData, PPKSRecord } from '../types';
+import { isLegacySamplePPKS, isObviousDemoMarker, LEGACY_SAMPLE_PPKS_IDS, LEGACY_SAMPLE_PPKS_NAMES } from '../data/initialData';
 
 export interface GoogleDriveFile {
   id: string;
@@ -219,7 +220,7 @@ export async function readSpreadsheetRichData(
   const params = new URLSearchParams({
     ranges: range,
     includeGridData: 'true',
-    fields: 'sheets(properties(title),data(rowData(values(formattedValue,hyperlink,textFormatRuns(format(link(uri)))))))',
+    fields: 'sheets(properties(title),data(rowData(values(formattedValue,userEnteredValue.stringValue,effectiveValue.stringValue,hyperlink,textFormatRuns(format(link(uri)))))))',
   });
   const data = await googleJson<{
     sheets?: {
@@ -228,6 +229,8 @@ export async function readSpreadsheetRichData(
         rowData?: {
           values?: {
             formattedValue?: string;
+            userEnteredValue?: { stringValue?: string };
+            effectiveValue?: { stringValue?: string };
             hyperlink?: string;
             textFormatRuns?: Array<{ format?: { link?: { uri?: string } } }>;
           }[];
@@ -236,13 +239,33 @@ export async function readSpreadsheetRichData(
     }[];
   }>(`https://sheets.googleapis.com/v4/spreadsheets/${id}?${params.toString()}`);
 
-  const sheet = data.sheets?.[0];
-  const rowData = sheet?.data?.[0]?.rowData || [];
-  return rowData.map((row) => (row.values || []).map((cell) => {
+  const rowData = data.sheets?.[0]?.data?.[0]?.rowData || [];
+  const headerCells = rowData[0]?.values || [];
+  const headers = headerCells.map((cell) =>
+    String(cell.userEnteredValue?.stringValue || cell.formattedValue || '')
+  );
+  const normalizedHeaders = headers.map(normalizeSheetHeader);
+  const photoColumns = new Set<number>();
+  normalizedHeaders.forEach((header, index) => {
+    if (/(foto|ktp|kartuidentitas|kartu keluarga|kartuKeluarga|rumah|lampiran|upload|dokumen)/i.test(header)) {
+      photoColumns.add(index);
+    }
+  });
+
+  return rowData.map((row) => (row.values || []).map((cell, index) => {
+    const displayValue = String(
+      cell.userEnteredValue?.stringValue ||
+      cell.effectiveValue?.stringValue ||
+      cell.formattedValue ||
+      ''
+    );
     const runLink = cell.textFormatRuns?.find((run) => run.format?.link?.uri)?.format?.link?.uri;
-    // Prefer the actual link for uploaded photo cells; otherwise preserve the
-    // formatted display value, including leading zeroes in NIK cells.
-    return String(cell.hyperlink || runLink || cell.formattedValue || '');
+    const actualLink = cell.hyperlink || runLink || '';
+    // Use underlying Drive URLs only for columns that are photo/upload/document
+    // questions. For NIK and all other text columns, keep the displayed value
+    // so a rich-text hyperlink cannot replace an identity number with its URL.
+    if (photoColumns.has(index) && actualLink) return String(actualLink);
+    return displayValue || (photoColumns.has(index) ? String(actualLink) : '');
   }));
 }
 
@@ -331,44 +354,78 @@ function readCellByAliases(headers: string[], row: string[], aliases: string[]):
 }
 
 /** Maps respondent NIK from the common header variants used by Google Forms/Sheets. */
-function readNIKFromSheetRow(headers: string[], row: string[]): string {
-  const normalizedHeaders = headers.map(normalizeSheetHeader);
-  const exactAliases = [
-    'nik', 'nikResponden', 'nikSesuaiKTP', 'nikSesuaiKKTP', 'nikNoKTP', 'nikKTP',
-    'nomorIndukKependudukan', 'nomorIndukKependudukanNIK', 'nomorKTP', 'noKTP',
-    'nomorKartuTandaPenduduk', 'noIndukKependudukan', 'nomorNIK', 'noNIK',
-    'noKTPNIK', 'KTPNIK',
-  ].map(normalizeSheetHeader);
+function isLikelyRespondentNIKHeader(header: string): boolean {
+  const normalized = normalizeSheetHeader(header);
+  if (!normalized) return false;
 
-  // Prefer exact semantic column names when possible.
-  for (const alias of exactAliases) {
-    const index = normalizedHeaders.indexOf(alias);
-    if (index >= 0 && row[index] !== undefined && row[index].trim() !== '') {
-      return row[index].trim();
-    }
+  // Reject identity numbers of relatives, pendamping/staff, assessors, or contacts.
+  const excludedTokens = [
+    'nikayah', 'nikibu', 'nikorangtua', 'nikwali', 'niksuami', 'nikistri',
+    'nikpasangan', 'nikkeluarga', 'nikpendamping', 'nikpetugas', 'nikasesor',
+    'nikasessor', 'niksupervisor', 'nikkontakdarurat', 'nikpenanggungjawab',
+  ];
+  if (excludedTokens.some((prefix) => normalized.startsWith(prefix))) return false;
+  if (/(ayah|ibu|orangtua|wali|suami|istri|pasangan|keluarga|pendamping|petugas|asesor|asessor|supervisor|penanggungjawab)/.test(normalized)
+      && /(nik|nomorindukkependudukan|nomorktp|noktp)/.test(normalized)) return false;
+
+  return normalized === 'nik' ||
+    normalized.startsWith('nik') ||
+    normalized.endsWith('nik') ||
+    normalized.includes('nikresponden') ||
+    normalized.includes('nikppks') ||
+    normalized.includes('nikcalonresponden') ||
+    normalized.includes('nomorindukkependudukan') ||
+    normalized.includes('nomorkartutandapenduduk') ||
+    normalized.includes('nomorktp') ||
+    normalized.includes('noktp') ||
+    normalized.includes('ktpnik') ||
+    normalized.includes('noidentitas') ||
+    normalized.includes('nomoridentitas') ||
+    normalized.includes('nokependudukan') ||
+    normalized.includes('noindukkependudukan');
+}
+
+function normalizeNIKCellValue(value: string): string {
+  const raw = String(value ?? '').trim();
+  if (!raw) return '';
+  const digits = raw.replace(/\D/g, '');
+  if (!digits) return '';
+  // NIK must be kept as text. This recovers a leading zero if Sheets coerced
+  // a 16-digit NIK to a 15-digit number; never coerce it back to Number.
+  return digits.length === 15 ? `0${digits}` : digits;
+}
+
+/** Maps respondent NIK from exact and descriptive Google Forms question headers. */
+export function readNIKFromSheetRow(headers: string[], row: string[]): string {
+  const candidates = headers
+    .map((header, index) => ({
+      header: String(header ?? '').trim(),
+      normalized: normalizeSheetHeader(String(header ?? '')),
+      value: String(row[index] ?? '').trim(),
+      index,
+    }))
+    .filter(({ header, normalized, value }) => value && normalized && isLikelyRespondentNIKHeader(header));
+
+  const score = (header: string): number => {
+    const normalized = normalizeSheetHeader(header);
+    let points = 0;
+    if (['nik', 'nikresponden', 'nikppks', 'nomorindukkependudukan', 'nomorktp', 'noktp'].includes(normalized)) points += 100;
+    if (normalized.includes('responden') || normalized.includes('ppks') || normalized.includes('calonresponden')) points += 60;
+    if (normalized.includes('nik')) points += 35;
+    if (normalized.includes('ktp')) points += 20;
+    if (normalized.includes('nomorindukkependudukan')) points += 15;
+    if (normalized.length > 100) points -= 10;
+    return points;
+  };
+
+  // Iterate every matching column: duplicate headings occur in Google Forms,
+  // and the first duplicate may be blank while a later one holds the NIK.
+  candidates.sort((a, b) => score(b.header) - score(a.header) || a.index - b.index);
+  for (const candidate of candidates) {
+    const nik = normalizeNIKCellValue(candidate.value);
+    if (nik) return nik;
   }
-
-  // Form question labels often include instructions, e.g. "NIK (16 digit, sesuai KTP)".
-  // Exclude relatives' and staff members' identity numbers.
-  const excluded = /(ayah|ibu|orangtua|wali|suami|istri|pasangan|keluarga|pendamping|petugas|asesor|asessor|supervisor|penanggungjawab)/;
-  const candidates = normalizedHeaders
-    .map((header, index) => ({ header, index, value: row[index]?.trim() || '' }))
-    .filter(({ header, value }) => value && !excluded.test(header))
-    .filter(({ header }) =>
-      header.includes('nik') ||
-      header.includes('nomorindukkependudukan') ||
-      header.includes('nomorkartutandapenduduk') ||
-      header.includes('nomorktp') ||
-      header.includes('noktp')
-    );
-
-  const score = (header: string) =>
-    (header.includes('responden') ? 50 : 0) +
-    (header.includes('nik') ? 30 : 0) +
-    (header.includes('ktp') ? 20 : 0) -
-    (header.length > 100 ? 10 : 0);
-  candidates.sort((a, b) => score(b.header) - score(a.header));
-  return candidates[0]?.value || '';
+  return '';
 }
 
 function parseSheetNumber(value: string, fallback = 0): number {
@@ -523,6 +580,9 @@ export async function importPPKSFromSpreadsheet(
   selectedTab: string;
   rowsRead: number;
   records: PPKSRecord[];
+  recordsWithNIK: number;
+  recordsMissingNIK: number;
+  nikHeadersFound: string[];
   previewRows: string[][];
 }> {
   const metadata = await getSpreadsheetMetadata(spreadsheetUrlOrId);
@@ -537,7 +597,10 @@ export async function importPPKSFromSpreadsheet(
     : (responseTab || metadata.sheetTitles[0]);
   const escapedTitle = selectedTab.replace(/'/g, "''");
   const rows = await readSpreadsheetRichData(metadata.spreadsheetId, `'${escapedTitle}'!A1:AZ2000`);
-  const records = mapRowsToPPKSRecords(rows);
+  const records = mapRowsToPPKSRecords(rows).filter((record) => !isLegacySamplePPKS(record));
+  const headers = rows[0] || [];
+  const nikHeadersFound = headers.filter((header) => isLikelyRespondentNIKHeader(header)).map((header) => header.trim());
+  const recordsWithNIK = records.filter((record) => Boolean(String(record.nik || '').trim())).length;
   return {
     spreadsheetId: metadata.spreadsheetId,
     spreadsheetTitle: metadata.title,
@@ -545,6 +608,9 @@ export async function importPPKSFromSpreadsheet(
     selectedTab,
     rowsRead: rows.length,
     records,
+    recordsWithNIK,
+    recordsMissingNIK: records.length - recordsWithNIK,
+    nikHeadersFound,
     previewRows: rows.slice(0, 8),
   };
 }
@@ -587,4 +653,157 @@ export async function fetchFormResponses(formUrlOrId: string): Promise<GoogleFor
     pageToken = data.nextPageToken || '';
   } while (pageToken);
   return all;
+}
+
+
+
+/**
+ * Clears only rows that clearly match retired demo respondent IDs/names or
+ * explicit demo/sample markers in the row's ID/name columns. Every other row,
+ * its formatting, and the sheet structure are preserved.
+ */
+export async function removeLegacyDemoRowsFromSpreadsheet(spreadsheetUrlOrId: string): Promise<{
+  spreadsheetId: string;
+  spreadsheetTitle: string;
+  tabsScanned: number;
+  rowsCleared: number;
+  clearedRanges: string[];
+}> {
+  const metadata = await getSpreadsheetMetadata(spreadsheetUrlOrId);
+  const rangesToClear: string[] = [];
+  for (const title of metadata.sheetTitles) {
+    const escapedTitle = title.replace(/'/g, "''");
+    const rows = await readSpreadsheetData(metadata.spreadsheetId, `'${escapedTitle}'!A1:AZ2000`);
+    if (rows.length < 2 || !rows[0].some((header) => header.trim())) continue;
+    const headers = rows[0].map(normalizeSheetHeader);
+    const idColumnIndexes = headers
+      .map((header, index) => ({ header, index }))
+      .filter(({ header }) => ['id', 'idppks', 'idresponden', 'recordid', 'nomorregistrasi', 'kodeppks'].includes(header))
+      .map(({ index }) => index);
+    const nameColumnIndexes = headers
+      .map((header, index) => ({ header, index }))
+      .filter(({ header }) =>
+        ['namalengkap', 'namaresponden', 'namappks', 'namaodhiv', 'namacalonresponden'].includes(header) ||
+        header.includes('namalengkapsesuaiktp') ||
+        header.includes('namaresponden')
+      )
+      .map(({ index }) => index);
+
+    rows.slice(1).forEach((row, index) => {
+      const idMatch = idColumnIndexes.some((columnIndex) => {
+        const value = String(row[columnIndex] || '').trim();
+        return LEGACY_SAMPLE_PPKS_IDS.has(value) || isObviousDemoMarker(value);
+      });
+      const nameMatch = nameColumnIndexes.some((columnIndex) => {
+        const value = String(row[columnIndex] || '').trim();
+        return LEGACY_SAMPLE_PPKS_NAMES.has(value.toLocaleLowerCase('id-ID')) || isObviousDemoMarker(value);
+      });
+      const exactLegacyIdInAnyCell = row.some((cell) => LEGACY_SAMPLE_PPKS_IDS.has(String(cell || '').trim()));
+      if (idMatch || nameMatch || exactLegacyIdInAnyCell) {
+        const rowNumber = index + 2;
+        rangesToClear.push(`'${escapedTitle}'!A${rowNumber}:ZZ${rowNumber}`);
+      }
+    });
+  }
+
+  if (rangesToClear.length) {
+    await googleJson(
+      `https://sheets.googleapis.com/v4/spreadsheets/${metadata.spreadsheetId}/values:batchClear`,
+      { method: 'POST', body: JSON.stringify({ ranges: rangesToClear }) }
+    );
+  }
+  return {
+    spreadsheetId: metadata.spreadsheetId,
+    spreadsheetTitle: metadata.title,
+    tabsScanned: metadata.sheetTitles.length,
+    rowsCleared: rangesToClear.length,
+    clearedRanges: rangesToClear,
+  };
+}
+
+function isObviousDemoDriveName(name: string): boolean {
+  const normalized = normalizeSheetHeader(name);
+  const exactLegacyArtifacts = [
+    'Database_PPKS_ODHIV_Sumut_2026.xlsx',
+    'SRT-ST-001',
+    'SRT-BA-002',
+    'SRT-SP-003',
+    '1yA8KemensosODHIVSumut2026_LiveSync',
+  ].map(normalizeSheetHeader);
+  if (exactLegacyArtifacts.some((marker) => normalized.includes(marker))) return true;
+  if ([...LEGACY_SAMPLE_PPKS_IDS].some((id) => normalized.includes(normalizeSheetHeader(id)))) return true;
+  if ([...LEGACY_SAMPLE_PPKS_NAMES].some((sampleName) => normalized.includes(normalizeSheetHeader(sampleName)))) return true;
+  return isObviousDemoMarker(name) ||
+    /(^|[^a-z])(demo|sample|contoh|dummy|uji[\\s_-]?coba|data[\\s_-]?uji|uji[\\s_-]?data|test[\\s_-]?data)([^a-z]|$)/i.test(name);
+}
+
+async function listDriveChildren(parentId: string): Promise<GoogleDriveFile[]> {
+  const files: GoogleDriveFile[] = [];
+  let pageToken = '';
+  do {
+    const params = new URLSearchParams({
+      q: `'${parentId}' in parents and trashed = false`,
+      pageSize: '100',
+      orderBy: 'name',
+      fields: 'nextPageToken,files(id,name,mimeType,webViewLink,createdTime)',
+      includeItemsFromAllDrives: 'true',
+      supportsAllDrives: 'true',
+    });
+    if (pageToken) params.set('pageToken', pageToken);
+    const result = await googleJson<{ files?: GoogleDriveFile[]; nextPageToken?: string }>(
+      `https://www.googleapis.com/drive/v3/files?${params.toString()}`
+    );
+    files.push(...(result.files || []));
+    pageToken = result.nextPageToken || '';
+  } while (pageToken);
+  return files;
+}
+
+/**
+ * Deletes clearly marked demo/sample files within the configured SIPANDU Drive
+ * folder and files located under folders whose names explicitly mark them as
+ * demo areas. Non-demo files elsewhere in the Drive are not touched.
+ */
+export async function removeObviousDemoFilesFromDrive(folderUrlOrId: string): Promise<{
+  folderId: string;
+  filesScanned: number;
+  filesDeleted: number;
+  deletedNames: string[];
+}> {
+  const rootFolderId = extractDriveFolderId(folderUrlOrId);
+  const discovered: GoogleDriveFile[] = [];
+  const visitedFolders = new Set<string>();
+  let filesScanned = 0;
+
+  const visit = async (parentId: string, depth: number, insideMarkedDemoFolder = false): Promise<void> => {
+    if (depth > 5 || visitedFolders.has(parentId)) return;
+    visitedFolders.add(parentId);
+    const children = await listDriveChildren(parentId);
+    filesScanned += children.length;
+    for (const file of children) {
+      const isFolder = file.mimeType === 'application/vnd.google-apps.folder';
+      if (isFolder) {
+        await visit(file.id, depth + 1, insideMarkedDemoFolder || isObviousDemoDriveName(file.name));
+      } else if (insideMarkedDemoFolder || isObviousDemoDriveName(file.name)) {
+        discovered.push(file);
+      }
+    }
+  };
+
+  await visit(rootFolderId, 0);
+  const unique = [...new Map(discovered.map((file) => [file.id, file])).values()];
+  const deletedNames: string[] = [];
+  for (const file of unique) {
+    await googleJson(
+      `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(file.id)}?supportsAllDrives=true`,
+      { method: 'DELETE' }
+    );
+    deletedNames.push(file.name);
+  }
+  return {
+    folderId: rootFolderId,
+    filesScanned,
+    filesDeleted: deletedNames.length,
+    deletedNames,
+  };
 }

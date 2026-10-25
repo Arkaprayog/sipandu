@@ -1,5 +1,5 @@
 import React from 'react';
-import { Bell, X, CheckCircle, Clock, AlertTriangle } from 'lucide-react';
+import { Bell, X } from 'lucide-react';
 
 interface NotificationsModalProps {
   isOpen: boolean;
@@ -13,32 +13,15 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
 }) => {
   if (!isOpen) return null;
 
-  const notifications = [
-    {
-      id: 1,
-      type: 'new_entry',
-      title: 'Responden Baru dari Google Form Tahap Awal',
-      desc: 'Rahmat Hidayat Simanjuntak (Medan) berhasil masuk ke database dan siap diverifikasi.',
-      time: '15 Menit yang lalu',
-      unread: true,
-    },
-    {
-      id: 2,
-      type: 'arv_reminder',
-      title: 'Jadwal Kontrol ARV & Ambil Obat',
-      desc: 'Dewi Sartika Lubis (Deli Serdang) dijadwalkan kontrol rutin ke RSUD Drs. H. Amri Tambunan.',
-      time: '2 Jam yang lalu',
-      unread: true,
-    },
-    {
-      id: 3,
-      type: 'mental_health',
-      title: 'Kuesioner Asesmen Kesehatan Mental Diisi',
-      desc: 'Hasil asesmen menunjukkan tingkat stres ringan, rekomendasi konseling telah diinput.',
-      time: 'Kemarin, 16:30 WIB',
-      unread: false,
-    },
-  ];
+  // Do not show fabricated respondent/medical notifications. This list will be
+  // populated when a real notification source is connected.
+  const notifications: Array<{
+    id: string | number;
+    title: string;
+    desc: string;
+    time: string;
+    unread: boolean;
+  }> = [];
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80">
@@ -58,6 +41,13 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
         </div>
 
         <div className="space-y-3 max-h-96 overflow-y-auto pr-1">
+          {notifications.length === 0 && (
+            <div className="rounded-xl border border-dashed border-white/15 bg-black/30 px-4 py-8 text-center">
+              <Bell className="mx-auto mb-2 h-6 w-6 text-neutral-500" />
+              <p className="text-sm font-semibold text-neutral-200">Belum ada notifikasi</p>
+              <p className="mt-1 text-xs text-neutral-400">Notifikasi akan muncul setelah sumber notifikasi nyata terhubung.</p>
+            </div>
+          )}
           {notifications.map((n) => (
             <div
               key={n.id}
