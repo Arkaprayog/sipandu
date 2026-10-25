@@ -10,6 +10,7 @@ import {
   listDriveFiles,
   createDriveFolder,
   readSpreadsheetData,
+  getSpreadsheetSheetTitles,
   appendPPKSToSpreadsheet,
   createGoogleSpreadsheet,
   fetchFormResponses,
@@ -146,7 +147,9 @@ export const GoogleWorkspaceModal: React.FC<GoogleWorkspaceModalProps> = ({
     setLoading(true);
     setStatusMessage(null);
     try {
-      const rows = await readSpreadsheetData(spreadsheetIdInput, 'Form Responses 1!A1:Z100');
+      const tabs = await getSpreadsheetSheetTitles(spreadsheetIdInput);
+      if (!tabs.length) throw new Error('Spreadsheet tidak memiliki tab yang dapat dibaca.');
+      const rows = await readSpreadsheetData(spreadsheetIdInput, `'${tabs[0].replace(/'/g, "''")}'!A1:Z100`);
       setSheetRows(rows);
       setStatusMessage({ type: 'success', text: `Berhasil membaca ${rows.length} baris dari Google Sheet.` });
     } catch (err: any) {
