@@ -220,7 +220,7 @@ export async function readSpreadsheetRichData(
   const params = new URLSearchParams({
     ranges: range,
     includeGridData: 'true',
-    fields: 'sheets(properties(title),data(rowData(values(formattedValue,hyperlink,textFormatRuns(format(link(uri)))))))',
+    fields: 'sheets(properties(title),data(rowData(values(formattedValue,userEnteredValue.stringValue,effectiveValue.stringValue,hyperlink,textFormatRuns(format(link(uri)))))))',
   });
   const data = await googleJson<{
     sheets?: {
@@ -229,6 +229,8 @@ export async function readSpreadsheetRichData(
         rowData?: {
           values?: {
             formattedValue?: string;
+            userEnteredValue?: { stringValue?: string };
+            effectiveValue?: { stringValue?: string };
             hyperlink?: string;
             textFormatRuns?: Array<{ format?: { link?: { uri?: string } } }>;
           }[];
@@ -243,7 +245,14 @@ export async function readSpreadsheetRichData(
     const runLink = cell.textFormatRuns?.find((run) => run.format?.link?.uri)?.format?.link?.uri;
     // Prefer the actual link for uploaded photo cells; otherwise preserve the
     // formatted display value, including leading zeroes in NIK cells.
-    return String(cell.hyperlink || runLink || cell.formattedValue || '');
+    return String(
+      cell.hyperlink ||
+      runLink ||
+      cell.userEnteredValue?.stringValue ||
+      cell.effectiveValue?.stringValue ||
+      cell.formattedValue ||
+      ''
+    );
   }));
 }
 
@@ -371,6 +380,8 @@ function isLikelyRespondentNIKHeader(header: string): boolean {
     normalized.includes('noidentitas') ||
     normalized.includes('nomoridentitas') ||
     normalized.includes('identitasresponden') ||
+    normalized.includes('kartutandapenduduk') ||
+    normalized.includes('kependudukan') ||
     normalized.includes('nokependudukan') ||
     normalized.includes('noindukkependudukan') ||
     /^no\d*nik/.test(normalized) ||
@@ -378,7 +389,7 @@ function isLikelyRespondentNIKHeader(header: string): boolean {
 }
 
 function normalizeNIKCellValue(value: string): string {
-  const raw = String(value ?? '').trim().replace(/^['`]/, '');
+  const raw = String(value ?? '').trim().replace(/^['`]/, '').replace(/\.0+$/, '');
   if (!raw) return '';
 
   // A scientific-notation NIK can already have lost precision in Sheets' numeric
