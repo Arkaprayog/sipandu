@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { PPKSRecord, AppSettings } from '../types';
 import { KemensosQRCode } from './KemensosQRCode';
 import { CameraCaptureModal } from './CameraCaptureModal';
+import { PrivateDriveImage } from './PrivateDriveImage';
 import {
   buildWhatsAppMessage,
   createWhatsAppLink,
@@ -762,22 +763,28 @@ export const AsesmenView: React.FC<AsesmenViewProps> = ({
                     {ppks.kotaDomisili}
                   </td>
                   <td className="py-3 px-2">
-                    <div className="w-10 h-10 rounded-lg overflow-hidden border border-rose-500/35 mx-auto bg-black">
-                      <img
-                        src={ppks.fotoDiri}
-                        alt="Diri"
-                        className="w-full h-full object-cover"
+                    {ppks.fotoDiri ? (
+                      <PrivateDriveImage
+                        source={ppks.fotoDiri}
+                        alt={`Foto diri ${ppks.namaLengkap}`}
+                        className="mx-auto h-10 w-10 rounded-lg"
+                        objectFit="cover"
                       />
-                    </div>
+                    ) : (
+                      <span className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-white/10 bg-black/30 text-[8px] text-neutral-500">Tidak ada</span>
+                    )}
                   </td>
                   <td className="py-3 px-2">
-                    <div className="w-12 h-8 rounded border border-rose-500/35 overflow-hidden mx-auto bg-black">
-                      <img
-                        src={ppks.fotoKtp}
-                        alt="KTP"
-                        className="w-full h-full object-cover"
+                    {ppks.fotoKtp ? (
+                      <PrivateDriveImage
+                        source={ppks.fotoKtp}
+                        alt={`Foto KTP ${ppks.namaLengkap}`}
+                        className="mx-auto h-8 w-12 rounded"
+                        objectFit="contain"
                       />
-                    </div>
+                    ) : (
+                      <span className="inline-flex h-8 w-12 items-center justify-center rounded border border-white/10 bg-black/30 text-[8px] text-neutral-500">Tidak ada</span>
+                    )}
                   </td>
                   <td className="py-3 px-3 whitespace-nowrap">
                     <button
