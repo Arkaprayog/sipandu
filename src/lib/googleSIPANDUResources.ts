@@ -3,6 +3,8 @@
  * These are resource identifiers only; they do not prove the current Google account
  * has permission to access the resources.
  */
+export const GOOGLE_WORKSPACE_EMAIL = 'aryprayoga139@gmail.com';
+
 export const GOOGLE_SIPANDU_RESOURCES = {
   formEditorUrl: 'https://docs.google.com/forms/d/12JJIlBzY9yA5taFIfkQ6r0dJDMEBbEw8ymX7mTUHmYc/edit',
   formId: '12JJIlBzY9yA5taFIfkQ6r0dJDMEBbEw8ymX7mTUHmYc',
