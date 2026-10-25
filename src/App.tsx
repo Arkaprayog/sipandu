@@ -14,7 +14,7 @@ import { SettingsModal } from './components/SettingsModal';
 import { NotificationsModal } from './components/NotificationsModal';
 import { GoogleWorkspaceModal } from './components/GoogleWorkspaceModal';
 import { onAuthStateChanged, signOut, getIdTokenResult } from 'firebase/auth';
-import { auth, getAccessToken, savePPKSToFirestore, googleLogout } from './lib/firebase';
+import { auth, getAccessToken, savePPKSToFirestore, googleLogout, removeKnownDemoPPKSDocuments } from './lib/firebase';
 import { ensureSIPANDUDatabaseSheet, extractSpreadsheetId, importPPKSFromSpreadsheet, removeLegacyDemoRowsFromSpreadsheet, removeObviousDemoFilesFromDrive, upsertPPKSInSpreadsheet } from './lib/googleWorkspace';
 import { GOOGLE_SIPANDU_RESOURCES } from './lib/googleSIPANDUResources';
 
@@ -233,6 +233,8 @@ export default function App() {
 
   const [cloudSyncNotice, setCloudSyncNotice] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const demoCleanupAttemptedRef = useRef('');
+  const demoCleanupInProgressRef = useRef('');
+  const firestoreDemoCleanupAttemptedRef = useRef(false);
   const [liveSyncState, setLiveSyncState] = useState<{
     type: 'idle' | 'success' | 'paused' | 'error';
     message: string;
@@ -352,7 +354,7 @@ export default function App() {
     const updatedAt = new Date().toLocaleString('id-ID');
     setLiveSyncState({
       type: 'success',
-      message: `Sumber “${imported.spreadsheetTitle}” dibaca: ${imported.rowsRead} baris, ${imported.records.length} responden dikenali. Pembaruan otomatis berjalan setiap 2 menit selama izin Google masih berlaku.`,
+      message: `Sumber “${imported.spreadsheetTitle}” dibaca: ${imported.rowsRead} baris, ${imported.records.length} responden dikenali; NIK tersedia untuk ${imported.recordsWithNIK}/${imported.records.length}. Pembaruan otomatis berjalan setiap 2 menit selama izin Google masih berlaku.`,
       lastUpdatedAt: updatedAt,
     });
     return imported.records.length;
@@ -442,6 +444,40 @@ export default function App() {
   }, [isAuthenticated, settings.googleSpreadsheetSourceUrl, settings.googleSpreadsheetSourceTab]);
 
 
+  // Remove exact retired demo documents from Firestore without enumerating/downloading all PPKS records.
+  // Only owner/supervisor accounts are allowed to run this destructive maintenance operation.
+  useEffect(() => {
+    if (
+      !isAuthenticated ||
+      (currentUserRole !== 'owner' && currentUserRole !== 'supervisor') ||
+      firestoreDemoCleanupAttemptedRef.current
+    ) return;
+
+    let active = true;
+    const runFirestoreCleanup = async () => {
+      try {
+        const result = await removeKnownDemoPPKSDocuments();
+        if (!active) return;
+        firestoreDemoCleanupAttemptedRef.current = true;
+        setPpksList((current) => mergePPKSRecords(current, []));
+        setCloudSyncNotice({
+          type: 'success',
+          text: result.documentsDeleted
+            ? `Firestore: ${result.documentsDeleted} dokumen PPKS contoh yang dikenal dihapus. Data non-demo dipertahankan.`
+            : 'Firestore: tidak ditemukan dokumen PPKS dengan ID/nama contoh lama yang dikenal.',
+        });
+      } catch (error) {
+        if (!active) return;
+        setCloudSyncNotice({
+          type: 'error',
+          text: `Pembersihan PPKS contoh di Firestore belum selesai: ${error instanceof Error ? error.message : String(error)}. Dokumen yang tidak cocok dengan penanda contoh tidak disentuh.`,
+        });
+      }
+    };
+    void runFirestoreCleanup();
+    return () => { active = false; };
+  }, [isAuthenticated, currentUserRole]);
+
   // Remove known demo records once per configured cloud target after valid Google API authorization.
   // The operation is repeat-safe and never clears a row/file without an exact demo marker.
   useEffect(() => {
@@ -470,7 +506,10 @@ export default function App() {
         GOOGLE_SIPANDU_RESOURCES.driveFolderId,
       ].join('|');
       const cleanupFlag = 'sipandu_legacy_demo_cleanup_v1:' + targetKey;
-      if (demoCleanupAttemptedRef.current === cleanupFlag) return;
+      if (
+        demoCleanupAttemptedRef.current === cleanupFlag ||
+        demoCleanupInProgressRef.current === cleanupFlag
+      ) return;
       try {
         if (localStorage.getItem(cleanupFlag)) {
           demoCleanupAttemptedRef.current = cleanupFlag;
@@ -489,7 +528,7 @@ export default function App() {
         return;
       }
 
-      demoCleanupAttemptedRef.current = cleanupFlag;
+      demoCleanupInProgressRef.current = cleanupFlag;
       const messages: string[] = [];
       let rowsCleared = 0;
       for (const [spreadsheetId, url] of uniqueSheets) {
@@ -514,7 +553,9 @@ export default function App() {
 
       if (!active) return;
       const allDone = failures.length === 0;
+      demoCleanupInProgressRef.current = '';
       if (allDone) {
+        demoCleanupAttemptedRef.current = cleanupFlag;
         try { localStorage.setItem(cleanupFlag, new Date().toISOString()); } catch { /* non-critical */ }
       }
       setPpksList((current) => mergePPKSRecords(current, []));
