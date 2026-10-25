@@ -596,7 +596,7 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
             </div>
           </div>
           <div className="official-photo-print-frame">
-            {printPhotoUrls[photo.key] ? (
+            {printPhotoUrls[photo.key] && !printPhotoErrors[photo.key] ? (
               <img
                 src={printPhotoUrls[photo.key]}
                 alt={`${photo.title} — ${currentPPKS.namaLengkap}`}
