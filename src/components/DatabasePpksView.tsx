@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { PPKSRecord, AppSettings } from '../types';
 import { PrivateDriveImage } from './PrivateDriveImage';
+import { formatPPKSTimestamp } from '../lib/ppksData';
 import {
   buildWhatsAppMessage,
   createWhatsAppLink,
@@ -143,7 +144,7 @@ export const DatabasePpksView: React.FC<DatabasePpksViewProps> = ({
               </option>
               {ppksList.map((p) => (
                 <option key={p.id} value={p.id} className="bg-[#0f1d12] text-white py-1">
-                  {p.namaLengkap} • NIK: {resolveProfileNIK(p) || 'belum terpetakan'} • {p.kotaDomisili} (Desil {p.desil})
+                  {formatPPKSTimestamp(p.timestamp)} • {p.namaLengkap} • NIK: {resolveProfileNIK(p) || 'belum terpetakan'} • {p.kotaDomisili} (Desil {p.desil})
                 </option>
               ))}
             </select>
@@ -226,7 +227,7 @@ export const DatabasePpksView: React.FC<DatabasePpksViewProps> = ({
                         Timestamp
                       </td>
                       <td className="py-2.5 px-3 font-mono text-emerald-300">
-                        {currentPPKS.timestamp}
+                        {formatPPKSTimestamp(currentPPKS.timestamp)}
                       </td>
                     </tr>
 
