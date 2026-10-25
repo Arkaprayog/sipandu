@@ -45,9 +45,52 @@ googleAuthProvider.addScope('https://www.googleapis.com/auth/spreadsheets');
 googleAuthProvider.addScope('https://www.googleapis.com/auth/forms.body');
 googleAuthProvider.addScope('https://www.googleapis.com/auth/forms.responses.readonly');
 
-// Short-lived Workspace OAuth token stays memory-only. It must be re-authorized
-// after refresh/expiry; never persist it in localStorage.
-let cachedAccessToken: string | null = null;
+// Google access tokens are short-lived. Keep them only in sessionStorage (not
+// localStorage) so a page reload in the same tab does not force an immediate
+// reconnect, and discard them conservatively before Google's usual 1-hour expiry.
+const WORKSPACE_TOKEN_STORAGE_KEY = 'sipandu_google_workspace_token_v1';
+const WORKSPACE_TOKEN_TTL_MS = 50 * 60 * 1000;
+
+function readStoredWorkspaceToken(): string | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = window.sessionStorage.getItem(WORKSPACE_TOKEN_STORAGE_KEY);
+    if (!raw) return null;
+    const saved = JSON.parse(raw) as { token?: unknown; savedAt?: unknown };
+    if (
+      typeof saved.token !== 'string' ||
+      typeof saved.savedAt !== 'number' ||
+      Date.now() - saved.savedAt < 0 ||
+      Date.now() - saved.savedAt >= WORKSPACE_TOKEN_TTL_MS
+    ) {
+      window.sessionStorage.removeItem(WORKSPACE_TOKEN_STORAGE_KEY);
+      return null;
+    }
+    return saved.token;
+  } catch {
+    // Storage can be unavailable in privacy-restricted browser contexts.
+    return null;
+  }
+}
+
+function cacheWorkspaceToken(token: string | null): void {
+  cachedAccessToken = token;
+  if (typeof window === 'undefined') return;
+  try {
+    if (!token) {
+      window.sessionStorage.removeItem(WORKSPACE_TOKEN_STORAGE_KEY);
+      return;
+    }
+    window.sessionStorage.setItem(
+      WORKSPACE_TOKEN_STORAGE_KEY,
+      JSON.stringify({ token, savedAt: Date.now() })
+    );
+  } catch {
+    // Keep the current-page session working even when browser storage is blocked.
+  }
+}
+
+let cachedAccessToken: string | null = readStoredWorkspaceToken();
 
 export type ConnectionCheckResult = {
   service: 'Firebase Auth' | 'Firestore';
@@ -145,7 +188,7 @@ export const googleSignIn = async (): Promise<{
     if (!credential?.accessToken) {
       throw new Error('Google berhasil merespons tetapi tidak memberikan access token untuk Drive/Sheets/Forms. Periksa consent screen, scope OAuth, dan API yang diaktifkan.');
     }
-    cachedAccessToken = credential.accessToken;
+    cacheWorkspaceToken(credential.accessToken);
     return { user: result.user, accessToken: cachedAccessToken };
   } catch (error: any) {
     const code = error?.code ? String(error.code) : '';
@@ -176,11 +219,19 @@ export const googleSignIn = async (): Promise<{
   }
 };
 
-export const getAccessToken = async (): Promise<string | null> => cachedAccessToken;
+export const getAccessToken = async (): Promise<string | null> => {
+  if (!cachedAccessToken) cachedAccessToken = readStoredWorkspaceToken();
+  return cachedAccessToken;
+};
+
+/** Clears an expired/rejected token without signing the Google user out of SIPANDU. */
+export const invalidateAccessToken = (): void => {
+  cacheWorkspaceToken(null);
+};
 
 export const googleLogout = async () => {
   await signOut(workspaceAuth);
-  cachedAccessToken = null;
+  cacheWorkspaceToken(null);
 };
 
 export const initAuthListener = (
@@ -189,9 +240,12 @@ export const initAuthListener = (
 ) => {
   return onAuthStateChanged(workspaceAuth, async (user: User | null) => {
     if (user) {
+      // Firebase may restore the Workspace identity after reload; restore its
+      // still-valid, tab-scoped API token as well so UI state remains consistent.
+      if (!cachedAccessToken) cachedAccessToken = readStoredWorkspaceToken();
       if (onAuthSuccess) onAuthSuccess(user, cachedAccessToken);
     } else {
-      cachedAccessToken = null;
+      cacheWorkspaceToken(null);
       if (onAuthFailure) onAuthFailure();
     }
   });
