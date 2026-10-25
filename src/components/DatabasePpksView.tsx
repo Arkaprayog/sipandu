@@ -390,6 +390,50 @@ export const DatabasePpksView: React.FC<DatabasePpksViewProps> = ({
             </div>
           </div>
         )}
+
+        {ppksList.length > 0 && (
+          <section className="mt-6 rounded-2xl border border-sky-400/30 bg-black/35 p-4 md:p-5">
+            <div className="mb-4 flex flex-col gap-1 border-b border-sky-400/20 pb-3">
+              <h3 className="text-base font-black text-white">Galeri Semua Responden</h3>
+              <p className="text-xs text-neutral-300">
+                Daftar foto diri, KTP, rumah tampak depan, dan NIK untuk setiap responden yang telah dimuat. Foto privat dimuat saat kartu terlihat agar halaman tetap ringan.
+              </p>
+            </div>
+            <div className="space-y-4">
+              {ppksList.map((record) => (
+                <article key={record.id} className="rounded-xl border border-white/10 bg-black/25 p-3">
+                  <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
+                    <div>
+                      <h4 className="text-sm font-bold text-white">{record.namaLengkap || 'Nama belum tersedia'}</h4>
+                      <p className="text-[10px] font-mono text-neutral-400">ID: {record.id}</p>
+                    </div>
+                    <div className="rounded-lg border border-sky-400/25 bg-sky-950/20 px-3 py-2">
+                      <span className="block text-[9px] uppercase tracking-wide text-sky-200">NIK Responden</span>
+                      <span className="font-mono text-xs font-bold tracking-wider text-white">{record.nik || 'Belum tersedia di sumber'}</span>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                    {[
+                      { label: 'Foto Diri', source: record.fotoDiri },
+                      { label: 'Foto KTP', source: record.fotoKtp },
+                      { label: 'Foto Rumah Tampak Depan', source: record.fotoRumah || '' },
+                    ].map((photo) => (
+                      <div key={photo.label} className="rounded-lg border border-white/10 bg-black/30 p-2">
+                        <p className="mb-2 text-[11px] font-semibold text-sky-100">{photo.label}</p>
+                        <PrivateDriveImage
+                          source={photo.source}
+                          alt={`${photo.label} — ${record.namaLengkap}`}
+                          className="h-36 w-full"
+                          objectFit="contain"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </article>
+              ))}
+            </div>
+          </section>
+        )}
       </div>
     </div>
   );
