@@ -666,7 +666,7 @@ export const GoogleWorkspaceModal: React.FC<GoogleWorkspaceModalProps> = ({
                 <div className="flex items-center gap-3">
                   {googleUser ? (
                     <img
-                      src={googleUser.photoURL || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=120'}
+                      src={googleUser.photoURL || undefined}
                       alt="Google User"
                       className="w-12 h-12 rounded-full border border-emerald-400"
                     />
