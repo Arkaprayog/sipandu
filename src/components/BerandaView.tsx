@@ -430,7 +430,7 @@ export const BerandaView: React.FC<BerandaViewProps> = ({
                   <div className="w-full h-3 rounded-full bg-black/60 overflow-hidden border border-emerald-950">
                     <div
                       className="h-full rounded-full bg-gradient-to-r from-emerald-600 via-teal-500 to-sky-400 transition-all duration-700"
-                      style={{ width: `${Math.max(pct, 8)}%` }}
+                      style={{ width: `${pct === 0 ? 0 : Math.max(pct, 8)}%` }}
                     />
                   </div>
                 </div>
@@ -530,7 +530,7 @@ export const BerandaView: React.FC<BerandaViewProps> = ({
                     className={`h-full ${
                       isPriority ? 'bg-rose-500' : 'bg-emerald-500'
                     }`}
-                    style={{ width: `${Math.max(item.percent * 2, 8)}%` }}
+                    style={{ width: `${item.percent === 0 ? 0 : Math.max(item.percent * 2, 8)}%` }}
                   />
                 </div>
               </div>
