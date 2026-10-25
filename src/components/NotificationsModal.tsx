@@ -1,5 +1,5 @@
 import React from 'react';
-import { Bell, X, CheckCircle, Clock, AlertTriangle } from 'lucide-react';
+import { Bell, X } from 'lucide-react';
 
 interface NotificationsModalProps {
   isOpen: boolean;
@@ -7,38 +7,9 @@ interface NotificationsModalProps {
   onNavigateToTab?: (tab: string) => void;
 }
 
-export const NotificationsModal: React.FC<NotificationsModalProps> = ({
-  isOpen,
-  onClose,
-}) => {
+/** No fictitious PPKS, medical reminders, or outdated sample timestamps. */
+export const NotificationsModal: React.FC<NotificationsModalProps> = ({ isOpen, onClose }) => {
   if (!isOpen) return null;
-
-  const notifications = [
-    {
-      id: 1,
-      type: 'new_entry',
-      title: 'Responden Baru dari Google Form Tahap Awal',
-      desc: 'Rahmat Hidayat Simanjuntak (Medan) berhasil masuk ke database dan siap diverifikasi.',
-      time: '15 Menit yang lalu',
-      unread: true,
-    },
-    {
-      id: 2,
-      type: 'arv_reminder',
-      title: 'Jadwal Kontrol ARV & Ambil Obat',
-      desc: 'Dewi Sartika Lubis (Deli Serdang) dijadwalkan kontrol rutin ke RSUD Drs. H. Amri Tambunan.',
-      time: '2 Jam yang lalu',
-      unread: true,
-    },
-    {
-      id: 3,
-      type: 'mental_health',
-      title: 'Kuesioner Asesmen Kesehatan Mental Diisi',
-      desc: 'Hasil asesmen menunjukkan tingkat stres ringan, rekomendasi konseling telah diinput.',
-      time: 'Kemarin, 16:30 WIB',
-      unread: false,
-    },
-  ];
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80">
@@ -48,47 +19,19 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
             <Bell className="w-5 h-5 text-sky-300" />
             <h3 className="text-base font-bold text-white">Notifikasi Terpadu SIPANDU</h3>
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="p-1 rounded text-neutral-400 hover:text-white"
-          >
+          <button type="button" onClick={onClose} className="p-1 rounded text-neutral-400 hover:text-white" aria-label="Tutup notifikasi">
             <X className="w-5 h-5" />
           </button>
         </div>
-
-        <div className="space-y-3 max-h-96 overflow-y-auto pr-1">
-          {notifications.map((n) => (
-            <div
-              key={n.id}
-              className={`p-3.5 rounded-xl border text-xs transition ${
-                n.unread
-                  ? 'bg-[#152e19] border-rose-500/50 shadow-sm'
-                  : 'bg-black/50 border-emerald-950 text-neutral-300'
-              }`}
-            >
-              <div className="flex items-center justify-between mb-1">
-                <span className="font-bold text-white text-xs">{n.title}</span>
-                {n.unread && (
-                  <span className="px-1.5 py-0.5 rounded text-[9px] bg-rose-600 text-white font-bold">
-                    Baru
-                  </span>
-                )}
-              </div>
-              <p className="text-[11px] text-neutral-300 leading-snug">{n.desc}</p>
-              <span className="text-[10px] text-sky-300/80 mt-2 block font-mono">
-                {n.time}
-              </span>
-            </div>
-          ))}
+        <div className="rounded-xl border border-dashed border-white/15 bg-black/20 p-8 text-center">
+          <Bell className="mx-auto mb-3 h-8 w-8 text-neutral-500" />
+          <p className="text-sm font-semibold text-neutral-200">Belum ada notifikasi aktual</p>
+          <p className="mt-1 text-xs leading-relaxed text-neutral-400">
+            Informasi responden atau pengingat hanya akan muncul setelah ada peristiwa nyata dari sumber notifikasi yang terhubung.
+          </p>
         </div>
-
         <div className="mt-5 pt-3 border-t border-rose-500/20 text-center">
-          <button
-            type="button"
-            onClick={onClose}
-            className="w-full py-2.5 rounded-xl bg-black/60 hover:bg-black/80 border border-rose-500/30 text-xs font-semibold text-neutral-200"
-          >
+          <button type="button" onClick={onClose} className="w-full py-2.5 rounded-xl bg-black/60 hover:bg-black/80 border border-rose-500/30 text-xs font-semibold text-neutral-200">
             Tutup
           </button>
         </div>
