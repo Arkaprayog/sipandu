@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   googleSignIn,
+  completeGoogleRedirectSignIn,
   getWorkspaceGoogleEmail,
   googleLogout,
   getAccessToken,
@@ -203,6 +204,30 @@ export const GoogleWorkspaceModal: React.FC<GoogleWorkspaceModalProps> = ({
     return () => unsubscribe();
   }, []);
 
+  // A redirect-based OAuth flow reloads this page after Google consent.
+  // Consume the redirect result once during startup and restore the API token.
+  useEffect(() => {
+    let active = true;
+    completeGoogleRedirectSignIn()
+      .then((result) => {
+        if (!active || !result) return;
+        setGoogleUser(result.user);
+        setToken(result.accessToken);
+        setStatusMessage({
+          type: 'success',
+          text: `Berhasil mengotorisasi Google (${getWorkspaceGoogleEmail(result.user) || GOOGLE_WORKSPACE_EMAIL}). Izin API telah dipulihkan.`,
+        });
+      })
+      .catch((error: any) => {
+        if (!active) return;
+        setStatusMessage({
+          type: 'error',
+          text: error?.message || 'Hasil pengalihan login Google tidak dapat diverifikasi.',
+        });
+      });
+    return () => { active = false; };
+  }, []);
+
   useEffect(() => {
     const configured = settings.googleSpreadsheetUrl?.trim() || '';
     if (!configured || configured.includes('1yA8KemensosODHIVSumut2026_LiveSync')) {
@@ -232,6 +257,11 @@ export const GoogleWorkspaceModal: React.FC<GoogleWorkspaceModalProps> = ({
         setGoogleUser(res.user);
         setToken(res.accessToken);
         setStatusMessage({ type: 'success', text: `Berhasil terhubung dengan Google (${getWorkspaceGoogleEmail(res.user) || GOOGLE_WORKSPACE_EMAIL})` });
+      } else {
+        setStatusMessage({
+          type: 'success',
+          text: 'Browser sedang dialihkan ke Google untuk menyelesaikan otorisasi. Setelah kembali ke SIPANDU, hasil dan token akan dipulihkan otomatis.',
+        });
       }
     } catch (err: any) {
       console.error(err);
