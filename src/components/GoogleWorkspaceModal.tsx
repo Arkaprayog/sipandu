@@ -445,6 +445,13 @@ export const GoogleWorkspaceModal: React.FC<GoogleWorkspaceModalProps> = ({
       // preserves all other local records.
       onLoadPPKSFromCloud([]);
       setSheetRows([]);
+      if (errors.length === 0) {
+        const cleanupKey = 'sipandu_legacy_demo_cleanup_v1:' + [
+          ...[...uniqueSheets.keys()].sort(),
+          GOOGLE_SIPANDU_RESOURCES.driveFolderId,
+        ].join('|');
+        try { localStorage.setItem(cleanupKey, new Date().toISOString()); } catch { /* non-critical */ }
+      }
       const summary = [
         `Pembersihan contoh selesai. ${totalRowsCleared} baris contoh dibersihkan dari Google Sheets.`,
         ...results,
