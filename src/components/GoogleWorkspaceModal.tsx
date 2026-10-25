@@ -5,6 +5,8 @@ import {
   getAccessToken,
   initAuthListener,
   savePPKSToFirestore,
+  testFirestoreConnection,
+  testFirebaseAuthConnection,
 } from '../lib/firebase';
 import {
   listDriveFiles,
@@ -71,6 +73,36 @@ export const GoogleWorkspaceModal: React.FC<GoogleWorkspaceModalProps> = ({
 
   // Firestore sync state
   const [firestoreSyncedCount, setFirestoreSyncedCount] = useState<number>(0);
+  const [diagnosticResults, setDiagnosticResults] = useState<Array<{service: string; ok: boolean; message: string; checkedAt: string}>>([]);
+  const [diagnosticsRunning, setDiagnosticsRunning] = useState<boolean>(false);
+
+  const handleRunDiagnostics = async () => {
+    setDiagnosticsRunning(true);
+    setStatusMessage(null);
+    const results: Array<{service: string; ok: boolean; message: string; checkedAt: string}> = [];
+    try {
+      results.push(await testFirebaseAuthConnection());
+      results.push(await testFirestoreConnection());
+      const accessToken = await getAccessToken();
+      const now = new Date().toISOString();
+      if (!googleUser) {
+        results.push({ service: 'Google Workspace', ok: false, message: 'Belum masuk dengan akun Google di sesi ini.', checkedAt: now });
+      } else if (!accessToken) {
+        results.push({ service: 'Google Workspace', ok: false, message: 'Akun Google terdeteksi, tetapi token akses API tidak tersedia. Jalankan otorisasi Google untuk sesi ini.', checkedAt: now });
+      } else {
+        results.push({ service: 'Google Workspace', ok: true, message: 'Token akses tersedia. Izin Drive, Sheets, dan Forms perlu diuji melalui tombol masing-masing karena akses dapat berbeda per layanan.', checkedAt: now });
+      }
+      setDiagnosticResults(results);
+      const failures = results.filter((r) => !r.ok).length;
+      setStatusMessage({ type: failures ? 'error' : 'success', text: failures ? `Pemeriksaan selesai: ${failures} dari ${results.length} pemeriksaan perlu perhatian. Lihat rincian di bawah.` : 'Pemeriksaan dasar selesai. Periksa layanan Google satu per satu untuk memastikan izin API.' });
+    } catch (error: any) {
+      const message = error?.message || String(error) || 'Kesalahan tidak diketahui saat pemeriksaan.';
+      setDiagnosticResults([{ service: 'Pemeriksaan', ok: false, message, checkedAt: new Date().toISOString() }]);
+      setStatusMessage({ type: 'error', text: `Pemeriksaan gagal: ${message}` });
+    } finally {
+      setDiagnosticsRunning(false);
+    }
+  };
 
   useEffect(() => {
     const unsubscribe = initAuthListener(
@@ -325,6 +357,31 @@ export const GoogleWorkspaceModal: React.FC<GoogleWorkspaceModalProps> = ({
           {/* TAB 1: OVERVIEW & GOOGLE SIGN-IN */}
           {activeTab === 'overview' && (
             <div className="space-y-4">
+              <div className="p-4 rounded-xl bg-black/40 border border-sky-500/30 space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div>
+                    <h4 className="font-bold text-white text-sm">Diagnostik Koneksi</h4>
+                    <p className="text-[11px] text-neutral-300">Uji Firebase Auth dan Firestore secara eksplisit. Hasil pemeriksaan dan waktu akan ditampilkan di sini.</p>
+                  </div>
+                  <button type="button" onClick={handleRunDiagnostics} disabled={loading || diagnosticsRunning} className="px-3 py-2 rounded-lg bg-sky-800 hover:bg-sky-700 text-white font-semibold text-xs disabled:opacity-50">
+                    {diagnosticsRunning ? 'Memeriksa…' : 'Periksa Koneksi Sekarang'}
+                  </button>
+                </div>
+                {diagnosticResults.length > 0 && (
+                  <div className="space-y-2">
+                    {diagnosticResults.map((result) => (
+                      <div key={result.service} className={`rounded-lg border p-2.5 ${result.ok ? 'border-emerald-500/40 bg-emerald-950/40' : 'border-rose-500/40 bg-rose-950/40'}`}>
+                        <div className="flex items-center gap-2 font-semibold text-white">
+                          {result.ok ? <CheckCircle2 className="w-4 h-4 text-emerald-400" /> : <AlertCircle className="w-4 h-4 text-rose-400" />}
+                          <span>{result.service}: {result.ok ? 'LULUS' : 'PERLU DIPERIKSA'}</span>
+                        </div>
+                        <p className="mt-1 text-neutral-200 break-words">{result.message}</p>
+                        <p className="mt-1 text-[10px] text-neutral-400">Diperiksa: {new Date(result.checkedAt).toLocaleString()}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
               <div className="p-4 rounded-xl bg-black/50 border border-emerald-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div className="flex items-center gap-3">
                   {googleUser ? (
