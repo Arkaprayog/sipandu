@@ -330,6 +330,48 @@ function readCellByAliases(headers: string[], row: string[], aliases: string[]):
   return '';
 }
 
+/** Robustly maps common NIK / identity-card question labels from Google Forms. */
+function readNIKFromSheetRow(headers: string[], row: string[]): string {
+  const normalizedHeaders = headers.map(normalizeSheetHeader);
+  const exactAliases = [
+    'nik', 'nikresponden', 'niksesuaiktp', 'niksesuaikktp', 'niknoktp', 'nikktp',
+    'nomorindukkependudukan', 'nomorindukkependudukannik', 'nomorktp', 'noktp',
+    'nomorkartutandapenduduk', 'noindukkependudukan', 'noKTPNIK', 'KTPNIK',
+    'nikkartukeluarga',
+  ].map(normalizeSheetHeader);
+  // Exact semantic header names are safest and take priority.
+  for (const alias of exactAliases) {
+    const index = normalizedHeaders.indexOf(alias);
+    if (index >= 0 && row[index] !== undefined && row[index].trim() !== '') {
+      return row[index].trim();
+    }
+  }
+
+  // Google Forms titles often include instructions, e.g. "NIK (16 digit, sesuai KTP)".
+  // Reject family/worker/assessor NIKs so they cannot be confused with respondent NIK.
+  const excluded = /(ayah|ibu|orangtua|wali|suami|istri|pasangan|keluarga|pendamping|petugas|asesor|asessor|supervisor|petugas|penanggungjawab)/;
+  const candidates = normalizedHeaders
+    .map((header, index) => ({ header, index, value: row[index]?.trim() || '' }))
+    .filter(({ header, value }) => value && !excluded.test(header))
+    .filter(({ header }) =>
+      /(^|[^a-z])nik([^a-z]|$)/.test(header) ||
+      header.includes('nomorindukkependudukan') ||
+      header.includes('nomorkartutandapenduduk') ||
+      /^(no|nomor)ktp/.test(header) ||
+      header.includes('niksesuaiktp') ||
+      header.includes('niknoktp')
+    );
+  const best = candidates.sort((a, b) => {
+    const score = (header: string) =>
+      (header.includes('responden') ? 50 : 0) +
+      (header.includes('nik') ? 30 : 0) +
+      (header.includes('ktp') ? 20 : 0) -
+      (header.length > 100 ? 10 : 0);
+    return score(b.header) - score(a.header);
+  })[0];
+  return best?.value || '';
+}
+
 function parseSheetNumber(value: string, fallback = 0): number {
   const normalized = String(value ?? '').replace(/,/g, '.').replace(/[^\d.-]/g, '');
   const parsed = Number(normalized);
@@ -405,7 +447,7 @@ function mapRowsToPPKSRecords(rows: string[][]): PPKSRecord[] {
     if (!namaLengkap) return;
 
     const timestamp = readCellByAliases(headers, row, ['timestamp', 'capWaktu', 'waktuPengiriman', 'waktuPengisian', 'tanggalWaktu', 'createTime']);
-    const nik = readCellByAliases(headers, row, ['nik', 'nikResponden', 'NIKNoKTP', 'nomorIndukKependudukan', 'nomorKTP', 'nomorKTPNIK', 'NIKKTP', 'noKTPNIK', 'KTPNIK']);
+    const nik = readNIKFromSheetRow(headers, row);
     const externalId = readCellByAliases(headers, row, ['idPPKS', 'recordId', 'id']);
     const stableSource = [timestamp, nik, namaLengkap, ...row].join('|');
     let hash = 2166136261;
