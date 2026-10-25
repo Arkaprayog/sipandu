@@ -62,6 +62,16 @@ export function normalizeNIKCellValue(value: unknown): string {
   return sequences.length === 1 ? sequences[0] : '';
 }
 
+/**
+ * Converts a raw Google Sheets numeric cell into a NIK only when precision is
+ * guaranteed. Unsafe numeric values must remain blank rather than be guessed.
+ */
+export function normalizeExactNumericNIK(value: unknown): string {
+  if (typeof value !== 'number' || !Number.isSafeInteger(value)) return '';
+  const digits = String(value);
+  return /^\d{16}$/.test(digits) ? digits : '';
+}
+
 /** Reads a respondent NIK despite punctuation/long instructions in Form headers. */
 export function readNIKFromSheetRow(headers: string[], row: string[]): string {
   const candidates = headers
