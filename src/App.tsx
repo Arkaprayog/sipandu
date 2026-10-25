@@ -391,11 +391,14 @@ export default function App() {
     const onVisibilityChange = () => {
       if (document.visibilityState === 'visible') void syncOnce();
     };
+    const onWorkspaceTokenUpdated = () => { void syncOnce(); };
     document.addEventListener('visibilitychange', onVisibilityChange);
+    window.addEventListener('sipandu-workspace-token-updated', onWorkspaceTokenUpdated);
     return () => {
       active = false;
       window.clearInterval(timer);
       document.removeEventListener('visibilitychange', onVisibilityChange);
+      window.removeEventListener('sipandu-workspace-token-updated', onWorkspaceTokenUpdated);
     };
   }, [isAuthenticated, settings.googleSpreadsheetSourceUrl, settings.googleSpreadsheetSourceTab]);
 
