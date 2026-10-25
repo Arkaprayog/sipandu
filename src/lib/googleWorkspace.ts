@@ -345,64 +345,49 @@ function isLikelyRespondentNIKHeader(header: string): boolean {
   const normalized = normalizeSheetHeader(header);
   if (!normalized) return false;
 
-  // A respondent NIK is allowed; NIKs belonging to family members, caseworkers,
-  // assessors, supervisors, or emergency contacts must never be displayed as theirs.
-  // Do not mistake upload/document columns for identity numbers, even though
-  // their header may contain "KTP".
+  // Reject photo/document links and identifiers belonging to other people.
   const nonIdentityDocument = [
     'foto', 'photo', 'gambar', 'image', 'upload', 'unggah', 'dokumen',
-    'lampiran', 'scan', 'file', 'tautan', 'link', 'drive',
+    'lampiran', 'scan', 'file', 'tautan', 'link', 'drive', 'berkas',
   ];
   if (nonIdentityDocument.some((word) => normalized.includes(word))) return false;
 
-  // NIKs belonging to other people must never be shown as the respondent's NIK.
   const excludedPeople = [
     'ayah', 'ibu', 'orangtua', 'wali', 'suami', 'istri', 'pasangan',
     'keluarga', 'pendamping', 'petugas', 'asesor', 'asessor',
-    'supervisor', 'kontakdarurat', 'penanggungjawab',
+    'supervisor', 'kontakdarurat', 'penanggungjawab', 'penanggungjawab',
   ];
   if (excludedPeople.some((word) => normalized.includes(word)) &&
       /(nik|ktp|kependudukan|identitas)/.test(normalized)) return false;
 
-  // Accept common Indonesian spelling variations: No. KTP, e-KTP, NIK/No. KTP,
-  // nomor identitas kependudukan, or a long respondent-question title.
-  return normalized === 'nik' ||
-    normalized.includes('nik') ||
-    normalized.includes('nomorindukkependudukan') ||
-    normalized.includes('indukkependudukan') ||
-    normalized.includes('nomorkartuidentitas') ||
-    normalized.includes('nomorkartutandapenduduk') ||
-    normalized.includes('nomorktp') ||
-    normalized.includes('noktp') ||
-    normalized.includes('ektp') ||
+  // Match official and common Google Forms labels, including long question text:
+  // "Nomor Induk Kependudukan (NIK) sesuai KTP responden", "No. KTP", and
+  // "NIK/No KTP". This helper is deliberately not used for image/link columns.
+  const identityTokens = [
+    'nik', 'nomorindukkependudukan', 'indukkependudukan', 'nokependudukan',
+    'nomorktp', 'noktp', 'kartutandapenduduk', 'ektp', 'kependudukan',
+    'nomoridentitas', 'noidentitas', 'identitasresponden',
+  ];
+  return identityTokens.some((token) => normalized.includes(token)) ||
     normalized === 'ktp' ||
-    normalized.includes('ktp') ||
-    normalized.includes('noidentitas') ||
-    normalized.includes('nomoridentitas') ||
-    normalized.includes('identitasresponden') ||
-    normalized.includes('kartutandapenduduk') ||
-    normalized.includes('kependudukan') ||
-    normalized.includes('nokependudukan') ||
-    normalized.includes('noindukkependudukan') ||
-    /^no\d*nik/.test(normalized) ||
-    /^nik\d*digit/.test(normalized);
+    normalized.startsWith('noinduk');
 }
 
 function normalizeNIKCellValue(value: string): string {
   const raw = String(value ?? '').trim().replace(/^['`]/, '').replace(/\.0+$/, '');
   if (!raw) return '';
 
-  // A scientific-notation NIK can already have lost precision in Sheets' numeric
-  // storage. Never manufacture a 16-digit identity from a rounded scientific value.
+  // Don't attempt to reconstruct an identity number when Sheets converted it
+  // to scientific notation; those values may already have lost precision.
   if (/^[+-]?\d+(?:[.,]\d+)?e[+-]?\d+$/i.test(raw)) return '';
 
   const digits = raw.replace(/\D/g, '');
-  if (!digits) return '';
-  // A Sheets numeric cell can omit the leading zero for some 15-digit values.
-  const normalized = digits.length === 15 ? `0${digits}` : digits;
-  // NIK is 16 digits. Do not display partial phone/ID values or silently
-  // transform a rounded/scientific number into a plausible-looking NIK.
-  return /^\d{16}$/.test(normalized) ? normalized : '';
+  if (/^\d{16}$/.test(digits)) return digits;
+
+  // Some cells are formatted with a label ("NIK: 123...") or include a note.
+  // Accept the one unambiguous contiguous 16-digit number and reject ambiguity.
+  const sequences = [...raw.matchAll(/\d{16}/g)].map((match) => match[0]);
+  return sequences.length === 1 ? sequences[0] : '';
 }
 
 /** Reads the respondent NIK even when the Google Forms question title has instructions/punctuation. */
