@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { PPKSRecord, ProfileUser, AppSettings } from './types';
-import { initialPPKSList, initialProfileUser, initialAppSettings, LEGACY_SAMPLE_PPKS_IDS } from './data/initialData';
+import { initialPPKSList, initialProfileUser, initialAppSettings, isLegacySamplePPKS } from './data/initialData';
 import { LoginPage } from './components/LoginPage';
 import { Header } from './components/Header';
 import { BottomNav, TabKey } from './components/BottomNav';
@@ -51,7 +51,7 @@ function mergePPKSRecords(localRecords: PPKSRecord[], cloudRecords: PPKSRecord[]
   };
 
   for (const record of localRecords) {
-    if (!record || LEGACY_SAMPLE_PPKS_IDS.has(String(record.id || ''))) continue;
+    if (!record || isLegacySamplePPKS(record)) continue;
     merged.set(recordKey(record), record);
   }
   const normalizePersonText = (value: string | undefined) =>
@@ -187,7 +187,7 @@ export default function App() {
           // every other cached record untouched; the storage effect below
           // persists this cleaned list back to the browser cache.
           return (parsed as PPKSRecord[]).filter(
-            (record) => record && !LEGACY_SAMPLE_PPKS_IDS.has(String(record.id || ''))
+            (record) => record && !isLegacySamplePPKS(record)
           );
         }
         console.warn('Cached PPKS data is not an array; starting with an empty list.');
