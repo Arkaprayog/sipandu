@@ -53,8 +53,8 @@ export const LEGACY_SAMPLE_PPKS_NAMES: ReadonlySet<string> = new Set([
 export function isObviousDemoMarker(value: unknown): boolean {
   const text = String(value ?? '').trim();
   if (!text) return false;
-  return /^(?:demo|sample|contoh|dummy|uji[\\s_-]?coba|data[\\s_-]?uji|uji[\\s_-]?data|test(?:[\\s_-]?data)?)(?:$|[\\s:._-])/i.test(text) ||
-    /^(?:PPKS|RESPONDEN|RECORD|DATA|ID)[\\s_-]*(?:DEMO|SAMPLE|CONTOH|DUMMY|TEST|UJI)[\\s_-]*/i.test(text);
+  return /^(?:demo|sample|contoh|dummy|uji[\s_-]?coba|data[\s_-]?uji|uji[\s_-]?data|test(?:[\s_-]?data)?)(?:$|[\s:._-])/i.test(text) ||
+    /^(?:PPKS|RESPONDEN|RECORD|DATA|ID)[\s_-]*(?:DEMO|SAMPLE|CONTOH|DUMMY|TEST|UJI)[\s_-]*/i.test(text);
 }
 
 export function isLegacySamplePPKS(record: Pick<PPKSRecord, 'id' | 'namaLengkap'> | null | undefined): boolean {
