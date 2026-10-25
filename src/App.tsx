@@ -361,7 +361,7 @@ export default function App() {
     setPpksList((localRecords) => mergePPKSRecords(localRecords, cloudRecords));
   };
 
-  const handleSyncGoogleSpreadsheet = async (): Promise<number> => {
+  const handleSyncGoogleSpreadsheet = async (): Promise<{ records: number; sourceDataRows: number; sourceRowsWithName: number; sampleRecordsFiltered: number }> => {
     const sourceUrl = settings.googleSpreadsheetSourceUrl?.trim() || '';
     if (!sourceUrl) throw new Error('Spreadsheet sumber belum dipilih. Buka Google Workspace & Cloud Hub → Google Sheets → Cari Spreadsheet Saya, lalu pilih file Anda.');
     const imported = await importPPKSFromSpreadsheet(
@@ -387,7 +387,12 @@ export default function App() {
       message: `Sumber “${imported.spreadsheetTitle}” → “${imported.selectedTab}”: ${imported.sourceDataRows} baris data (header tidak dihitung), ${imported.sourceRowsWithName} baris bernama, ${imported.records.length} PPKS dimuat; ${imported.sampleRecordsFiltered} contoh disaring; NIK terpetakan ${imported.recordsWithNIK}/${imported.records.length}. Sinkronisasi otomatis setiap 2 menit selama izin Google masih berlaku.`,
       lastUpdatedAt: updatedAt,
     });
-    return imported.records.length;
+    return {
+      records: imported.records.length,
+      sourceDataRows: imported.sourceDataRows,
+      sourceRowsWithName: imported.sourceRowsWithName,
+      sampleRecordsFiltered: imported.sampleRecordsFiltered,
+    };
   };
 
   // Poll the selected read-only Google Sheet while the dashboard is open.
