@@ -1,4 +1,4 @@
-import { getAccessToken } from './firebase';
+import { getAccessToken, invalidateAccessToken } from './firebase';
 import { PPKSRecord } from '../types';
 
 export interface GoogleDriveFile {
@@ -38,7 +38,8 @@ async function googleJson<T>(url: string, init: RequestInit = {}): Promise<T> {
     const message = apiError?.message || `HTTP ${res.status}`;
     const reason = apiError?.errors?.[0]?.reason || apiError?.status || '';
     if (res.status === 401) {
-      throw new Error('Google API menolak token (HTTP 401). Token mungkin kedaluwarsa; tekan “Pulihkan Izin Google API” di tab Koneksi Akun lalu ulangi operasi.');
+      invalidateAccessToken();
+      throw new Error('Token Google API telah kedaluwarsa atau dicabut. Sesi akun tetap tersimpan, tetapi izin API perlu dipulihkan sekali lagi melalui Koneksi Akun. Muat ulang tidak akan menghapus token yang masih berlaku.');
     }
     if (res.status === 403 && /insufficient|scope/i.test(`${reason} ${message}`)) {
       throw new Error(`Izin OAuth Google kurang (HTTP 403): ${message}. Otorisasi ulang dan pastikan scope Drive/Sheets/Forms disetujui akun.`);
