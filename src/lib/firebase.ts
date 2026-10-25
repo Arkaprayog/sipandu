@@ -5,6 +5,7 @@ import {
   collection,
   getDocs,
   setDoc,
+  deleteDoc,
   query,
   limit,
 } from 'firebase/firestore';
@@ -24,6 +25,7 @@ import {
 } from 'firebase/auth';
 import firebaseConfig from '../../firebase-applet-config.json';
 import { PPKSRecord } from '../types';
+import { isLegacySamplePPKS } from '../data/initialData';
 import { GOOGLE_WORKSPACE_EMAIL } from './googleSIPANDUResources';
 
 // Initialize Firebase
@@ -433,8 +435,37 @@ export async function savePPKSToFirestore(ppks: PPKSRecord): Promise<true> {
 export async function fetchPPKSFromFirestore(): Promise<PPKSRecord[]> {
   try {
     const snapshot = await getDocs(collection(db, 'ppks'));
-    return snapshot.docs.map((document) => document.data() as PPKSRecord);
+    return snapshot.docs.map((document) => ({ id: document.id, ...document.data() }) as PPKSRecord);
   } catch (error) {
     throw new Error(describeConnectionError(error));
   }
+}
+
+/**
+ * Physically deletes only the retired sample/test PPKS documents from Firestore.
+ * Requires a trusted owner/supervisor role. Real respondent documents are left intact.
+ */
+export async function removeLegacyDemoPPKSFromFirestore(): Promise<number> {
+  const user = auth.currentUser;
+  if (!user) throw new Error('Sesi SIPANDU belum aktif; masuk kembali sebelum membersihkan data contoh Firestore.');
+
+  const token = await getIdTokenResult(user);
+  const role = token.claims.role;
+  if (role !== 'owner' && role !== 'supervisor') {
+    throw new Error('Pembersihan data contoh Firestore memerlukan peran owner atau supervisor.');
+  }
+
+  const snapshot = await getDocs(collection(db, 'ppks'));
+  let deletedCount = 0;
+  for (const item of snapshot.docs) {
+    const data = item.data() as Partial<PPKSRecord>;
+    const candidate = {
+      id: String(data.id || item.id),
+      namaLengkap: String(data.namaLengkap || ''),
+    };
+    if (!isLegacySamplePPKS(candidate)) continue;
+    await deleteDoc(doc(db, 'ppks', item.id));
+    deletedCount++;
+  }
+  return deletedCount;
 }
