@@ -134,6 +134,24 @@ export const GoogleWorkspaceModal: React.FC<GoogleWorkspaceModalProps> = ({
     return () => unsubscribe();
   }, []);
 
+  useEffect(() => {
+    const configured = settings.googleSpreadsheetUrl?.trim() || '';
+    if (!configured || configured.includes('1yA8KemensosODHIVSumut2026_LiveSync')) {
+      setSpreadsheetIdInput('');
+      return;
+    }
+    try {
+      if (extractSpreadsheetId(configured) === GOOGLE_SIPANDU_RESOURCES.responseSpreadsheetId) {
+        setSpreadsheetIdInput('');
+        return;
+      }
+    } catch {
+      setSpreadsheetIdInput('');
+      return;
+    }
+    setSpreadsheetIdInput(configured);
+  }, [settings.googleSpreadsheetUrl]);
+
   if (!isOpen) return null;
 
   const handleSignIn = async () => {
@@ -241,7 +259,7 @@ export const GoogleWorkspaceModal: React.FC<GoogleWorkspaceModalProps> = ({
       const refreshedRows = await readSpreadsheetData(target, 'SIPANDU!A1:K100');
       setSheetRows(refreshedRows);
       if (failures.length) {
-        setStatusMessage({ type: 'error', text: `Ekspor belum tuntas: ${inserted} baris baru, ${alreadyPresent} sudah ada, ${failures.length} gagal. Penyebab pertama: ${failures[0]}` });
+        setStatusMessage({ type: 'error', text: `Ekspor dihentikan saat memproses ${failures[0]}. ${inserted} baris baru ditambahkan, ${alreadyPresent} sudah ada; record sisanya belum dicoba. Periksa akses/format database lalu ulangi ekspor.` });
       } else {
         setStatusMessage({ type: 'success', text: `Google Sheets tersinkron: ${inserted} baris baru ditambahkan; ${alreadyPresent} sudah ada sehingga tidak digandakan. Target: tab SIPANDU.` });
       }
@@ -481,7 +499,7 @@ export const GoogleWorkspaceModal: React.FC<GoogleWorkspaceModalProps> = ({
                       {googleUser ? googleUser.email : 'Hubungkan akun Google untuk sinkronisasi Drive, Sheets, dan Forms.'}
                     </p>
                     <span className="text-[10px] text-sky-300 font-mono">
-                      Status Token: {token ? 'Aktif (In-Memory Safe)' : 'Menunggu Otorisasi'}
+                      Status Token: {token ? 'Tersedia di sesi ini; validitas diuji saat API dipanggil' : (googleUser ? 'Perlu otorisasi ulang' : 'Belum diotorisasi')}
                     </span>
                   </div>
                 </div>
