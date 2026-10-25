@@ -71,12 +71,18 @@ function mergePPKSRecords(localRecords: PPKSRecord[], cloudRecords: PPKSRecord[]
       const name = normalizePersonText(record.namaLengkap);
       const phone = normalizePhone(record.noHpWa);
       const timestamp = String(record.timestamp || '').trim();
-      for (const [candidateKey, candidate] of merged.entries()) {
-        if (!name || normalizePersonText(candidate.namaLengkap) !== name) continue;
+      const sameNameCandidates = [...merged.entries()].filter(([, candidate]) =>
+        name && normalizePersonText(candidate.namaLengkap) === name
+      );
+      for (const [candidateKey, candidate] of sameNameCandidates) {
         const sameTimestamp = !!timestamp && timestamp === String(candidate.timestamp || '').trim();
         const candidatePhone = normalizePhone(candidate.noHpWa);
         const samePhone = !!phone && phone === candidatePhone;
-        if (sameTimestamp || samePhone) {
+        // If the new import finally includes a NIK and the old cached row does
+        // not, exact-name matching is safe only when that name is unique locally.
+        // Duplicate names still require timestamp/phone evidence.
+        const safeNIKEnrichment = !candidate.nik && !!record.nik && sameNameCandidates.length === 1;
+        if (sameTimestamp || samePhone || safeNIKEnrichment) {
           existingKey = candidateKey;
           existing = candidate;
           break;
