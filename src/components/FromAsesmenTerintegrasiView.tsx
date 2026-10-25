@@ -274,6 +274,30 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
     setStatusMessage({ type: 'success', text: 'Jawaban Form Asesmen Terintegrasi resmi tersimpan pada data PPKS.' });
   };
 
+  const handlePrint = async () => {
+    const shell = document.querySelector('.official-assessment-shell');
+    const images = shell ? Array.from(shell.querySelectorAll('img')) : [];
+    await Promise.all(images.map((image) => {
+      if (image.complete && image.naturalWidth > 0) return Promise.resolve();
+      return new Promise<void>((resolve) => {
+        let finished = false;
+        const finish = () => {
+          if (finished) return;
+          finished = true;
+          window.clearTimeout(timer);
+          image.removeEventListener('load', finish);
+          image.removeEventListener('error', finish);
+          resolve();
+        };
+        const timer = window.setTimeout(finish, 2500);
+        image.addEventListener('load', finish, { once: true });
+        image.addEventListener('error', finish, { once: true });
+      });
+    }));
+    if (document.fonts?.ready) await document.fonts.ready;
+    window.print();
+  };
+
   const renderAnswer = (item: OfficialField) => {
     const value = answers[item.key] ?? (item.key === 'q25' ? '-' : '');
     if (item.kind === 'single' || item.kind === 'multi') {
@@ -357,7 +381,7 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
           <button type="button" onClick={handleSave} disabled={!currentPPKS} className="inline-flex items-center gap-2 rounded-lg bg-emerald-700 px-4 py-2 text-xs font-bold text-white disabled:opacity-50">
             <Save className="h-4 w-4" /> Simpan Form
           </button>
-          <button type="button" onClick={() => window.print()} className="inline-flex items-center gap-2 rounded-lg border border-sky-400/40 bg-sky-950/50 px-4 py-2 text-xs font-bold text-white">
+          <button type="button" onClick={() => { void handlePrint(); }} className="inline-flex items-center gap-2 rounded-lg border border-sky-400/40 bg-sky-950/50 px-4 py-2 text-xs font-bold text-white">
             <Printer className="h-4 w-4" /> Cetak / Simpan PDF
           </button>
           <button type="button" onClick={handleReset} className="inline-flex items-center gap-2 rounded-lg border border-rose-400/40 bg-rose-950/40 px-4 py-2 text-xs font-bold text-white">
@@ -378,29 +402,26 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
           {page.hasLetterhead && (
             <>
               <div className="official-letterhead" aria-label="Kop surat resmi Form Asesmen Terintegrasi (terkunci)">
-                <div className="official-letterhead-logo">
-                  <svg viewBox="0 0 100 100" aria-hidden="true">
-                    <path d="M43 76 C38 61 23 49 20 34 C39 40 49 52 50 70" fill="#194a86" />
-                    <path d="M45 70 C45 46 53 24 75 12 C71 37 60 55 47 72" fill="#008d45" />
-                    <path d="M48 74 C55 51 69 38 87 34 C80 52 67 66 48 74" fill="#009847" />
-                    <path d="M46 77 C65 66 81 65 92 69 C76 82 60 83 46 77" fill="#f5c400" />
-                    <path d="M42 81 C58 81 72 87 78 93 C57 96 44 90 42 81" fill="#f5c400" />
-                    <circle cx="30" cy="20" r="8" fill="#194a86" />
-                  </svg>
-                  <small>KEMENTERIAN SOSIAL<br />REPUBLIK INDONESIA</small>
+                <div className="official-letterhead-logo official-kemensos-logo">
+                  <img
+                    src={import.meta.env.BASE_URL + 'uploads/Logo%20Kemensos.png'}
+                    alt="Logo resmi Kementerian Sosial Republik Indonesia"
+                    loading="eager"
+                    decoding="sync"
+                  />
                 </div>
                 <div className="official-letterhead-title">
                   FORM ASESMEN TERINTEGRASI
                   <span>DIREKTORAT JENDERAL REHABILITASI SOSIAL</span>
                 </div>
-                <div className="official-letterhead-logo">
-                  <svg viewBox="0 0 100 100" aria-hidden="true">
-                    <ellipse cx="50" cy="42" rx="43" ry="26" fill="none" stroke="#ed1c2e" strokeWidth="5" transform="rotate(-23 50 42)" />
-                    <path d="M17 82 L50 22 L82 82 Z" fill="#4d9a87" />
-                    <path d="M50 22 L67 54 L50 82 L34 54 Z" fill="#f5cf68" />
-                    <path d="M50 22 L67 54 L50 82 L62 82 L85 39 L69 8 Z" fill="#a7b7eb" opacity=".9" />
-                  </svg>
-                  <div className="official-logo-atensi-text">ATENSI</div>
+                <div className="official-letterhead-logo official-atensi-logo">
+                  <img
+                    src="https://nanasitimur.berdesa.id/desa/upload/artikel/sedang_UyLR7_1751267865_atensi.webp"
+                    alt="Logo ATENSI"
+                    loading="eager"
+                    decoding="sync"
+                    referrerPolicy="no-referrer"
+                  />
                 </div>
               </div>
               <div className="official-letterhead-lock">Kop surat resmi dikunci</div>
