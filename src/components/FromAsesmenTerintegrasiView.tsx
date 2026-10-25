@@ -1,1172 +1,455 @@
-import React, { useState, useEffect } from 'react';
-import { PPKSRecord, IntegratedFormData } from '../types';
-import {
-  FileText,
-  Search,
-  Upload,
-  Printer,
-  Save,
-  RotateCcw,
-  Check,
-  CheckCircle2,
-  FileCheck,
-  Camera,
-  Image as ImageIcon,
-  Building,
-  UserCheck,
-  HeartPulse,
-  DollarSign,
-  Brain,
-  Award,
-} from 'lucide-react';
-import { KemensosLogo } from './KemensosLogo';
-import { PrivateDriveImage } from './PrivateDriveImage';
+import React, { useEffect, useMemo, useState } from 'react';
+import { CheckCircle2, FileText, Printer, RotateCcw, Save, Search } from 'lucide-react';
+import { PPKSRecord } from '../types';
+import '../officialAssessment.css';
 
-interface FromAsesmenTerintegrasiViewProps {
-  ppksList: PPKSRecord[];
-  onUpdatePPKS: (updated: PPKSRecord) => void;
+type AnswerValue = string | string[];
+type FieldKind = 'text' | 'date' | 'number' | 'textarea' | 'single' | 'multi';
+interface OfficialField {
+  key: string; number?: number; label: string; kind?: FieldKind;
+  options?: string[]; optional?: boolean; placeholder?: string;
 }
+interface OfficialGroup { title?: string; tone?: 'gray' | 'beige' | 'white'; fields: OfficialField[]; }
+interface OfficialPage { groups: OfficialGroup[]; hasLetterhead?: boolean; }
+interface FromAsesmenTerintegrasiViewProps { ppksList: PPKSRecord[]; onUpdatePPKS: (updated: PPKSRecord) => void; }
 
-const defaultEmptyForm: IntegratedFormData = {
-  nomorRegistrasi: '',
-  noBpjs: '',
-  statusPernikahan: '',
-  pendidikanTerakhir: '',
-  pekerjaan: '',
-  kontakDaruratNama: '',
-  kontakDaruratHubungan: '',
-  kontakDaruratNoHp: '',
-  tahunDiagnosa: '',
-  faskesPdpRujukan: '',
-  statusArv: '',
-  regimenArv: '',
-  kepatuhanArv: '',
-  nilaiCd4Terakhir: '',
-  viralLoadTerakhir: '',
-  riwayatInfeksiOportunistik: '',
-  kendalaAksesPengobatan: '',
-  statusKeterbukaanStatus: '',
-  dukunganKeluarga: '',
-  pengalamanStigmaDiskriminasi: '',
-  kondisiTempatTinggal: '',
-  kondisiKelayakanRumah: '',
-  penghasilanBulanan: '',
-  pengeluaranKebutuhanObatNutrisi: '',
-  tanggunganKeluarga: 0,
-  kepemilikanUsaha: '',
-  minatKeterampilanAtensi: '',
-  desilKemiskinan: 0,
-  skorKecemasan: '',
-  skorDepresi: '',
-  penerimaanDiri: '',
-  doronganBunuhDiri: '',
-  kebutuhanKonselingSosial: '',
-  rekomendasiBantuanNutrisi: false,
-  rekomendasiBantuanModalUsaha: false,
-  rekomendasiBantuanMedisTransport: false,
-  rekomendasiRujukanRehabilitasi: false,
-  catatanIntervensiKhusus: '',
-  rencanaAksiPendamping: '',
-  jadwalMonitoringBerikutnya: '',
-  namaAsesor: '',
-  nipAsesor: '',
-  supervisorKemensos: '',
+const field = (number: number, label: string, kind: FieldKind = 'text', options?: string[], optional = false): OfficialField => ({
+  key: 'q' + number, number, label, kind, options, optional,
+});
+const textField = (number: number, label: string, optional = false) => field(number, label, 'text', undefined, optional);
+const areaField = (number: number, label: string, optional = false) => field(number, label, 'textarea', undefined, optional);
+const oneField = (number: number, label: string, options: string[], optional = false) => field(number, label, 'single', options, optional);
+const manyField = (number: number, label: string, options: string[], optional = false) => field(number, label, 'multi', options, optional);
+
+const agama = ['Islam', 'Kristen', 'Katolik', 'Hindu', 'Budha', 'Konghuchu', 'Lainnya'];
+const bantuan = ['Belum Menerima Bantuan', 'PKH', 'Sembako', 'KIS PBI JK', 'KIP', 'Prokus', 'Lainnya'];
+const pendidikan = ['Tidak Sekolah', 'Belum Sekolah', 'SD', 'SMP', 'SMA', 'Perguruan Tinggi'];
+const statusKawin = ['Belum Kawin', 'Kawin', 'Cerai Hidup', 'Cerai Mati'];
+const jenisKelamin = ['Laki-laki', 'Perempuan'];
+const penghasilan = ['< Rp500.000,-', 'Rp500.000,- – < Rp1.500.000,-', 'Rp1.500.000,- – < Rp2.500.000,-', 'Rp2.500.000,- – < Rp3.500.000,-', '>= Rp3.500.000,-'];
+const komponenLayanan = [
+  'Pemenuhan Kebutuhan Hidup Layak', 'Perawatan dan Pengasuhan Sosial', 'Dukungan Keluarga',
+  'Terapi (Fisik, Psikososial, Mental Spiritual)', 'Pelatihan Vokasional/Pembinaan Kewirausahaan',
+  'Bantuan dan Asistensi Sosial', 'Dukungan Aksesibilitas',
+];
+
+const pages: OfficialPage[] = [
+  {
+    hasLetterhead: true,
+    groups: [
+      { title: 'A. ASESMEN CEPAT (RAPID ASSESSMENT)', tone: 'gray', fields: [
+        field(1, 'Tanggal/Bulan/Tahun Asesmen', 'date'),
+        textField(2, 'Nama Petugas Asesmen'),
+        textField(3, 'Unit Kerja Petugas Asesmen (nama sentra terpadu/sentra)'),
+      ]},
+      { title: 'PROFILE LENGKAP PPKS', tone: 'beige', fields: [] },
+      { title: 'ALAMAT SESUAI KTP', tone: 'beige', fields: [
+        textField(4, 'Provinsi'), textField(5, 'Kabupaten/Kota'), textField(6, 'Kecamatan'),
+        textField(7, 'Desa/Kelurahan'), textField(8, 'Dusun, RT/RW'), textField(9, 'Alamat Lengkap (Nama Jalan & No Rumah)'),
+      ]},
+      { title: 'ALAMAT SESUAI DOMISILI', tone: 'beige', fields: [
+        textField(10, 'Provinsi'), textField(11, 'Kabupaten/Kota'), textField(12, 'Kecamatan'),
+        textField(13, 'Desa/Kelurahan'), textField(14, 'Dusun, RT/RW'), textField(15, 'Alamat Lengkap (Nama Jalan & No Rumah)'),
+      ]},
+      { title: 'IDENTITAS PPKS', tone: 'beige', fields: [
+        textField(16, 'Nama Lengkap'), textField(17, 'Tempat Lahir'), field(18, 'Tanggal/bln/th Lahir', 'date'),
+        oneField(19, 'Jenis Kelamin', jenisKelamin), textField(20, 'Asal Daerah'), textField(21, 'Suku'),
+        oneField(22, 'Agama', agama), { ...textField(23, 'NIK **'), placeholder: '16 digit NIK' },
+        textField(24, 'Nomor Kartu Keluarga **'),
+      ]},
+    ],
+  },
+  {
+    groups: [
+      { tone: 'white', fields: [
+        { ...textField(25, 'Nomor Akta Lahir **'), placeholder: '-' },
+        oneField(26, 'Apakah sudah masuk DTKS?', ['Belum', 'Sudah']),
+        oneField(27, 'Bantuan yang diterima saat ini', bantuan),
+        oneField(28, 'Pendidikan Terakhir', pendidikan),
+        oneField(29, 'Status Kawin', statusKawin),
+      ]},
+      { title: 'PROFIL PENGAMPU PPKS [opsional]', tone: 'beige', fields: [
+        textField(30, 'Nama Lengkap', true), textField(31, 'Nomor Hp/ Telepon', true),
+        oneField(32, 'Hubungan dengan PPKS', ['Ayah', 'Ibu', 'Kakek', 'Nenek', 'Saudara Kandung', 'Lainnya'], true),
+        textField(33, 'Tempat Lahir', true), field(34, 'Tanggal/bulan/tahun Lahir', 'date', undefined, true),
+        oneField(35, 'Jenis Kelamin', jenisKelamin, true), textField(36, 'Asal Daerah', true),
+        textField(37, 'Suku', true), oneField(38, 'Agama', agama, true),
+        textField(39, 'NIK **', true), textField(40, 'Nomor KK **', true),
+        oneField(41, 'Apakah sudah masuk DTKS?', ['Belum', 'Sudah'], true),
+        oneField(42, 'Bantuan yang diterima saat ini', bantuan, true),
+        oneField(43, 'Pendidikan terakhir', pendidikan, true),
+      ]},
+    ],
+  },
+  {
+    groups: [
+      { tone: 'white', fields: [
+        oneField(44, 'Status Kawin', statusKawin), textField(45, 'Pekerjaan'),
+        oneField(46, 'Penghasilan per Bulan', penghasilan),
+      ]},
+      { title: 'KONDISI PPKS', tone: 'gray', fields: [
+        oneField(47, 'Kategori PPKS', ['Anak', 'Lansia', 'Disabilitas', 'Korban Bencana dan Kedaruratan']),
+        manyField(48, 'Ragam Penyandang Disabilitas', [
+          'Fisik – amputasi/lumpuh layuh/kaku', 'Paraplegi, cerebral palsy (CP)', 'Akibat stroke', 'Akibat kusta',
+          'Dwarfisme (kerdil)', 'Intelektual – lambat belajar', 'Disabilitas grahita', 'Down syndrome',
+          'Mental – skizofrenia', 'Bipolar', 'Depresi', 'Ansietas', 'Gangguan kepribadian', 'Autis',
+          'Hiperaktif', 'Sensorik – netra', 'Sensorik – rungu', 'Sensorik – wicara', 'Ganda/Multi',
+        ]),
+        oneField(49, 'Tingkatan Disabilitas', ['Ringan', 'Sedang', 'Berat']),
+        oneField(50, 'Apakah sudah memiliki kartu penyandang Disabilitas?', ['Ya', 'Tidak']),
+        manyField(51, 'Ragam Anak', [
+          'Anak dalam situasi darurat/pengungsi/kerusuhan/bencana/konflik', 'Anak berhadapan dengan hukum',
+          'Anak kelompok minoritas dan terisolasi', 'Anak dieksploitasi secara ekonomi dan/atau seksual',
+          'Korban penyalahgunaan narkotika, alkohol, psikotropika, dan zat adiktif', 'Korban pornografi',
+          'Anak dengan HIV/AIDS', 'Korban penculikan, penjualan, dan/atau perdagangan',
+          'Korban kekerasan fisik dan/atau psikis', 'Korban kejahatan seksual', 'Korban jaringan terorisme',
+          'Anak penyandang disabilitas', 'Korban perlakuan salah dan penelantaran',
+          'Anak dengan perilaku sosial menyimpang', 'Korban stigmatisasi terkait kondisi orang tua',
+        ]),
+      ]},
+    ],
+  },
+  {
+    groups: [
+      { tone: 'white', fields: [
+        manyField(52, 'Ragam Korban Bencana dan Kedaruratan', [
+          'Tuna Susila', 'Gelandangan', 'Pengemis', 'Pemulung', 'Kelompok Minoritas',
+          'Bekas Warga Binaan Lembaga Pemasyarakatan (BWBLP)', 'Orang dengan HIV/AIDS (ODHA)',
+          'Korban Penyalahgunaan NAPZA', 'Korban trafficking', 'Korban tindak kekerasan',
+          'Pekerja Migran Indonesia Bermasalah (PMIB)', 'Perempuan rawan sosial ekonomi',
+          'Korban bencana alam', 'Korban bencana sosial',
+        ]),
+        oneField(53, 'Jika kategori Lansia atau Disabilitas, membutuhkan bantuan dalam aktivitas sehari-hari (Activity Daily Living)?', ['Ya', 'Tidak']),
+        oneField(54, 'Kondisi Fisik PPKS', ['Sehat', 'Sakit']),
+        areaField(55, 'Jelaskan Kondisi Fisik (kesehatan, mobilitas, dll)'),
+        areaField(56, 'Kondisi Psikologis PPKS'), areaField(57, 'Kondisi sosial PPKS'),
+        areaField(58, 'Kondisi Mental Spiritual'), areaField(59, 'Kondisi Keluarga'),
+      ]},
+      { title: 'KONDISI SOSIAL EKONOMI', tone: 'gray', fields: [
+        oneField(60, 'Apakah Kepala Keluarga Bekerja?', ['Tidak', 'Iya']),
+        textField(61, 'Pekerjaan'), oneField(62, 'Penghasilan Keluarga per Bulan', penghasilan),
+        field(63, 'Jumlah Tanggungan', 'number'),
+        oneField(64, 'Apakah pernah tidak makan dalam sehari?', ['Tidak', 'Pernah khawatir tidak makan', 'Pernah tidak makan']),
+        field(65, 'Pengeluaran Pangan per Bulan (Rp)', 'number'),
+        field(66, 'Pengeluaran Total per Bulan (Rp)', 'number'),
+        oneField(67, 'Apakah ada pengeluaran pakaian dalam setahun?', ['Tidak', 'Ya']),
+      ]},
+      { title: 'KONDISI TEMPAT TINGGAL', tone: 'gray', fields: [
+        oneField(68, 'Tempat Tinggal saat ini', ['Milik Sendiri', 'Sewa', 'Menumpang', 'Lembaga', 'Telantar/Menggelandang']),
+        oneField(69, 'Jika milik sendiri; bukti kepemilikan tanah', ['Sertifikat Hak Milik', 'Hak Guna Bangunan', 'Girik']),
+        oneField(70, 'Tinggal Bersama', ['Sendiri', 'Keluarga Inti', 'Keluarga Besar', 'Lainnya']),
+        field(71, 'Luas Tempat Tinggal (m²)', 'number'),
+      ]},
+    ],
+  },
+  {
+    groups: [
+      { tone: 'white', fields: [
+        oneField(72, 'Kondisi Bangunan', ['Permanen', 'Semi Permanen', 'Lainnya']),
+        oneField(73, 'Atap Tempat Tinggal', ['Seng', 'Genteng', 'Asbes', 'Lainnya']),
+        oneField(74, 'Lantai Tempat Tinggal', ['Tanah', 'Ubin', 'Kayu']),
+        oneField(75, 'Dinding Tempat Tinggal', ['Kayu', 'Bambu', 'Seng', 'Kawat', 'Batu Bata']),
+        oneField(76, 'Apakah memiliki jamban/MCK?', ['Tidak', 'Ya']),
+        oneField(77, 'Sumber Penerangan', ['Bukan Listrik', 'Listrik 450 VA', 'Listrik 900 VA', 'Lainnya']),
+        oneField(78, 'Sumber Air Bersih', ['PDAM', 'Mata Air', 'Sumur', 'Lainnya']),
+      ]},
+      { title: 'B. PERMASALAHAN, POTENSI & RENCANA INTERVENSI PPKS', tone: 'gray', fields: [
+        areaField(79, 'Permasalahan (Gambaran Kasus)'), areaField(80, 'Pelayanan yang pernah diterima'),
+        areaField(81, 'Potensi Diri (Minat Bakat, Keterampilan, Motivasi, Hasil Test IQ)'),
+        areaField(82, 'Potensi Sumber (Organisasi, Lingkungan, Pendidikan, Ekonomi, Keagamaan, Alam)'),
+        manyField(83, 'Komponen Layanan Yang Dibutuhkan', komponenLayanan),
+        areaField(84, 'Uraian Komponen Layanan'), areaField(85, 'Pihak yang terlibat dalam rencana intervensi'),
+      ]},
+      { title: 'C. INTERVENSI PPKS [SKIP]', tone: 'gray', fields: [
+        manyField(86, 'Komponen Layanan yang diberikan', komponenLayanan),
+        areaField(87, 'Uraian Komponen Layanan'), field(88, 'Estimasi Jumlah Total Bantuan (Rp)', 'number'),
+        textField(89, 'Waktu Pemberian Layanan (Bulan/Tahun)'), textField(90, 'Pihak yang terlibat dalam intervensi'),
+      ]},
+    ],
+  },
+  {
+    groups: [
+      { title: 'D. RENCANA INTERVENSI LANJUTAN (KOMPLEMENTARITAS)', tone: 'gray', fields: [
+        manyField(91, 'Bentuk Layanan (bisa lebih dari 1)', [
+          'Program Kewirausahaan', 'Program Perbaikan Rumah melalui Rumah Usaha Sederhana',
+          'Program Keluarga Harapan', 'Bantuan dari Dana Hibah', 'Pemberian Alat Bantu',
+          'Pelatihan Keterampilan Kerja', 'Lainnya',
+        ]),
+      ]},
+      { title: 'KESIMPULAN/RESUME KASUS', tone: 'beige', fields: [
+        { key: 'kesimpulanResumeKasus', label: 'Kesimpulan/Resume Kasus', kind: 'textarea' },
+        { key: 'rekomendasiCatatanPetugas', label: 'Rekomendasi/Catatan Petugas', kind: 'textarea' },
+      ]},
+    ],
+  },
+];
+
+const emptyAnswers = (): Record<string, AnswerValue> => {
+  const values: Record<string, AnswerValue> = { metaSatker: '', metaYear: '', metaSequence: '', q25: '-' };
+  for (let n = 1; n <= 91; n++) values['q' + n] = '';
+  values.q48 = []; values.q51 = []; values.q52 = []; values.q83 = []; values.q86 = []; values.q91 = [];
+  values.kesimpulanResumeKasus = ''; values.rekomendasiCatatanPetugas = '';
+  return values;
 };
 
-export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewProps> = ({
-  ppksList,
-  onUpdatePPKS,
-}) => {
+function answersForRecord(record?: PPKSRecord): Record<string, AnswerValue> {
+  const values = emptyAnswers();
+  if (record?.officialAssessment) {
+    Object.entries(record.officialAssessment).forEach(([key, value]) => { values[key] = value; });
+  }
+  if (record) {
+    if (!String(values.q16 || '').trim()) values.q16 = record.namaLengkap || '';
+    if (!String(values.q23 || '').trim()) values.q23 = record.nik || '';
+    if (!String(values.q5 || '').trim()) values.q5 = record.kotaDomisili || '';
+    if (!String(values.q19 || '').trim()) values.q19 = record.jenisKelamin || '';
+    // The master record stores one address (current domicile); do not assume it is also the KTP address.
+    if (!String(values.q15 || '').trim()) values.q15 = record.alamatLengkap || '';
+    if (!String(values.q25 || '').trim()) values.q25 = '-';
+  }
+  return values;
+}
+
+export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewProps> = ({ ppksList, onUpdatePPKS }) => {
   const [selectedPPKSId, setSelectedPPKSId] = useState<string>(ppksList[0]?.id || '');
-  const [formData, setFormData] = useState<IntegratedFormData>(
-    ppksList[0]?.integratedForm || defaultEmptyForm
-  );
+  const [answers, setAnswers] = useState<Record<string, AnswerValue>>(() => answersForRecord(ppksList.find((record) => record.id === selectedPPKSId)));
+  const [statusMessage, setStatusMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
-  // Photos state
-  const [fotoDiri, setFotoDiri] = useState<string>(ppksList[0]?.fotoDiri || '');
-  const [fotoKtp, setFotoKtp] = useState<string>(ppksList[0]?.fotoKtp || '');
-  const [fotoKk, setFotoKk] = useState<string>(ppksList[0]?.fotoKk || '');
-  const [fotoRumah, setFotoRumah] = useState<string>(ppksList[0]?.fotoRumah || '');
-
-  const [activeSheetTab, setActiveSheetTab] = useState<number>(1);
-  const [saveSuccess, setSaveSuccess] = useState<boolean>(false);
-  const [showPrintModal, setShowPrintModal] = useState<boolean>(false);
-
-  const currentPPKS = ppksList.find((p) => p.id === selectedPPKSId);
-
-  // The view may stay mounted while Google Sheets data is imported in the overlay.
-  // If its previous selection was empty/removed, automatically select the first
-  // real respondent so the integrated form updates without requiring navigation.
   useEffect(() => {
-    const selectedStillExists = ppksList.some((record) => record.id === selectedPPKSId);
-    if (selectedStillExists) return;
-    const first = ppksList[0];
-    if (!first) {
-      setSelectedPPKSId('');
-      setFormData(defaultEmptyForm);
-      setFotoDiri('');
-      setFotoKtp('');
-      setFotoKk('');
-      setFotoRumah('');
-      return;
-    }
-    setSelectedPPKSId(first.id);
-    setFormData(first.integratedForm || {
-      ...defaultEmptyForm,
-      nomorRegistrasi: first.id ? `REG-${first.id}` : '',
-    });
-    setFotoDiri(first.fotoDiri || '');
-    setFotoKtp(first.fotoKtp || '');
-    setFotoKk(first.fotoKk || '');
-    setFotoRumah(first.fotoRumah || '');
+    if (ppksList.some((record) => record.id === selectedPPKSId)) return;
+    const next = ppksList[0];
+    setSelectedPPKSId(next?.id || '');
+    setAnswers(answersForRecord(next));
   }, [ppksList, selectedPPKSId]);
 
-  // Handle selecting a PPKS from horizontal search
-  const handleSelectPPKS = (id: string) => {
+  const currentPPKS = useMemo(() => ppksList.find((record) => record.id === selectedPPKSId), [ppksList, selectedPPKSId]);
+
+  const choosePPKS = (id: string) => {
     setSelectedPPKSId(id);
-    const target = ppksList.find((p) => p.id === id);
-    if (target) {
-      setFormData(target.integratedForm || {
-        ...defaultEmptyForm,
-        nomorRegistrasi: `REG-${target.id}`,
-      });
-      setFotoDiri(target.fotoDiri);
-      setFotoKtp(target.fotoKtp);
-      setFotoKk(target.fotoKk || '');
-      setFotoRumah(target.fotoRumah || '');
-    }
+    setAnswers(answersForRecord(ppksList.find((record) => record.id === id)));
+    setStatusMessage(null);
   };
 
-  // Tombol Kosongkan Form (di tengah)
-  const handleResetForm = () => {
-    if (window.confirm('Kosongkan semua isian formulir asesmen untuk responden ini?')) {
-      setFormData({
-        ...defaultEmptyForm,
-        nomorRegistrasi: `REG-MANUAL-${Date.now().toString().slice(-4)}`,
-      });
-    }
+  const updateAnswer = (key: string, value: AnswerValue) => {
+    setAnswers((current) => ({ ...current, [key]: value }));
+    setStatusMessage(null);
   };
 
-  const handleFieldChange = (key: keyof IntegratedFormData, value: any) => {
-    setFormData((prev) => ({ ...prev, [key]: value }));
+  const handleReset = () => {
+    if (!currentPPKS) {
+      setAnswers(emptyAnswers());
+      setStatusMessage({ type: 'success', text: 'Formulir kosong. Pilih responden ketika data tersedia.' });
+      return;
+    }
+    if (!window.confirm('Kosongkan semua jawaban asesmen untuk responden terpilih? Nama dan NIK master PPKS tetap dipertahankan.')) return;
+    const blank = emptyAnswers();
+    blank.q16 = currentPPKS.namaLengkap || '';
+    blank.q23 = currentPPKS.nik || '';
+    blank.q9 = currentPPKS.alamatLengkap || '';
+    blank.q15 = currentPPKS.alamatLengkap || '';
+    setAnswers(blank);
+    setStatusMessage({ type: 'success', text: 'Isian asesmen dikosongkan. Tekan Simpan Form agar perubahan tersimpan.' });
   };
 
   const handleSave = () => {
-    if (!currentPPKS) return;
+    if (!currentPPKS) {
+      setStatusMessage({ type: 'error', text: 'Pilih responden PPKS terlebih dahulu. Form tidak disimpan ke data contoh.' });
+      return;
+    }
+    const nikFromForm = typeof answers.q23 === 'string' ? answers.q23.replace(/\D/g, '') : '';
+    if (nikFromForm && !/^\d{16}$/.test(nikFromForm)) {
+      setStatusMessage({ type: 'error', text: 'NIK harus terdiri dari 16 digit. Periksa kolom 23 NIK sebelum menyimpan.' });
+      return;
+    }
+    const clean: Record<string, AnswerValue> = {};
+    Object.entries(answers).forEach(([key, value]) => { clean[key] = Array.isArray(value) ? value.filter(Boolean) : String(value ?? ''); });
     const updated: PPKSRecord = {
       ...currentPPKS,
-      integratedForm: formData,
-      fotoDiri,
-      fotoKtp,
-      fotoKk,
-      fotoRumah,
+      namaLengkap: (typeof clean.q16 === 'string' && clean.q16.trim()) ? clean.q16.trim() : currentPPKS.namaLengkap,
+      nik: nikFromForm || currentPPKS.nik || '',
+      officialAssessment: clean,
       statusAsesmen: 'Terintegrasi',
     };
     onUpdatePPKS(updated);
-    setSaveSuccess(true);
-    setTimeout(() => setSaveSuccess(false), 3000);
+    setAnswers(clean);
+    setStatusMessage({ type: 'success', text: 'Jawaban Form Asesmen Terintegrasi resmi tersimpan pada data PPKS.' });
   };
 
-  const handleTriggerPrint = () => {
-    window.print();
-  };
-
-  const handleCustomPhotoUpload = (
-    e: React.ChangeEvent<HTMLInputElement>,
-    type: 'diri' | 'ktp' | 'kk' | 'rumah'
-  ) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const url = event.target?.result as string;
-      if (type === 'diri') setFotoDiri(url);
-      if (type === 'ktp') setFotoKtp(url);
-      if (type === 'kk') setFotoKk(url);
-      if (type === 'rumah') setFotoRumah(url);
-    };
-    reader.readAsDataURL(file);
+  const renderAnswer = (item: OfficialField) => {
+    const value = answers[item.key] ?? (item.key === 'q25' ? '-' : '');
+    if (item.kind === 'single' || item.kind === 'multi') {
+      const selected = Array.isArray(value) ? value : (String(value) ? [String(value)] : []);
+      return (
+        <div className="official-options">
+          {(item.options || []).map((option, index) => {
+            const checked = selected.includes(option);
+            return (
+              <label className="official-option" key={option}>
+                <input
+                  type={item.kind === 'multi' ? 'checkbox' : 'radio'}
+                  name={item.key}
+                  checked={checked}
+                  onChange={() => {
+                    if (item.kind === 'multi') updateAnswer(item.key, checked ? selected.filter((v) => v !== option) : [...selected, option]);
+                    else updateAnswer(item.key, checked ? '' : option);
+                  }}
+                />
+                <span className="official-option-number">{index + 1}.</span><span>{option}</span>
+              </label>
+            );
+          })}
+        </div>
+      );
+    }
+    if (item.kind === 'textarea') {
+      return <textarea className="official-input official-textarea" rows={3} value={typeof value === 'string' ? value : value.join(', ')} onChange={(event) => updateAnswer(item.key, event.target.value)} aria-label={item.label} />;
+    }
+    return (
+      <input
+        className="official-input"
+        type={item.kind === 'date' ? 'date' : item.kind === 'number' ? 'number' : 'text'}
+        inputMode={[23, 24, 39, 40].includes(item.number || -1) ? 'numeric' : undefined}
+        maxLength={[23, 39].includes(item.number || -1) ? 16 : undefined}
+        value={typeof value === 'string' ? value : value.join(', ')}
+        placeholder={item.placeholder || ''}
+        onChange={(event) => updateAnswer(item.key, item.number === 23 || item.number === 39 ? event.target.value.replace(/\D/g, '').slice(0, 16) : event.target.value)}
+        aria-label={item.label}
+      />
+    );
   };
 
   return (
-    <div className="space-y-6 pb-28 text-white">
-      {/* PDF RESMI — From Asesmen Terintegrasi */}
-
-
-      {/* Bingkai Judul: From Asesmen Terintegrasi */}
-      <div className="p-5 md:p-6 rounded-2xl bg-black/40 border border-rose-500/40 shadow-[0_0_24px_rgba(244,63,94,0.18)]">
-        {/* Judul From Asesmen Terintegrasi */}
-        <div className="text-center mb-6 pb-4 border-b border-rose-500/25">
-          <h2 className="text-xl md:text-2xl font-black text-white tracking-widest uppercase inline-block px-6 py-1.5 rounded-xl bg-emerald-950/90 border border-emerald-500/40 shadow-md">
-            FROM ASESMEN TERINTEGRASI
-          </h2>
-          <p className="text-xs text-sky-200 mt-2">
-            Instrumen Resmi Asesmen Komprehensif PPKS ODHIV Kementerian Sosial RI (Formulir 6 Lembar & 12 Halaman Dokumen Standar)
-          </p>
+    <div className="official-assessment-shell text-neutral-900">
+      <div className="official-toolbar mb-4 rounded-xl border border-rose-500/30 bg-black/40 p-4">
+        <div className="mb-3 flex items-center gap-2">
+          <FileText className="h-5 w-5 text-sky-300" />
+          <div>
+            <h2 className="text-base font-black uppercase tracking-wide text-white">Form Asesmen Terintegrasi</h2>
+            <p className="text-xs text-neutral-300">Pertanyaan mengikuti PDF resmi yang diberikan, nomor 1–91. Kop surat dikunci dan tidak dapat diedit.</p>
+          </div>
         </div>
 
-        {ppksList.length === 0 && (
-          <div role="status" className="mb-5 rounded-xl border border-amber-500/40 bg-amber-950/40 p-4 text-sm text-amber-100">
-            <h3 className="font-bold">Data PPKS / Asesmen belum dimuat</h3>
-            <p className="mt-1 text-xs text-amber-100/90">
-              Form ini mengambil daftar responden dari data SIPANDU. Buka Google Workspace & Cloud Hub → Google Sheets → pilih spreadsheet sumber yang benar, lalu tekan “Muat Data PPKS + Asesmen”. Setelah impor berhasil, nama responden akan muncul di pilihan ini otomatis.
-            </p>
+        {ppksList.length === 0 ? (
+          <div role="status" className="mb-3 rounded-lg border border-amber-500/40 bg-amber-950/40 p-3 text-sm text-amber-100">
+            Data PPKS belum dimuat. Pilih spreadsheet sumber di Google Workspace & Cloud Hub untuk menampilkan responden.
+          </div>
+        ) : (
+          <label className="mb-3 block text-xs font-semibold text-sky-100">
+            Pilih responden PPKS
+            <div className="relative mt-1.5">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-400" />
+              <select value={selectedPPKSId} onChange={(event) => choosePPKS(event.target.value)} className="w-full rounded-lg border border-sky-500/30 bg-black/60 py-2.5 pl-9 pr-3 text-sm text-white">
+                {ppksList.map((record) => <option key={record.id} value={record.id}>{record.namaLengkap || 'Nama belum tersedia'} — NIK {record.nik || 'belum terpetakan'} — {record.kotaDomisili || 'wilayah belum tersedia'}</option>)}
+              </select>
+            </div>
+          </label>
+        )}
+
+        {currentPPKS && (
+          <div className="mb-3 grid grid-cols-2 gap-2 rounded-lg border border-white/10 bg-black/30 p-3 text-xs sm:grid-cols-4">
+            <div><span className="block text-[10px] text-sky-200">Nama PPKS</span><strong className="break-words text-white">{currentPPKS.namaLengkap || '-'}</strong></div>
+            <div><span className="block text-[10px] text-sky-200">NIK (16 digit)</span><strong className="break-words text-white">{currentPPKS.nik || 'Belum terpetakan'}</strong></div>
+            <div><span className="block text-[10px] text-sky-200">Kota/Kabupaten</span><strong className="break-words text-white">{currentPPKS.kotaDomisili || '-'}</strong></div>
+            <div><span className="block text-[10px] text-sky-200">Status</span><strong className="text-white">{currentPPKS.statusAsesmen}</strong></div>
           </div>
         )}
 
-        {/* Menu horizontal: mencari/menggulir nama PPKS yang sudah tersinkron ke aplikasi */}
-        <div className="mb-6">
-          <label className="block text-xs font-bold text-sky-200 mb-2 uppercase tracking-wider flex items-center gap-2">
-            <Search className="w-4 h-4 text-sky-300" />
-            <span>Pilih / Gulir Nama PPKS Tersinkron:</span>
-          </label>
-          <div className="relative">
-            <select
-              value={selectedPPKSId}
-              onChange={(e) => handleSelectPPKS(e.target.value)}
-              disabled={ppksList.length === 0}
-              className="w-full py-3 px-4 rounded-xl bg-[#142618] border border-rose-500/45 text-white font-medium text-sm focus:outline-none focus:border-sky-400 focus:ring-1 focus:ring-sky-400 shadow-md cursor-pointer transition disabled:opacity-60"
-            >
-              {ppksList.length === 0 && <option value="">Belum ada data PPKS yang dimuat</option>}
-              {ppksList.map((p) => (
-                <option key={p.id} value={p.id} className="bg-[#0f1d12] text-white py-1">
-                  {p.namaLengkap} • NIK: {p.nik} • {p.kotaDomisili} (Status: {p.statusAsesmen})
-                </option>
-              ))}
-            </select>
-          </div>
-          {currentPPKS && (
-            <div className="mt-3 grid grid-cols-2 md:grid-cols-4 gap-2 rounded-xl border border-sky-400/25 bg-sky-950/20 p-3 text-xs">
-              <div><span className="block text-[10px] uppercase tracking-wide text-sky-200">Nama PPKS</span><strong className="block break-words text-white">{currentPPKS.namaLengkap || '-'}</strong></div>
-              <div><span className="block text-[10px] uppercase tracking-wide text-sky-200">NIK</span><strong className="block break-words text-white">{currentPPKS.nik || '-'}</strong></div>
-              <div><span className="block text-[10px] uppercase tracking-wide text-sky-200">Nomor HP/WA</span><strong className="block break-words text-white">{currentPPKS.noHpWa || '-'}</strong></div>
-              <div><span className="block text-[10px] uppercase tracking-wide text-sky-200">Kabupaten/Kota</span><strong className="block break-words text-white">{currentPPKS.kotaDomisili || '-'}</strong></div>
-            </div>
-          )}
-        </div>
-
-        {/* Ketika user memilih salah satu nama ppks, pada halaman akan muncul foto dengan urutan:
-            Foto Diri       ->>          Foto KTP
-            Foto KK        ->>          Foto Rumah Tampak Depan */}
-        <div className="mb-4 p-3 md:p-4 rounded-xl bg-black/50 border border-rose-500/35">
-          <div className="flex items-center justify-between mb-3 border-b border-rose-500/20 pb-2">
-            <h4 className="text-xs md:text-sm font-bold text-sky-200 uppercase tracking-wider flex items-center gap-2">
-              <ImageIcon className="w-4 h-4 text-sky-300" />
-              <span>Lampiran Berkas Foto Responden (Urutan Wajib)</span>
-            </h4>
-            <span className="text-[10px] text-neutral-400 font-mono">
-              Foto Diri → KTP → KK → Rumah Tampak Depan
-            </span>
-          </div>
-
-          <div className="grid grid-cols-2 gap-2 md:gap-3">
-            {/* 1. Foto Diri */}
-            <div className="flex min-w-0 flex-col items-center p-2 rounded-lg bg-black/60 border border-emerald-500/30">
-              <span className="text-xs font-bold text-emerald-300 mb-2">1. Foto Diri</span>
-              <div className="w-full aspect-[4/3] rounded-md overflow-hidden border border-rose-500/30 bg-black">
-                <PrivateDriveImage source={fotoDiri} alt="Foto Diri" className="h-full w-full rounded-none border-0" objectFit="contain" />
-              </div>
-              <label className="mt-1.5 text-[9px] md:text-[10px] text-sky-300 hover:underline cursor-pointer flex items-center gap-1">
-                <Upload className="w-3 h-3" />
-                <span>Ganti Foto Diri</span>
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={(e) => handleCustomPhotoUpload(e, 'diri')}
-                  className="hidden"
-                />
-              </label>
-            </div>
-
-            {/* 2. Foto KTP */}
-            <div className="flex flex-col items-center p-3 rounded-xl bg-black/60 border border-emerald-500/30">
-              <span className="text-xs font-bold text-emerald-300 mb-2">2. Foto KTP</span>
-              <div className="w-full aspect-3/4 rounded-lg overflow-hidden border border-rose-500/30 bg-black">
-                <PrivateDriveImage source={fotoKtp} alt="Foto KTP" className="h-full w-full rounded-none border-0" objectFit="contain" />
-              </div>
-              <label className="mt-2 text-[10px] text-sky-300 hover:underline cursor-pointer flex items-center gap-1">
-                <Upload className="w-3 h-3" />
-                <span>Ganti Foto KTP</span>
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={(e) => handleCustomPhotoUpload(e, 'ktp')}
-                  className="hidden"
-                />
-              </label>
-            </div>
-
-            {/* 3. Foto KK */}
-            <div className="flex flex-col items-center p-3 rounded-xl bg-black/60 border border-emerald-500/30">
-              <span className="text-xs font-bold text-emerald-300 mb-2">3. Foto KK</span>
-              <div className="w-full aspect-3/4 rounded-lg overflow-hidden border border-rose-500/30 bg-black">
-                <PrivateDriveImage source={fotoKk} alt="Foto KK" className="h-full w-full rounded-none border-0" objectFit="contain" />
-              </div>
-              <label className="mt-2 text-[10px] text-sky-300 hover:underline cursor-pointer flex items-center gap-1">
-                <Upload className="w-3 h-3" />
-                <span>Ganti Foto KK</span>
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={(e) => handleCustomPhotoUpload(e, 'kk')}
-                  className="hidden"
-                />
-              </label>
-            </div>
-
-            {/* 4. Foto Rumah Tampak Depan */}
-            <div className="flex flex-col items-center p-3 rounded-xl bg-black/60 border border-emerald-500/30">
-              <span className="text-xs font-bold text-emerald-300 mb-2">
-                4. Foto Rumah Tampak Depan
-              </span>
-              <div className="w-full aspect-3/4 rounded-lg overflow-hidden border border-rose-500/30 bg-black">
-                <PrivateDriveImage source={fotoRumah} alt="Foto Rumah Tampak Depan" className="h-full w-full rounded-none border-0" objectFit="contain" />
-              </div>
-              <label className="mt-2 text-[10px] text-sky-300 hover:underline cursor-pointer flex items-center gap-1">
-                <Upload className="w-3 h-3" />
-                <span>Ganti Foto Rumah</span>
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={(e) => handleCustomPhotoUpload(e, 'rumah')}
-                  className="hidden"
-                />
-              </label>
-            </div>
-          </div>
-        </div>
-
-        {/* Tombol Kosongkan Form (berada di tengah) */}
-        <div className="my-6 text-center">
-          <button
-            type="button"
-            onClick={handleResetForm}
-            className="py-2.5 px-6 rounded-xl font-bold text-xs uppercase tracking-wider text-rose-200 bg-rose-950/70 hover:bg-rose-900 border border-rose-500/50 shadow-md inline-flex items-center gap-2 cursor-pointer active:scale-95 transition"
-          >
-            <RotateCcw className="w-4 h-4 text-rose-400" />
-            <span>Tombol Kosongkan Form</span>
+        <div className="flex flex-wrap gap-2">
+          <button type="button" onClick={handleSave} disabled={!currentPPKS} className="inline-flex items-center gap-2 rounded-lg bg-emerald-700 px-4 py-2 text-xs font-bold text-white disabled:opacity-50">
+            <Save className="h-4 w-4" /> Simpan Form
           </button>
-        </div>
-
-        {/* Template From Asesmen Terintegrasi 6 lembar yang bisa diisi oleh user saat asesmen ke lapangan */}
-        <div className="p-5 md:p-6 rounded-2xl bg-black/60 border border-rose-500/40">
-          {/* Sub-tabs untuk memilih lembar form (1-6) */}
-          <div className="flex items-center gap-1.5 overflow-x-auto pb-3 mb-5 border-b border-rose-500/25 no-scrollbar">
-            {[1, 2, 3, 4, 5, 6].map((num) => (
-              <button
-                key={num}
-                type="button"
-                onClick={() => setActiveSheetTab(num)}
-                className={`py-2 px-3 rounded-lg text-xs font-bold whitespace-nowrap transition cursor-pointer ${
-                  activeSheetTab === num
-                    ? 'bg-emerald-800 text-white border border-rose-500/50 shadow-sm'
-                    : 'bg-black/40 text-neutral-400 hover:text-white border border-transparent'
-                }`}
-              >
-                Lembar {num}
-              </button>
-            ))}
-          </div>
-
-          {/* LEMBAR 1: Identitas & Administrasi PPKS */}
-          {activeSheetTab === 1 && (
-            <div className="space-y-4">
-              <div className="border-b border-rose-500/20 pb-2">
-                <h4 className="text-sm font-bold text-sky-200 uppercase">
-                  LEMBAR 1: Identitas & Administrasi PPKS ODHIV
-                </h4>
-                <p className="text-[11px] text-neutral-300">
-                  Data legalitas kependudukan, kepesertaan jaminan kesehatan, dan kontak darurat pendamping.
-                </p>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
-                <div>
-                  <label className="block text-neutral-300 font-semibold mb-1">
-                    Nomor Registrasi Asesmen:
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.nomorRegistrasi}
-                    onChange={(e) => handleFieldChange('nomorRegistrasi', e.target.value)}
-                    placeholder=""
-                    className="w-full p-2 rounded bg-black/70 border border-rose-500/30 text-white font-mono"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-neutral-300 font-semibold mb-1">
-                    No. BPJS Kesehatan / KIS:
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.noBpjs}
-                    onChange={(e) => handleFieldChange('noBpjs', e.target.value)}
-                    placeholder=""
-                    className="w-full p-2 rounded bg-black/70 border border-rose-500/30 text-white font-mono"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-neutral-300 font-semibold mb-1">
-                    Status Pernikahan:
-                  </label>
-                  <select
-                    value={formData.statusPernikahan}
-                    onChange={(e) => handleFieldChange('statusPernikahan', e.target.value)}
-                    className="w-full p-2 rounded bg-black/70 border border-rose-500/30 text-white"
-                  >
-                    <option value="">Pilih status pernikahan</option>
-                    <option value="Belum Menikah">Belum Menikah</option>
-                    <option value="Menikah (Pasangan Positif)">Menikah (Pasangan Positif)</option>
-                    <option value="Menikah (Pasangan Negatif/Diskordan)">Menikah (Pasangan Negatif/Diskordan)</option>
-                    <option value="Cerai Mati (Pasangan Meninggal Akibat HIV)">Cerai Mati (Pasangan Meninggal Akibat HIV)</option>
-                    <option value="Cerai Hidup">Cerai Hidup</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-neutral-300 font-semibold mb-1">
-                    Pekerjaan Saat Ini:
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.pekerjaan}
-                    onChange={(e) => handleFieldChange('pekerjaan', e.target.value)}
-                    placeholder=""
-                    className="w-full p-2 rounded bg-black/70 border border-rose-500/30 text-white"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-neutral-300 font-semibold mb-1">
-                    Nama Kontak Darurat:
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.kontakDaruratNama}
-                    onChange={(e) => handleFieldChange('kontakDaruratNama', e.target.value)}
-                    placeholder=""
-                    className="w-full p-2 rounded bg-black/70 border border-rose-500/30 text-white"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-neutral-300 font-semibold mb-1">
-                    No. HP Kontak Darurat:
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.kontakDaruratNoHp}
-                    onChange={(e) => handleFieldChange('kontakDaruratNoHp', e.target.value)}
-                    placeholder=""
-                    className="w-full p-2 rounded bg-black/70 border border-rose-500/30 text-white font-mono"
-                  />
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* LEMBAR 2: Kondisi Medis & Riwayat Pengobatan ODHIV */}
-          {activeSheetTab === 2 && (
-            <div className="space-y-4">
-              <div className="border-b border-rose-500/20 pb-2">
-                <h4 className="text-sm font-bold text-sky-200 uppercase">
-                  LEMBAR 2: Kondisi Medis & Riwayat Terapi ARV
-                </h4>
-                <p className="text-[11px] text-neutral-300">
-                  Riwayat diagnosis, faskes PDP, kepatuhan minum obat, viral load, dan riwayat infeksi oportunistik.
-                </p>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
-                <div>
-                  <label className="block text-neutral-300 font-semibold mb-1">
-                    Tahun Diagnosa Pertama:
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.tahunDiagnosa}
-                    onChange={(e) => handleFieldChange('tahunDiagnosa', e.target.value)}
-                    placeholder="Contoh: 2023"
-                    className="w-full p-2 rounded bg-black/70 border border-rose-500/30 text-white"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-neutral-300 font-semibold mb-1">
-                    Faskes PDP Rujukan (Klinik ARV):
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.faskesPdpRujukan}
-                    onChange={(e) => handleFieldChange('faskesPdpRujukan', e.target.value)}
-                    placeholder="RSUP H. Adam Malik / RSUD Pirngadi / Puskesmas"
-                    className="w-full p-2 rounded bg-black/70 border border-rose-500/30 text-white"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-neutral-300 font-semibold mb-1">
-                    Status Pengobatan ARV:
-                  </label>
-                  <select
-                    value={formData.statusArv}
-                    onChange={(e) => handleFieldChange('statusArv', e.target.value)}
-                    className="w-full p-2 rounded bg-black/70 border border-rose-500/30 text-white"
-                  >
-                    <option value="Aktif Minum ARV">Aktif Minum ARV (Rutin)</option>
-                    <option value="Sempat Putus Obat / Drop Out">Sempat Putus Obat / Drop Out</option>
-                    <option value="Baru Memulai">Baru Memulai</option>
-                    <option value="Belum Mau Mulai Pengobatan">Belum Mau Mulai Pengobatan</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-neutral-300 font-semibold mb-1">
-                    Regimen Obat ARV:
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.regimenArv}
-                    onChange={(e) => handleFieldChange('regimenArv', e.target.value)}
-                    placeholder="TLD / TLE / Aluvia"
-                    className="w-full p-2 rounded bg-black/70 border border-rose-500/30 text-white"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-neutral-300 font-semibold mb-1">
-                    Hasil CD4 Terakhir:
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.nilaiCd4Terakhir}
-                    onChange={(e) => handleFieldChange('nilaiCd4Terakhir', e.target.value)}
-                    placeholder="480 sel/mm³"
-                    className="w-full p-2 rounded bg-black/70 border border-rose-500/30 text-white"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-neutral-300 font-semibold mb-1">
-                    Hasil Viral Load (VL):
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.viralLoadTerakhir}
-                    onChange={(e) => handleFieldChange('viralLoadTerakhir', e.target.value)}
-                    placeholder="Undetectable (<50 copies/mL) / TND"
-                    className="w-full p-2 rounded bg-black/70 border border-rose-500/30 text-white"
-                  />
-                </div>
-
-                <div className="md:col-span-2">
-                  <label className="block text-neutral-300 font-semibold mb-1">
-                    Riwayat Infeksi Oportunistik (IO) & Kendala Akses:
-                  </label>
-                  <textarea
-                    rows={2}
-                    value={formData.riwayatInfeksiOportunistik}
-                    onChange={(e) =>
-                      handleFieldChange('riwayatInfeksiOportunistik', e.target.value)
-                    }
-                    placeholder="Pernah TB Paru, Candidiasis, Toksoplasmosis, atau kendala jarak faskes..."
-                    className="w-full p-2 rounded bg-black/70 border border-rose-500/30 text-white"
-                  />
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* LEMBAR 3: Profil Sosial & Kondisi Keluarga / Tempat Tinggal */}
-          {activeSheetTab === 3 && (
-            <div className="space-y-4">
-              <div className="border-b border-rose-500/20 pb-2">
-                <h4 className="text-sm font-bold text-sky-200 uppercase">
-                  LEMBAR 3: Profil Sosial & Kondisi Tempat Tinggal
-                </h4>
-                <p className="text-[11px] text-neutral-300">
-                  Tingkat keterbukaan status, dukungan keluarga, stigma lingkungan, dan kelayakan hunian.
-                </p>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
-                <div>
-                  <label className="block text-neutral-300 font-semibold mb-1">
-                    Status Keterbukaan HIV:
-                  </label>
-                  <select
-                    value={formData.statusKeterbukaanStatus}
-                    onChange={(e) =>
-                      handleFieldChange('statusKeterbukaanStatus', e.target.value)
-                    }
-                    className="w-full p-2 rounded bg-black/70 border border-rose-500/30 text-white"
-                  >
-                    <option value="Terbuka Penuh ke Keluarga">Terbuka Penuh ke Keluarga</option>
-                    <option value="Hanya Pasangan Yang Tahu">Hanya Pasangan Yang Tahu</option>
-                    <option value="Sangat Tertutup / Rahasia">Sangat Tertutup / Rahasia</option>
-                    <option value="Terbuka ke Komunitas/KDS">Terbuka ke Komunitas/KDS</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-neutral-300 font-semibold mb-1">
-                    Dukungan Keluarga Inti:
-                  </label>
-                  <select
-                    value={formData.dukunganKeluarga}
-                    onChange={(e) => handleFieldChange('dukunganKeluarga', e.target.value)}
-                    className="w-full p-2 rounded bg-black/70 border border-rose-500/30 text-white"
-                  >
-                    <option value="Sangat Mendukung">Sangat Mendukung (Mendampingi)</option>
-                    <option value="Mendukung Pasif">Mendukung Pasif</option>
-                    <option value="Netral">Netral</option>
-                    <option value="Ada Penolakan / Diskriminasi">Ada Penolakan / Diskriminasi</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-neutral-300 font-semibold mb-1">
-                    Status Kepemilikan Tempat Tinggal:
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.kondisiTempatTinggal}
-                    onChange={(e) => handleFieldChange('kondisiTempatTinggal', e.target.value)}
-                    placeholder="Sewa/Kontrak, Milik Sendiri, Menumpang Ortu"
-                    className="w-full p-2 rounded bg-black/70 border border-rose-500/30 text-white"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-neutral-300 font-semibold mb-1">
-                    Kelayakan Fisik Rumah:
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.kondisiKelayakanRumah}
-                    onChange={(e) =>
-                      handleFieldChange('kondisiKelayakanRumah', e.target.value)
-                    }
-                    placeholder="Dinding semen/papan, lantai semen, ventilasi cukup"
-                    className="w-full p-2 rounded bg-black/70 border border-rose-500/30 text-white"
-                  />
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* LEMBAR 4: Kondisi Ekonomi & Penghidupan */}
-          {activeSheetTab === 4 && (
-            <div className="space-y-4">
-              <div className="border-b border-rose-500/20 pb-2">
-                <h4 className="text-sm font-bold text-sky-200 uppercase">
-                  LEMBAR 4: Kondisi Ekonomi & Penghidupan
-                </h4>
-                <p className="text-[11px] text-neutral-300">
-                  Penghasilan, pengeluaran nutrisi pendukung, tanggungan, dan potensi kewirausahaan Atensi.
-                </p>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
-                <div>
-                  <label className="block text-neutral-300 font-semibold mb-1">
-                    Estimasi Penghasilan Bulanan:
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.penghasilanBulanan}
-                    onChange={(e) => handleFieldChange('penghasilanBulanan', e.target.value)}
-                    placeholder="Contoh: Rp 1.500.000"
-                    className="w-full p-2 rounded bg-black/70 border border-rose-500/30 text-white"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-neutral-300 font-semibold mb-1">
-                    Pengeluaran Nutrisi & Transport Medis:
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.pengeluaranKebutuhanObatNutrisi}
-                    onChange={(e) =>
-                      handleFieldChange('pengeluaranKebutuhanObatNutrisi', e.target.value)
-                    }
-                    placeholder="Contoh: Rp 400.000"
-                    className="w-full p-2 rounded bg-black/70 border border-rose-500/30 text-white"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-neutral-300 font-semibold mb-1">
-                    Jumlah Tanggungan Keluarga:
-                  </label>
-                  <input
-                    type="number"
-                    value={formData.tanggunganKeluarga}
-                    onChange={(e) =>
-                      handleFieldChange('tanggunganKeluarga', parseInt(e.target.value, 10) || 1)
-                    }
-                    className="w-full p-2 rounded bg-black/70 border border-rose-500/30 text-white"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-neutral-300 font-semibold mb-1">
-                    Minat Keterampilan / Usaha Mandiri:
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.minatKeterampilanAtensi}
-                    onChange={(e) =>
-                      handleFieldChange('minatKeterampilanAtensi', e.target.value)
-                    }
-                    placeholder="Perbengkelan, Tata Boga, Menjahit, Warung Sembako"
-                    className="w-full p-2 rounded bg-black/70 border border-rose-500/30 text-white"
-                  />
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* LEMBAR 5: Asesmen Psikososial & Kesehatan Mental */}
-          {activeSheetTab === 5 && (
-            <div className="space-y-4">
-              <div className="border-b border-rose-500/20 pb-2">
-                <h4 className="text-sm font-bold text-sky-200 uppercase">
-                  LEMBAR 5: Asesmen Psikososial & Kesehatan Mental
-                </h4>
-                <p className="text-[11px] text-neutral-300">
-                  Evaluasi tingkat kecemasan, depresi, penerimaan diri, dan kebutuhan konseling sosial.
-                </p>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
-                <div>
-                  <label className="block text-neutral-300 font-semibold mb-1">
-                    Tingkat Kecemasan:
-                  </label>
-                  <select
-                    value={formData.skorKecemasan}
-                    onChange={(e) => handleFieldChange('skorKecemasan', e.target.value)}
-                    className="w-full p-2 rounded bg-black/70 border border-rose-500/30 text-white"
-                  >
-                    <option value="Normal">Normal (Tidak Ada Kecemasan Signifikan)</option>
-                    <option value="Ringan">Ringan (Kekhawatiran Finansial/Anak)</option>
-                    <option value="Sedang">Sedang (Sering Gelisah/Insomnia)</option>
-                    <option value="Berat">Berat (Perlu Pendampingan Psikiatri)</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-neutral-300 font-semibold mb-1">
-                    Tingkat Depresi:
-                  </label>
-                  <select
-                    value={formData.skorDepresi}
-                    onChange={(e) => handleFieldChange('skorDepresi', e.target.value)}
-                    className="w-full p-2 rounded bg-black/70 border border-rose-500/30 text-white"
-                  >
-                    <option value="Normal">Normal</option>
-                    <option value="Ringan">Ringan</option>
-                    <option value="Sedang">Sedang</option>
-                    <option value="Berat">Berat</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-neutral-300 font-semibold mb-1">
-                    Penerimaan Diri Terhadap Status:
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.penerimaanDiri}
-                    onChange={(e) => handleFieldChange('penerimaanDiri', e.target.value)}
-                    placeholder="Menerima dengan baik / Masih syok / Bersemangat pulih"
-                    className="w-full p-2 rounded bg-black/70 border border-rose-500/30 text-white"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-neutral-300 font-semibold mb-1">
-                    Riwayat Pikiran Melukai Diri:
-                  </label>
-                  <select
-                    value={formData.doronganBunuhDiri}
-                    onChange={(e) => handleFieldChange('doronganBunuhDiri', e.target.value)}
-                    className="w-full p-2 rounded bg-black/70 border border-rose-500/30 text-white"
-                  >
-                    <option value="Tidak Pernah">Tidak Pernah (Aman)</option>
-                    <option value="Pernah di Awal Diagnosa">Pernah di Awal Diagnosa (Sekarang Stabil)</option>
-                    <option value="Jarang Muncul">Jarang Muncul</option>
-                    <option value="Perlu Pengawasan Ketat">Perlu Pengawasan Ketat (High Risk)</option>
-                  </select>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* LEMBAR 6: Rencana Intervensi & Rekomendasi Program Atensi Kemensos */}
-          {activeSheetTab === 6 && (
-            <div className="space-y-4">
-              <div className="border-b border-rose-500/20 pb-2">
-                <h4 className="text-sm font-bold text-sky-200 uppercase">
-                  LEMBAR 6: Rencana Intervensi & Rekomendasi Program Atensi Kemensos
-                </h4>
-                <p className="text-[11px] text-neutral-300">
-                  Pemberian bantuan pemenuhan hidup layak, modal kewirausahaan, serta pengesahan asesor lapangan.
-                </p>
-              </div>
-
-              <div className="p-3 rounded-xl bg-black/70 border border-emerald-500/30 space-y-2 text-xs">
-                <span className="font-bold text-emerald-300 block mb-1">
-                  Rekomendasi Klaster Bantuan ATENSI:
-                </span>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      style={{ accentColor: "#000000", width: "1.2rem", height: "1.2rem", border: "2px solid #000" }}
-                      checked={formData.rekomendasiBantuanNutrisi}
-                      onChange={(e) =>
-                        handleFieldChange('rekomendasiBantuanNutrisi', e.target.checked)
-                      }
-                      className="rounded accent-emerald-500"
-                    />
-                    <span>Bantuan Paket Nutrisi & Sembako (3 Bulan)</span>
-                  </label>
-
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      style={{ accentColor: "#000000", width: "1.2rem", height: "1.2rem", border: "2px solid #000" }}
-                      checked={formData.rekomendasiBantuanModalUsaha}
-                      onChange={(e) =>
-                        handleFieldChange('rekomendasiBantuanModalUsaha', e.target.checked)
-                      }
-                      className="rounded accent-emerald-500"
-                    />
-                    <span>Bantuan Stimulan Modal Kewirausahaan</span>
-                  </label>
-
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      style={{ accentColor: "#000000", width: "1.2rem", height: "1.2rem", border: "2px solid #000" }}
-                      checked={formData.rekomendasiBantuanMedisTransport}
-                      onChange={(e) =>
-                        handleFieldChange('rekomendasiBantuanMedisTransport', e.target.checked)
-                      }
-                      className="rounded accent-emerald-500"
-                    />
-                    <span>Fasilitasi Biaya Transportasi Kontrol ARV</span>
-                  </label>
-
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      style={{ accentColor: "#000000", width: "1.2rem", height: "1.2rem", border: "2px solid #000" }}
-                      checked={formData.rekomendasiRujukanRehabilitasi}
-                      onChange={(e) =>
-                        handleFieldChange('rekomendasiRujukanRehabilitasi', e.target.checked)
-                      }
-                      className="rounded accent-emerald-500"
-                    />
-                    <span>Rujukan Sentra Rehabilitasi Sosial Kemensos</span>
-                  </label>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
-                <div>
-                  <label className="block text-neutral-300 font-semibold mb-1">
-                    Nama Asesor Pendamping:
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.namaAsesor}
-                    onChange={(e) => handleFieldChange('namaAsesor', e.target.value)}
-                    className="w-full p-2 rounded bg-black/70 border border-rose-500/30 text-white"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-neutral-300 font-semibold mb-1">
-                    NIP Asesor Pendamping:
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.nipAsesor}
-                    onChange={(e) => handleFieldChange('nipAsesor', e.target.value)}
-                    className="w-full p-2 rounded bg-black/70 border border-rose-500/30 text-white font-mono"
-                  />
-                </div>
-
-                <div className="md:col-span-2">
-                  <label className="block text-neutral-300 font-semibold mb-1">
-                    Catatan Intervensi Khusus:
-                  </label>
-                  <textarea
-                    rows={2}
-                    value={formData.catatanIntervensiKhusus}
-                    onChange={(e) =>
-                      handleFieldChange('catatanIntervensiKhusus', e.target.value)
-                    }
-                    placeholder="Tuliskan rekomendasi spesifik intervensi lapangan Kemensos..."
-                    className="w-full p-2 rounded bg-black/70 border border-rose-500/30 text-white"
-                  />
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Dibawah form ke 6:
-            SIMPAN (sebelah kiri)        ---->>>>         CETAK PDF (sebelah kanan) */}
-        <div className="mt-8 pt-6 border-t border-rose-500/30 flex flex-col sm:flex-row items-center justify-between gap-4">
-          {/* SIMPAN (sebelah kiri) */}
-          <div className="w-full sm:w-auto">
-            <button
-              type="button"
-              onClick={handleSave}
-              className="w-full sm:w-64 py-3.5 px-6 rounded-xl font-bold text-xs md:text-sm uppercase tracking-wider text-white bg-gradient-to-r from-[#1e4423] to-[#122e15] hover:from-[#28572e] hover:to-[#1a401e] border-2 border-rose-500/60 shadow-[0_0_18px_rgba(244,63,94,0.25)] flex items-center justify-center gap-2 cursor-pointer active:scale-95 transition"
-            >
-              <Save className="w-4 h-4 text-sky-300" />
-              <span>SIMPAN FORMULIR</span>
-            </button>
-            {saveSuccess && (
-              <p className="mt-1.5 text-[11px] text-emerald-300 font-medium flex items-center gap-1">
-                <Check className="w-3.5 h-3.5 text-emerald-400" />
-                <span>Formulir berhasil disimpan ke database!</span>
-              </p>
-            )}
-          </div>
-
-          {/* Info status 12 lembar dokumen */}
-          <div className="text-center sm:text-right text-[11px] text-sky-200">
-            <span className="font-semibold block">Dokumen Standar Cetak: Tepat 12 Halaman</span>
-            <span className="text-neutral-400">
-              Hal 1-8: Form Asesmen • Hal 9: Foto Diri • Hal 10: KTP • Hal 11: KK • Hal 12: Rumah
-            </span>
-          </div>
-
-          {/* CETAK PDF (sebelah kanan) */}
-          <div className="w-full sm:w-auto">
-            <button
-              type="button"
-              onClick={() => setShowPrintModal(true)}
-              className="w-full sm:w-64 py-3.5 px-6 rounded-xl font-bold text-xs md:text-sm uppercase tracking-wider text-white bg-gradient-to-r from-emerald-700 via-teal-700 to-sky-700 hover:from-emerald-600 hover:to-sky-600 border-2 border-rose-500/60 shadow-[0_0_20px_rgba(56,189,248,0.3)] flex items-center justify-center gap-2 cursor-pointer active:scale-95 transition"
-            >
-              <Printer className="w-4 h-4 text-white" />
-              <span>CETAK PDF (12 HALAMAN)</span>
-            </button>
-          </div>
+          <button type="button" onClick={() => window.print()} className="inline-flex items-center gap-2 rounded-lg border border-sky-400/40 bg-sky-950/50 px-4 py-2 text-xs font-bold text-white">
+            <Printer className="h-4 w-4" /> Cetak / Simpan PDF
+          </button>
+          <button type="button" onClick={handleReset} className="inline-flex items-center gap-2 rounded-lg border border-rose-400/40 bg-rose-950/40 px-4 py-2 text-xs font-bold text-white">
+            <RotateCcw className="h-4 w-4" /> Kosongkan Form
+          </button>
         </div>
       </div>
 
-      {/* MODAL PRINT PREVIEW & CETAK PDF RESMI 12 HALAMAN */}
-      {showPrintModal && (
-        <div className="fixed inset-0 z-50 overflow-y-auto bg-black/90 p-4 md:p-6 select-none text-neutral-900">
-          <div className="print-container max-w-4xl mx-auto bg-white rounded-2xl shadow-2xl p-6 md:p-8 flex flex-col space-y-6">
-            {/* Modal header with action buttons */}
-            <div className="flex items-center justify-between pb-4 border-b border-neutral-300 no-print">
-              <div>
-                <h3 className="text-base md:text-lg font-bold text-neutral-900">
-                  Pratinjau Dokumen Cetak Form Asesmen Terintegrasi
-                </h3>
-                <p className="text-xs text-neutral-600">
-                  Struktur dokumen tepat 12 halaman berurutan sesuai pedoman resmi Kemensos RI.
-                </p>
-              </div>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={handleTriggerPrint}
-                  className="px-4 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 shadow-md"
-                >
-                  <Printer className="w-4 h-4" />
-                  <span>Cetak Dokumen Sekarang</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setShowPrintModal(false)}
-                  className="px-3 py-2 rounded-xl bg-neutral-200 hover:bg-neutral-300 text-neutral-800 text-xs font-bold"
-                >
-                  Tutup
-                </button>
-              </div>
-            </div>
-
-            {/* Document Pages Container (12 Pages sequentially) */}
-            <div className="space-y-8 font-sans text-xs">
-              {/* HALAMAN 1 - 8: Form Asesmen Terintegrasi */}
-              <div className="p-6 border border-neutral-300 rounded-xl bg-neutral-50 shadow-sm page-break">
-                <div className="text-center border-b-2 border-neutral-800 pb-3 mb-4">
-                  <span className="text-[10px] uppercase font-bold text-neutral-600 tracking-widest">
-                    KEMENTERIAN SOSIAL REPUBLIK INDONESIA
-                  </span>
-                  <h4 className="text-base font-extrabold text-neutral-900 tracking-wide uppercase">
-                    FORMULIR ASESMEN TERINTEGRASI PPKS ODHIV
-                  </h4>
-                  <p className="text-xs text-neutral-600">
-                    Direktorat Rehabilitasi Sosial Korban Penyalahgunaan Narkoba & ODHIV
-                  </p>
-                  <p className="text-[10px] text-neutral-500 font-mono mt-1">
-                    No. Dokumen: KEMENSOS-SU-ODHIV-2026 • Halaman 1 dari 12
-                  </p>
-                </div>
-
-                <div className="space-y-4">
-                  <div className="bg-white p-3 rounded border border-neutral-200">
-                    <span className="font-bold text-neutral-800 block mb-2 border-b pb-1">
-                      BAGIAN A: IDENTITAS & REGISTRASI PPKS (HALAMAN 1-2)
-                    </span>
-                    <div className="grid grid-cols-2 gap-2 text-[11px]">
-                      <div><strong>Nama Responden:</strong> {currentPPKS?.namaLengkap}</div>
-                      <div><strong>NIK:</strong> {currentPPKS?.nik}</div>
-                      <div><strong>Nomor Registrasi:</strong> {formData.nomorRegistrasi}</div>
-                      <div><strong>Usia / Jenis Kelamin:</strong> {currentPPKS?.usia} Thn / {currentPPKS?.jenisKelamin}</div>
-                      <div><strong>No. BPJS/KIS:</strong> {formData.noBpjs || '—'}</div>
-                      <div><strong>Status Pernikahan:</strong> {formData.statusPernikahan}</div>
-                      <div><strong>Kota Domisili:</strong> {currentPPKS?.kotaDomisili}</div>
-                      <div><strong>No. HP/WA:</strong> {currentPPKS?.noHpWa}</div>
-                    </div>
-                  </div>
-
-                  <div className="bg-white p-3 rounded border border-neutral-200">
-                    <span className="font-bold text-neutral-800 block mb-2 border-b pb-1">
-                      BAGIAN B: KONDISI MEDIS & KEPATUHAN ARV (HALAMAN 3-4)
-                    </span>
-                    <div className="grid grid-cols-2 gap-2 text-[11px]">
-                      <div><strong>Tahun Diagnosa:</strong> {formData.tahunDiagnosa || '—'}</div>
-                      <div><strong>Faskes PDP Rujukan:</strong> {formData.faskesPdpRujukan || '—'}</div>
-                      <div><strong>Status Terapi ARV:</strong> {formData.statusArv}</div>
-                      <div><strong>Regimen ARV:</strong> {formData.regimenArv}</div>
-                      <div><strong>Nilai CD4 Terakhir:</strong> {formData.nilaiCd4Terakhir || '—'}</div>
-                      <div><strong>Viral Load:</strong> {formData.viralLoadTerakhir || '—'}</div>
-                    </div>
-                  </div>
-
-                  <div className="bg-white p-3 rounded border border-neutral-200">
-                    <span className="font-bold text-neutral-800 block mb-2 border-b pb-1">
-                      BAGIAN C: ASESMEN SOSIAL & EKONOMI (HALAMAN 5-6)
-                    </span>
-                    <div className="grid grid-cols-2 gap-2 text-[11px]">
-                      <div><strong>Desil DTKS:</strong> Desil {formData.desilKemiskinan}</div>
-                      <div><strong>Penghasilan:</strong> {formData.penghasilanBulanan || '—'}</div>
-                      <div><strong>Tempat Tinggal:</strong> {formData.kondisiTempatTinggal}</div>
-                      <div><strong>Dukungan Keluarga:</strong> {formData.dukunganKeluarga}</div>
-                    </div>
-                  </div>
-
-                  <div className="bg-white p-3 rounded border border-neutral-200">
-                    <span className="font-bold text-neutral-800 block mb-2 border-b pb-1">
-                      BAGIAN D: PENGESAHAN & REKOMENDASI ATENSI (HALAMAN 7-8)
-                    </span>
-                    <p className="text-[11px] mb-3">
-                      Berdasarkan asesmen komprehensif, PPKS berhak diusulkan menerima Program ATENSI Kemensos klaster ODHIV berupa pemenuhan hidup layak, nutrisi, dan stimulan modal mandiri.
-                    </p>
-                    <div className="grid grid-cols-2 gap-4 text-center text-[11px] pt-4 border-t">
-                      <div>
-                        <p className="font-medium">Mengetahui/Menerima,</p>
-                        <p className="text-neutral-500">Penerima Manfaat (PPKS)</p>
-                        <div className="h-14 flex items-end justify-center font-bold">
-                          ({currentPPKS?.namaLengkap})
-                        </div>
-                      </div>
-                      <div>
-                        <p className="font-medium">Petugas Asesor Kemensos,</p>
-                        <p className="text-neutral-500">Pendamping ODHIV Prov. Sumut</p>
-                        <div className="h-14 flex items-end justify-center font-bold">
-                          ({formData.namaAsesor})
-                        </div>
-                        <p className="text-[10px] text-neutral-600 font-mono">NIP: {formData.nipAsesor}</p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* HALAMAN 9: Lampiran I - Foto Diri */}
-              <div className="p-6 border border-neutral-300 rounded-xl bg-white page-break flex flex-col items-center justify-center text-center">
-                <div className="w-full border-b pb-2 mb-4">
-                  <h5 className="font-extrabold text-sm uppercase text-neutral-900">
-                    HALAMAN 9: LAMPIRAN I - FOTO DIRI PPKS
-                  </h5>
-                  <p className="text-[11px] text-neutral-500">
-                    Responden: {currentPPKS?.namaLengkap} (NIK: {currentPPKS?.nik})
-                  </p>
-                </div>
-                <div className="w-64 h-80 rounded-lg overflow-hidden border-2 border-neutral-400 bg-neutral-100 p-1">
-                  <img src={fotoDiri} alt="Foto Diri" className="w-full h-full object-cover rounded" />
-                </div>
-                <p className="mt-3 text-[11px] text-neutral-600 font-mono">
-                  Dokumentasi verifikasi fisik lapangan terautentikasi Kemensos RI
-                </p>
-              </div>
-
-              {/* HALAMAN 10: Lampiran II - Foto KTP */}
-              <div className="p-6 border border-neutral-300 rounded-xl bg-white page-break flex flex-col items-center justify-center text-center">
-                <div className="w-full border-b pb-2 mb-4">
-                  <h5 className="font-extrabold text-sm uppercase text-neutral-900">
-                    HALAMAN 10: LAMPIRAN II - FOTO KTP PPKS
-                  </h5>
-                  <p className="text-[11px] text-neutral-500">
-                    Kartu Tanda Penduduk Republik Indonesia
-                  </p>
-                </div>
-                <div className="w-80 h-52 rounded-lg overflow-hidden border-2 border-neutral-400 bg-neutral-100 p-1">
-                  <img src={fotoKtp} alt="Foto KTP" className="w-full h-full object-cover rounded" />
-                </div>
-                <p className="mt-3 text-[11px] text-neutral-600 font-mono">
-                  Verifikasi NIK: {currentPPKS?.nik} (Sesuai Database Kependudukan)
-                </p>
-              </div>
-
-              {/* HALAMAN 11: Lampiran III - Foto KK */}
-              <div className="p-6 border border-neutral-300 rounded-xl bg-white page-break flex flex-col items-center justify-center text-center">
-                <div className="w-full border-b pb-2 mb-4">
-                  <h5 className="font-extrabold text-sm uppercase text-neutral-900">
-                    HALAMAN 11: LAMPIRAN III - FOTO KK (KARTU KELUARGA)
-                  </h5>
-                  <p className="text-[11px] text-neutral-500">
-                    Dokumen Kartu Keluarga PPKS
-                  </p>
-                </div>
-                <div className="w-96 h-60 rounded-lg overflow-hidden border-2 border-neutral-400 bg-neutral-100 p-1">
-                  <img src={fotoKk} alt="Foto KK" className="w-full h-full object-cover rounded" />
-                </div>
-                <p className="mt-3 text-[11px] text-neutral-600 font-mono">
-                  Lampiran Verifikasi Hubungan Keluarga & Tanggungan Sosial
-                </p>
-              </div>
-
-              {/* HALAMAN 12: Lampiran IV - Foto Rumah Tampak Depan */}
-              <div className="p-6 border border-neutral-300 rounded-xl bg-white page-break flex flex-col items-center justify-center text-center">
-                <div className="w-full border-b pb-2 mb-4">
-                  <h5 className="font-extrabold text-sm uppercase text-neutral-900">
-                    HALAMAN 12: LAMPIRAN IV - FOTO RUMAH TAMPAK DEPAN
-                  </h5>
-                  <p className="text-[11px] text-neutral-500">
-                    Dokumentasi Kelayakan Hunian & Kondisi Fisik Lingkungan Tempat Tinggal
-                  </p>
-                </div>
-                <div className="w-96 h-64 rounded-lg overflow-hidden border-2 border-neutral-400 bg-neutral-100 p-1">
-                  <img
-                    src={fotoRumah}
-                    alt="Foto Rumah Tampak Depan"
-                    className="w-full h-full object-cover rounded"
-                  />
-                </div>
-                <p className="mt-3 text-[11px] text-neutral-600 font-mono">
-                  Alamat: {currentPPKS?.alamatLengkap} ({currentPPKS?.kotaDomisili})
-                </p>
-              </div>
-            </div>
-          </div>
+      {statusMessage && (
+        <div role="status" aria-live="polite" className={'official-status mb-3 rounded-lg border p-3 text-xs ' + (statusMessage.type === 'success' ? 'border-emerald-500/40 bg-emerald-950/50 text-emerald-100' : 'border-rose-500/40 bg-rose-950/50 text-rose-100')}>
+          {statusMessage.type === 'success' && <CheckCircle2 className="mr-1 inline h-4 w-4 align-middle" />}
+          {statusMessage.text}
         </div>
       )}
+
+      {pages.map((page, pageIndex) => (
+        <section className="official-page" key={'page-' + pageIndex}>
+          {page.hasLetterhead && (
+            <>
+              <div className="official-letterhead" aria-label="Kop surat resmi Form Asesmen Terintegrasi (terkunci)">
+                <div className="official-letterhead-logo">
+                  <svg viewBox="0 0 100 100" aria-hidden="true">
+                    <path d="M43 76 C38 61 23 49 20 34 C39 40 49 52 50 70" fill="#194a86" />
+                    <path d="M45 70 C45 46 53 24 75 12 C71 37 60 55 47 72" fill="#008d45" />
+                    <path d="M48 74 C55 51 69 38 87 34 C80 52 67 66 48 74" fill="#009847" />
+                    <path d="M46 77 C65 66 81 65 92 69 C76 82 60 83 46 77" fill="#f5c400" />
+                    <path d="M42 81 C58 81 72 87 78 93 C57 96 44 90 42 81" fill="#f5c400" />
+                    <circle cx="30" cy="20" r="8" fill="#194a86" />
+                  </svg>
+                  <small>KEMENTERIAN SOSIAL<br />REPUBLIK INDONESIA</small>
+                </div>
+                <div className="official-letterhead-title">
+                  FORM ASESMEN TERINTEGRASI
+                  <span>DIREKTORAT JENDERAL REHABILITASI SOSIAL</span>
+                </div>
+                <div className="official-letterhead-logo">
+                  <svg viewBox="0 0 100 100" aria-hidden="true">
+                    <ellipse cx="50" cy="42" rx="43" ry="26" fill="none" stroke="#ed1c2e" strokeWidth="5" transform="rotate(-23 50 42)" />
+                    <path d="M17 82 L50 22 L82 82 Z" fill="#4d9a87" />
+                    <path d="M50 22 L67 54 L50 82 L34 54 Z" fill="#f5cf68" />
+                    <path d="M50 22 L67 54 L50 82 L62 82 L85 39 L69 8 Z" fill="#a7b7eb" opacity=".9" />
+                  </svg>
+                  <div className="official-logo-atensi-text">ATENSI</div>
+                </div>
+              </div>
+              <div className="official-letterhead-lock">Kop surat resmi dikunci</div>
+              <div className="official-numbering">
+                <div className="official-numbering-title">Nomor Kuesioner</div>
+                <div className="official-numbering-grid">
+                  {[
+                    { key: 'metaSatker', label: 'No Urutan Satker' },
+                    { key: 'metaYear', label: 'Tahun' },
+                    { key: 'metaSequence', label: 'Nomor Urut' },
+                  ].map((item) => (
+                    <label key={item.key}>{item.label}
+                      <input value={String(answers[item.key] ?? '')} onChange={(event) => updateAnswer(item.key, event.target.value)} aria-label={item.label} />
+                    </label>
+                  ))}
+                </div>
+              </div>
+            </>
+          )}
+
+          <table className="official-table">
+            <colgroup><col className="col-number" /><col className="col-label" /><col className="col-answer" /></colgroup>
+            <tbody>
+              {page.groups.map((group, groupIndex) => (
+                <React.Fragment key={'group-' + groupIndex}>
+                  {group.title && <tr className={'official-group-title ' + (group.tone || 'gray')}><td colSpan={3}>{group.title}</td></tr>}
+                  {group.fields.map((item) => (
+                    <tr key={item.key}>
+                      <td className="question-number">{item.number ?? ''}</td>
+                      <td className="question-label">
+                        {item.label}
+                        {item.optional && <span className="block text-[9px] italic text-neutral-500">[opsional]</span>}
+                      </td>
+                      <td className="question-answer">{renderAnswer(item)}</td>
+                    </tr>
+                  ))}
+                </React.Fragment>
+              ))}
+            </tbody>
+          </table>
+
+          {pageIndex === 5 && (
+            <>
+              <p className="official-footer-note">** Perlu melampirkan foto/dokumen. Foto PPKS dapat dilakukan dengan closeup.</p>
+              <div className="official-signature"><div>Petugas</div><div className="official-signature-line">( ........................................ )</div></div>
+            </>
+          )}
+        </section>
+      ))}
     </div>
   );
 };

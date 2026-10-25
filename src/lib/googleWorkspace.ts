@@ -335,7 +335,7 @@ export async function upsertPPKSInSpreadsheet(
 
 
 function normalizeSheetHeader(value: string): string {
-  return String(value ?? '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]/g, '');
+  return String(value ?? '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/^\s*\d{1,2}[\s.)\-:]+/, '').replace(/[^a-z0-9]/g, '');
 }
 
 function readCellByAliases(headers: string[], row: string[], aliases: string[]): string {
@@ -528,6 +528,27 @@ function mapRowsToPPKSRecords(rows: string[][]): PPKSRecord[] {
 
     const timestamp = readCellByAliases(headers, row, ['timestamp', 'capWaktu', 'waktuPengiriman', 'waktuPengisian', 'tanggalWaktu', 'createTime']);
     const nik = readNIKFromSheetRow(headers, row);
+    // Preserve answers from a spreadsheet whose headers are numbered like the official PDF.
+    // For unnumbered Google Forms headers, resolve the unambiguous identity fields explicitly.
+    const officialAssessment: Record<string, string | string[]> = {};
+    headers.forEach((header, columnIndex) => {
+      const label = String(header ?? '').trim();
+      const value = String(row[columnIndex] ?? '').trim();
+      if (!value) return;
+      const numbered = label.match(/^\s*(?:q(?:uestion)?\s*)?(\d{1,2})\s*[.)\-:]\s*/i);
+      const questionNumber = numbered ? Number(numbered[1]) : 0;
+      if (questionNumber >= 1 && questionNumber <= 91) {
+        officialAssessment['q' + questionNumber] = value;
+        return;
+      }
+      const normalized = normalizeSheetHeader(label);
+      if (normalized === 'nik' || normalized === 'nikresponden' || normalized === 'nikppks' || normalized === 'nomorindukkependudukan' || normalized === 'nomorktp' || normalized === 'noktp') {
+        officialAssessment.q23 = nik || value;
+      } else if (normalized === 'namalengkap' || normalized === 'namaresponden' || normalized === 'namappks') {
+        officialAssessment.q16 = value;
+      }
+    });
+    if (nik) officialAssessment.q23 = nik;
     const externalId = readCellByAliases(headers, row, ['idPPKS', 'recordId', 'id']);
     const stableSource = [timestamp, nik, namaLengkap, ...row].join('|');
     let hash = 2166136261;
@@ -587,6 +608,7 @@ function mapRowsToPPKSRecords(rows: string[][]): PPKSRecord[] {
       statusAsesmen: integratedForm ? 'Terintegrasi' : 'Tahap Awal',
       googleFormSync: true,
       integratedForm,
+      officialAssessment: Object.keys(officialAssessment).length ? officialAssessment : undefined,
     };
     records.push(sourceRecord);
   });

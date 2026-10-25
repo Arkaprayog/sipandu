@@ -50,7 +50,16 @@ function mergePPKSRecords(localRecords: PPKSRecord[], cloudRecords: PPKSRecord[]
       integratedForm: next.integratedForm
         ? ({ ...(previous.integratedForm || {}), ...nextIntegrated } as NonNullable<PPKSRecord['integratedForm']>)
         : previous.integratedForm,
-      statusAsesmen: next.integratedForm ? 'Terintegrasi' : (previous.statusAsesmen || next.statusAsesmen),
+      officialAssessment: next.officialAssessment
+        ? ({ ...(previous.officialAssessment || {}), ...Object.fromEntries(
+            Object.entries(next.officialAssessment).filter(([, value]) =>
+              Array.isArray(value) ? value.length > 0 : String(value ?? '') !== ''
+            )
+          ) } as NonNullable<PPKSRecord['officialAssessment']>)
+        : previous.officialAssessment,
+      statusAsesmen: next.officialAssessment || next.integratedForm
+        ? 'Terintegrasi'
+        : (previous.statusAsesmen || next.statusAsesmen),
     };
   };
 
