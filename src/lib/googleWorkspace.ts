@@ -460,7 +460,7 @@ function mapRowsToPPKSRecords(rows: string[][]): PPKSRecord[] {
 
     const usia = parseSheetNumber(readCellByAliases(headers, row, ['usia', 'umur', 'umurTahun', 'usiaSaatIni', 'umurSaatIni']), 0);
     const gender = readCellByAliases(headers, row, ['jenisKelamin', 'gender', 'jenisKelaminResponden']);
-    const domisili = readCellByAliases(headers, row, ['kotaDomisili', 'kabupatenKota', 'kotaKabupaten', 'domisili', 'kota', 'kabupaten']);
+    const domisili = readCellByAliases(headers, row, ['kotaDomisili', 'kabupatenKota', 'kotaKabupaten', 'kotaKabupatenDomisili', 'domisiliKabupatenKota', 'domisili', 'kota', 'kabupaten']);
     const alamat = readCellByAliases(headers, row, ['alamatLengkap', 'alamatDomisili', 'alamatResponden', 'alamat']);
     const jenisBantuan = readCellByAliases(headers, row, ['jenisBantuan', 'bantuanDibutuhkan', 'jenisBantuanAtensi', 'kebutuhanBantuan']);
     const integratedValues: Partial<Record<keyof IntegratedFormData, string | number | boolean>> = {};
