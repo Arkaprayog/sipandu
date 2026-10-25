@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { PPKSRecord, ProfileUser, AppSettings } from './types';
 import { initialPPKSList, initialProfileUser, initialAppSettings, isLegacySamplePPKS } from './data/initialData';
 import { LoginPage } from './components/LoginPage';
@@ -15,7 +15,7 @@ import { NotificationsModal } from './components/NotificationsModal';
 import { GoogleWorkspaceModal } from './components/GoogleWorkspaceModal';
 import { onAuthStateChanged, signOut, getIdTokenResult } from 'firebase/auth';
 import { auth, getAccessToken, savePPKSToFirestore, googleLogout } from './lib/firebase';
-import { ensureSIPANDUDatabaseSheet, extractSpreadsheetId, importPPKSFromSpreadsheet, upsertPPKSInSpreadsheet } from './lib/googleWorkspace';
+import { ensureSIPANDUDatabaseSheet, extractSpreadsheetId, importPPKSFromSpreadsheet, removeLegacyDemoRowsFromSpreadsheet, removeObviousDemoFilesFromDrive, upsertPPKSInSpreadsheet } from './lib/googleWorkspace';
 import { GOOGLE_SIPANDU_RESOURCES } from './lib/googleSIPANDUResources';
 
 function mergePPKSRecords(localRecords: PPKSRecord[], cloudRecords: PPKSRecord[]): PPKSRecord[] {
@@ -223,6 +223,7 @@ export default function App() {
   });
 
   const [cloudSyncNotice, setCloudSyncNotice] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const demoCleanupAttemptedRef = useRef(false);
   const [liveSyncState, setLiveSyncState] = useState<{
     type: 'idle' | 'success' | 'paused' | 'error';
     message: string;
@@ -430,6 +431,100 @@ export default function App() {
       window.removeEventListener('sipandu-workspace-token-updated', onWorkspaceTokenUpdated);
     };
   }, [isAuthenticated, settings.googleSpreadsheetSourceUrl, settings.googleSpreadsheetSourceTab]);
+
+
+  // On the first authorized app session after this update, remove only known
+  // retired demo rows/files from the configured SIPANDU source, response sheet,
+  // destination sheet, and SIPANDU Drive folder. This is idempotent and does not
+  // delete any respondent record that doesn't match an exact legacy demo marker.
+  useEffect(() => {
+    let active = true;
+    const cleanupFlag = 'sipandu_legacy_demo_cleanup_v1';
+
+    const runCleanup = async () => {
+      if (!active || !isAuthenticated || demoCleanupAttemptedRef.current) return;
+      try {
+        if (localStorage.getItem(cleanupFlag)) {
+          demoCleanupAttemptedRef.current = true;
+          return;
+        }
+      } catch {
+        // Continue; cloud-side cleanup remains safely idempotent without the local flag.
+      }
+
+      const accessToken = await getAccessToken();
+      if (!accessToken) {
+        setCloudSyncNotice({
+          type: 'error',
+          text: 'Pembersihan data contoh cloud menunggu izin Google API. Hubungkan akun Google satu kali di Google Workspace & Cloud Hub; aplikasi tidak akan membuka popup login otomatis.',
+        });
+        return;
+      }
+
+      demoCleanupAttemptedRef.current = true;
+      const messages: string[] = [];
+      const failures: string[] = [];
+      let rowsCleared = 0;
+
+      const candidateUrls = [
+        GOOGLE_SIPANDU_RESOURCES.responseSpreadsheetUrl,
+        settings.googleSpreadsheetSourceUrl || '',
+        settings.googleSpreadsheetUrl || '',
+      ].filter(Boolean);
+      const uniqueSheets = new Map<string, string>();
+      for (const url of candidateUrls) {
+        try {
+          uniqueSheets.set(extractSpreadsheetId(url), url);
+        } catch {
+          failures.push('Satu URL/ID spreadsheet dikonfigurasi tidak valid; target tersebut dilewati.');
+        }
+      }
+
+      for (const [spreadsheetId, url] of uniqueSheets) {
+        if (!active) return;
+        try {
+          const result = await removeLegacyDemoRowsFromSpreadsheet(url);
+          rowsCleared += result.rowsCleared;
+          messages.push(\`\${result.spreadsheetTitle}: \${result.rowsCleared} baris contoh dibersihkan dari \${result.tabsScanned} tab\`);
+        } catch (error) {
+          failures.push(\`Spreadsheet \${spreadsheetId}: \${error instanceof Error ? error.message : String(error)}\`);
+        }
+      }
+
+      if (active) {
+        try {
+          const drive = await removeObviousDemoFilesFromDrive(GOOGLE_SIPANDU_RESOURCES.driveFolderId);
+          messages.push(\`Google Drive: \${drive.filesDeleted} file/folder contoh yang dikenali dihapus\`);
+        } catch (error) {
+          failures.push(\`Google Drive: \${error instanceof Error ? error.message : String(error)}\`);
+        }
+      }
+
+      if (!active) return;
+      const allDone = failures.length === 0;
+      if (allDone) {
+        try { localStorage.setItem(cleanupFlag, new Date().toISOString()); } catch { /* non-critical */ }
+      }
+      setPpksList((current) => mergePPKSRecords(current, []));
+      setCloudSyncNotice({
+        type: allDone ? 'success' : 'error',
+        text: [
+          \`Pembersihan data contoh \${allDone ? 'selesai' : 'sebagian selesai'}: \${rowsCleared} baris contoh dihapus dari Google Sheets.\`,
+          ...messages,
+          ...(failures.length ? [\`Target yang belum selesai (\${failures.length}): \${failures.join(' · ')}\`] : []),
+          'Data non-demo dipertahankan. Pembersihan ini tidak menghapus respons dari penyimpanan internal Google Forms.',
+        ].join(' | '),
+      });
+    };
+
+    const onTokenUpdated = () => { void runCleanup(); };
+    void runCleanup();
+    window.addEventListener('sipandu-workspace-token-updated', onTokenUpdated);
+    return () => {
+      active = false;
+      window.removeEventListener('sipandu-workspace-token-updated', onTokenUpdated);
+    };
+  }, [isAuthenticated, settings.googleSpreadsheetSourceUrl, settings.googleSpreadsheetUrl]);
 
   // Avoid showing protected UI until Firebase has resolved the current session.
   if (!authReady) {
