@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { PPKSRecord, AppSettings } from '../types';
 import {
   buildWhatsAppMessage,
@@ -51,6 +51,17 @@ export const DatabasePpksView: React.FC<DatabasePpksViewProps> = ({
       setEditingIntervensi(target.intervensiMental);
     }
   };
+
+  // Auto-select the first respondent after a live spreadsheet import populates an empty view.
+  useEffect(() => {
+    if (ppksList.length === 0) {
+      setSelectedPPKSId('');
+      return;
+    }
+    if (!ppksList.some((record) => record.id === selectedPPKSId)) {
+      handleSelectPPKS(ppksList[0].id);
+    }
+  }, [ppksList, selectedPPKSId]);
 
   const handleSave = () => {
     if (!currentPPKS) return;
@@ -108,10 +119,11 @@ export const DatabasePpksView: React.FC<DatabasePpksViewProps> = ({
             <select
               value={selectedPPKSId}
               onChange={(e) => handleSelectPPKS(e.target.value)}
-              className="w-full py-3.5 px-4 rounded-xl bg-[#142618] border border-rose-500/45 text-white font-medium text-sm focus:outline-none focus:border-sky-400 focus:ring-1 focus:ring-sky-400 shadow-md cursor-pointer transition"
+              disabled={ppksList.length === 0}
+              className="w-full py-3.5 px-4 rounded-xl bg-[#142618] border border-rose-500/45 text-white font-medium text-sm focus:outline-none focus:border-sky-400 focus:ring-1 focus:ring-sky-400 shadow-md cursor-pointer transition disabled:opacity-60"
             >
               <option value="" className="bg-[#0f1d12] text-neutral-400">
-                -- Silakan Klik Untuk Memilih Data PPKS --
+                {ppksList.length === 0 ? 'Belum ada data PPKS dimuat — gunakan Google Workspace & Cloud Hub' : '-- Silakan Klik Untuk Memilih Data PPKS --'}
               </option>
               {ppksList.map((p) => (
                 <option key={p.id} value={p.id} className="bg-[#0f1d12] text-white py-1">
@@ -128,9 +140,11 @@ export const DatabasePpksView: React.FC<DatabasePpksViewProps> = ({
             <div className="p-4 rounded-full bg-emerald-950/60 border border-emerald-500/30 text-emerald-300">
               <UserCheck className="w-10 h-10 text-sky-300" />
             </div>
-            <h4 className="text-base font-bold text-white">Database Belum Dipilih</h4>
+            <h4 className="text-base font-bold text-white">{ppksList.length === 0 ? 'Data PPKS belum dimuat' : 'Database Belum Dipilih'}</h4>
             <p className="text-xs text-neutral-300 max-w-md">
-              Silakan klik kotak pilihan di atas untuk memilih responden PPKS mana yang ingin Anda lihat profil lengkap, status desil, dan tindak lanjutnya.
+              {ppksList.length === 0
+                ? 'Buka Google Workspace & Cloud Hub → Google Sheets, pilih spreadsheet sumber yang benar, lalu tekan “Muat Data PPKS + Asesmen”. Data yang berhasil diimpor akan muncul di sini.'
+                : 'Silakan pilih responden PPKS untuk melihat profil lengkap, status desil, dan tindak lanjutnya.'}
             </p>
           </div>
         )}

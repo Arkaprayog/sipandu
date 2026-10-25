@@ -1,5 +1,5 @@
 import { getAccessToken, invalidateAccessToken } from './firebase';
-import { PPKSRecord } from '../types';
+import { IntegratedFormData, PPKSRecord } from '../types';
 
 export interface GoogleDriveFile {
   id: string;
@@ -55,6 +55,30 @@ async function googleJson<T>(url: string, init: RequestInit = {}): Promise<T> {
   return data as T;
 }
 
+
+/** Lists real Google Sheets files the authorized account can access across My Drive/shared drives. */
+export async function listDriveSpreadsheets(): Promise<GoogleDriveFile[]> {
+  const all: GoogleDriveFile[] = [];
+  let pageToken = '';
+  do {
+    const params = new URLSearchParams({
+      q: "mimeType = 'application/vnd.google-apps.spreadsheet' and trashed = false",
+      pageSize: '100',
+      orderBy: 'modifiedTime desc',
+      fields: 'nextPageToken,files(id,name,mimeType,webViewLink,createdTime)',
+      includeItemsFromAllDrives: 'true',
+      supportsAllDrives: 'true',
+    });
+    if (pageToken) params.set('pageToken', pageToken);
+    const data = await googleJson<{ files?: GoogleDriveFile[]; nextPageToken?: string }>(
+      `https://www.googleapis.com/drive/v3/files?${params.toString()}`
+    );
+    all.push(...(data.files || []));
+    pageToken = data.nextPageToken || '';
+  } while (pageToken);
+  return all;
+}
+
 /** Extracts a Google Drive folder ID from either an ID or a Drive folder URL. */
 export function extractDriveFolderId(input: string): string {
   const value = input.trim();
@@ -108,13 +132,29 @@ export async function createDriveFolder(folderName: string): Promise<GoogleDrive
   });
 }
 
-/** Returns actual tab titles from the spreadsheet metadata; does not assume a tab name. */
-export async function getSpreadsheetSheetTitles(spreadsheetIdOrUrl: string): Promise<string[]> {
+/** Returns spreadsheet name and actual tab titles from the Google Sheets API. */
+export async function getSpreadsheetMetadata(spreadsheetIdOrUrl: string): Promise<{
+  spreadsheetId: string;
+  title: string;
+  sheetTitles: string[];
+}> {
   const id = extractSpreadsheetId(spreadsheetIdOrUrl);
-  const data = await googleJson<{ sheets?: { properties?: { title?: string } }[] }>(
-    `https://sheets.googleapis.com/v4/spreadsheets/${id}?fields=sheets.properties.title`
+  const data = await googleJson<{
+    spreadsheetId?: string;
+    properties?: { title?: string };
+    sheets?: { properties?: { title?: string } }[];
+  }>(
+    `https://sheets.googleapis.com/v4/spreadsheets/${id}?fields=spreadsheetId,properties.title,sheets.properties.title`
   );
-  return (data.sheets || []).map(sheet => sheet.properties?.title || '').filter(Boolean);
+  return {
+    spreadsheetId: data.spreadsheetId || id,
+    title: data.properties?.title || 'Google Spreadsheet',
+    sheetTitles: (data.sheets || []).map(sheet => sheet.properties?.title || '').filter(Boolean),
+  };
+}
+
+export async function getSpreadsheetSheetTitles(spreadsheetIdOrUrl: string): Promise<string[]> {
+  return (await getSpreadsheetMetadata(spreadsheetIdOrUrl)).sheetTitles;
 }
 
 export const SIPANDU_DATABASE_HEADERS = [
@@ -228,6 +268,206 @@ export async function upsertPPKSInSpreadsheet(
     body: JSON.stringify({ values: [row] }),
   });
   return 'inserted';
+}
+
+
+function normalizeSheetHeader(value: string): string {
+  return String(value ?? '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]/g, '');
+}
+
+function readCellByAliases(headers: string[], row: string[], aliases: string[]): string {
+  const normalizedHeaders = headers.map(normalizeSheetHeader);
+  const normalizedAliases = [...aliases].map(normalizeSheetHeader).sort((a, b) => b.length - a.length);
+  for (const alias of normalizedAliases) {
+    const index = normalizedHeaders.indexOf(alias);
+    if (index >= 0 && row[index] !== undefined && row[index].trim() !== '') return row[index].trim();
+  }
+  // Match longer phrases within Google Forms question titles, but avoid short
+  // generic aliases such as "nama" matching "Nama Asesor".
+  for (let index = 0; index < normalizedHeaders.length; index++) {
+    const header = normalizedHeaders[index];
+    const alias = normalizedAliases.find((candidate) => candidate.length >= 6 && header.includes(candidate));
+    if (alias && row[index] !== undefined && row[index].trim() !== '') return row[index].trim();
+  }
+  return '';
+}
+
+function parseSheetNumber(value: string, fallback = 0): number {
+  const normalized = String(value ?? '').replace(/,/g, '.').replace(/[^\d.-]/g, '');
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function parseSheetBoolean(value: string): boolean {
+  return /^(1|true|ya|yes|iya|setuju|direkomendasikan|perlu|ada)$/i.test(value.trim());
+}
+
+const INTEGRATED_SHEET_FIELDS: Array<{
+  key: keyof IntegratedFormData;
+  aliases: string[];
+  kind?: 'number' | 'boolean';
+}> = [
+  { key: 'nomorRegistrasi', aliases: ['nomorRegistrasi', 'nomorRegistrasiPPKS', 'registrationNumber'] },
+  { key: 'noBpjs', aliases: ['noBPJS', 'nomorBPJS', 'nomorJKN'] },
+  { key: 'statusPernikahan', aliases: ['statusPernikahan', 'statusPerkawinan'] },
+  { key: 'pendidikanTerakhir', aliases: ['pendidikanTerakhir', 'pendidikan'] },
+  { key: 'pekerjaan', aliases: ['pekerjaan', 'pekerjaanSaatIni'] },
+  { key: 'kontakDaruratNama', aliases: ['kontakDaruratNama', 'namaKontakDarurat'] },
+  { key: 'kontakDaruratHubungan', aliases: ['kontakDaruratHubungan', 'hubunganKontakDarurat'] },
+  { key: 'kontakDaruratNoHp', aliases: ['kontakDaruratNoHp', 'nomorKontakDarurat'] },
+  { key: 'tahunDiagnosa', aliases: ['tahunDiagnosa', 'tahunDiagnosis', 'tahunDidiagnosis'] },
+  { key: 'faskesPdpRujukan', aliases: ['faskesPdpRujukan', 'fasilitasKesehatanPDP', 'faskesRujukan'] },
+  { key: 'statusArv', aliases: ['statusArv', 'statusARV'] },
+  { key: 'regimenArv', aliases: ['regimenArv', 'regimenARV'] },
+  { key: 'kepatuhanArv', aliases: ['kepatuhanArv', 'kepatuhanARV'] },
+  { key: 'nilaiCd4Terakhir', aliases: ['nilaiCd4Terakhir', 'CD4Terakhir', 'hasilCD4'] },
+  { key: 'viralLoadTerakhir', aliases: ['viralLoadTerakhir', 'viralLoad', 'hasilViralLoad'] },
+  { key: 'riwayatInfeksiOportunistik', aliases: ['riwayatInfeksiOportunistik', 'infeksiOportunistik'] },
+  { key: 'kendalaAksesPengobatan', aliases: ['kendalaAksesPengobatan', 'kendalaBerobat'] },
+  { key: 'statusKeterbukaanStatus', aliases: ['statusKeterbukaanStatus', 'keterbukaanStatus'] },
+  { key: 'dukunganKeluarga', aliases: ['dukunganKeluarga', 'dukunganKeluargaODHIV'] },
+  { key: 'pengalamanStigmaDiskriminasi', aliases: ['pengalamanStigmaDiskriminasi', 'stigmaDiskriminasi'] },
+  { key: 'kondisiTempatTinggal', aliases: ['kondisiTempatTinggal', 'statusTempatTinggal'] },
+  { key: 'kondisiKelayakanRumah', aliases: ['kondisiKelayakanRumah', 'kelayakanRumah', 'kondisiRumah'] },
+  { key: 'penghasilanBulanan', aliases: ['penghasilanBulanan', 'pendapatanBulanan'] },
+  { key: 'pengeluaranKebutuhanObatNutrisi', aliases: ['pengeluaranKebutuhanObatNutrisi', 'pengeluaranObatNutrisi'] },
+  { key: 'tanggunganKeluarga', aliases: ['tanggunganKeluarga', 'jumlahTanggungan'], kind: 'number' },
+  { key: 'kepemilikanUsaha', aliases: ['kepemilikanUsaha', 'usahaDimiliki'] },
+  { key: 'minatKeterampilanAtensi', aliases: ['minatKeterampilanAtensi', 'minatKeterampilan', 'jenisBantuanAtensi'] },
+  { key: 'desilKemiskinan', aliases: ['desilKemiskinan', 'desilDTKS', 'desilEkonomi'], kind: 'number' },
+  { key: 'skorKecemasan', aliases: ['skorKecemasan', 'tingkatKecemasan', 'hasilAsesmenKecemasan'] },
+  { key: 'skorDepresi', aliases: ['skorDepresi', 'tingkatDepresi', 'hasilAsesmenDepresi'] },
+  { key: 'penerimaanDiri', aliases: ['penerimaanDiri', 'penerimaanStatus'] },
+  { key: 'doronganBunuhDiri', aliases: ['doronganBunuhDiri', 'ideBunuhDiri'] },
+  { key: 'kebutuhanKonselingSosial', aliases: ['kebutuhanKonselingSosial', 'kebutuhanKonseling'] },
+  { key: 'rekomendasiBantuanNutrisi', aliases: ['rekomendasiBantuanNutrisi', 'bantuanNutrisi'], kind: 'boolean' },
+  { key: 'rekomendasiBantuanModalUsaha', aliases: ['rekomendasiBantuanModalUsaha', 'bantuanModalUsaha'], kind: 'boolean' },
+  { key: 'rekomendasiBantuanMedisTransport', aliases: ['rekomendasiBantuanMedisTransport', 'bantuanMedisTransport'], kind: 'boolean' },
+  { key: 'rekomendasiRujukanRehabilitasi', aliases: ['rekomendasiRujukanRehabilitasi', 'rujukanRehabilitasi'], kind: 'boolean' },
+  { key: 'catatanIntervensiKhusus', aliases: ['catatanIntervensiKhusus', 'intervensiKhusus'] },
+  { key: 'rencanaAksiPendamping', aliases: ['rencanaAksiPendamping', 'rencanaAksi'] },
+  { key: 'jadwalMonitoringBerikutnya', aliases: ['jadwalMonitoringBerikutnya', 'jadwalMonitoring'] },
+  { key: 'namaAsesor', aliases: ['namaAsesor', 'petugasAsesmen'] },
+  { key: 'nipAsesor', aliases: ['nipAsesor', 'NIPAsesor'] },
+  { key: 'supervisorKemensos', aliases: ['supervisorKemensos', 'namaSupervisor'] },
+];
+
+function mapRowsToPPKSRecords(rows: string[][]): PPKSRecord[] {
+  if (rows.length < 2) return [];
+  const headers = rows[0].map((value) => String(value ?? '').trim());
+  if (!headers.some(Boolean)) return [];
+  const records: PPKSRecord[] = [];
+  const seen = new Set<string>();
+
+  rows.slice(1).forEach((sourceRow, rowIndex) => {
+    const row = sourceRow.map((value) => String(value ?? '').trim());
+    const namaLengkap = readCellByAliases(headers, row, [
+      'namaLengkap', 'namaResponden', 'namaPPKS', 'namaODHIV', 'namaLengkapSesuaiKTP', 'nama',
+    ]);
+    if (!namaLengkap) return;
+
+    const timestamp = readCellByAliases(headers, row, ['timestamp', 'capWaktu', 'waktuPengiriman', 'waktuPengisian', 'tanggalWaktu', 'createTime']);
+    const nik = readCellByAliases(headers, row, ['nik', 'nomorIndukKependudukan', 'nomorKTP', 'NIKKTP', 'noKTPNIK', 'KTPNIK']);
+    const externalId = readCellByAliases(headers, row, ['idPPKS', 'recordId', 'id']);
+    const stableSource = [timestamp, nik, namaLengkap, ...row].join('|');
+    let hash = 2166136261;
+    for (let i = 0; i < stableSource.length; i++) {
+      hash ^= stableSource.charCodeAt(i);
+      hash = Math.imul(hash, 16777619);
+    }
+    const recordId = externalId || (nik ? `SHEET-NIK-${nik.replace(/\D/g, '')}` : `SHEET-${(hash >>> 0).toString(36)}`);
+    if (seen.has(recordId)) return;
+    seen.add(recordId);
+
+    const usia = parseSheetNumber(readCellByAliases(headers, row, ['usia', 'umur', 'umurTahun']), 0);
+    const gender = readCellByAliases(headers, row, ['jenisKelamin', 'gender', 'jenisKelaminResponden']);
+    const domisili = readCellByAliases(headers, row, ['kotaDomisili', 'kabupatenKota', 'kotaKabupaten', 'domisili', 'kota', 'kabupaten']);
+    const alamat = readCellByAliases(headers, row, ['alamatLengkap', 'alamatDomisili', 'alamatResponden', 'alamat']);
+    const jenisBantuan = readCellByAliases(headers, row, ['jenisBantuan', 'bantuanDibutuhkan', 'jenisBantuanAtensi', 'kebutuhanBantuan']);
+    const integratedValues: Partial<Record<keyof IntegratedFormData, string | number | boolean>> = {};
+    const integratedMarkerKeys = new Set<keyof IntegratedFormData>([
+      'nomorRegistrasi', 'noBpjs', 'statusPernikahan', 'pendidikanTerakhir',
+      'tahunDiagnosa', 'faskesPdpRujukan', 'statusArv', 'nilaiCd4Terakhir',
+      'viralLoadTerakhir', 'kontakDaruratNama', 'statusKeterbukaanStatus',
+    ]);
+    let hasIntegratedAssessmentData = false;
+    for (const field of INTEGRATED_SHEET_FIELDS) {
+      const rawValue = readCellByAliases(headers, row, field.aliases);
+      if (rawValue && integratedMarkerKeys.has(field.key)) hasIntegratedAssessmentData = true;
+      if (field.kind === 'number') integratedValues[field.key] = parseSheetNumber(rawValue, 0);
+      else if (field.kind === 'boolean') integratedValues[field.key] = parseSheetBoolean(rawValue);
+      else integratedValues[field.key] = rawValue;
+    }
+
+    const integratedForm = hasIntegratedAssessmentData
+      ? (integratedValues as IntegratedFormData)
+      : undefined;
+    const desil = parseSheetNumber(readCellByAliases(headers, row, ['desil', 'desilKemiskinan']), 0);
+    const fotoDiri = readCellByAliases(headers, row, ['fotoDiri', 'fotoResponden', 'uploadFotoDiri', 'foto']);
+    const fotoKtp = readCellByAliases(headers, row, ['fotoKtp', 'fotoKTP', 'uploadFotoKTP', 'dokumenKTP']);
+    const fotoKk = readCellByAliases(headers, row, ['fotoKk', 'fotoKK', 'uploadFotoKK', 'dokumenKK']);
+    const fotoRumah = readCellByAliases(headers, row, ['fotoRumah', 'fotoRumahTampakDepan', 'uploadFotoRumah']);
+    const sourceRecord: PPKSRecord = {
+      id: recordId || `SHEET-ROW-${rowIndex + 2}`,
+      timestamp,
+      namaLengkap,
+      nik,
+      usia,
+      jenisKelamin: /perempuan|wanita/i.test(gender) ? 'Perempuan' : 'Laki-laki',
+      kotaDomisili: domisili,
+      alamatLengkap: alamat,
+      noHpWa: readCellByAliases(headers, row, ['noHPWA', 'nomorHPWA', 'noWhatsApp', 'nomorTelepon', 'telepon', 'hp']),
+      jenisBantuan,
+      intervensiMental: readCellByAliases(headers, row, ['intervensiMental', 'kebutuhanIntervensiMental', 'catatanPendamping']),
+      desil,
+      fotoDiri,
+      fotoKtp,
+      fotoKk,
+      fotoRumah,
+      statusAsesmen: integratedForm ? 'Terintegrasi' : 'Tahap Awal',
+      googleFormSync: true,
+      integratedForm,
+    };
+    records.push(sourceRecord);
+  });
+  return records;
+}
+
+/** Imports respondent records from an authorized spreadsheet without writing to the source. */
+export async function importPPKSFromSpreadsheet(
+  spreadsheetUrlOrId: string,
+  preferredTab?: string,
+): Promise<{
+  spreadsheetId: string;
+  spreadsheetTitle: string;
+  sheetTitles: string[];
+  selectedTab: string;
+  rowsRead: number;
+  records: PPKSRecord[];
+  previewRows: string[][];
+}> {
+  const metadata = await getSpreadsheetMetadata(spreadsheetUrlOrId);
+  if (!metadata.sheetTitles.length) throw new Error('Spreadsheet tidak memiliki tab yang dapat dibaca.');
+  const preferred = preferredTab?.trim();
+  const responseTab = metadata.sheetTitles.find((title) => {
+    const normalized = normalizeSheetHeader(title);
+    return normalized.includes('formresponses') || normalized.includes('fromresponse') || normalized.includes('respon');
+  });
+  const selectedTab = preferred && metadata.sheetTitles.includes(preferred)
+    ? preferred
+    : (responseTab || metadata.sheetTitles[0]);
+  const escapedTitle = selectedTab.replace(/'/g, "''");
+  const rows = await readSpreadsheetData(metadata.spreadsheetId, `'${escapedTitle}'!A1:ZZ2000`);
+  const records = mapRowsToPPKSRecords(rows);
+  return {
+    spreadsheetId: metadata.spreadsheetId,
+    spreadsheetTitle: metadata.title,
+    sheetTitles: metadata.sheetTitles,
+    selectedTab,
+    rowsRead: rows.length,
+    records,
+    previewRows: rows.slice(0, 8),
+  };
 }
 
 export async function createGoogleSpreadsheet(title: string): Promise<string> {
