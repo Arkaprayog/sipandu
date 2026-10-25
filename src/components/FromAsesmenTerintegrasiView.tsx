@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { PPKSRecord, IntegratedFormData } from '../types';
 import {
   FileText,
@@ -92,6 +92,33 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
   const [showPrintModal, setShowPrintModal] = useState<boolean>(false);
 
   const currentPPKS = ppksList.find((p) => p.id === selectedPPKSId);
+
+  // The view may stay mounted while Google Sheets data is imported in the overlay.
+  // If its previous selection was empty/removed, automatically select the first
+  // real respondent so the integrated form updates without requiring navigation.
+  useEffect(() => {
+    const selectedStillExists = ppksList.some((record) => record.id === selectedPPKSId);
+    if (selectedStillExists) return;
+    const first = ppksList[0];
+    if (!first) {
+      setSelectedPPKSId('');
+      setFormData(defaultEmptyForm);
+      setFotoDiri('');
+      setFotoKtp('');
+      setFotoKk('');
+      setFotoRumah('');
+      return;
+    }
+    setSelectedPPKSId(first.id);
+    setFormData(first.integratedForm || {
+      ...defaultEmptyForm,
+      nomorRegistrasi: first.id ? `REG-${first.id}` : '',
+    });
+    setFotoDiri(first.fotoDiri || '');
+    setFotoKtp(first.fotoKtp || '');
+    setFotoKk(first.fotoKk || '');
+    setFotoRumah(first.fotoRumah || '');
+  }, [ppksList, selectedPPKSId]);
 
   // Handle selecting a PPKS from horizontal search
   const handleSelectPPKS = (id: string) => {
@@ -194,6 +221,15 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
           </p>
         </div>
 
+        {ppksList.length === 0 && (
+          <div role="status" className="mb-5 rounded-xl border border-amber-500/40 bg-amber-950/40 p-4 text-sm text-amber-100">
+            <h3 className="font-bold">Data PPKS / Asesmen belum dimuat</h3>
+            <p className="mt-1 text-xs text-amber-100/90">
+              Form ini mengambil daftar responden dari data SIPANDU. Buka Google Workspace & Cloud Hub → Google Sheets → pilih spreadsheet sumber yang benar, lalu tekan “Muat Data PPKS + Asesmen”. Setelah impor berhasil, nama responden akan muncul di pilihan ini otomatis.
+            </p>
+          </div>
+        )}
+
         {/* Menu horizontal: mencari/menggulir nama PPKS yang sudah tersinkron ke aplikasi */}
         <div className="mb-6">
           <label className="block text-xs font-bold text-sky-200 mb-2 uppercase tracking-wider flex items-center gap-2">
@@ -204,8 +240,10 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
             <select
               value={selectedPPKSId}
               onChange={(e) => handleSelectPPKS(e.target.value)}
-              className="w-full py-3 px-4 rounded-xl bg-[#142618] border border-rose-500/45 text-white font-medium text-sm focus:outline-none focus:border-sky-400 focus:ring-1 focus:ring-sky-400 shadow-md cursor-pointer transition"
+              disabled={ppksList.length === 0}
+              className="w-full py-3 px-4 rounded-xl bg-[#142618] border border-rose-500/45 text-white font-medium text-sm focus:outline-none focus:border-sky-400 focus:ring-1 focus:ring-sky-400 shadow-md cursor-pointer transition disabled:opacity-60"
             >
+              {ppksList.length === 0 && <option value="">Belum ada data PPKS yang dimuat</option>}
               {ppksList.map((p) => (
                 <option key={p.id} value={p.id} className="bg-[#0f1d12] text-white py-1">
                   {p.namaLengkap} • NIK: {p.nik} • {p.kotaDomisili} (Status: {p.statusAsesmen})
