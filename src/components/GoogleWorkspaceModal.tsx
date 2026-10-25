@@ -91,6 +91,15 @@ export const GoogleWorkspaceModal: React.FC<GoogleWorkspaceModalProps> = ({
   const [firestoreSyncedCount, setFirestoreSyncedCount] = useState<number>(0);
   const [diagnosticResults, setDiagnosticResults] = useState<Array<{service: string; ok: boolean; message: string; checkedAt: string}>>([]);
   const [diagnosticsRunning, setDiagnosticsRunning] = useState<boolean>(false);
+  const firestoreDiagnostic = diagnosticResults.find((result) => result.service === 'Firestore');
+  const firestoreBadgeLabel = !firestoreDiagnostic
+    ? 'Belum diperiksa'
+    : firestoreDiagnostic.ok ? 'Terverifikasi' : 'Perlu perhatian';
+  const firestoreBadgeClass = !firestoreDiagnostic
+    ? 'bg-neutral-900 text-neutral-300 border-neutral-700'
+    : firestoreDiagnostic.ok
+      ? 'bg-emerald-950 text-emerald-200 border-emerald-600/40'
+      : 'bg-rose-950 text-rose-200 border-rose-600/40';
 
   const handleRunDiagnostics = async () => {
     setDiagnosticsRunning(true);
@@ -552,14 +561,23 @@ export const GoogleWorkspaceModal: React.FC<GoogleWorkspaceModalProps> = ({
                     <Database className="w-4 h-4 text-sky-300" />
                     <span className="font-bold text-white">Firebase Firestore Database</span>
                   </div>
-                  <span className="px-2 py-0.5 rounded text-[10px] bg-neutral-900 text-neutral-300 border border-neutral-700">
-                    Belum diverifikasi
+                  <span className={`px-2 py-0.5 rounded text-[10px] border ${firestoreBadgeClass}}>
+                    {firestoreBadgeLabel}
                   </span>
                 </div>
                 <p className="text-neutral-300 text-[11px]">
                   Uji akses dilakukan terhadap koleksi ppks yang dilindungi Firestore Rules. Penyimpanan lokal browser tidak otomatis berarti data sudah tersimpan di cloud.
                 </p>
-                <div className="pt-2 flex items-center gap-2">
+                <div className="pt-2 flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleRunDiagnostics}
+                    disabled={loading || diagnosticsRunning}
+                    className="px-3.5 py-2 rounded-lg bg-violet-800/80 hover:bg-violet-700 text-white font-semibold text-xs flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${diagnosticsRunning ? 'animate-spin' : ''}`} />
+                    <span>{diagnosticsRunning ? 'Memeriksa…' : 'Verifikasi Firestore'}</span>
+                  </button>
                   <button
                     type="button"
                     onClick={handleSyncFirestore}
