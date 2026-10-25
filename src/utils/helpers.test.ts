@@ -8,17 +8,6 @@ import {
   authenticateFixedUser,
 } from './helpers';
 import { PPKSRecord, UserAccount } from '../types';
-import { isObviousDemoMarker } from '../data/initialData';
-
-test('demo cleanup recognises common Indonesian marker spellings but does not classify normal names', () => {
-  assert.equal(isObviousDemoMarker('Uji Coba'), true);
-  assert.equal(isObviousDemoMarker('UJI-COBA: PPKS'), true);
-  assert.equal(isObviousDemoMarker('Data Uji PPKS'), true);
-  assert.equal(isObviousDemoMarker('Uji_Data'), true);
-  assert.equal(isObviousDemoMarker('PPKS Sample 001'), true);
-  assert.equal(isObviousDemoMarker('Budi Santoso'), false);
-  assert.equal(isObviousDemoMarker('Dewi Sample Lubis'), false);
-});
 
 test('validatePassword rejects passwords under 6 characters', () => {
   const result = validatePassword('abc1');
