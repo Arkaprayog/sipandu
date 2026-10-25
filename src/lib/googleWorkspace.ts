@@ -330,6 +330,47 @@ function readCellByAliases(headers: string[], row: string[], aliases: string[]):
   return '';
 }
 
+/** Maps respondent NIK from the common header variants used by Google Forms/Sheets. */
+function readNIKFromSheetRow(headers: string[], row: string[]): string {
+  const normalizedHeaders = headers.map(normalizeSheetHeader);
+  const exactAliases = [
+    'nik', 'nikResponden', 'nikSesuaiKTP', 'nikSesuaiKKTP', 'nikNoKTP', 'nikKTP',
+    'nomorIndukKependudukan', 'nomorIndukKependudukanNIK', 'nomorKTP', 'noKTP',
+    'nomorKartuTandaPenduduk', 'noIndukKependudukan', 'nomorNIK', 'noNIK',
+    'noKTPNIK', 'KTPNIK',
+  ].map(normalizeSheetHeader);
+
+  // Prefer exact semantic column names when possible.
+  for (const alias of exactAliases) {
+    const index = normalizedHeaders.indexOf(alias);
+    if (index >= 0 && row[index] !== undefined && row[index].trim() !== '') {
+      return row[index].trim();
+    }
+  }
+
+  // Form question labels often include instructions, e.g. "NIK (16 digit, sesuai KTP)".
+  // Exclude relatives' and staff members' identity numbers.
+  const excluded = /(ayah|ibu|orangtua|wali|suami|istri|pasangan|keluarga|pendamping|petugas|asesor|asessor|supervisor|penanggungjawab)/;
+  const candidates = normalizedHeaders
+    .map((header, index) => ({ header, index, value: row[index]?.trim() || '' }))
+    .filter(({ header, value }) => value && !excluded.test(header))
+    .filter(({ header }) =>
+      header.includes('nik') ||
+      header.includes('nomorindukkependudukan') ||
+      header.includes('nomorkartutandapenduduk') ||
+      header.includes('nomorktp') ||
+      header.includes('noktp')
+    );
+
+  const score = (header: string) =>
+    (header.includes('responden') ? 50 : 0) +
+    (header.includes('nik') ? 30 : 0) +
+    (header.includes('ktp') ? 20 : 0) -
+    (header.length > 100 ? 10 : 0);
+  candidates.sort((a, b) => score(b.header) - score(a.header));
+  return candidates[0]?.value || '';
+}
+
 function parseSheetNumber(value: string, fallback = 0): number {
   const normalized = String(value ?? '').replace(/,/g, '.').replace(/[^\d.-]/g, '');
   const parsed = Number(normalized);
@@ -405,7 +446,7 @@ function mapRowsToPPKSRecords(rows: string[][]): PPKSRecord[] {
     if (!namaLengkap) return;
 
     const timestamp = readCellByAliases(headers, row, ['timestamp', 'capWaktu', 'waktuPengiriman', 'waktuPengisian', 'tanggalWaktu', 'createTime']);
-    const nik = readCellByAliases(headers, row, ['nik', 'nikResponden', 'NIKNoKTP', 'nomorIndukKependudukan', 'nomorKTP', 'nomorKTPNIK', 'NIKKTP', 'noKTPNIK', 'KTPNIK']);
+    const nik = readNIKFromSheetRow(headers, row);
     const externalId = readCellByAliases(headers, row, ['idPPKS', 'recordId', 'id']);
     const stableSource = [timestamp, nik, namaLengkap, ...row].join('|');
     let hash = 2166136261;
