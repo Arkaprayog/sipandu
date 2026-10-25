@@ -1,7 +1,7 @@
 import { getAccessToken, invalidateAccessToken } from './firebase';
 import { IntegratedFormData, PPKSRecord } from '../types';
 import { isLegacySamplePPKS, isObviousDemoMarker, LEGACY_SAMPLE_PPKS_IDS, LEGACY_SAMPLE_PPKS_NAMES } from '../data/initialData';
-import { findNIKHeaders, isLikelyRespondentNIKHeader, readNIKFromSheetRow } from './nikMapping';
+import { findNIKHeaders, readNIKFromSheetRow } from './nikMapping';
 
 export interface GoogleDriveFile {
   id: string;
