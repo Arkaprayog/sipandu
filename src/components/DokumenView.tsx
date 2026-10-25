@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { SuratRecord } from '../types';
+import { ProfileUser, SuratRecord } from '../types';
 import { KemensosLogo } from './KemensosLogo';
 import {
   FolderArchive,
@@ -16,7 +16,11 @@ import {
   Check,
 } from 'lucide-react';
 
-export const DokumenView: React.FC = () => {
+interface DokumenViewProps {
+  profile: ProfileUser;
+}
+
+export const DokumenView: React.FC<DokumenViewProps> = ({ profile }) => {
   const [activeTab, setActiveTab] = useState<'surat-tugas' | 'surat-lainnya'>('surat-tugas');
   const [suratList, setSuratList] = useState<SuratRecord[]>([]);
   const [selectedSurat, setSelectedSurat] = useState<SuratRecord | null>(null);
@@ -28,7 +32,7 @@ export const DokumenView: React.FC = () => {
     `ST.03.02/REHSOS-ODHIV/${new Date().getMonth() + 1}/${new Date().getFullYear()}`
   );
   const [newJudul, setNewJudul] = useState<string>('');
-  const [newLokasi, setNewLokasi] = useState<string>('Kota Medan & Kab. Deli Serdang');
+  const [newLokasi, setNewLokasi] = useState<string>('');
   const [newTanggal, setNewTanggal] = useState<string>(
     new Date().toISOString().split('T')[0]
   );
@@ -44,11 +48,11 @@ export const DokumenView: React.FC = () => {
       judul: newJudul,
       jenis: activeTab === 'surat-tugas' ? 'Surat Tugas' : 'Berita Acara',
       tanggal: newTanggal,
-      petugas: 'Deny Arifin Martyon S.',
-      nipPetugas: '19920315 202012 1 002',
+      petugas: profile.nama,
+      nipPetugas: profile.nip,
       lokasi: newLokasi,
       status: 'Aktif',
-      deskripsi: newDeskripsi || 'Penugasan pendampingan sosial dan verifikasi data lapangan PPKS ODHIV.',
+      deskripsi: newDeskripsi.trim(),
     };
 
     setSuratList([newRecord, ...suratList]);
