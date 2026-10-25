@@ -191,7 +191,9 @@ export async function savePPKSToFirestore(ppks: PPKSRecord): Promise<true> {
   const user = auth.currentUser;
   if (!user) throw new Error('Belum masuk ke Firebase Auth sebagai akun SIPANDU.');
 
-  const token = await getIdTokenResult(user, true);
+  // The primary session already refreshes its claims during app login; avoid forcing
+  // a network refresh for every row in a batch sync.
+  const token = await getIdTokenResult(user);
   const role = token.claims.role;
   if (role !== 'owner' && role !== 'supervisor') {
     if (role === 'pendamping') throw new Error('Firestore Rules hanya mengizinkan peran pendamping membaca data. Minta admin memberi peran owner/supervisor yang sesuai bila Anda memang berwenang menulis.');
