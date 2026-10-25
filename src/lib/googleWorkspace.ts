@@ -656,7 +656,7 @@ function isObviousDemoDriveName(name: string): boolean {
   if (exactLegacyArtifacts.some((marker) => normalized.includes(marker))) return true;
   if ([...LEGACY_SAMPLE_PPKS_IDS].some((id) => normalized.includes(normalizeSheetHeader(id)))) return true;
   if ([...LEGACY_SAMPLE_PPKS_NAMES].some((sampleName) => normalized.includes(normalizeSheetHeader(sampleName)))) return true;
-  return /(^|[^a-z])(demo|sample|contoh|dummy|uji[\s_-]?coba|data[\s_-]?uji|uji[\s_-]?data|test[\s_-]?data|data[\s_-]?test)([^a-z]|$)/i.test(name);
+  return /(^|[^a-z])(demo|sample|sampel|contoh|dummy|example|testing|test|uji[\s_-]?coba|data[\s_-]?uji|uji[\s_-]?data|test[\s_-]?data|data[\s_-]?test)([^a-z]|$)/i.test(name);
 }
 
 async function listAllVisibleDriveFiles(): Promise<GoogleDriveFile[]> {
@@ -695,7 +695,7 @@ function isSIPANDULegacyDriveArtifact(name: string): boolean {
   if (exactLegacyArtifacts.some((marker) => normalized.includes(marker))) return true;
   if ([...LEGACY_SAMPLE_PPKS_IDS].some((id) => normalized.includes(normalizeSheetHeader(id)))) return true;
   if ([...LEGACY_SAMPLE_PPKS_NAMES].some((sampleName) => normalized.includes(normalizeSheetHeader(sampleName)))) return true;
-  const hasDemoMarker = /(^|[^a-z])(demo|sample|contoh|dummy|uji\s*coba|data\s*uji|uji\s*data|test\s*data|data\s*test)([^a-z]|$)/i.test(name);
+  const hasDemoMarker = /(^|[^a-z])(demo|sample|sampel|contoh|dummy|example|testing|test|uji\s*coba|data\s*uji|uji\s*data|test\s*data|data\s*test)([^a-z]|$)/i.test(name);
   const identifiesSipandu = /(sipandu|ppks|odhiv|asesmen|kemensos)/i.test(name);
   return hasDemoMarker && identifiesSipandu;
 }
