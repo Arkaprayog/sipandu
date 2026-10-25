@@ -459,7 +459,7 @@ export default function App() {
         <Header
           currentUser={currentUserName}
           profile={profile}
-          unreadNotificationsCount={2}
+          unreadNotificationsCount={0}
           onOpenEditProfile={() => setIsEditProfileOpen(true)}
           onOpenSettings={() => setIsSettingsOpen(true)}
           onOpenNotifications={() => setIsNotificationsOpen(true)}
