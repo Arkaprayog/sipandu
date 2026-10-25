@@ -497,7 +497,10 @@ export default function App() {
           try {
             const drive = await removeObviousDemoFilesFromDrive(GOOGLE_SIPANDU_RESOURCES.driveFolderId);
             filesDeleted = drive.filesDeleted;
-            messages.push(`Drive: ${drive.filesDeleted} file contoh dihapus; ${drive.filesScanned} file diperiksa`);
+            messages.push(`Drive: ${drive.filesDeleted} file contoh dihapus; ${drive.filesScanned} file diperiksa; pemindaian seluruh Drive ${drive.accountWideScanCompleted ? 'berhasil' : 'tidak lengkap'}`);
+            if (!drive.accountWideScanCompleted) {
+              failures.push('Google Drive: pemindaian seluruh akun tidak berhasil. File contoh pada folder SIPANDU sudah diperiksa; pemindaian akan diulangi pada sesi berikutnya.');
+            }
           } catch (error) {
             failures.push(`Google Drive: ${error instanceof Error ? error.message : String(error)}`);
           }
