@@ -21,7 +21,7 @@ import {
   fetchFormResponses,
   GoogleDriveFile,
 } from '../lib/googleWorkspace';
-import { GOOGLE_SIPANDU_RESOURCES } from '../lib/googleSIPANDUResources';
+import { GOOGLE_SIPANDU_RESOURCES, GOOGLE_WORKSPACE_EMAIL } from '../lib/googleSIPANDUResources';
 import { PPKSRecord, AppSettings } from '../types';
 import {
   X,
@@ -110,12 +110,52 @@ export const GoogleWorkspaceModal: React.FC<GoogleWorkspaceModalProps> = ({
       results.push(await testFirestoreConnection());
       const accessToken = await getAccessToken();
       const now = new Date().toISOString();
+      const expectedWorkspaceEmail = GOOGLE_WORKSPACE_EMAIL;
+
       if (!googleUser) {
-        results.push({ service: 'Google Workspace', ok: false, message: 'Belum masuk dengan akun Google di sesi ini.', checkedAt: now });
+        results.push({ service: 'Akun Google Workspace', ok: false, message: 'Belum masuk dengan akun Google pada sesi ini.', checkedAt: now });
+      } else if ((googleUser.email || '').toLowerCase() !== expectedWorkspaceEmail) {
+        results.push({
+          service: 'Akun Google Workspace',
+          ok: false,
+          message: `Akun yang tersambung adalah ${googleUser.email || 'akun tanpa email'}, sedangkan sumber data dibagikan ke ${expectedWorkspaceEmail}. Sambungkan akun yang menerima izin berbagi tersebut.`,
+          checkedAt: now,
+        });
       } else if (!accessToken) {
-        results.push({ service: 'Google Workspace', ok: false, message: 'Akun Google terdeteksi, tetapi token akses API tidak tersedia. Jalankan otorisasi Google untuk sesi ini.', checkedAt: now });
+        results.push({
+          service: 'Akun Google Workspace',
+          ok: false,
+          message: 'Identitas Google tersimpan, tetapi token API belum tersedia atau sudah kedaluwarsa. Hubungkan ulang hanya bila diperlukan; token yang masih berlaku kini dipertahankan saat halaman dimuat ulang.',
+          checkedAt: now,
+        });
       } else {
-        results.push({ service: 'Google Workspace', ok: true, message: 'Token akses tersedia. Izin Drive, Sheets, dan Forms perlu diuji melalui tombol masing-masing karena akses dapat berbeda per layanan.', checkedAt: now });
+        results.push({
+          service: 'Akun Google Workspace',
+          ok: true,
+          message: `Akun yang benar terhubung: ${googleUser.email}. Token akses tersedia untuk pengujian layanan.`,
+          checkedAt: now,
+        });
+
+        // Verify actual shared-resource access; a token's mere presence is not proof
+        // that Drive, Sheets and Forms permissions are correct.
+        try {
+          const files = await listDriveFiles('', GOOGLE_SIPANDU_RESOURCES.driveFolderId);
+          results.push({ service: 'Google Drive sumber', ok: true, message: `Folder sumber dapat dibaca; ${files.length} berkas ditemukan pada daftar pertama.`, checkedAt: new Date().toISOString() });
+        } catch (error: any) {
+          results.push({ service: 'Google Drive sumber', ok: false, message: error?.message || String(error), checkedAt: new Date().toISOString() });
+        }
+        try {
+          const titles = await getSpreadsheetSheetTitles(GOOGLE_SIPANDU_RESOURCES.responseSpreadsheetId);
+          results.push({ service: 'Google Sheets respons', ok: true, message: `Spreadsheet respons dapat dibaca; tab terdeteksi: ${titles.join(', ') || '(tanpa nama tab)'}.`, checkedAt: new Date().toISOString() });
+        } catch (error: any) {
+          results.push({ service: 'Google Sheets respons', ok: false, message: error?.message || String(error), checkedAt: new Date().toISOString() });
+        }
+        try {
+          const responses = await fetchFormResponses(GOOGLE_SIPANDU_RESOURCES.formId);
+          results.push({ service: 'Google Forms respons', ok: true, message: `Form sumber dapat diakses melalui API; ${responses.length} respons terbaca.`, checkedAt: new Date().toISOString() });
+        } catch (error: any) {
+          results.push({ service: 'Google Forms respons', ok: false, message: error?.message || String(error), checkedAt: new Date().toISOString() });
+        }
       }
       setDiagnosticResults(results);
       const failures = results.filter((r) => !r.ok).length;

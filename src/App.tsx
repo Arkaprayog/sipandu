@@ -14,7 +14,7 @@ import { SettingsModal } from './components/SettingsModal';
 import { NotificationsModal } from './components/NotificationsModal';
 import { GoogleWorkspaceModal } from './components/GoogleWorkspaceModal';
 import { onAuthStateChanged, signOut, getIdTokenResult } from 'firebase/auth';
-import { auth, getAccessToken, savePPKSToFirestore } from './lib/firebase';
+import { auth, getAccessToken, savePPKSToFirestore, googleLogout } from './lib/firebase';
 import { ensureSIPANDUDatabaseSheet, extractSpreadsheetId, upsertPPKSInSpreadsheet } from './lib/googleWorkspace';
 import { GOOGLE_SIPANDU_RESOURCES } from './lib/googleSIPANDUResources';
 
@@ -133,6 +133,7 @@ export default function App() {
   const handleLogout = async () => {
     if (window.confirm('Apakah Anda yakin ingin keluar dari aplikasi SIPANDU ODHIV?')) {
       await signOut(auth);
+      await googleLogout();
       setIsAuthenticated(false);
       setCurrentUserName('');
     }
