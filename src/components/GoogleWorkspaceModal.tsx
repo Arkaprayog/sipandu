@@ -727,10 +727,10 @@ export const GoogleWorkspaceModal: React.FC<GoogleWorkspaceModalProps> = ({
               </div>
               <div className="p-4 rounded-xl bg-black/50 border border-emerald-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div className="flex items-center gap-3">
-                  {googleUser ? (
+                  {googleUser?.photoURL ? (
                     <img
-                      src={googleUser.photoURL || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=120'}
-                      alt="Google User"
+                      src={googleUser.photoURL}
+                      alt="Foto akun Google"
                       className="w-12 h-12 rounded-full border border-emerald-400"
                     />
                   ) : (
