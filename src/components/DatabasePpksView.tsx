@@ -28,15 +28,19 @@ interface DatabasePpksViewProps {
   settings: AppSettings;
 }
 
+function normalizeProfileNIK(value: unknown): string {
+  const raw = String(value ?? '').trim().replace(/^['"`]/, '');
+  if (!raw || /^[+-]?\d+(?:[.,]\d+)?e[+-]?\d+$/i.test(raw)) return '';
+  const digits = raw.replace(/\D/g, '');
+  if (/^\d{16}$/.test(digits)) return digits;
+  // Older cached responses may have the question label stored with the answer.
+  // Accept only one exact 16-digit run; never fill missing digits.
+  const matches = [...raw.matchAll(/\d{16}/g)].map((match) => match[0]);
+  return matches.length === 1 ? matches[0] : '';
+}
+
 function resolveProfileNIK(record: PPKSRecord): string {
-  const masterValue = String(record.nik || '').replace(/\D/g, '');
-  if (/^\d{16}$/.test(masterValue)) return masterValue;
-  const assessmentValue = record.officialAssessment?.q23;
-  if (typeof assessmentValue === 'string') {
-    const assessmentNIK = assessmentValue.replace(/\D/g, '');
-    if (/^\d{16}$/.test(assessmentNIK)) return assessmentNIK;
-  }
-  return '';
+  return normalizeProfileNIK(record.nik) || normalizeProfileNIK(record.officialAssessment?.q23);
 }
 export const DatabasePpksView: React.FC<DatabasePpksViewProps> = ({
   ppksList,
