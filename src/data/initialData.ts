@@ -15,7 +15,7 @@ export const initialAppSettings: AppSettings = {
   googleFormKesehatanMentalUrl: 'https://forms.gle/Asesmen-Kesehatan-Mental-ODHIV-Kemensos',
   googleSpreadsheetUrl: '', // Writable database target stays separate from the Google Forms response spreadsheet.
   googleSpreadsheetSourceUrl: GOOGLE_SIPANDU_RESOURCES.responseSpreadsheetUrl,
-  googleSpreadsheetSourceName: 'Sumber Respons Google Form SIPANDU',
+  googleSpreadsheetSourceName: '',
   googleSpreadsheetSourceTab: '',
   googleDriveFolderUrl: GOOGLE_SIPANDU_RESOURCES.driveFolderUrl,
   senderName: 'Deny Arifin Martyon S.',
