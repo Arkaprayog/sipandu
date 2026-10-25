@@ -44,6 +44,7 @@ export function buildWhatsAppMessage(
   const waktu = getWaktuGreeting().toLowerCase();
   const namaResponden = ppks.namaLengkap || 'Bapak/Ibu';
   const senderName = settings.senderName || 'Deny Arifin Martyon S.';
+  const senderShortName = senderName.replace(/\\s+S\\.$/, '');
   const senderRole = settings.senderRole || 'Pendamping ODHIV';
   const senderUnit =
     settings.senderUnit ||
@@ -64,7 +65,7 @@ export function buildWhatsAppMessage(
   return `Halo ${namaResponden}
 Selamat ${waktu}
 
-Saya ${senderName} dari ${senderUnit}.
+Saya ${senderShortName} dari Tim Administrasi.
 
 Terima kasih telah mengisi formulir Asesmen Program Atensi Kementerian Sosial Tahap Awal. Pesan ini membantu proses tindak lanjut; status verifikasi data akan diinformasikan setelah diperiksa petugas.
 
