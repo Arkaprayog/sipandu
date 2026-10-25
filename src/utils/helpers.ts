@@ -49,26 +49,28 @@ export function buildWhatsAppMessage(
     settings.senderUnit ||
     'Direktorat Rehabilitasi Sosial Korban Penyalahgunaan Narkoba & ODHIV';
 
-  const baseUrl = settings.googleFormTahapAwalUrl || 'https://forms.gle/SIPANDU-ODHIV-Lanjutan-Sumut';
-  const uniqueLanjutanUrl = `${baseUrl}?entry.id=${encodeURIComponent(ppks.id)}&entry.nik=${encodeURIComponent(ppks.nik)}`;
-  const mentalHealthUrl =
-    settings.googleFormKesehatanMentalUrl ||
-    'https://forms.gle/Asesmen-Kesehatan-Mental-ODHIV-Kemensos';
+  // Never invent a Forms URL. Convert the configured editor URL to its public
+  // respondent URL; leave the link out if no real URL has been configured.
+  const configuredStageUrl = settings.googleFormTahapAwalUrl?.trim() || '';
+  const stageUrl = configuredStageUrl.replace(/\/edit(?:\?.*)?$/, '/viewform');
+  const mentalHealthUrl = settings.googleFormKesehatanMentalUrl?.trim() || '';
+  const continuationText = stageUrl
+    ? `Silakan gunakan tautan asesmen lanjutan berikut untuk melengkapi data:\n${stageUrl}`
+    : 'Tautan asesmen lanjutan belum dikonfigurasi. Silakan hubungi petugas pendamping untuk mendapatkan tautan yang benar.';
+  const mentalHealthText = mentalHealthUrl
+    ? `\n\nKuesioner Asesmen Kesehatan Mental (sukarela):\n${mentalHealthUrl}`
+    : '';
 
   return `Halo ${namaResponden}
 Selamat ${waktu}
 
-Saya Deny Arifin Martyon dari Tim Administrasi.
+Saya ${senderName} dari ${senderUnit}.
 
-Terima kasih telah mengisi formulir Asesmen Program Atensi Kementerian Sosial Tahap Awal. Data Anda telah berhasil kami terima dan terverifikasi dalam sistem kami.
-Silahkan mengisi link tersebut untuk melanjutkan asesmen lanjutan agar data kamu bisa kami proses dan verifikasi:
-${uniqueLanjutanUrl}
+Terima kasih telah mengisi formulir Asesmen Program Atensi Kementerian Sosial Tahap Awal. Pesan ini membantu proses tindak lanjut; status verifikasi data akan diinformasikan setelah diperiksa petugas.
 
-Dan silahkan mengisi kuisioer Asesmen Kesehatan Mental berikut dengan sukarela jika Bapak/Ibu berkenan:
-${mentalHealthUrl}
+${continuationText}${mentalHealthText}
 
-Tim kami akan melakukan proses verifikasi lebih lanjut. 
-Jika diperlukan asesmen lanjutan atau Bapak/Ibu membutuhka pendampingan sosial,  silahkan menghubungi saya kembali melalui nomor ini.
+Tim kami akan melakukan proses verifikasi lebih lanjut. Jika diperlukan asesmen lanjutan atau Anda membutuhkan pendampingan sosial, silakan menghubungi petugas pendamping.
 
 Jika Anda memiliki pertanyaan terkait Program Bantuan Atensi ini, silakan membalas pesan ini.
 
