@@ -28,6 +28,16 @@ interface DatabasePpksViewProps {
   settings: AppSettings;
 }
 
+function resolveProfileNIK(record: PPKSRecord): string {
+  const masterValue = String(record.nik || '').replace(/\D/g, '');
+  if (/^\d{16}$/.test(masterValue)) return masterValue;
+  const assessmentValue = record.officialAssessment?.q23;
+  if (typeof assessmentValue === 'string') {
+    const assessmentNIK = assessmentValue.replace(/\D/g, '');
+    if (/^\d{16}$/.test(assessmentNIK)) return assessmentNIK;
+  }
+  return '';
+}
 export const DatabasePpksView: React.FC<DatabasePpksViewProps> = ({
   ppksList,
   onUpdatePPKS,
@@ -41,6 +51,7 @@ export const DatabasePpksView: React.FC<DatabasePpksViewProps> = ({
 
   // Currently selected PPKS
   const currentPPKS = ppksList.find((p) => p.id === selectedPPKSId);
+  const currentNIK = currentPPKS ? resolveProfileNIK(currentPPKS) : '';
 
   // Sync internal edit state when a PPKS is selected
   const handleSelectPPKS = (id: string) => {
@@ -128,7 +139,7 @@ export const DatabasePpksView: React.FC<DatabasePpksViewProps> = ({
               </option>
               {ppksList.map((p) => (
                 <option key={p.id} value={p.id} className="bg-[#0f1d12] text-white py-1">
-                  {p.namaLengkap} • NIK: {p.nik} • {p.kotaDomisili} (Desil {p.desil})
+                  {p.namaLengkap} • NIK: {resolveProfileNIK(p) || 'belum terpetakan'} • {p.kotaDomisili} (Desil {p.desil})
                 </option>
               ))}
             </select>
@@ -229,7 +240,7 @@ export const DatabasePpksView: React.FC<DatabasePpksViewProps> = ({
                         NIK
                       </td>
                       <td className="py-2.5 px-3 font-mono text-sky-200 font-semibold tracking-wider break-all">
-                        {currentPPKS.nik || 'NIK belum terpetakan dari spreadsheet sumber'}
+                        {currentNIK || 'NIK belum terpetakan dari spreadsheet sumber'}
                       </td>
                     </tr>
 

@@ -409,6 +409,26 @@ export const initAuthListener = (
 };
 
 /**
+ * Firestore rejects JavaScript `undefined` values, including optional nested
+ * fields such as integratedForm/fotoKk/fotoRumah. Remove them recursively
+ * before writing imported records; null, false, 0, and empty strings are kept.
+ */
+function stripUndefinedForFirestore(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.filter((item) => item !== undefined).map(stripUndefinedForFirestore);
+  }
+  if (value && typeof value === 'object') {
+    if (value instanceof Date) return value;
+    const output: Record<string, unknown> = {};
+    for (const [key, nested] of Object.entries(value as Record<string, unknown>)) {
+      if (nested !== undefined) output[key] = stripUndefinedForFirestore(nested);
+    }
+    return output;
+  }
+  return value;
+}
+
+/**
  * Firestore PPKS Sync Helpers
  */
 export async function savePPKSToFirestore(ppks: PPKSRecord): Promise<true> {
@@ -425,7 +445,8 @@ export async function savePPKSToFirestore(ppks: PPKSRecord): Promise<true> {
   }
 
   try {
-    await setDoc(doc(db, 'ppks', ppks.id), ppks, { merge: true });
+    const firestoreRecord = stripUndefinedForFirestore(ppks) as PPKSRecord;
+    await setDoc(doc(db, 'ppks', ppks.id), firestoreRecord, { merge: true });
     return true;
   } catch (error) {
     throw new Error(describeConnectionError(error));

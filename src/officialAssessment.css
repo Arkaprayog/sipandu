@@ -72,31 +72,131 @@
 }
 @media print {
   @page { size:A4 portrait; margin:8mm; }
-  body { background:#fff !important; }
-  body * { visibility:hidden !important; }
-  /* index.css hides print content globally for other print views. The official
-     assessment must explicitly override that rule or Chrome preview becomes blank. */
-  .official-assessment-shell,
-  .official-assessment-shell * { visibility:visible !important; }
-  .official-assessment-shell {
-    position:absolute !important; z-index:99999 !important; left:0 !important; top:0 !important;
-    width:100% !important; padding:0 !important; margin:0 !important;
-    color:#111 !important; background:#fff !important;
+
+  html, body, #root {
+    width:100% !important;
+    min-width:0 !important;
+    height:auto !important;
+    min-height:0 !important;
+    margin:0 !important;
+    padding:0 !important;
+    overflow:visible !important;
   }
-  .official-toolbar,.official-status { display:none !important; }
-  .official-page { width:auto; max-width:none; min-height:0; margin:0; padding:0; box-shadow:none; page-break-after:always; break-after:page; overflow:visible !important; }
-  .official-page:last-child { page-break-after:auto; break-after:auto; }
+  body { background:#fff !important; color:#111 !important; }
+
+  /* Print only the official assessment. Hide siblings with display:none so
+     they take no pagination space; visibility:hidden alone leaves blank pages. */
+  body.official-assessment-printing * { visibility:hidden !important; }
+  body.official-assessment-printing .official-assessment-shell,
+  body.official-assessment-printing .official-assessment-shell * {
+    visibility:visible !important;
+  }
+  body.official-assessment-printing #root > div {
+    display:block !important;
+    width:100% !important;
+    height:auto !important;
+    min-height:0 !important;
+    margin:0 !important;
+    padding:0 !important;
+    overflow:visible !important;
+    background:#fff !important;
+  }
+  body.official-assessment-printing #root > div > :not(main) {
+    display:none !important;
+  }
+  body.official-assessment-printing main {
+    display:block !important;
+    position:static !important;
+    width:100% !important;
+    max-width:none !important;
+    height:auto !important;
+    min-height:0 !important;
+    margin:0 !important;
+    padding:0 !important;
+    overflow:visible !important;
+    flex:none !important;
+    background:#fff !important;
+  }
+  body.official-assessment-printing main > :not(.official-assessment-shell) {
+    display:none !important;
+  }
+  body.official-assessment-printing .official-assessment-shell {
+    display:block !important;
+    position:static !important;
+    left:auto !important;
+    top:auto !important;
+    z-index:auto !important;
+    width:100% !important;
+    max-width:none !important;
+    height:auto !important;
+    min-height:0 !important;
+    margin:0 !important;
+    padding:0 !important;
+    overflow:visible !important;
+    box-shadow:none !important;
+    background:#fff !important;
+    color:#111 !important;
+  }
+
+  .official-toolbar, .official-status { display:none !important; }
+  .official-page {
+    display:block !important;
+    position:relative !important;
+    left:auto !important;
+    top:auto !important;
+    float:none !important;
+    box-sizing:border-box !important;
+    width:100% !important;
+    max-width:none !important;
+    height:auto !important;
+    min-height:0 !important;
+    max-height:none !important;
+    margin:0 !important;
+    padding:0 !important;
+    box-shadow:none !important;
+    background:#fff !important;
+    color:#111 !important;
+    overflow:visible !important;
+    page-break-after:always !important;
+    break-after:page !important;
+  }
+  .official-page:last-child { page-break-after:auto !important; break-after:auto !important; }
+
+  /* Four appendices are four separate A4 pages (7–10), not off-screen nodes. */
   .official-photo-appendix {
-    position:relative !important; left:auto !important; top:auto !important;
-    display:flex !important; flex-direction:column; width:100% !important; max-width:none !important;
-    min-height:0 !important; height:auto !important; margin:0 !important; padding:0 !important;
-    box-shadow:none !important; page-break-after:always; break-after:page;
-    background:#fff !important; color:#111 !important; overflow:visible !important;
+    position:relative !important;
+    left:auto !important;
+    top:auto !important;
+    display:flex !important;
+    flex-direction:column !important;
+    box-sizing:border-box !important;
+    width:100% !important;
+    max-width:none !important;
+    min-height:0 !important;
+    height:281mm !important;
+    max-height:281mm !important;
+    margin:0 !important;
+    padding:0 !important;
+    box-shadow:none !important;
+    page-break-after:always !important;
+    break-after:page !important;
+    background:#fff !important;
+    color:#111 !important;
+    overflow:hidden !important;
   }
-  .official-photo-appendix:last-child { page-break-after:auto; break-after:auto; }
-  .official-photo-appendix-heading { margin-bottom:6mm; }
-  .official-photo-print-frame { height:235mm; min-height:235mm; max-height:235mm; overflow:hidden; }
-  .official-photo-print-frame img { max-width:100%; max-height:100%; object-fit:contain; }
+  .official-photo-appendix:last-child { page-break-after:auto !important; break-after:auto !important; }
+  .official-photo-appendix-heading { flex:0 0 auto; margin-bottom:5mm !important; }
+  .official-photo-print-frame {
+    flex:1 1 auto !important;
+    width:100% !important;
+    height:230mm !important;
+    min-height:230mm !important;
+    max-height:230mm !important;
+    overflow:hidden !important;
+    break-inside:avoid !important;
+    page-break-inside:avoid !important;
+  }
+  .official-photo-print-frame img { max-width:100% !important; max-height:100% !important; object-fit:contain !important; }
   .official-letterhead { margin-bottom:6mm; break-inside:avoid; page-break-inside:avoid; }
   .official-letterhead-logo img { print-color-adjust:exact; -webkit-print-color-adjust:exact; }
   .official-table { font-size:7pt; }

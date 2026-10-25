@@ -355,9 +355,14 @@ function readCellByAliases(headers: string[], row: string[], aliases: string[]):
   return '';
 }
 
+/** Remove an official-question number before classifying a NIK header (for example, "23. NIK **"). */
+function normalizeNIKHeader(header: string): string {
+  const label = String(header ?? '').trim().replace(/^\s*(?:q(?:uestion)?\s*)?\d{1,2}\s*[.)\-:]\s*/i, '');
+  return normalizeSheetHeader(label);
+}
 /** Returns whether a column header refers to the respondent's own NIK/KTP, not a relative or worker. */
 export function isLikelyRespondentNIKHeader(header: string): boolean {
-  const normalized = normalizeSheetHeader(header);
+  const normalized = normalizeNIKHeader(header);
   if (!normalized) return false;
 
   // Never treat a photo/file upload column as an identity number, even if its
@@ -384,6 +389,12 @@ export function isLikelyRespondentNIKHeader(header: string): boolean {
     'nokartutandapenduduk',
     'nomorktp',
     'noktp',
+    'nomorktpnik',
+    'noktpnik',
+    'noindukpenduduk',
+    'nomorindukpenduduk',
+    'nikppks',
+    'nikcalonresponden',
     'ktpnik',
     'ktpresponden',
     'ktppks',
@@ -422,14 +433,14 @@ export function readNIKFromSheetRow(headers: string[], row: string[]): string {
   const candidates = headers
     .map((header, index) => ({
       header: String(header ?? '').trim(),
-      normalized: normalizeSheetHeader(String(header ?? '')),
+      normalized: normalizeNIKHeader(String(header ?? '')),
       value: String(row[index] ?? '').trim(),
       index,
     }))
     .filter(({ header, normalized, value }) => value && normalized && isLikelyRespondentNIKHeader(header));
 
   const score = (header: string): number => {
-    const normalized = normalizeSheetHeader(header);
+    const normalized = normalizeNIKHeader(header);
     let points = 0;
     if (normalized === 'nik' || normalized === 'nomorktp' || normalized === 'noktp' ||
         normalized === 'nomorindukkependudukan' || normalized === 'nokartutandapenduduk') points += 120;
@@ -527,7 +538,7 @@ function mapRowsToPPKSRecords(rows: string[][]): PPKSRecord[] {
     if (!namaLengkap) return;
 
     const timestamp = readCellByAliases(headers, row, ['timestamp', 'capWaktu', 'waktuPengiriman', 'waktuPengisian', 'tanggalWaktu', 'createTime']);
-    const nik = readNIKFromSheetRow(headers, row);
+    let nik = readNIKFromSheetRow(headers, row);
     // Preserve answers from a spreadsheet whose headers are numbered like the official PDF.
     // For unnumbered Google Forms headers, resolve the unambiguous identity fields explicitly.
     const officialAssessment: Record<string, string | string[]> = {};
@@ -548,6 +559,12 @@ function mapRowsToPPKSRecords(rows: string[][]): PPKSRecord[] {
         officialAssessment.q16 = value;
       }
     });
+    // Numbered official-PDF headings such as "23. NIK **" are first stored in
+    // officialAssessment.q23. Recover the validated 16-digit NIK from that
+    // canonical answer when the general column detector did not recognize it.
+    if (!nik && typeof officialAssessment.q23 === 'string') {
+      nik = normalizeNIKCellValue(officialAssessment.q23);
+    }
     if (nik) officialAssessment.q23 = nik;
     const externalId = readCellByAliases(headers, row, ['idPPKS', 'recordId', 'id']);
     const stableSource = [timestamp, nik, namaLengkap, ...row].join('|');
