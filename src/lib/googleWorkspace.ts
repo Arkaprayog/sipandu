@@ -18,7 +18,7 @@ export interface GoogleFormResponse {
 }
 
 function requireToken(token: string | null): string {
-  if (!token) throw new Error('Silakan masuk dengan akun Google yang memiliki akses ke sumber SIPANDU.');
+  if (!token) throw new Error('Token akses Google belum tersedia atau telah hilang setelah halaman dimuat ulang. Buka Koneksi Akun dan tekan “Pulihkan Izin Google API”, lalu ulangi operasi.');
   return token;
 }
 
@@ -174,25 +174,18 @@ export async function readSpreadsheetData(spreadsheetIdOrUrl: string, range = 'S
  * Do not point this at the Google Form's response tab: that tab is owned by Forms.
  * API errors are thrown rather than reported as a successful sync.
  */
-export async function appendPPKSToSpreadsheet(
+export async function upsertPPKSInSpreadsheet(
   spreadsheetIdOrUrl: string,
   ppks: PPKSRecord,
   range = 'SIPANDU!A:K',
-): Promise<'inserted' | 'already-exists'> {
+): Promise<'inserted' | 'updated'> {
   const id = extractSpreadsheetId(spreadsheetIdOrUrl);
   const existingRows = await readSpreadsheetData(id, range);
   const headers = existingRows[0] || [];
   const idIndex = headers.findIndex((h) => h.trim().toLowerCase() === 'id');
   const nikIndex = headers.findIndex((h) => ['nik', 'nomor induk kependudukan'].includes(h.trim().toLowerCase()));
   if (idIndex < 0 || nikIndex < 0) {
-    throw new Error(`Header tab database tidak memiliki kolom ID/NIK yang diperlukan. Periksa tab SIPANDU.`);
-  }
-
-  if (existingRows.slice(1).some((row) =>
-    (row[idIndex] && row[idIndex] === ppks.id) ||
-    (nikIndex >= 0 && ppks.nik && row[nikIndex] === ppks.nik)
-  )) {
-    return 'already-exists';
+    throw new Error('Header tab database tidak memiliki kolom ID/NIK yang diperlukan. Periksa tab SIPANDU.');
   }
 
   const row = [
@@ -208,6 +201,27 @@ export async function appendPPKSToSpreadsheet(
     ppks.intervensiMental,
     `Desil ${ppks.desil}`,
   ];
+
+  const matchingIdIndex = existingRows.findIndex((cells, index) =>
+    index > 0 && cells[idIndex] === ppks.id
+  );
+  if (matchingIdIndex > 0) {
+    const sheetRow = matchingIdIndex + 1; // array row 1 is spreadsheet row 2
+    const updateRange = `SIPANDU!A${sheetRow}:K${sheetRow}`;
+    await googleJson(`https://sheets.googleapis.com/v4/spreadsheets/${id}/values/${encodeURIComponent(updateRange)}?valueInputOption=USER_ENTERED`, {
+      method: 'PUT',
+      body: JSON.stringify({ values: [row] }),
+    });
+    return 'updated';
+  }
+
+  const matchingNikIndex = ppks.nik
+    ? existingRows.findIndex((cells, index) => index > 0 && cells[nikIndex] === ppks.nik)
+    : -1;
+  if (matchingNikIndex > 0) {
+    throw new Error('NIK sudah terdaftar pada ID PPKS lain di tab SIPANDU. Sinkronisasi dihentikan untuk mencegah penggabungan dua record yang berbeda; periksa duplikasi di database.');
+  }
+
   await googleJson(`https://sheets.googleapis.com/v4/spreadsheets/${id}/values/${encodeURIComponent(range)}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`, {
     method: 'POST',
     body: JSON.stringify({ values: [row] }),
