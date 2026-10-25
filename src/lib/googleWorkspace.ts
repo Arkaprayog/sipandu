@@ -722,6 +722,47 @@ function isObviousDemoDriveName(name: string): boolean {
   return /(^|[^a-z])(demo|sample|contoh|dummy|uji[\s_-]?coba|data[\s_-]?uji|uji[\s_-]?data|test[\s_-]?data|data[\s_-]?test)([^a-z]|$)/i.test(name);
 }
 
+async function listAllVisibleDriveFiles(): Promise<GoogleDriveFile[]> {
+  const files: GoogleDriveFile[] = [];
+  let pageToken = '';
+  do {
+    const params = new URLSearchParams({
+      q: 'trashed = false',
+      pageSize: '1000',
+      orderBy: 'modifiedTime desc',
+      fields: 'nextPageToken,files(id,name,mimeType,webViewLink,createdTime,parents)',
+      corpora: 'user',
+      includeItemsFromAllDrives: 'true',
+      supportsAllDrives: 'true',
+    });
+    if (pageToken) params.set('pageToken', pageToken);
+    const page = await googleJson<{ files?: GoogleDriveFile[]; nextPageToken?: string }>(
+      `https://www.googleapis.com/drive/v3/files?${params.toString()}`
+    );
+    files.push(...(page.files || []));
+    pageToken = page.nextPageToken || '';
+  } while (pageToken);
+  return files;
+}
+
+/** True only for demo artifacts identifiable as SIPANDU legacy data. */
+function isSIPANDULegacyDriveArtifact(name: string): boolean {
+  const normalized = normalizeSheetHeader(name);
+  const exactLegacyArtifacts = [
+    'Database_PPKS_ODHIV_Sumut_2026.xlsx',
+    'SRT-ST-001',
+    'SRT-BA-002',
+    'SRT-SP-003',
+    '1yA8KemensosODHIVSumut2026_LiveSync',
+  ].map(normalizeSheetHeader);
+  if (exactLegacyArtifacts.some((marker) => normalized.includes(marker))) return true;
+  if ([...LEGACY_SAMPLE_PPKS_IDS].some((id) => normalized.includes(normalizeSheetHeader(id)))) return true;
+  if ([...LEGACY_SAMPLE_PPKS_NAMES].some((sampleName) => normalized.includes(normalizeSheetHeader(sampleName)))) return true;
+  const hasDemoMarker = /(^|[^a-z])(demo|sample|contoh|dummy|uji\s*coba|data\s*uji|uji\s*data|test\s*data|data\s*test)([^a-z]|$)/i.test(name);
+  const identifiesSipandu = /(sipandu|ppks|odhiv|asesmen|kemensos)/i.test(name);
+  return hasDemoMarker && identifiesSipandu;
+}
+
 async function listDriveChildren(parentId: string): Promise<GoogleDriveFile[]> {
   const files: GoogleDriveFile[] = [];
   let pageToken = '';
@@ -778,6 +819,27 @@ export async function removeObviousDemoFilesFromDrive(folderUrlOrId: string): Pr
   };
 
   await visit(rootFolderId, 0);
+
+  // Also search the user's visible Drive for exact SIPANDU legacy artifacts,
+  // because older example files may have been created outside the configured folder.
+  // Broad names like "sample" or "test" are only deleted inside the SIPANDU folder;
+  // outside it, the filename must also identify this application.
+  let accountWideScanCompleted = false;
+  try {
+    const allVisible = await listAllVisibleDriveFiles();
+    accountWideScanCompleted = true;
+    filesScanned += allVisible.length;
+    for (const file of allVisible) {
+      if (
+        file.mimeType !== 'application/vnd.google-apps.folder' &&
+        isSIPANDULegacyDriveArtifact(file.name)
+      ) discovered.push(file);
+    }
+  } catch {
+    // Keep the successfully scanned configured folder usable if account-wide
+    // listing is not permitted; the caller will still get the folder cleanup result.
+  }
+
   const deletedNames: string[] = [];
   const unique = [...new Map(discovered.map((file) => [file.id, file])).values()];
   for (const file of unique) {
@@ -792,5 +854,6 @@ export async function removeObviousDemoFilesFromDrive(folderUrlOrId: string): Pr
     filesScanned,
     filesDeleted: deletedNames.length,
     deletedNames,
+    accountWideScanCompleted,
   };
 }
