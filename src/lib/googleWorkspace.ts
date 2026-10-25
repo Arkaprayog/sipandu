@@ -71,7 +71,7 @@ export async function listDriveSpreadsheets(): Promise<GoogleDriveFile[]> {
     });
     if (pageToken) params.set('pageToken', pageToken);
     const data = await googleJson<{ files?: GoogleDriveFile[]; nextPageToken?: string }>(
-      \`https://www.googleapis.com/drive/v3/files?\${params.toString()}\`
+      `https://www.googleapis.com/drive/v3/files?${params.toString()}`
     );
     all.push(...(data.files || []));
     pageToken = data.nextPageToken || '';
@@ -144,7 +144,7 @@ export async function getSpreadsheetMetadata(spreadsheetIdOrUrl: string): Promis
     properties?: { title?: string };
     sheets?: { properties?: { title?: string } }[];
   }>(
-    \`https://sheets.googleapis.com/v4/spreadsheets/\${id}?fields=spreadsheetId,properties.title,sheets.properties.title\`
+    `https://sheets.googleapis.com/v4/spreadsheets/${id}?fields=spreadsheetId,properties.title,sheets.properties.title`
   );
   return {
     spreadsheetId: data.spreadsheetId || id,
@@ -375,7 +375,7 @@ function mapRowsToPPKSRecords(rows: string[][]): PPKSRecord[] {
       hash ^= stableSource.charCodeAt(i);
       hash = Math.imul(hash, 16777619);
     }
-    const recordId = externalId || (nik ? \`SHEET-NIK-\${nik.replace(/\D/g, '')}\` : \`SHEET-\${(hash >>> 0).toString(36)}\`);
+    const recordId = externalId || (nik ? `SHEET-NIK-${nik.replace(/\D/g, '')}` : `SHEET-${(hash >>> 0).toString(36)}`);
     if (seen.has(recordId)) return;
     seen.add(recordId);
 
@@ -403,7 +403,7 @@ function mapRowsToPPKSRecords(rows: string[][]): PPKSRecord[] {
     const fotoKk = readCellByAliases(headers, row, ['fotoKk', 'fotoKK', 'uploadFotoKK', 'dokumenKK']);
     const fotoRumah = readCellByAliases(headers, row, ['fotoRumah', 'fotoRumahTampakDepan', 'uploadFotoRumah']);
     const sourceRecord: PPKSRecord = {
-      id: recordId || \`SHEET-ROW-\${rowIndex + 2}\`,
+      id: recordId || `SHEET-ROW-${rowIndex + 2}`,
       timestamp,
       namaLengkap,
       nik,
@@ -452,7 +452,7 @@ export async function importPPKSFromSpreadsheet(
     ? preferred
     : (responseTab || metadata.sheetTitles[0]);
   const escapedTitle = selectedTab.replace(/'/g, "''");
-  const rows = await readSpreadsheetData(metadata.spreadsheetId, \`'\${escapedTitle}'!A1:ZZ2000\`);
+  const rows = await readSpreadsheetData(metadata.spreadsheetId, `'${escapedTitle}'!A1:ZZ2000`);
   const records = mapRowsToPPKSRecords(rows);
   return {
     spreadsheetId: metadata.spreadsheetId,
