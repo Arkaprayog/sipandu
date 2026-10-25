@@ -12,7 +12,7 @@ export const initialProfileUser: ProfileUser = {
 
 export const initialAppSettings: AppSettings = {
   googleFormTahapAwalUrl: GOOGLE_SIPANDU_RESOURCES.formEditorUrl,
-  googleFormKesehatanMentalUrl: 'https://forms.gle/Asesmen-Kesehatan-Mental-ODHIV-Kemensos',
+  googleFormKesehatanMentalUrl: '', // Configure only after the real form URL is known.
   googleSpreadsheetUrl: '', // Writable database target stays separate from the Google Forms response spreadsheet.
   googleSpreadsheetSourceUrl: '', // Deliberately blank until the user chooses the real source spreadsheet.
   googleSpreadsheetSourceName: '',
@@ -53,8 +53,8 @@ export const LEGACY_SAMPLE_PPKS_NAMES: ReadonlySet<string> = new Set([
 export function isObviousDemoMarker(value: unknown): boolean {
   const text = String(value ?? '').trim();
   if (!text) return false;
-  return /^(?:demo|sample|contoh|dummy|uji[\s_-]?coba|data[\s_-]?uji|uji[\s_-]?data|test(?:[\s_-]?data)?)(?:$|[\s:._-])/i.test(text) ||
-    /^(?:PPKS|RESPONDEN|RECORD|DATA|ID)[\s_-]*(?:DEMO|SAMPLE|CONTOH|DUMMY|TEST|UJI)[\s_-]*/i.test(text);
+  return /(?:^|[\s:._-])(?:demo|sample|sampel|contoh|dummy|example|testing|test(?:[\s_-]?data)?|uji[\s_-]?coba|data[\s_-]?uji|uji[\s_-]?data)(?:$|[\s:._-])/i.test(text) ||
+    /^(?:PPKS|RESPONDEN|RECORD|DATA|ID)[\s_-]*(?:DEMO|SAMPLE|SAMPEL|CONTOH|DUMMY|EXAMPLE|TEST|UJI)[\s_-]*/i.test(text);
 }
 
 export function isLegacySamplePPKS(record: Pick<PPKSRecord, 'id' | 'namaLengkap'> | null | undefined): boolean {
