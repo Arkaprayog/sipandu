@@ -334,7 +334,7 @@ const INTEGRATED_SHEET_FIELDS: Array<{
   { key: 'tanggunganKeluarga', aliases: ['tanggunganKeluarga', 'jumlahTanggungan'], kind: 'number' },
   { key: 'kepemilikanUsaha', aliases: ['kepemilikanUsaha', 'usahaDimiliki'] },
   { key: 'minatKeterampilanAtensi', aliases: ['minatKeterampilanAtensi', 'minatKeterampilan', 'jenisBantuanAtensi'] },
-  { key: 'desilKemiskinan', aliases: ['desilKemiskinan', 'desilDTKS', 'desil'], kind: 'number' },
+  { key: 'desilKemiskinan', aliases: ['desilKemiskinan', 'desilDTKS', 'desilEkonomi'], kind: 'number' },
   { key: 'skorKecemasan', aliases: ['skorKecemasan', 'tingkatKecemasan', 'hasilAsesmenKecemasan'] },
   { key: 'skorDepresi', aliases: ['skorDepresi', 'tingkatDepresi', 'hasilAsesmenDepresi'] },
   { key: 'penerimaanDiri', aliases: ['penerimaanDiri', 'penerimaanStatus'] },
