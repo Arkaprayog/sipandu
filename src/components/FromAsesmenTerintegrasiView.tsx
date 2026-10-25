@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { CheckCircle2, FileText, Printer, RotateCcw, Save, Search } from 'lucide-react';
 import { PPKSRecord } from '../types';
 import { getAccessToken } from '../lib/firebase';
+import { formatPPKSTimestamp } from '../lib/ppksData';
 import '../officialAssessment.css';
 
 type AnswerValue = string | string[];
@@ -484,7 +485,7 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
             <div className="relative mt-1.5">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-400" />
               <select value={selectedPPKSId} onChange={(event) => choosePPKS(event.target.value)} className="w-full rounded-lg border border-sky-500/30 bg-black/60 py-2.5 pl-9 pr-3 text-sm text-white">
-                {ppksList.map((record) => <option key={record.id} value={record.id}>{record.namaLengkap || 'Nama belum tersedia'} — NIK {record.nik || 'belum terpetakan'} — {record.kotaDomisili || 'wilayah belum tersedia'}</option>)}
+                {ppksList.map((record) => <option key={record.id} value={record.id}>{formatPPKSTimestamp(record.timestamp)} — {record.namaLengkap || 'Nama belum tersedia'} — NIK {record.nik || 'belum terpetakan'} — {record.kotaDomisili || 'wilayah belum tersedia'}</option>)}
               </select>
             </div>
           </label>
