@@ -247,7 +247,10 @@ export async function readSpreadsheetRichData(
   const normalizedHeaders = headers.map(normalizeSheetHeader);
   const photoColumns = new Set<number>();
   normalizedHeaders.forEach((header, index) => {
-    if (/(foto|ktp|kartuidentitas|kartu keluarga|kartuKeluarga|rumah|lampiran|upload|dokumen)/i.test(header)) {
+    // Do not classify a standalone KTP, No. KTP, or NIK/No. KTP
+    // identity-number column as a photo. Only file/upload markers mean that
+    // the underlying hyperlink should replace the displayed cell value.
+    if (/(foto|photo|gambar|image|upload|unggah|lampiran|scan|dokumen|berkas|file|tautan|linkdrive)/i.test(header)) {
       photoColumns.add(index);
     }
   });
@@ -407,12 +410,20 @@ export function isLikelyRespondentNIKHeader(header: string): boolean {
 /** NIK is an identity string, never a numeric calculation. Preserve text zeros,
  * reject rounded scientific notation, and only return validated 16-digit values. */
 function normalizeNIKCellValue(value: string): string {
-  const raw = String(value ?? '').trim().replace(/^['\\`]/, '').replace(/\\.0+$/, '');
+  const raw = String(value ?? '').trim().replace(/^['"]/, '').replace(/\.0+$/, '');
   if (!raw) return '';
-  if (/^[+-]?\\d+(?:[.,]\\d+)?e[+-]?\\d+$/i.test(raw)) return '';
-  const digits = raw.replace(/\\D/g, '');
-  const normalized = digits.length === 15 ? '0' + digits : digits;
-  return /^\\d{16}$/.test(normalized) ? normalized : '';
+
+  // Scientific notation may mean Sheets rounded a numeric NIK. Its missing
+  // digits cannot be restored reliably, so never synthesize a replacement.
+  if (/^[+-]?\d+(?:[.,]\d+)?e[+-]?\d+$/i.test(raw)) return '';
+
+  const digits = raw.replace(/\D/g, '');
+  if (/^\d{16}$/.test(digits)) return digits;
+
+  // If a response includes a label/note around the number, accept only one
+  // unambiguous contiguous 16-digit sequence. Do not pad 15 digits with zero.
+  const matches = [...raw.matchAll(/\d{16}/g)].map((match) => match[0]);
+  return matches.length === 1 ? matches[0] : '';
 }
 
 /** Maps respondent NIK from descriptive Google Forms/Sheets headers. */
