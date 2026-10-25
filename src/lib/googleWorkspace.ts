@@ -1,6 +1,7 @@
 import { getAccessToken, invalidateAccessToken } from './firebase';
 import { IntegratedFormData, PPKSRecord } from '../types';
 import { isLegacySamplePPKS, isObviousDemoMarker, LEGACY_SAMPLE_PPKS_IDS, LEGACY_SAMPLE_PPKS_NAMES } from '../data/initialData';
+import { findNIKHeaders, isLikelyRespondentNIKHeader, readNIKFromSheetRow } from './nikMapping';
 
 export interface GoogleDriveFile {
   id: string;
@@ -350,90 +351,6 @@ function readCellByAliases(headers: string[], row: string[], aliases: string[]):
   return '';
 }
 
-/** Robustly maps common NIK / identity-card question labels from Google Forms. */
-function isLikelyRespondentNIKHeader(header: string): boolean {
-  const normalized = normalizeSheetHeader(header);
-  if (!normalized) return false;
-
-  // Reject photo/document links and identifiers belonging to other people.
-  const nonIdentityDocument = [
-    'foto', 'photo', 'gambar', 'image', 'upload', 'unggah', 'dokumen',
-    'lampiran', 'scan', 'file', 'tautan', 'link', 'drive', 'berkas',
-  ];
-  if (nonIdentityDocument.some((word) => normalized.includes(word))) return false;
-
-  const excludedPeople = [
-    'ayah', 'ibu', 'orangtua', 'wali', 'suami', 'istri', 'pasangan',
-    'keluarga', 'pendamping', 'petugas', 'asesor', 'asessor',
-    'supervisor', 'kontakdarurat', 'penanggungjawab', 'penanggungjawab',
-  ];
-  if (excludedPeople.some((word) => normalized.includes(word)) &&
-      /(nik|ktp|kependudukan|identitas)/.test(normalized)) return false;
-
-  // Match official and common Google Forms labels, including long question text:
-  // "Nomor Induk Kependudukan (NIK) sesuai KTP responden", "No. KTP", and
-  // "NIK/No KTP". This helper is deliberately not used for image/link columns.
-  const identityTokens = [
-    'nik', 'nikresponden', 'nikppks', 'nomornik', 'nonik', 'nomorindukkependudukan', 'indukkependudukan', 'nokependudukan',
-    'nomorktp', 'noktp', 'nomorktpresponden', 'noktpresponden', 'kartutandapenduduk', 'ektp', 'kependudukan',
-    'nomoridentitas', 'noidentitas', 'identitasresponden', 'niksesuaiktp', 'nomorindukkependudukanresponden',
-  ];
-  return identityTokens.some((token) => normalized.includes(token)) ||
-    normalized === 'ktp' ||
-    normalized.startsWith('noinduk');
-}
-
-function normalizeNIKCellValue(value: string): string {
-  const raw = String(value ?? '').trim().replace(/^['`]/, '').replace(/\.0+$/, '');
-  if (!raw) return '';
-
-  // Don't attempt to reconstruct an identity number when Sheets converted it
-  // to scientific notation; those values may already have lost precision.
-  if (/^[+-]?\d+(?:[.,]\d+)?e[+-]?\d+$/i.test(raw)) return '';
-
-  const digits = raw.replace(/\D/g, '');
-  if (/^\d{16}$/.test(digits)) return digits;
-
-  // Some cells are formatted with a label ("NIK: 123...") or include a note.
-  // Accept the one unambiguous contiguous 16-digit number and reject ambiguity.
-  const sequences = [...raw.matchAll(/\d{16}/g)].map((match) => match[0]);
-  return sequences.length === 1 ? sequences[0] : '';
-}
-
-/** Reads the respondent NIK even when the Google Forms question title has instructions/punctuation. */
-export function readNIKFromSheetRow(headers: string[], row: string[]): string {
-  const candidates = headers
-    .map((header, index) => ({
-      header: String(header ?? '').trim(),
-      normalized: normalizeSheetHeader(String(header ?? '')),
-      value: String(row[index] ?? '').trim(),
-      index,
-    }))
-    .filter(({ header, normalized, value }) => value && isLikelyRespondentNIKHeader(header) && normalized);
-
-  const score = (header: string): number => {
-    const normalized = normalizeSheetHeader(header);
-    let points = 0;
-    if (['nik', 'nikresponden', 'nikppks', 'nomorindukkependudukan', 'nomorindukkependudukanresponden', 'nomorktp', 'nomorktpresponden', 'noktp', 'noktpresponden', 'niksesuaiktp'].includes(normalized)) points += 100;
-    if (normalized.includes('responden') || normalized.includes('ppks') || normalized.includes('calonresponden')) points += 60;
-    if (normalized.includes('nik')) points += 35;
-    if (normalized.includes('ktp')) points += 20;
-    if (normalized.includes('nomorindukkependudukan')) points += 15;
-    if (normalized.length > 100) points -= 10;
-    return points;
-  };
-
-  // Check all columns, not indexOf(alias): duplicate headers are possible and
-  // the first duplicate may be blank while a later column contains the value.
-  candidates.sort((a, b) => score(b.header) - score(a.header) || a.index - b.index);
-  for (const candidate of candidates) {
-    const nik = normalizeNIKCellValue(candidate.value);
-    if (nik) return nik;
-  }
-  return '';
-}
-
-
 function parseSheetNumber(value: string, fallback = 0): number {
   const normalized = String(value ?? '').replace(/,/g, '.').replace(/[^\d.-]/g, '');
   const parsed = Number(normalized);
@@ -606,7 +523,7 @@ export async function importPPKSFromSpreadsheet(
   const rows = await readSpreadsheetRichData(metadata.spreadsheetId, `'${escapedTitle}'!A1:ZZ2000`);
   const records = mapRowsToPPKSRecords(rows);
   const headers = rows[0] || [];
-  const nikHeadersFound = headers.filter((header) => isLikelyRespondentNIKHeader(header)).map((header) => header.trim());
+  const nikHeadersFound = findNIKHeaders(headers);
   const recordsWithNIK = records.filter((record) => Boolean(String(record.nik || '').trim())).length;
   return {
     spreadsheetId: metadata.spreadsheetId,
