@@ -336,8 +336,7 @@ function readNIKFromSheetRow(headers: string[], row: string[]): string {
   const exactAliases = [
     'nik', 'nikresponden', 'niksesuaiktp', 'niksesuaikktp', 'niknoktp', 'nikktp',
     'nomorindukkependudukan', 'nomorindukkependudukannik', 'nomorktp', 'noktp',
-    'nomorkartutandapenduduk', 'noindukkependudukan', 'noKTPNIK', 'KTPNIK',
-    'nikkartukeluarga',
+    'nomorkartutandapenduduk', 'noindukkependudukan', 'nomorNIK', 'noNIK', 'noKTPNIK', 'KTPNIK',
   ].map(normalizeSheetHeader);
   // Exact semantic header names are safest and take priority.
   for (const alias of exactAliases) {
