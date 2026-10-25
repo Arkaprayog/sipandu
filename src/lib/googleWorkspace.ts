@@ -563,6 +563,9 @@ export async function importPPKSFromSpreadsheet(
   selectedTab: string;
   rowsRead: number;
   records: PPKSRecord[];
+  recordsWithNIK: number;
+  recordsMissingNIK: number;
+  nikHeadersFound: string[];
   previewRows: string[][];
 }> {
   const metadata = await getSpreadsheetMetadata(spreadsheetUrlOrId);
@@ -578,6 +581,9 @@ export async function importPPKSFromSpreadsheet(
   const escapedTitle = selectedTab.replace(/'/g, "''");
   const rows = await readSpreadsheetRichData(metadata.spreadsheetId, `'${escapedTitle}'!A1:ZZ2000`);
   const records = mapRowsToPPKSRecords(rows);
+  const headers = rows[0] || [];
+  const nikHeadersFound = headers.filter((header) => isLikelyRespondentNIKHeader(header)).map((header) => header.trim());
+  const recordsWithNIK = records.filter((record) => Boolean(String(record.nik || '').trim())).length;
   return {
     spreadsheetId: metadata.spreadsheetId,
     spreadsheetTitle: metadata.title,
@@ -585,6 +591,9 @@ export async function importPPKSFromSpreadsheet(
     selectedTab,
     rowsRead: rows.length,
     records,
+    recordsWithNIK,
+    recordsMissingNIK: records.length - recordsWithNIK,
+    nikHeadersFound,
     previewRows: rows.slice(0, 8),
   };
 }
