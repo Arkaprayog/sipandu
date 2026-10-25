@@ -332,46 +332,83 @@ function readCellByAliases(headers: string[], row: string[], aliases: string[]):
 }
 
 /** Robustly maps common NIK / identity-card question labels from Google Forms. */
-function readNIKFromSheetRow(headers: string[], row: string[]): string {
-  const normalizedHeaders = headers.map(normalizeSheetHeader);
-  const exactAliases = [
-    'nik', 'nikresponden', 'nik16digit', 'nik16digitsesuaiktp', 'niksesuaiktp', 'niksesuaikktp', 'niknoktp', 'nikktp',
-    'nomorindukkependudukan', 'nomorindukkependudukannik', 'nomoridentitas', 'noidentitas', 'nomorktp', 'noktp',
-    'nomorkartutandapenduduk', 'noindukkependudukan', 'nomorNIK', 'noNIK', 'noKTPNIK', 'KTPNIK',
-  ].map(normalizeSheetHeader);
-  // Exact semantic header names are safest and take priority.
-  for (const alias of exactAliases) {
-    const index = normalizedHeaders.indexOf(alias);
-    if (index >= 0 && row[index] !== undefined && row[index].trim() !== '') {
-      return row[index].trim();
-    }
-  }
+function isLikelyRespondentNIKHeader(header: string): boolean {
+  const normalized = normalizeSheetHeader(header);
+  if (!normalized) return false;
 
-  // Google Forms titles often include instructions, e.g. "NIK (16 digit, sesuai KTP)".
-  // Reject family/worker/assessor NIKs so they cannot be confused with respondent NIK.
-  const excluded = /(ayah|ibu|orangtua|wali|suami|istri|pasangan|keluarga|pendamping|petugas|asesor|asessor|supervisor|petugas|penanggungjawab)/;
-  const candidates = normalizedHeaders
-    .map((header, index) => ({ header, index, value: row[index]?.trim() || '' }))
-    .filter(({ header, value }) => value && !excluded.test(header))
-    .filter(({ header }) =>
-      header.includes('nik') ||
-      header.includes('nomorindukkependudukan') ||
-      header.includes('nomorkartutandapenduduk') ||
-      header.includes('nomorktp') ||
-      header.includes('noktp') ||
-      header.includes('nomoridentitas') ||
-      header.includes('noidentitas')
-    );
-  const best = candidates.sort((a, b) => {
-    const score = (header: string) =>
-      (header.includes('responden') ? 50 : 0) +
-      (header.includes('nik') ? 30 : 0) +
-      (header.includes('ktp') ? 20 : 0) -
-      (header.length > 100 ? 10 : 0);
-    return score(b.header) - score(a.header);
-  })[0];
-  return best?.value || '';
+  // Do not accidentally display the NIK of a relative, caseworker, assessor,
+  // supervisor, or emergency contact as the respondent's identity.
+  const excludedPrefixes = [
+    'nikayah', 'nikibu', 'nikorangtua', 'nikwali', 'niksuami', 'nikistri',
+    'nikpasangan', 'nikkeluarga', 'nikpendamping', 'nikpetugas', 'nikasesor',
+    'nikasessor', 'niksupervisor', 'nikkontakdarurat', 'nikpenanggungjawab',
+  ];
+  if (excludedPrefixes.some((prefix) => normalized.startsWith(prefix))) return false;
+  if (/(ayah|ibu|orangtua|wali|suami|istri|pasangan|pendamping|petugas|asesor|asessor|supervisor|penanggungjawab)/.test(normalized)
+      && /(nik|nomorktp|noktp|nomorindukkependudukan)/.test(normalized)) return false;
+
+  return normalized === 'nik' ||
+    normalized.includes('nikresponden') ||
+    normalized.includes('nikppks') ||
+    normalized.includes('nikcalonresponden') ||
+    normalized.includes('nomorindukkependudukan') ||
+    normalized.includes('nomorkartutandapenduduk') ||
+    normalized.includes('nomorktp') ||
+    normalized.includes('noktp') ||
+    normalized.includes('ktpnik') ||
+    normalized.includes('noidentitas') ||
+    normalized.includes('nomoridentitas') ||
+    normalized.includes('nokependudukan') ||
+    normalized.includes('noindukkependudukan') ||
+    /^nik[0-9]+digit/.test(normalized) ||
+    normalized.startsWith('nik') ||
+    normalized.endsWith('nik');
 }
+
+/** Keeps NIK as a string so leading zeros are preserved. Fifteen-digit numeric
+ * values are left-padded once because spreadsheets sometimes dropped a leading 0. */
+function normalizeNIKCellValue(value: string): string {
+  const raw = String(value ?? '').trim();
+  if (!raw) return '';
+  const digits = raw.replace(/\D/g, '');
+  if (!digits) return '';
+  if (digits.length === 15) return `0${digits}`;
+  return digits;
+}
+
+/** Reads the respondent NIK even when the Google Forms question title has instructions/punctuation. */
+export function readNIKFromSheetRow(headers: string[], row: string[]): string {
+  const candidates = headers
+    .map((header, index) => ({
+      header: String(header ?? '').trim(),
+      normalized: normalizeSheetHeader(String(header ?? '')),
+      value: String(row[index] ?? '').trim(),
+      index,
+    }))
+    .filter(({ header, normalized, value }) => value && isLikelyRespondentNIKHeader(header) && normalized);
+
+  const score = (header: string): number => {
+    const normalized = normalizeSheetHeader(header);
+    let points = 0;
+    if (['nik', 'nikresponden', 'nikppks', 'nomorindukkependudukan', 'nomorktp', 'noktp'].includes(normalized)) points += 100;
+    if (normalized.includes('responden') || normalized.includes('ppks') || normalized.includes('calonresponden')) points += 60;
+    if (normalized.includes('nik')) points += 35;
+    if (normalized.includes('ktp')) points += 20;
+    if (normalized.includes('nomorindukkependudukan')) points += 15;
+    if (normalized.length > 100) points -= 10;
+    return points;
+  };
+
+  // Check all columns, not indexOf(alias): duplicate headers are possible and
+  // the first duplicate may be blank while a later column contains the value.
+  candidates.sort((a, b) => score(b.header) - score(a.header) || a.index - b.index);
+  for (const candidate of candidates) {
+    const nik = normalizeNIKCellValue(candidate.value);
+    if (nik) return nik;
+  }
+  return '';
+}
+
 
 function parseSheetNumber(value: string, fallback = 0): number {
   const normalized = String(value ?? '').replace(/,/g, '.').replace(/[^\d.-]/g, '');
