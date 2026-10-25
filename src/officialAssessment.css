@@ -12,7 +12,7 @@
   border:1px solid #eee; background:#fff; padding:2mm;
 }
 .official-letterhead-logo { display:flex; flex-direction:column; align-items:center; justify-content:center; }
-.official-letterhead-logo svg { width:18mm; height:18mm; }
+.official-letterhead-logo img { display:block; width:22mm; height:22mm; max-width:100%; object-fit:contain; }
 .official-letterhead-logo small { margin-top:1mm; text-align:center; font-size:5pt; line-height:1.05; font-weight:700; }
 .official-letterhead-title { text-align:center; font-size:12pt; line-height:1.5; font-weight:800; color:#111; }
 .official-letterhead-title span { display:block; font-size:11pt; }
@@ -52,18 +52,26 @@
   .official-letterhead { grid-template-columns:18mm 1fr 18mm; }
   .official-letterhead-title { font-size:9pt; }
   .official-letterhead-title span { font-size:8pt; }
-  .official-letterhead-logo svg { width:13mm; height:13mm; }
+  .official-letterhead-logo img { width:15mm; height:15mm; }
 }
 @media print {
   @page { size:A4 portrait; margin:8mm; }
   body { background:#fff !important; }
-  body * { visibility:hidden; }
-  .official-assessment-shell,.official-assessment-shell * { visibility:visible; }
-  .official-assessment-shell { position:absolute; left:0; top:0; width:100%; padding:0; margin:0; color:#111 !important; background:#fff !important; }
+  body * { visibility:hidden !important; }
+  /* index.css hides print content globally for other print views. The official
+     assessment must explicitly override that rule or Chrome preview becomes blank. */
+  .official-assessment-shell,
+  .official-assessment-shell * { visibility:visible !important; }
+  .official-assessment-shell {
+    position:absolute !important; z-index:99999 !important; left:0 !important; top:0 !important;
+    width:100% !important; padding:0 !important; margin:0 !important;
+    color:#111 !important; background:#fff !important;
+  }
   .official-toolbar,.official-status { display:none !important; }
-  .official-page { width:auto; max-width:none; min-height:0; margin:0; padding:0; box-shadow:none; page-break-after:always; break-after:page; overflow:visible; }
+  .official-page { width:auto; max-width:none; min-height:0; margin:0; padding:0; box-shadow:none; page-break-after:always; break-after:page; overflow:visible !important; }
   .official-page:last-child { page-break-after:auto; break-after:auto; }
-  .official-letterhead { margin-bottom:6mm; }
+  .official-letterhead { margin-bottom:6mm; break-inside:avoid; page-break-inside:avoid; }
+  .official-letterhead-logo img { print-color-adjust:exact; -webkit-print-color-adjust:exact; }
   .official-table { font-size:7pt; }
   .official-table td { padding:1.5px 2px; }
   .official-input,.official-textarea { border:0; min-height:12px; padding:0; resize:none; }
