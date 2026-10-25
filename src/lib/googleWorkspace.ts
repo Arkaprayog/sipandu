@@ -234,7 +234,7 @@ export async function readSpreadsheetRichData(
         }[];
       }[];
     }[];
-  }>(\`https://sheets.googleapis.com/v4/spreadsheets/\${id}?\${params.toString()}\`);
+  }>(`https://sheets.googleapis.com/v4/spreadsheets/${id}?${params.toString()}`);
 
   const sheet = data.sheets?.[0];
   const rowData = sheet?.data?.[0]?.rowData || [];
