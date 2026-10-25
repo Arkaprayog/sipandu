@@ -374,9 +374,9 @@ function isLikelyRespondentNIKHeader(header: string): boolean {
   // "Nomor Induk Kependudukan (NIK) sesuai KTP responden", "No. KTP", and
   // "NIK/No KTP". This helper is deliberately not used for image/link columns.
   const identityTokens = [
-    'nik', 'nomorindukkependudukan', 'indukkependudukan', 'nokependudukan',
-    'nomorktp', 'noktp', 'kartutandapenduduk', 'ektp', 'kependudukan',
-    'nomoridentitas', 'noidentitas', 'identitasresponden',
+    'nik', 'nikresponden', 'nikppks', 'nomornik', 'nonik', 'nomorindukkependudukan', 'indukkependudukan', 'nokependudukan',
+    'nomorktp', 'noktp', 'nomorktpresponden', 'noktpresponden', 'kartutandapenduduk', 'ektp', 'kependudukan',
+    'nomoridentitas', 'noidentitas', 'identitasresponden', 'niksesuaiktp', 'nomorindukkependudukanresponden',
   ];
   return identityTokens.some((token) => normalized.includes(token)) ||
     normalized === 'ktp' ||
@@ -414,7 +414,7 @@ export function readNIKFromSheetRow(headers: string[], row: string[]): string {
   const score = (header: string): number => {
     const normalized = normalizeSheetHeader(header);
     let points = 0;
-    if (['nik', 'nikresponden', 'nikppks', 'nomorindukkependudukan', 'nomorktp', 'noktp'].includes(normalized)) points += 100;
+    if (['nik', 'nikresponden', 'nikppks', 'nomorindukkependudukan', 'nomorindukkependudukanresponden', 'nomorktp', 'nomorktpresponden', 'noktp', 'noktpresponden', 'niksesuaiktp'].includes(normalized)) points += 100;
     if (normalized.includes('responden') || normalized.includes('ppks') || normalized.includes('calonresponden')) points += 60;
     if (normalized.includes('nik')) points += 35;
     if (normalized.includes('ktp')) points += 20;
