@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { PPKSRecord } from '../types';
 import { SUMUT_DISTRICTS } from '../data/initialData';
+import { normalizeNorthSumatraRegion } from '../lib/ppksData';
 import {
   FileSpreadsheet,
   RefreshCw,
@@ -17,7 +18,7 @@ interface BerandaViewProps {
   ppksList: PPKSRecord[];
   googleSpreadsheetUrl?: string;
   googleSpreadsheetName?: string;
-  onSyncGoogleSpreadsheet?: () => Promise<number>;
+  onSyncGoogleSpreadsheet?: () => Promise<{ records: number; sourceDataRows: number; sourceRowsWithName: number; sampleRecordsFiltered: number }>;
 }
 
 export const BerandaView: React.FC<BerandaViewProps> = ({
@@ -60,14 +61,34 @@ export const BerandaView: React.FC<BerandaViewProps> = ({
     return { desil: i, count, percent };
   });
 
-  // Top regions
-  const cityCounts = SUMUT_DISTRICTS.map((d) => {
-    const cityLabel = d.name.toLowerCase().replace('kota ', '').replace('kab. ', '');
-    const listCount = ppksList.filter((p) =>
-      (p.kotaDomisili || '').toLowerCase().includes(cityLabel)
-    ).length;
-    return { ...d, displayCount: listCount };
-  }).sort((a, b) => b.displayCount - a.displayCount);
+  // Resolve each respondent to at most one district, preferring the longest
+  // alias. This prevents "Nias Selatan" being counted as both Nias and Nias Selatan,
+  // and matches variants such as "Kab. Labuhan Batu Selatan".
+  const regionMatchers = SUMUT_DISTRICTS
+    .flatMap((district) => [district.name, ...(district.aliases || [])].map((alias) => ({
+      districtId: district.id,
+      normalizedAlias: normalizeNorthSumatraRegion(alias),
+    })))
+    .filter((item) => item.normalizedAlias.length > 2)
+    .sort((a, b) => b.normalizedAlias.length - a.normalizedAlias.length);
+  const regionAssignments = ppksList.map((record) => {
+    const original = String(record.kotaDomisili || '').trim();
+    const normalized = normalizeNorthSumatraRegion(original);
+    const match = normalized
+      ? regionMatchers.find((candidate) => normalized.includes(candidate.normalizedAlias))
+      : undefined;
+    return { original, districtId: match?.districtId || '' };
+  });
+  const cityCounts = SUMUT_DISTRICTS.map((district) => ({
+    ...district,
+    displayCount: regionAssignments.filter((item) => item.districtId === district.id).length,
+  })).sort((a, b) => b.displayCount - a.displayCount || a.name.localeCompare(b.name, 'id'));
+
+  const recognizedRegionCount = regionAssignments.filter((item) => item.districtId).length;
+  const unmatchedRegionValues = [...new Set(
+    regionAssignments.filter((item) => !item.districtId && item.original).map((item) => item.original)
+  )].slice(0, 8);
+  const blankRegionCount = regionAssignments.filter((item) => !item.original).length;
 
   // Map pins show only counts calculated from imported/local records; no demo totals.
   const mapHotspots = [
@@ -97,10 +118,12 @@ export const BerandaView: React.FC<BerandaViewProps> = ({
     setIsSyncing(true);
     setSyncMessage('');
     try {
-      const count = await onSyncGoogleSpreadsheet();
+      const stats = await onSyncGoogleSpreadsheet();
       const now = new Date();
       setLastSyncTime(now.toLocaleString('id-ID'));
-      setSyncMessage(`Sinkronisasi nyata berhasil: ${count} responden dibaca dari spreadsheet sumber. Daftar PPKS diperbarui dan data yang cocok digabungkan agar tidak duplikat.`);
+      setSyncMessage(
+        `Sinkronisasi nyata berhasil: ${stats.sourceDataRows} baris data, ${stats.sourceRowsWithName} baris bernama, ${stats.records} PPKS dimuat; ${stats.sampleRecordsFiltered} contoh disaring. Daftar PPKS diurutkan dari waktu terbaru.`
+      );
     } catch (error) {
       setSyncMessage(error instanceof Error ? error.message : String(error));
     } finally {
@@ -449,19 +472,34 @@ export const BerandaView: React.FC<BerandaViewProps> = ({
               </h3>
             </div>
             <span className="text-xs text-emerald-300 font-mono">
-              Top 7 Wilayah Sumut
+              Semua 33 Kabupaten/Kota Sumut
             </span>
           </div>
 
-          <div className="space-y-3">
-            {cityCounts.slice(0, 7).map((item, idx) => {
-              const maxCity = cityCounts[0]?.displayCount || 50;
+          <div className="mb-3 rounded-lg border border-white/10 bg-black/25 p-3 text-[11px] text-neutral-300">
+            <div className="flex flex-wrap gap-x-4 gap-y-1">
+              <span>Responden: <strong className="text-white">{totalPPKS}</strong></span>
+              <span>Wilayah terpetakan: <strong className="text-emerald-300">{recognizedRegionCount}</strong></span>
+              <span>Wilayah belum cocok: <strong className="text-amber-300">{totalPPKS - recognizedRegionCount}</strong></span>
+            </div>
+            {unmatchedRegionValues.length > 0 && (
+              <p className="mt-2 break-words text-amber-200">
+                Nilai wilayah yang belum dikenali: {unmatchedRegionValues.join(', ')}
+              </p>
+            )}
+            {blankRegionCount > 0 && (
+              <p className="mt-1 text-neutral-400">{blankRegionCount} responden belum memiliki nilai kabupaten/kota pada sumber.</p>
+            )}
+          </div>
+          <div className="max-h-[34rem] space-y-3 overflow-y-auto pr-2">
+            {cityCounts.map((item) => {
+              const maxCity = Math.max(cityCounts[0]?.displayCount || 0, 1);
               const pct = Math.round((item.displayCount / maxCity) * 100);
               return (
-                <div key={idx} className="space-y-1">
-                  <div className="flex justify-between text-xs">
+                <div key={item.id} className="space-y-1">
+                  <div className="flex justify-between gap-3 text-xs">
                     <span className="font-semibold text-white">{item.name}</span>
-                    <span className="text-sky-300 font-bold">{item.displayCount} PPKS</span>
+                    <span className="shrink-0 text-sky-300 font-bold">{item.displayCount} PPKS</span>
                   </div>
                   <div className="w-full h-2.5 rounded-full bg-black/60 overflow-hidden border border-emerald-950">
                     <div
