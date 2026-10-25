@@ -1,5 +1,6 @@
 import { getAccessToken, invalidateAccessToken } from './firebase';
 import { IntegratedFormData, PPKSRecord } from '../types';
+import { normalizeExactNumericNIK } from './nikNumeric';
 import { isLegacySamplePPKS, isObviousDemoMarker, LEGACY_SAMPLE_PPKS_IDS, LEGACY_SAMPLE_PPKS_NAMES } from '../data/initialData';
 
 export interface GoogleDriveFile {
@@ -220,7 +221,7 @@ export async function readSpreadsheetRichData(
   const params = new URLSearchParams({
     ranges: range,
     includeGridData: 'true',
-    fields: 'sheets(properties(title),data(rowData(values(formattedValue,userEnteredValue.stringValue,effectiveValue.stringValue,hyperlink,textFormatRuns(format(link(uri)))))))',
+    fields: 'sheets(properties(title),data(rowData(values(formattedValue,userEnteredValue.stringValue,userEnteredValue.numberValue,effectiveValue.stringValue,effectiveValue.numberValue,hyperlink,textFormatRuns(format(link(uri)))))))',
   });
   const data = await googleJson<{
     sheets?: {
@@ -229,8 +230,8 @@ export async function readSpreadsheetRichData(
         rowData?: {
           values?: {
             formattedValue?: string;
-            userEnteredValue?: { stringValue?: string };
-            effectiveValue?: { stringValue?: string };
+            userEnteredValue?: { stringValue?: string; numberValue?: number };
+            effectiveValue?: { stringValue?: string; numberValue?: number };
             hyperlink?: string;
             textFormatRuns?: Array<{ format?: { link?: { uri?: string } } }>;
           }[];
@@ -267,6 +268,17 @@ export async function readSpreadsheetRichData(
     // questions. For NIK and all other text columns, keep the displayed value
     // so a rich-text hyperlink cannot replace an identity number with its URL.
     if (photoColumns.has(index) && actualLink) return String(actualLink);
+
+    // A numeric NIK cell may have scientific notation as its visible format.
+    // Recover it only from Sheets' underlying numberValue when the number is
+    // still an exact safe integer and the column header is actually a NIK/KTP
+    // identity field, never from a rounded display string.
+    if (!photoColumns.has(index) && isLikelyRespondentNIKHeader(headers[index] || '')) {
+      const numericNIK = normalizeExactNumericNIK(
+        cell.effectiveValue?.numberValue ?? cell.userEnteredValue?.numberValue
+      );
+      if (numericNIK) return numericNIK;
+    }
     return displayValue || (photoColumns.has(index) ? String(actualLink) : '');
   }));
 }
