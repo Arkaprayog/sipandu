@@ -31,7 +31,10 @@ function normalizeAppSettings(value: unknown): AppSettings {
   }
 
   let sourceUrl = saved.googleSpreadsheetSourceUrl?.trim() || '';
-  if (sourceUrl.includes('1yA8KemensosODHIVSumut2026_LiveSync')) sourceUrl = '';
+  // Older builds silently defaulted to the Forms response spreadsheet. Clear that
+  // value if it was written by the old automatic default rather than user selection.
+  const wasAutoDefaultSource = saved.googleSpreadsheetSourceName === 'Sumber Respons Google Form SIPANDU';
+  if (sourceUrl.includes('1yA8KemensosODHIVSumut2026_LiveSync') || wasAutoDefaultSource) sourceUrl = '';
   if (sourceUrl) {
     try {
       extractSpreadsheetId(sourceUrl);
@@ -40,9 +43,7 @@ function normalizeAppSettings(value: unknown): AppSettings {
     }
   }
 
-  const sourceName = saved.googleSpreadsheetSourceName === 'Sumber Respons Google Form SIPANDU'
-    ? ''
-    : (saved.googleSpreadsheetSourceName || '');
+  const sourceName = wasAutoDefaultSource ? '' : (saved.googleSpreadsheetSourceName || '');
 
   return {
     ...initialAppSettings,
