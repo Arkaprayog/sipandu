@@ -400,7 +400,7 @@ export const GoogleWorkspaceModal: React.FC<GoogleWorkspaceModalProps> = ({
           : `NIK belum terpetakan. Kolom dikenali: ${imported.nikHeadersFound.join(', ') || 'tidak ditemukan'}. Diagnostik kolom sumber: ${diagnosticSummary}. Jika nilai memakai notasi ilmiah/terpotong, perbaiki nilai NIK pada spreadsheet menjadi teks 16 digit, lalu sinkronkan kembali.`;
       setStatusMessage({
         type: imported.recordsWithNIK === 0 ? 'error' : 'success',
-        text: `Berhasil memuat ${imported.records.length} data PPKS/Asesmen dari “${imported.spreadsheetTitle}” → tab “${imported.selectedTab}” (${imported.rowsRead} baris dibaca). ${nikStatus} Data tersedia di Database PPKS dan From Asesmen Terintegrasi. Sumber tidak diubah.`,
+        text: `Berhasil memuat ${imported.records.length} PPKS dari “${imported.spreadsheetTitle}” → tab “${imported.selectedTab}”. Baris sumber: ${imported.sourceDataRows} (di luar header), baris bernama: ${imported.sourceRowsWithName}, tidak dikenali sebagai nama: ${imported.rowsWithoutRecognizedName}, data contoh disaring: ${imported.sampleRecordsFiltered}. ${nikStatus} Data tersedia di Database PPKS dan From Asesmen Terintegrasi, diurutkan dari timestamp terbaru. Sumber tidak diubah.`,
       });
     } catch (err: any) {
       setStatusMessage({ type: 'error', text: err?.message || String(err) });
