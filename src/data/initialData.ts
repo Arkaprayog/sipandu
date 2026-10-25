@@ -48,7 +48,6 @@ export const LEGACY_SAMPLE_PPKS_NAMES: ReadonlySet<string> = new Set([
   'melati anggraini sinaga',
   'tigor pangaribuan',
   'aisyah putri tanjung',
-  'budi santoso',
 ]);
 
 export function isLegacySamplePPKS(record: Pick<PPKSRecord, 'id' | 'namaLengkap'> | null | undefined): boolean {
