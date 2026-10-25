@@ -951,7 +951,7 @@ export const GoogleWorkspaceModal: React.FC<GoogleWorkspaceModalProps> = ({
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                   <div>
                     <h5 className="text-rose-100 text-xs font-bold">Bersihkan Data Contoh Lama</h5>
-                    <p className="text-[10px] text-neutral-300">Menghapus baris bertanda ID/nama contoh yang dikenali dari spreadsheet respons/sumber/database dan file yang jelas bertanda demo/contoh dari folder Drive SIPANDU. Data lain dipertahankan.</p>
+                    <p className="text-[10px] text-neutral-300">Menghapus hanya record PPKS contoh yang dikenali di Firestore, baris demo yang jelas dari spreadsheet respons/sumber/database, serta file demo/contoh dari folder Drive SIPANDU. Data responden non-demo dipertahankan.</p>
                   </div>
                   <button
                     type="button"
