@@ -108,4 +108,3 @@ test('authenticateFixedUser authenticates fixed user 1 (Deny) and user 2 (Supriy
   assert.equal(authWrong.success, false);
   assert.match(authWrong.error || '', /Password salah/);
 });
-
