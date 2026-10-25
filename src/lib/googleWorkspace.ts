@@ -356,7 +356,7 @@ function isLikelyRespondentNIKHeader(header: string): boolean {
     normalized.includes('nomorkartutandapenduduk') ||
     normalized.includes('nomorktp') ||
     normalized.includes('noktp') ||
-    normalized.includes('ktp') ||
+    /^ktp(?:responden|ppks|calonresponden)/.test(normalized) ||
     normalized.includes('noidentitas') ||
     normalized.includes('nomoridentitas') ||
     normalized.includes('identitasresponden') ||
@@ -367,8 +367,13 @@ function isLikelyRespondentNIKHeader(header: string): boolean {
 }
 
 function normalizeNIKCellValue(value: string): string {
-  const raw = String(value ?? '').trim();
+  const raw = String(value ?? '').trim().replace(/^['`]/, '');
   if (!raw) return '';
+
+  // A scientific-notation NIK can already have lost precision in Sheets' numeric
+  // storage. Never manufacture a 16-digit identity from a rounded scientific value.
+  if (/^[+-]?\d+(?:[.,]\d+)?e[+-]?\d+$/i.test(raw)) return '';
+
   const digits = raw.replace(/\D/g, '');
   if (!digits) return '';
   if (digits.length === 15) return `0${digits}`;
