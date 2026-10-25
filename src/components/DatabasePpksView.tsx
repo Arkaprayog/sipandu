@@ -178,8 +178,28 @@ export const DatabasePpksView: React.FC<DatabasePpksViewProps> = ({
                 <div className="mt-2 text-center">
                   <span className="text-xs font-bold text-sky-200">Foto Diri Responden</span>
                   <p className="text-[10px] text-neutral-400">
-                    Terverifikasi Petugas Lapangan Kemensos
+                    Foto asli dari sumber data; tidak diganti dengan foto contoh
                   </p>
+                </div>
+
+                {/* Tampilkan dokumen lain di dalam bingkai PROFIL PPKS yang sama,
+                    bukan sebagai card kedua di bawah tabel Desil. */}
+                <div className="mt-4 grid w-full grid-cols-2 gap-2">
+                  {[
+                    { label: 'Foto KTP', source: currentPPKS.fotoKtp },
+                    { label: 'Foto KK', source: currentPPKS.fotoKk || '' },
+                    { label: 'Foto Rumah Tampak Depan', source: currentPPKS.fotoRumah || '' },
+                  ].map((photo) => (
+                    <div key={photo.label} className="min-w-0 rounded-lg border border-white/10 bg-black/35 p-2">
+                      <p className="mb-1.5 text-[10px] font-semibold text-sky-100">{photo.label}</p>
+                      <PrivateDriveImage
+                        source={photo.source}
+                        alt={`${photo.label} — ${currentPPKS.namaLengkap}`}
+                        className="h-24 w-full"
+                        objectFit="contain"
+                      />
+                    </div>
+                  ))}
                 </div>
               </div>
 
