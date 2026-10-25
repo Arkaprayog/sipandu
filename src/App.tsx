@@ -18,6 +18,43 @@ import { auth, getAccessToken, savePPKSToFirestore, googleLogout } from './lib/f
 import { ensureSIPANDUDatabaseSheet, extractSpreadsheetId, importPPKSFromSpreadsheet, upsertPPKSInSpreadsheet } from './lib/googleWorkspace';
 import { GOOGLE_SIPANDU_RESOURCES } from './lib/googleSIPANDUResources';
 
+function normalizeAppSettings(value: unknown): AppSettings {
+  const saved = value && typeof value === 'object' ? value as Partial<AppSettings> : {};
+  let databaseUrl = saved.googleSpreadsheetUrl?.trim() || '';
+  if (databaseUrl.includes('1yA8KemensosODHIVSumut2026_LiveSync')) databaseUrl = '';
+  if (databaseUrl) {
+    try {
+      if (extractSpreadsheetId(databaseUrl) === GOOGLE_SIPANDU_RESOURCES.responseSpreadsheetId) databaseUrl = '';
+    } catch {
+      databaseUrl = '';
+    }
+  }
+
+  let sourceUrl = saved.googleSpreadsheetSourceUrl?.trim() || '';
+  if (!sourceUrl || sourceUrl.includes('1yA8KemensosODHIVSumut2026_LiveSync')) {
+    sourceUrl = GOOGLE_SIPANDU_RESOURCES.responseSpreadsheetUrl;
+  } else {
+    try {
+      extractSpreadsheetId(sourceUrl);
+    } catch {
+      sourceUrl = GOOGLE_SIPANDU_RESOURCES.responseSpreadsheetUrl;
+    }
+  }
+
+  const sourceName = saved.googleSpreadsheetSourceName === 'Sumber Respons Google Form SIPANDU'
+    ? ''
+    : (saved.googleSpreadsheetSourceName || '');
+
+  return {
+    ...initialAppSettings,
+    ...saved,
+    googleSpreadsheetUrl: databaseUrl,
+    googleSpreadsheetSourceUrl: sourceUrl,
+    googleSpreadsheetSourceName: sourceName,
+    googleSpreadsheetSourceTab: saved.googleSpreadsheetSourceTab || '',
+  };
+}
+
 export default function App() {
   // Firebase Authentication is the source of truth; URL/localStorage flags cannot bypass login.
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -104,7 +141,7 @@ export default function App() {
     const cached = localStorage.getItem('sipandu_settings');
     if (cached) {
       try {
-        return JSON.parse(cached);
+        return normalizeAppSettings(JSON.parse(cached));
       } catch (e) {
         console.error('Failed to parse cached settings', e);
       }
@@ -292,7 +329,7 @@ export default function App() {
           <BerandaView
             ppksList={ppksList}
             googleSpreadsheetUrl={settings.googleSpreadsheetSourceUrl || GOOGLE_SIPANDU_RESOURCES.responseSpreadsheetUrl}
-            googleSpreadsheetName={settings.googleSpreadsheetSourceName || 'Sumber Respons Google Form SIPANDU'}
+            googleSpreadsheetName={settings.googleSpreadsheetSourceName || ''}
             onSyncGoogleSpreadsheet={handleSyncGoogleSpreadsheet}
           />
         )}
