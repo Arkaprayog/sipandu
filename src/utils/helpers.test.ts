@@ -109,3 +109,26 @@ test('authenticateFixedUser authenticates fixed user 1 (Deny) and user 2 (Supriy
   assert.match(authWrong.error || '', /Password salah/);
 });
 
+
+test('buildWhatsAppMessage never invents Google Form links or claims verification without a real URL', () => {
+  const message = buildWhatsAppMessage({
+    id: 'PPKS-REAL-001',
+    timestamp: '2026-10-25T10:00:00',
+    namaLengkap: 'Responden Aktual',
+    nik: '1271011505920003',
+    usia: 34,
+    jenisKelamin: 'Laki-laki',
+    kotaDomisili: 'Medan',
+    alamatLengkap: '',
+    noHpWa: '',
+    jenisBantuan: '',
+    intervensiMental: '',
+    desil: 0,
+    fotoDiri: '',
+    fotoKtp: '',
+    statusAsesmen: 'Tahap Awal',
+  });
+  assert.doesNotMatch(message, /forms\\.gle\\/(?:SIPANDU-ODHIV-Lanjutan-Sumut|Asesmen-Kesehatan-Mental-ODHIV-Kemensos)/);
+  assert.match(message, /Tautan asesmen lanjutan belum dikonfigurasi/);
+  assert.doesNotMatch(message, /Data Anda telah berhasil kami terima dan terverifikasi/);
+});
