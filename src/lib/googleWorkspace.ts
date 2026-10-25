@@ -354,12 +354,11 @@ function readNIKFromSheetRow(headers: string[], row: string[]): string {
     .map((header, index) => ({ header, index, value: row[index]?.trim() || '' }))
     .filter(({ header, value }) => value && !excluded.test(header))
     .filter(({ header }) =>
-      /(^|[^a-z])nik([^a-z]|$)/.test(header) ||
+      header.includes('nik') ||
       header.includes('nomorindukkependudukan') ||
       header.includes('nomorkartutandapenduduk') ||
-      /^(no|nomor)ktp/.test(header) ||
-      header.includes('niksesuaiktp') ||
-      header.includes('niknoktp')
+      header.includes('nomorktp') ||
+      header.includes('noktp')
     );
   const best = candidates.sort((a, b) => {
     const score = (header: string) =>
