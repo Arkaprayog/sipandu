@@ -379,16 +379,16 @@ function mapRowsToPPKSRecords(rows: string[][]): PPKSRecord[] {
     if (seen.has(recordId)) return;
     seen.add(recordId);
 
-    const usia = parseSheetNumber(readCellByAliases(headers, row, ['usia', 'umur', 'umurTahun']), 0);
+    const usia = parseSheetNumber(readCellByAliases(headers, row, ['usia', 'umur', 'umurTahun', 'usiaSaatIni', 'umurSaatIni']), 0);
     const gender = readCellByAliases(headers, row, ['jenisKelamin', 'gender', 'jenisKelaminResponden']);
     const domisili = readCellByAliases(headers, row, ['kotaDomisili', 'kabupatenKota', 'kotaKabupaten', 'domisili', 'kota', 'kabupaten']);
     const alamat = readCellByAliases(headers, row, ['alamatLengkap', 'alamatDomisili', 'alamatResponden', 'alamat']);
     const jenisBantuan = readCellByAliases(headers, row, ['jenisBantuan', 'bantuanDibutuhkan', 'jenisBantuanAtensi', 'kebutuhanBantuan']);
     const integratedValues: Partial<Record<keyof IntegratedFormData, string | number | boolean>> = {};
     const integratedMarkerKeys = new Set<keyof IntegratedFormData>([
-      'nomorRegistrasi', 'noBpjs', 'statusPernikahan', 'pendidikanTerakhir',
-      'tahunDiagnosa', 'faskesPdpRujukan', 'statusArv', 'nilaiCd4Terakhir',
-      'viralLoadTerakhir', 'kontakDaruratNama', 'statusKeterbukaanStatus',
+      'nomorRegistrasi', 'noBpjs', 'tahunDiagnosa', 'faskesPdpRujukan',
+      'statusArv', 'nilaiCd4Terakhir', 'viralLoadTerakhir',
+      'kontakDaruratNama', 'statusKeterbukaanStatus',
     ]);
     let hasIntegratedAssessmentData = false;
     for (const field of INTEGRATED_SHEET_FIELDS) {
@@ -402,7 +402,7 @@ function mapRowsToPPKSRecords(rows: string[][]): PPKSRecord[] {
     const integratedForm = hasIntegratedAssessmentData
       ? (integratedValues as IntegratedFormData)
       : undefined;
-    const desil = parseSheetNumber(readCellByAliases(headers, row, ['desil', 'desilKemiskinan']), 0);
+    const desil = parseSheetNumber(readCellByAliases(headers, row, ['desil', 'desilKemiskinan', 'desilDTKS', 'desilEkonomi']), 0);
     const fotoDiri = readCellByAliases(headers, row, ['fotoDiri', 'fotoResponden', 'uploadFotoDiri', 'foto']);
     const fotoKtp = readCellByAliases(headers, row, ['fotoKtp', 'fotoKTP', 'uploadFotoKTP', 'dokumenKTP']);
     const fotoKk = readCellByAliases(headers, row, ['fotoKk', 'fotoKK', 'uploadFotoKK', 'dokumenKK']);
