@@ -15,7 +15,7 @@ import { NotificationsModal } from './components/NotificationsModal';
 import { GoogleWorkspaceModal } from './components/GoogleWorkspaceModal';
 import { onAuthStateChanged, signOut, getIdTokenResult } from 'firebase/auth';
 import { auth, getAccessToken, savePPKSToFirestore, googleLogout } from './lib/firebase';
-import { ensureSIPANDUDatabaseSheet, extractSpreadsheetId, upsertPPKSInSpreadsheet } from './lib/googleWorkspace';
+import { ensureSIPANDUDatabaseSheet, extractSpreadsheetId, importPPKSFromSpreadsheet, upsertPPKSInSpreadsheet } from './lib/googleWorkspace';
 import { GOOGLE_SIPANDU_RESOURCES } from './lib/googleSIPANDUResources';
 
 export default function App() {
@@ -203,16 +203,42 @@ export default function App() {
   const handleLoadPPKSFromCloud = (cloudRecords: PPKSRecord[]) => {
     setPpksList((localRecords) => {
       const merged = new Map<string, PPKSRecord>();
+      const recordKey = (record: PPKSRecord) => {
+        const normalizedNik = String(record.nik || '').replace(/\D/g, '');
+        return normalizedNik ? `nik:${normalizedNik}` : `id:${record.id}`;
+      };
       localRecords
         .filter((record) => !LEGACY_SAMPLE_PPKS_IDS.has(String(record.id || '')))
-        .forEach((record) => merged.set(record.id, record));
-      // Old demo IDs are also excluded on cloud import so they do not return
-      // after a sync, even if an earlier test uploaded them to a remote source.
+        .forEach((record) => merged.set(recordKey(record), record));
+      // Cloud/source records overwrite an older local record with the same NIK,
+      // preventing duplicate respondents when an imported row has a new ID.
       cloudRecords
         .filter((record) => !LEGACY_SAMPLE_PPKS_IDS.has(String(record.id || '')))
-        .forEach((record) => merged.set(record.id, record));
+        .forEach((record) => merged.set(recordKey(record), record));
       return Array.from(merged.values());
     });
+  };
+
+  const handleSyncGoogleSpreadsheet = async (): Promise<number> => {
+    const sourceUrl = settings.googleSpreadsheetSourceUrl?.trim() || GOOGLE_SIPANDU_RESOURCES.responseSpreadsheetUrl;
+    const imported = await importPPKSFromSpreadsheet(
+      sourceUrl,
+      settings.googleSpreadsheetSourceTab?.trim() || undefined
+    );
+    if (!imported.records.length) {
+      const headers = (imported.previewRows[0] || []).slice(0, 12).join(' | ');
+      throw new Error(
+        `Spreadsheet “${imported.spreadsheetTitle}”, tab “${imported.selectedTab}” berhasil dibaca (${imported.rowsRead} baris), tetapi tidak ditemukan baris responden yang memiliki kolom nama dikenali. Periksa judul kolom. Header: ${headers || '(kosong)'}`
+      );
+    }
+    handleLoadPPKSFromCloud(imported.records);
+    setSettings({
+      ...settings,
+      googleSpreadsheetSourceUrl: sourceUrl,
+      googleSpreadsheetSourceName: imported.spreadsheetTitle,
+      googleSpreadsheetSourceTab: imported.selectedTab,
+    });
+    return imported.records.length;
   };
 
   // Avoid showing protected UI until Firebase has resolved the current session.
@@ -265,7 +291,9 @@ export default function App() {
         {activeTab === 'beranda' && (
           <BerandaView
             ppksList={ppksList}
-            googleSpreadsheetUrl={settings.googleSpreadsheetUrl}
+            googleSpreadsheetUrl={settings.googleSpreadsheetSourceUrl || GOOGLE_SIPANDU_RESOURCES.responseSpreadsheetUrl}
+            googleSpreadsheetName={settings.googleSpreadsheetSourceName || 'Sumber Respons Google Form SIPANDU'}
+            onSyncGoogleSpreadsheet={handleSyncGoogleSpreadsheet}
           />
         )}
 
