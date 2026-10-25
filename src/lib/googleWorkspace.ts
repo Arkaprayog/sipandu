@@ -248,7 +248,13 @@ export async function readSpreadsheetRichData(
   );
   const normalizedHeaders = headers.map(normalizeSheetHeader);
   const photoColumns = new Set<number>();
+  const timestampColumns = new Set<number>();
   normalizedHeaders.forEach((header, index) => {
+    if (/^(timestamp|capwaktu|waktupengiriman|waktupengisian|tanggalwaktu|tanggaljam|wakturespon|wakturespons|createdtime|lastsubmittedtime)$/.test(header) ||
+        /^(timestamp|capwaktu|waktupengiriman|waktupengisian)/.test(header)) {
+      timestampColumns.add(index);
+    }
+
     // Do not classify standalone KTP/NIK headers as photo cells. A header such
     // as "NIK/No. KTP" must preserve the displayed NIK, not substitute its hyperlink.
     if (/(foto|photo|gambar|image|upload|unggah|lampiran|scan|dokumen|berkas|file|tautan|linkdrive)/i.test(header)) {
@@ -263,6 +269,15 @@ export async function readSpreadsheetRichData(
       cell.formattedValue ||
       ''
     );
+    // Sheets stores true dates as day serial numbers. Return the exact sheet
+    // wall-clock as ISO without a timezone so sort order is independent of the
+    // formatted display locale (US mm/dd vs Indonesian dd/mm).
+    const timestampNumber = cell.effectiveValue?.numberValue ?? cell.userEnteredValue?.numberValue;
+    if (timestampColumns.has(index) && typeof timestampNumber === 'number' && timestampNumber >= 20000 && timestampNumber <= 80000) {
+      const date = new Date(Date.UTC(1899, 11, 30) + Math.round(timestampNumber * 86400000));
+      const pad = (number: number) => String(number).padStart(2, '0');
+      return `${date.getUTCFullYear()}-${pad(date.getUTCMonth() + 1)}-${pad(date.getUTCDate())}T${pad(date.getUTCHours())}:${pad(date.getUTCMinutes())}:${pad(date.getUTCSeconds())}`;
+    }
     const runLink = cell.textFormatRuns?.find((run) => run.format?.link?.uri)?.format?.link?.uri;
     const actualLink = cell.hyperlink || runLink || '';
     // Use underlying Drive URLs only for columns that are photo/upload/document
