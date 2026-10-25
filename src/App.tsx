@@ -59,7 +59,7 @@ function mergePPKSRecords(localRecords: PPKSRecord[], cloudRecords: PPKSRecord[]
   const normalizePhone = (value: string | undefined) => String(value || '').replace(/\D/g, '');
 
   for (const record of cloudRecords) {
-    if (!record || LEGACY_SAMPLE_PPKS_IDS.has(String(record.id || ''))) continue;
+    if (!record || isLegacySamplePPKS(record)) continue;
     const key = recordKey(record);
     let existingKey = key;
     let existing = merged.get(key);
@@ -567,7 +567,7 @@ export default function App() {
         <Header
           currentUser={currentUserName}
           profile={profile}
-          unreadNotificationsCount={2}
+          unreadNotificationsCount={0}
           onOpenEditProfile={() => setIsEditProfileOpen(true)}
           onOpenSettings={() => setIsSettingsOpen(true)}
           onOpenNotifications={() => setIsNotificationsOpen(true)}
