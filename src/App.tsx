@@ -437,6 +437,108 @@ export default function App() {
     };
   }, [isAuthenticated, settings.googleSpreadsheetSourceUrl, settings.googleSpreadsheetSourceTab]);
 
+
+  // Clean only known legacy demo artifacts after Google API authorization exists.
+  // This never clears rows/files that do not match the exact legacy markers.
+  useEffect(() => {
+    let active = true;
+
+    const runCleanup = async () => {
+      if (!active || !isAuthenticated) return;
+
+      const candidateUrls = [
+        GOOGLE_SIPANDU_RESOURCES.responseSpreadsheetUrl,
+        settings.googleSpreadsheetSourceUrl || '',
+        settings.googleSpreadsheetUrl || '',
+      ].filter(Boolean);
+      const uniqueSheets = new Map<string, string>();
+      const failures: string[] = [];
+
+      for (const url of candidateUrls) {
+        try {
+          uniqueSheets.set(extractSpreadsheetId(url), url);
+        } catch {
+          failures.push('Satu URL/ID spreadsheet tidak valid; target tersebut dilewati.');
+        }
+      }
+
+      const targetKey = [
+        ...[...uniqueSheets.keys()].sort(),
+        GOOGLE_SIPANDU_RESOURCES.driveFolderId,
+      ].join('|');
+      const cleanupFlag = 'sipandu_legacy_demo_cleanup_v1:' + targetKey;
+      if (demoCleanupAttemptedRef.current === cleanupFlag) return;
+
+      try {
+        if (localStorage.getItem(cleanupFlag)) {
+          demoCleanupAttemptedRef.current = cleanupFlag;
+          return;
+        }
+      } catch {
+        // Cloud cleanup is idempotent if browser storage is not available.
+      }
+
+      const token = await getAccessToken();
+      if (!token) {
+        setCloudSyncNotice({
+          type: 'error',
+          text: 'Pembersihan data contoh cloud menunggu izin Google API. Hubungkan akun Google melalui Google Workspace & Cloud Hub; aplikasi tidak akan membuka popup login otomatis.',
+        });
+        return;
+      }
+
+      demoCleanupAttemptedRef.current = cleanupFlag;
+      const messages: string[] = [];
+      let rowsCleared = 0;
+
+      for (const [spreadsheetId, url] of uniqueSheets) {
+        if (!active) return;
+        try {
+          const result = await removeLegacyDemoRowsFromSpreadsheet(url);
+          rowsCleared += result.rowsCleared;
+          messages.push(`${result.spreadsheetTitle}: ${result.rowsCleared} baris contoh dibersihkan dari ${result.tabsScanned} tab`);
+        } catch (error) {
+          failures.push(`Spreadsheet ${spreadsheetId}: ${error instanceof Error ? error.message : String(error)}`);
+        }
+      }
+
+      if (active) {
+        try {
+          const drive = await removeObviousDemoFilesFromDrive(GOOGLE_SIPANDU_RESOURCES.driveFolderId);
+          messages.push(`Google Drive: ${drive.filesDeleted} file contoh yang dikenali dihapus dari ${drive.filesScanned} file yang dipindai`);
+        } catch (error) {
+          failures.push(`Google Drive: ${error instanceof Error ? error.message : String(error)}`);
+        }
+      }
+
+      if (!active) return;
+      const allDone = failures.length === 0;
+      if (allDone) {
+        try { localStorage.setItem(cleanupFlag, new Date().toISOString()); } catch { /* non-critical */ }
+      }
+
+      // Immediately remove legacy examples from the browser cache while preserving real respondents.
+      setPpksList((current) => mergePPKSRecords(current, []));
+      setCloudSyncNotice({
+        type: allDone ? 'success' : 'error',
+        text: [
+          `Pembersihan data contoh ${allDone ? 'selesai' : 'sebagian selesai'}: ${rowsCleared} baris contoh dibersihkan dari Google Sheets.`,
+          ...messages,
+          ...(failures.length ? [`Target yang belum selesai (${failures.length}): ${failures.join(' · ')}`] : []),
+          'Data non-demo dipertahankan. Riwayat respons internal Google Forms tidak dihapus oleh API ini.',
+        ].join(' | '),
+      });
+    };
+
+    const onTokenUpdated = () => { void runCleanup(); };
+    void runCleanup();
+    window.addEventListener('sipandu-workspace-token-updated', onTokenUpdated);
+    return () => {
+      active = false;
+      window.removeEventListener('sipandu-workspace-token-updated', onTokenUpdated);
+    };
+  }, [isAuthenticated, settings.googleSpreadsheetSourceUrl, settings.googleSpreadsheetUrl]);
+
   // Avoid showing protected UI until Firebase has resolved the current session.
   if (!authReady) {
     return <div className="min-h-screen flex items-center justify-center bg-[#0a140b] text-emerald-200">Memeriksa sesi SIPANDU…</div>;
