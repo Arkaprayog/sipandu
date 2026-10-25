@@ -358,6 +358,14 @@ export function isLikelyRespondentNIKHeader(header: string): boolean {
   const normalized = normalizeSheetHeader(header);
   if (!normalized) return false;
 
+  // Never treat a photo/file upload column as an identity number, even if its
+  // label contains "KTP" or "NIK".
+  const documentWords = [
+    'foto', 'photo', 'gambar', 'image', 'upload', 'unggah', 'dokumen',
+    'lampiran', 'scan', 'file', 'tautan', 'link', 'drive',
+  ];
+  if (documentWords.some((word) => normalized.includes(word))) return false;
+
   // Exclude numbers belonging to relatives, staff, assessors, or emergency contacts.
   if (/(ayah|ibu|orangtua|wali|suami|istri|pasangan|keluarga|pendamping|petugas|asesor|asessor|supervisor|penanggungjawab|kontakdarurat)/.test(normalized)) {
     return false;
@@ -369,6 +377,7 @@ export function isLikelyRespondentNIKHeader(header: string): boolean {
     'nik',
     'nomorindukkependudukan',
     'noindukkependudukan',
+    'indukkependudukan',
     'nomorkartutandapenduduk',
     'nokartutandapenduduk',
     'nomorktp',
@@ -379,11 +388,14 @@ export function isLikelyRespondentNIKHeader(header: string): boolean {
     'nikresponden',
     'nikppks',
     'nikcalonresponden',
+    'ektp',
     'noidentitas',
     'nomoridentitas',
+    'identitasresponden',
     'nokependudukan',
     'nomorkependudukan',
     'nomoridentitaspenduduk',
+    'kartutandapenduduk',
   ];
   return positivePatterns.some((pattern) =>
     pattern === 'nik'
@@ -392,15 +404,15 @@ export function isLikelyRespondentNIKHeader(header: string): boolean {
   );
 }
 
-/** NIK is an identifier, never a number. Accept 16 digits and repair one
- * leading zero only when Google Sheets has reduced a 16-digit NIK to 15 digits. */
+/** NIK is an identity string, never a numeric calculation. Preserve text zeros,
+ * reject rounded scientific notation, and only return validated 16-digit values. */
 function normalizeNIKCellValue(value: string): string {
-  const raw = String(value ?? '').trim();
+  const raw = String(value ?? '').trim().replace(/^['\\`]/, '').replace(/\\.0+$/, '');
   if (!raw) return '';
-  const digits = raw.replace(/\D/g, '');
-  if (digits.length === 16) return digits;
-  if (digits.length === 15) return '0' + digits;
-  return '';
+  if (/^[+-]?\\d+(?:[.,]\\d+)?e[+-]?\\d+$/i.test(raw)) return '';
+  const digits = raw.replace(/\\D/g, '');
+  const normalized = digits.length === 15 ? '0' + digits : digits;
+  return /^\\d{16}$/.test(normalized) ? normalized : '';
 }
 
 /** Maps respondent NIK from descriptive Google Forms/Sheets headers. */
