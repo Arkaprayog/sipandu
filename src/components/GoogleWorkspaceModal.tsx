@@ -23,6 +23,8 @@ import {
   extractSpreadsheetId,
   createGoogleSpreadsheet,
   fetchFormResponses,
+  removeLegacyDemoRowsFromSpreadsheet,
+  removeObviousDemoFilesFromDrive,
   GoogleDriveFile,
 } from '../lib/googleWorkspace';
 import { GOOGLE_SIPANDU_RESOURCES, GOOGLE_WORKSPACE_EMAIL } from '../lib/googleSIPANDUResources';
@@ -396,6 +398,75 @@ export const GoogleWorkspaceModal: React.FC<GoogleWorkspaceModalProps> = ({
     }
   };
 
+  const handleCleanKnownDemoData = async () => {
+    setLoading(true);
+    setStatusMessage(null);
+    const results: string[] = [];
+    const errors: string[] = [];
+    try {
+      if (!(await getAccessToken())) {
+        throw new Error('Izin Google API belum tersedia. Hubungkan akun Google terlebih dahulu; aplikasi tidak dapat membersihkan sumber cloud tanpa token yang sah.');
+      }
+
+      const candidates = [
+        sourceSpreadsheetUrl,
+        settings.googleSpreadsheetSourceUrl || '',
+        settings.googleSpreadsheetUrl || '',
+        GOOGLE_SIPANDU_RESOURCES.responseSpreadsheetUrl,
+      ].filter(Boolean);
+      const uniqueSheets = new Map<string, string>();
+      for (const url of candidates) {
+        try {
+          uniqueSheets.set(extractSpreadsheetId(url), url);
+        } catch {
+          errors.push('Satu konfigurasi URL/ID spreadsheet tidak valid; target tersebut dilewati.');
+        }
+      }
+
+      let rowsCleared = 0;
+      for (const [spreadsheetId, url] of uniqueSheets) {
+        try {
+          const cleaned = await removeLegacyDemoRowsFromSpreadsheet(url);
+          rowsCleared += cleaned.rowsCleared;
+          results.push(`Google Sheets “${cleaned.spreadsheetTitle}”: ${cleaned.rowsCleared} baris contoh dibersihkan dari ${cleaned.tabsScanned} tab`);
+        } catch (error) {
+          errors.push(`Spreadsheet ${spreadsheetId}: ${error instanceof Error ? error.message : String(error)}`);
+        }
+      }
+
+      try {
+        const drive = await removeObviousDemoFilesFromDrive(GOOGLE_SIPANDU_RESOURCES.driveFolderId);
+        results.push(`Google Drive: ${drive.filesDeleted} file contoh yang dikenali dihapus dari ${drive.filesScanned} file yang dipindai`);
+      } catch (error) {
+        errors.push(`Google Drive: ${error instanceof Error ? error.message : String(error)}`);
+      }
+
+      onLoadPPKSFromCloud([]);
+      setSheetRows([]);
+      if (errors.length === 0) {
+        const cleanupKey = 'sipandu_legacy_demo_cleanup_v1:' + [
+          ...[...uniqueSheets.keys()].sort(),
+          GOOGLE_SIPANDU_RESOURCES.driveFolderId,
+        ].join('|');
+        try { localStorage.setItem(cleanupKey, new Date().toISOString()); } catch { /* non-critical */ }
+      }
+
+      setStatusMessage({
+        type: errors.length ? 'error' : 'success',
+        text: [
+          `Pembersihan contoh ${errors.length ? 'sebagian selesai' : 'selesai'}: ${rowsCleared} baris contoh dibersihkan dari Google Sheets.`,
+          ...results,
+          ...(errors.length ? [`Target yang belum selesai (${errors.length}): ${errors.join(' · ')}`] : []),
+          'Data non-demo dipertahankan. Riwayat respons internal Google Forms tidak dihapus oleh API ini.',
+        ].join(' | '),
+      });
+    } catch (error) {
+      setStatusMessage({ type: 'error', text: error instanceof Error ? error.message : String(error) });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // Google Sheets Actions
   const handleReadSheet = async () => {
     setLoading(true);
@@ -664,10 +735,10 @@ export const GoogleWorkspaceModal: React.FC<GoogleWorkspaceModalProps> = ({
               </div>
               <div className="p-4 rounded-xl bg-black/50 border border-emerald-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div className="flex items-center gap-3">
-                  {googleUser ? (
+                  {googleUser?.photoURL ? (
                     <img
-                      src={googleUser.photoURL || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=120'}
-                      alt="Google User"
+                      src={googleUser.photoURL}
+                      alt="Foto akun Google"
                       className="w-12 h-12 rounded-full border border-emerald-400"
                     />
                   ) : (
@@ -919,6 +990,26 @@ export const GoogleWorkspaceModal: React.FC<GoogleWorkspaceModalProps> = ({
                   Sumber terpilih: {settings.googleSpreadsheetSourceName || 'nama file akan diketahui setelah dibaca'}.
                   {sourceSpreadsheetUrl ? <a href={sourceSpreadsheetUrl} target="_blank" rel="noopener noreferrer" className="ml-1 text-sky-300 underline">Buka file</a> : null}
                 </p>
+              </div>
+
+              <div className="p-3.5 rounded-xl border border-rose-500/40 bg-rose-950/20 space-y-2">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <h5 className="text-xs font-bold text-rose-100">Bersihkan Data Contoh Lama</h5>
+                    <p className="text-[10px] text-neutral-300">
+                      Menghapus hanya baris dengan ID/nama demo lama yang dikenali dan file berlabel demo/contoh atau artefak contoh lama pada folder Drive SIPANDU. Baris lain dan file yang tidak cocok tetap dipertahankan.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleCleanKnownDemoData}
+                    disabled={loading || !token}
+                    className="shrink-0 rounded-lg border border-rose-400/40 bg-rose-800/80 px-3 py-2 text-[11px] font-bold text-white hover:bg-rose-700 disabled:opacity-50"
+                  >
+                    {loading ? 'Membersihkan…' : 'Bersihkan Data Contoh'}
+                  </button>
+                </div>
+                <p className="text-[10px] text-neutral-400">Dijalankan dengan izin Google Workspace aktif. Formulir asli dan riwayat respons internal Google Forms tidak dihapus.</p>
               </div>
 
               <div className="p-3.5 rounded-xl bg-black/50 border border-emerald-500/30 space-y-3">
