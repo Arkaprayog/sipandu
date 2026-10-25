@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { SuratRecord } from '../types';
+import { ProfileUser, SuratRecord } from '../types';
 import { initialSuratList } from '../data/initialData';
 import { KemensosLogo } from './KemensosLogo';
 import {
@@ -17,10 +17,14 @@ import {
   Check,
 } from 'lucide-react';
 
-export const DokumenView: React.FC = () => {
+interface DokumenViewProps {
+  profile: ProfileUser;
+}
+
+export const DokumenView: React.FC<DokumenViewProps> = ({ profile }) => {
   const [activeTab, setActiveTab] = useState<'surat-tugas' | 'surat-lainnya'>('surat-tugas');
   const [suratList, setSuratList] = useState<SuratRecord[]>(initialSuratList);
-  const [selectedSurat, setSelectedSurat] = useState<SuratRecord | null>(initialSuratList[0]);
+  const [selectedSurat, setSelectedSurat] = useState<SuratRecord | null>(initialSuratList[0] || null);
   const [showCreateModal, setShowCreateModal] = useState<boolean>(false);
   const [showUploadModal, setShowUploadModal] = useState<boolean>(false);
 
@@ -29,7 +33,7 @@ export const DokumenView: React.FC = () => {
     `ST.03.02/REHSOS-ODHIV/${new Date().getMonth() + 1}/${new Date().getFullYear()}`
   );
   const [newJudul, setNewJudul] = useState<string>('');
-  const [newLokasi, setNewLokasi] = useState<string>('Kota Medan & Kab. Deli Serdang');
+  const [newLokasi, setNewLokasi] = useState<string>('');
   const [newTanggal, setNewTanggal] = useState<string>(
     new Date().toISOString().split('T')[0]
   );
@@ -37,7 +41,14 @@ export const DokumenView: React.FC = () => {
 
   const handleCreateSurat = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newJudul.trim()) return;
+    if (!newJudul.trim() || !newLokasi.trim() || !newDeskripsi.trim()) {
+      alert('Isi judul, lokasi, dan uraian dokumen yang sebenarnya sebelum membuat dokumen.');
+      return;
+    }
+    if (!profile.nama.trim() || !profile.nip.trim()) {
+      alert('Lengkapi nama dan NIP petugas di Profil SIPANDU sebelum membuat dokumen resmi.');
+      return;
+    }
 
     const newRecord: SuratRecord = {
       id: `SRT-${Date.now()}`,
@@ -45,11 +56,11 @@ export const DokumenView: React.FC = () => {
       judul: newJudul,
       jenis: activeTab === 'surat-tugas' ? 'Surat Tugas' : 'Berita Acara',
       tanggal: newTanggal,
-      petugas: 'Deny Arifin Martyon S.',
-      nipPetugas: '19920315 202012 1 002',
+      petugas: profile.nama.trim(),
+      nipPetugas: profile.nip.trim(),
       lokasi: newLokasi,
       status: 'Aktif',
-      deskripsi: newDeskripsi || 'Penugasan pendampingan sosial dan verifikasi data lapangan PPKS ODHIV.',
+      deskripsi: newDeskripsi.trim(),
     };
 
     setSuratList([newRecord, ...suratList]);
