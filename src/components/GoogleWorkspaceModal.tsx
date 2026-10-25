@@ -387,9 +387,14 @@ export const GoogleWorkspaceModal: React.FC<GoogleWorkspaceModalProps> = ({
         );
       }
       onLoadPPKSFromCloud(imported.records);
+      const nikStatus = imported.recordsWithNIK === imported.records.length
+        ? `NIK terpetakan: ${imported.recordsWithNIK}/${imported.records.length} responden.`
+        : imported.recordsWithNIK > 0
+          ? `NIK terpetakan: ${imported.recordsWithNIK}/${imported.records.length}; ${imported.recordsMissingNIK} belum terisi. Kolom yang dikenali: ${imported.nikHeadersFound.join(', ') || 'tidak ditemukan'}.`
+          : `NIK belum terpetakan. Kolom yang dikenali: ${imported.nikHeadersFound.join(', ') || 'tidak ditemukan'}. Periksa judul kolom NIK pada tab sumber.`;
       setStatusMessage({
-        type: 'success',
-        text: `Berhasil memuat ${imported.records.length} data PPKS/Asesmen dari “${imported.spreadsheetTitle}” → tab “${imported.selectedTab}” (${imported.rowsRead} baris dibaca). Data sekarang tersedia di Database PPKS dan From Asesmen Terintegrasi. Sumber tidak diubah.`,
+        type: imported.recordsWithNIK === 0 ? 'error' : 'success',
+        text: `Berhasil memuat ${imported.records.length} data PPKS/Asesmen dari “${imported.spreadsheetTitle}” → tab “${imported.selectedTab}” (${imported.rowsRead} baris dibaca). ${nikStatus} Data tersedia di Database PPKS dan From Asesmen Terintegrasi. Sumber tidak diubah.`,
       });
     } catch (err: any) {
       setStatusMessage({ type: 'error', text: err?.message || String(err) });
