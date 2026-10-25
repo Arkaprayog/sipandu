@@ -200,7 +200,9 @@ function answersForRecord(record?: PPKSRecord): Record<string, AnswerValue> {
   if (record) {
     if (!String(values.q16 || '').trim()) values.q16 = record.namaLengkap || '';
     if (!String(values.q23 || '').trim()) values.q23 = record.nik || '';
-    if (!String(values.q9 || '').trim()) values.q9 = record.alamatLengkap || '';
+    if (!String(values.q5 || '').trim()) values.q5 = record.kotaDomisili || '';
+    if (!String(values.q19 || '').trim()) values.q19 = record.jenisKelamin || '';
+    // The master record stores one address (current domicile); do not assume it is also the KTP address.
     if (!String(values.q15 || '').trim()) values.q15 = record.alamatLengkap || '';
     if (!String(values.q25 || '').trim()) values.q25 = '-';
   }
