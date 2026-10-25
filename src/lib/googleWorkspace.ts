@@ -247,7 +247,9 @@ export async function readSpreadsheetRichData(
   const normalizedHeaders = headers.map(normalizeSheetHeader);
   const photoColumns = new Set<number>();
   normalizedHeaders.forEach((header, index) => {
-    if (/(foto|ktp|kartuidentitas|kartu keluarga|kartuKeluarga|rumah|lampiran|upload|dokumen)/i.test(header)) {
+    // Do not classify standalone KTP/NIK headers as photo cells. A header such
+    // as "NIK/No. KTP" must preserve the displayed NIK, not substitute its hyperlink.
+    if (/(foto|photo|gambar|image|upload|unggah|lampiran|scan|dokumen|berkas|file|tautan|linkdrive)/i.test(header)) {
       photoColumns.add(index);
     }
   });
