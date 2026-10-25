@@ -388,11 +388,16 @@ export const GoogleWorkspaceModal: React.FC<GoogleWorkspaceModalProps> = ({
         );
       }
       onLoadPPKSFromCloud(imported.records);
+      const diagnosticSummary = imported.nikColumnDiagnostics.length
+        ? imported.nikColumnDiagnostics.map((column) =>
+            `${column.header}: ${column.validNIKValues}/${column.nonEmptyValues} nilai valid 16 digit${column.scientificNotationValues ? ` (${column.scientificNotationValues} notasi ilmiah)` : ''}`
+          ).join('; ')
+        : 'tidak ada header kolom yang mengandung NIK/KTP/identitas/kependudukan';
       const nikStatus = imported.recordsWithNIK === imported.records.length
         ? `NIK terpetakan: ${imported.recordsWithNIK}/${imported.records.length} responden.`
         : imported.recordsWithNIK > 0
-          ? `NIK terpetakan: ${imported.recordsWithNIK}/${imported.records.length}; ${imported.recordsMissingNIK} responden belum memiliki NIK terbaca. Kolom yang dikenali: ${imported.nikHeadersFound.join(', ') || 'tidak ditemukan'}.`
-          : `NIK belum terpetakan. Kolom yang dikenali: ${imported.nikHeadersFound.join(', ') || 'tidak ditemukan'}. Periksa judul kolom NIK pada tab sumber.`;
+          ? `NIK terpetakan: ${imported.recordsWithNIK}/${imported.records.length}; ${imported.recordsMissingNIK} responden belum memiliki NIK terbaca. Kolom dikenali: ${imported.nikHeadersFound.join(', ') || 'tidak ditemukan'}. Diagnostik kolom: ${diagnosticSummary}.`
+          : `NIK belum terpetakan. Kolom dikenali: ${imported.nikHeadersFound.join(', ') || 'tidak ditemukan'}. Diagnostik kolom sumber: ${diagnosticSummary}. Jika nilai memakai notasi ilmiah/terpotong, perbaiki nilai NIK pada spreadsheet menjadi teks 16 digit, lalu sinkronkan kembali.`;
       setStatusMessage({
         type: imported.recordsWithNIK === 0 ? 'error' : 'success',
         text: `Berhasil memuat ${imported.records.length} data PPKS/Asesmen dari “${imported.spreadsheetTitle}” → tab “${imported.selectedTab}” (${imported.rowsRead} baris dibaca). ${nikStatus} Data tersedia di Database PPKS dan From Asesmen Terintegrasi. Sumber tidak diubah.`,
