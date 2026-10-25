@@ -411,7 +411,7 @@ export default function App() {
         });
         setLiveSyncState({
           type: 'success',
-          message: `Live sync aktif — “${imported.spreadsheetTitle}” → tab “${imported.selectedTab}”: ${imported.records.length} responden dikenali dari ${imported.rowsRead} baris.`,
+          message: `Live sync aktif — “${imported.spreadsheetTitle}” → tab “${imported.selectedTab}”: ${imported.records.length} responden dikenali dari ${imported.rowsRead} baris; NIK terpetakan untuk ${imported.recordsWithNIK}/${imported.records.length} responden.`,
           lastUpdatedAt: new Date().toLocaleString('id-ID'),
         });
       } catch (error) {
