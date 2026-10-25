@@ -13,6 +13,8 @@ import {
 } from '../lib/firebase';
 import {
   listDriveFiles,
+  listDriveSpreadsheets,
+  importPPKSFromSpreadsheet,
   createDriveFolder,
   readSpreadsheetData,
   getSpreadsheetSheetTitles,
@@ -84,6 +86,13 @@ export const GoogleWorkspaceModal: React.FC<GoogleWorkspaceModalProps> = ({
     return configured;
   });
   const [sheetRows, setSheetRows] = useState<string[][]>([]);
+  const [spreadsheetFiles, setSpreadsheetFiles] = useState<GoogleDriveFile[]>([]);
+  const [sourceSpreadsheetUrl, setSourceSpreadsheetUrl] = useState<string>(
+    settings.googleSpreadsheetSourceUrl?.trim() || GOOGLE_SIPANDU_RESOURCES.responseSpreadsheetUrl
+  );
+  const [sourceSpreadsheetTab, setSourceSpreadsheetTab] = useState<string>(
+    settings.googleSpreadsheetSourceTab?.trim() || ''
+  );
 
   // Forms state
   const [formIdInput, setFormIdInput] = useState<string>(settings.googleFormTahapAwalUrl.includes('SIPANDU-ODHIV-Lanjutan-Sumut') ? GOOGLE_SIPANDU_RESOURCES.formEditorUrl : settings.googleFormTahapAwalUrl);
@@ -229,6 +238,12 @@ export const GoogleWorkspaceModal: React.FC<GoogleWorkspaceModalProps> = ({
   }, []);
 
   useEffect(() => {
+    const configuredSource = settings.googleSpreadsheetSourceUrl?.trim() || GOOGLE_SIPANDU_RESOURCES.responseSpreadsheetUrl;
+    setSourceSpreadsheetUrl(configuredSource);
+    setSourceSpreadsheetTab(settings.googleSpreadsheetSourceTab?.trim() || '');
+  }, [settings.googleSpreadsheetSourceUrl, settings.googleSpreadsheetSourceTab]);
+
+  useEffect(() => {
     const configured = settings.googleSpreadsheetUrl?.trim() || '';
     if (!configured || configured.includes('1yA8KemensosODHIVSumut2026_LiveSync')) {
       setSpreadsheetIdInput('');
@@ -306,6 +321,84 @@ export const GoogleWorkspaceModal: React.FC<GoogleWorkspaceModalProps> = ({
       handleLoadDriveFiles();
     } catch (err: any) {
       setStatusMessage({ type: 'error', text: err.message });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Discover the user's actual spreadsheets rather than inventing a sample/default file.
+  const handleDiscoverSpreadsheets = async () => {
+    setLoading(true);
+    setStatusMessage(null);
+    try {
+      const files = await listDriveSpreadsheets();
+      setSpreadsheetFiles(files);
+      if (!files.length) {
+        setStatusMessage({ type: 'error', text: 'Google Drive dapat diakses, tetapi tidak ada Google Spreadsheet yang terlihat oleh akun ini. Periksa akun, izin berbagi, dan folder Drive Bersama.' });
+        return;
+      }
+      const currentId = (() => {
+        try { return extractSpreadsheetId(sourceSpreadsheetUrl); } catch { return ''; }
+      })();
+      const currentFile = files.find((file) => file.id === currentId);
+      if (!currentFile && !sourceSpreadsheetUrl.trim()) {
+        const firstFile = files[0];
+        const url = firstFile.webViewLink || `https://docs.google.com/spreadsheets/d/${firstFile.id}/edit`;
+        setSourceSpreadsheetUrl(url);
+        setSourceSpreadsheetTab('');
+        onUpdateSettings({ ...settings, googleSpreadsheetSourceUrl: url, googleSpreadsheetSourceName: firstFile.name, googleSpreadsheetSourceTab: '' });
+      }
+      setStatusMessage({ type: 'success', text: `Ditemukan ${files.length} Google Spreadsheet yang benar-benar dapat diakses akun ini. Pilih file sumber di bawah.` });
+    } catch (err: any) {
+      setStatusMessage({ type: 'error', text: `Gagal mencari spreadsheet di Google Drive: ${err?.message || String(err)}` });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSourceSpreadsheetSelect = (fileId: string) => {
+    const file = spreadsheetFiles.find((candidate) => candidate.id === fileId);
+    if (!file) return;
+    const url = file.webViewLink || `https://docs.google.com/spreadsheets/d/${file.id}/edit`;
+    setSourceSpreadsheetUrl(url);
+    setSourceSpreadsheetTab('');
+    onUpdateSettings({
+      ...settings,
+      googleSpreadsheetSourceUrl: url,
+      googleSpreadsheetSourceName: file.name,
+      googleSpreadsheetSourceTab: '',
+    });
+    setStatusMessage({ type: 'success', text: `Spreadsheet sumber dipilih: ${file.name}. Tekan “Muat Data PPKS + Asesmen” untuk membaca data asli.` });
+  };
+
+  const handleImportPPKSFromSpreadsheet = async () => {
+    setLoading(true);
+    setStatusMessage(null);
+    try {
+      const sourceUrl = sourceSpreadsheetUrl.trim();
+      if (!sourceUrl) throw new Error('Pilih atau masukkan URL Google Spreadsheet sumber terlebih dahulu.');
+      const imported = await importPPKSFromSpreadsheet(sourceUrl, sourceSpreadsheetTab || undefined);
+      setSheetRows(imported.previewRows);
+      setSourceSpreadsheetTab(imported.selectedTab);
+      onUpdateSettings({
+        ...settings,
+        googleSpreadsheetSourceUrl: sourceUrl,
+        googleSpreadsheetSourceName: imported.spreadsheetTitle,
+        googleSpreadsheetSourceTab: imported.selectedTab,
+      });
+      if (!imported.records.length) {
+        const headerPreview = (imported.previewRows[0] || []).slice(0, 12).join(' | ');
+        throw new Error(
+          `Berhasil membaca ${imported.rowsRead} baris dari “${imported.spreadsheetTitle}” (tab “${imported.selectedTab}”), tetapi tidak menemukan kolom Nama PPKS/responden yang dikenali. Header terdeteksi: ${headerPreview || '(kosong)'}. Pilih tab respons yang benar atau periksa nama kolom.`
+        );
+      }
+      onLoadPPKSFromCloud(imported.records);
+      setStatusMessage({
+        type: 'success',
+        text: `Berhasil memuat ${imported.records.length} data PPKS/Asesmen dari “${imported.spreadsheetTitle}” → tab “${imported.selectedTab}” (${imported.rowsRead} baris dibaca). Data sekarang tersedia di Database PPKS dan From Asesmen Terintegrasi. Sumber tidak diubah.`,
+      });
+    } catch (err: any) {
+      setStatusMessage({ type: 'error', text: err?.message || String(err) });
     } finally {
       setLoading(false);
     }
@@ -779,9 +872,66 @@ export const GoogleWorkspaceModal: React.FC<GoogleWorkspaceModalProps> = ({
                 </p>
               </div>
 
+              <div className="p-3.5 rounded-xl bg-black/50 border border-sky-500/35 space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                  <div>
+                    <h5 className="text-sky-100 font-bold text-xs">Spreadsheet Sumber PPKS & Asesmen</h5>
+                    <p className="text-[10px] text-neutral-300">Pilih spreadsheet asli dari Drive. Data dibaca saja lalu dimasukkan ke daftar PPKS aplikasi; file sumber tidak diubah.</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleDiscoverSpreadsheets}
+                    disabled={loading || !token}
+                    className="shrink-0 px-3 py-2 rounded-lg bg-sky-900 hover:bg-sky-800 text-white font-semibold text-[11px] disabled:opacity-50"
+                  >
+                    {loading ? 'Mencari…' : 'Cari Spreadsheet Saya'}
+                  </button>
+                </div>
+                <select
+                  value={(() => { try { return extractSpreadsheetId(sourceSpreadsheetUrl); } catch { return ''; } })()}
+                  onChange={(e) => handleSourceSpreadsheetSelect(e.target.value)}
+                  className="w-full p-2.5 rounded bg-black/70 border border-sky-500/30 text-xs text-white"
+                  disabled={loading || !token || spreadsheetFiles.length === 0}
+                >
+                  <option value="">— Pilih spreadsheet hasil pencarian Drive —</option>
+                  {spreadsheetFiles.map((file) => (
+                    <option key={file.id} value={file.id}>{file.name}</option>
+                  ))}
+                </select>
+                <label className="block text-sky-200 font-semibold text-[11px]">Atau tempel URL Spreadsheet sumber:</label>
+                <input
+                  type="url"
+                  value={sourceSpreadsheetUrl}
+                  onChange={(e) => setSourceSpreadsheetUrl(e.target.value)}
+                  placeholder="https://docs.google.com/spreadsheets/d/..."
+                  className="w-full p-2.5 rounded bg-black/70 border border-sky-500/30 text-xs text-white font-mono"
+                />
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <input
+                    type="text"
+                    value={sourceSpreadsheetTab}
+                    onChange={(e) => setSourceSpreadsheetTab(e.target.value)}
+                    placeholder="Nama tab (opsional, otomatis memilih tab respons)"
+                    className="w-full sm:flex-1 p-2 rounded bg-black/70 border border-neutral-700 text-xs text-white"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleImportPPKSFromSpreadsheet}
+                    disabled={loading || !token}
+                    className="w-full sm:w-auto px-4 py-2 rounded-lg bg-emerald-700 hover:bg-emerald-600 text-white font-bold text-xs disabled:opacity-50"
+                  >
+                    {loading ? 'Memuat…' : 'Muat Data PPKS + Asesmen'}
+                  </button>
+                </div>
+                <p className="text-[10px] text-neutral-400">
+                  Sumber terpilih: {settings.googleSpreadsheetSourceName || 'nama file akan diketahui setelah dibaca'}.
+                  {sourceSpreadsheetUrl ? <a href={sourceSpreadsheetUrl} target="_blank" rel="noopener noreferrer" className="ml-1 text-sky-300 underline">Buka file</a> : null}
+                </p>
+              </div>
+
               <div className="p-3.5 rounded-xl bg-black/50 border border-emerald-500/30 space-y-3">
                 <label className="block text-sky-200 font-semibold text-[11px]">
-                  ID atau URL Google Spreadsheet:
+                  URL Google Spreadsheet tujuan DATABASE SIPANDU (khusus tulis):
                 </label>
                 <div className="flex flex-col sm:flex-row items-center gap-2">
                   <input
