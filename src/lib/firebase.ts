@@ -11,6 +11,8 @@ import {
 import {
   getAuth,
   signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult,
   GoogleAuthProvider,
   onAuthStateChanged,
   User,
@@ -44,7 +46,7 @@ googleAuthProvider.setCustomParameters({
   login_hint: GOOGLE_WORKSPACE_EMAIL,
   // Always show the account chooser: login_hint alone can silently reuse a
   // previously active Google identity in mobile browsers.
-  prompt: 'select_account',
+  prompt: 'select_account consent',
 });
 // Ask explicitly for identity scopes in addition to the Google API scopes.
 googleAuthProvider.addScope('email');
@@ -199,7 +201,73 @@ export async function testFirebaseAuthConnection(): Promise<ConnectionCheckResul
 }
 
 /**
- * Sign in with Google to obtain Workspace access token
+ * Validates a Workspace identity and stores its scoped API token.
+ * Shared by popup and redirect sign-in flows.
+ */
+async function finishWorkspaceSignIn(result: import('firebase/auth').UserCredential): Promise<{
+  user: User;
+  accessToken: string;
+}> {
+  const selectedEmail = getWorkspaceGoogleEmail(result.user);
+  if (!selectedEmail) {
+    try { await signOut(workspaceAuth); } catch { /* retain the actionable email-scope error below */ }
+    cacheWorkspaceToken(null);
+    throw new Error(
+      'Google berhasil membuka sesi, tetapi alamat email tidak dikirim ke SIPANDU. Pilih akun yang benar dan izinkan akses profil/email. Jika email tetap kosong, admin perlu memeriksa penyedia Google pada Firebase Authentication.'
+    );
+  }
+  if (selectedEmail.toLowerCase() !== GOOGLE_WORKSPACE_EMAIL.toLowerCase()) {
+    try { await signOut(workspaceAuth); } catch { /* preserve account-mismatch message */ }
+    cacheWorkspaceToken(null);
+    throw new Error(`Sumber data SIPANDU dibagikan ke ${GOOGLE_WORKSPACE_EMAIL}. Akun yang dipilih adalah ${selectedEmail}; pilih ${GOOGLE_WORKSPACE_EMAIL} pada pemilih akun Google lalu ulangi.`);
+  }
+  const credential = GoogleAuthProvider.credentialFromResult(result);
+  if (!credential?.accessToken) {
+    cacheWorkspaceToken(null);
+    throw new Error('Google berhasil mengautentikasi identitas, tetapi tidak memberikan access token untuk Drive/Sheets/Forms. Periksa persetujuan OAuth dan scope Google API.');
+  }
+  cacheWorkspaceToken(credential.accessToken);
+  return { user: result.user, accessToken: credential.accessToken };
+}
+
+function describeGoogleOAuthError(error: unknown): string {
+  const { code, message } = getErrorParts(error);
+  if (code.includes('auth/unauthorized-domain')) {
+    const hostname = typeof window !== 'undefined' ? window.location.hostname : '';
+    const projectId = auth.app.options.projectId || 'gen-lang-client-0197631978';
+    return `Domain aplikasi "${hostname || '(tidak terdeteksi)'}" belum diizinkan pada Firebase Authentication. Admin harus membuka https://console.firebase.google.com/project/${projectId}/authentication/settings, lalu menambahkan hostname aplikasi pada Authorized domains (tanpa https:// atau path). Untuk GitHub Pages, tambahkan arkaprayog.github.io; untuk Vercel, tambahkan sipandu-sigma.vercel.app. Setelah itu ulangi login.`;
+  }
+  if (code.includes('auth/operation-not-allowed')) {
+    return 'Penyedia Google belum diaktifkan pada Firebase Authentication. Admin harus membuka Firebase Console > Authentication > Sign-in method dan mengaktifkan Google pada proyek gen-lang-client-0197631978.';
+  }
+  if (code.includes('auth/popup-blocked')) {
+    return 'Popup Google diblokir browser. SIPANDU akan mencoba beralih ke halaman login Google penuh.';
+  }
+  if (code.includes('auth/operation-not-supported-in-this-environment')) {
+    return 'Browser tidak mendukung login Google lewat popup. SIPANDU akan mencoba beralih ke halaman login Google penuh.';
+  }
+  if (code.includes('auth/popup-closed-by-user')) {
+    return 'Jendela otorisasi Google ditutup sebelum selesai. Ulangi dan selesaikan persetujuan.';
+  }
+  if (code.includes('auth/cancelled-popup-request')) {
+    return 'Ada permintaan popup Google lain yang masih berjalan. Tutup popup duplikat lalu tekan tombol login sekali saja.';
+  }
+  if (code.includes('auth/network-request-failed')) {
+    return 'Login Google gagal karena jaringan atau pemblokiran browser. Periksa koneksi internet lalu ulangi.';
+  }
+  if (code.includes('auth/web-storage-unsupported')) {
+    return 'Browser memblokir penyimpanan yang dibutuhkan Firebase Authentication. Buka SIPANDU langsung di Chrome atau browser eksternal dan izinkan cookie/penyimpanan situs.';
+  }
+  if (code.includes('auth/invalid-oauth-client-id') || code.includes('redirect_uri_mismatch') || code.includes('origin_mismatch')) {
+    return `Konfigurasi OAuth Google tidak cocok dengan aplikasi ini (${code}). Admin harus memeriksa OAuth client ID, JavaScript origins, serta redirect URI pada Google Cloud Console. Detail: ${message}`;
+  }
+  if (code) return `Login Google gagal (${code}): ${message}`;
+  return message || (error instanceof Error ? error.message : String(error));
+}
+
+/**
+ * Attempts a popup first; mobile/embedded browsers fall back to the full-page
+ * redirect flow, whose result is processed after the page returns from Google.
  */
 export const googleSignIn = async (): Promise<{
   user: User;
@@ -207,63 +275,39 @@ export const googleSignIn = async (): Promise<{
 } | null> => {
   try {
     const result = await signInWithPopup(workspaceAuth, googleAuthProvider);
-    const selectedEmail = getWorkspaceGoogleEmail(result.user);
-    if (!selectedEmail) {
-      try { await signOut(workspaceAuth); } catch { /* retain the actionable email-scope error below */ }
-      cacheWorkspaceToken(null);
-      throw new Error(
-        'Google berhasil membuka sesi, tetapi alamat email tidak dikirim ke SIPANDU. Batalkan koneksi, pilih akun Google yang benar pada jendela pemilih akun, lalu ulangi. Jika tetap terjadi, admin perlu memeriksa konfigurasi Google provider dan izin email/profile pada Firebase Authentication.'
-      );
-    }
-    if (selectedEmail.toLowerCase() !== GOOGLE_WORKSPACE_EMAIL.toLowerCase()) {
-      try { await signOut(workspaceAuth); } catch { /* preserve account-mismatch message */ }
-      cacheWorkspaceToken(null);
-      throw new Error(`Sumber data SIPANDU dibagikan ke ${GOOGLE_WORKSPACE_EMAIL}. Akun yang dipilih adalah ${selectedEmail}; pilih ${GOOGLE_WORKSPACE_EMAIL} pada pemilih akun Google lalu ulangi.`);
-    }
-    const credential = GoogleAuthProvider.credentialFromResult(result);
-    if (!credential?.accessToken) {
-      throw new Error('Google berhasil merespons tetapi tidak memberikan access token untuk Drive/Sheets/Forms. Periksa consent screen, scope OAuth, dan API yang diaktifkan.');
-    }
-    cacheWorkspaceToken(credential.accessToken);
-    return { user: result.user, accessToken: cachedAccessToken };
+    return await finishWorkspaceSignIn(result);
   } catch (error: any) {
     const code = error?.code ? String(error.code) : '';
-    if (code.includes('auth/unauthorized-domain')) {
-      const hostname = typeof window !== 'undefined' ? window.location.hostname : '';
-      const projectId = auth.app.options.projectId || 'gen-lang-client-0197631978';
-      const projectSettingsUrl = `https://console.firebase.google.com/project/${projectId}/authentication/settings`;
-      const domainToAdd = hostname || '(hostname aplikasi belum terdeteksi)';
-      throw new Error(
-        `Domain aplikasi "${domainToAdd}" belum diizinkan pada Firebase Authentication.\n\n` +
-        `PERBAIKAN ADMIN FIREBASE:\n` +
-        `1. Buka ${projectSettingsUrl}\n` +
-        `2. Cari "Authorized domains", lalu pilih "Add domain".\n` +
-        `3. Tambahkan hanya hostname: ${domainToAdd} (tanpa https://, tanpa path, dan tanpa port).\n` +
-        `4. Simpan perubahan, muat ulang SIPANDU, lalu ulangi otorisasi Google.\n\n` +
-        `Untuk URL GitHub Pages https://arkaprayog.github.io/sipandu/, domain yang benar adalah arkaprayog.github.io — bukan arkaprayog.github.io/sipandu.\n` +
-        `Proyek Firebase yang digunakan aplikasi ini: ${projectId}.`
-      );
+    if (
+      code.includes('auth/popup-blocked') ||
+      code.includes('auth/operation-not-supported-in-this-environment')
+    ) {
+      try {
+        await signInWithRedirect(workspaceAuth, googleAuthProvider);
+        return null;
+      } catch (redirectError) {
+        throw new Error(describeGoogleOAuthError(redirectError));
+      }
     }
-    if (code.includes('auth/popup-blocked')) {
-      throw new Error('Popup Google diblokir browser. Izinkan pop-up untuk situs SIPANDU, lalu tekan Masuk dengan Google lagi.');
-    }
-    if (code.includes('auth/operation-not-supported-in-this-environment')) {
-      throw new Error('Browser saat ini tidak mendukung login Google melalui popup. Buka https://arkaprayog.github.io/sipandu/ langsung di Chrome atau browser eksternal (bukan browser di dalam aplikasi), lalu ulangi.');
-    }
-    if (code.includes('auth/operation-not-allowed')) {
-      throw new Error('Penyedia Google belum diaktifkan pada Firebase Authentication. Admin perlu membuka Firebase Console > Authentication > Sign-in method dan mengaktifkan Google untuk proyek gen-lang-client-0197631978.');
-    }
-    if (code.includes('auth/network-request-failed')) {
-      throw new Error('Permintaan login Google gagal karena jaringan atau pemblokiran browser. Periksa koneksi internet, nonaktifkan pemblokir popup untuk situs SIPANDU, lalu ulangi.');
-    }
-    if (code.includes('auth/cancelled-popup-request')) {
-      throw new Error('Permintaan popup Google sebelumnya masih berlangsung. Tutup popup duplikat, lalu tekan Masuk dengan Google sekali saja.');
-    }
-    if (code.includes('auth/popup-closed-by-user')) {
-      throw new Error('Jendela otorisasi Google ditutup sebelum selesai.');
-    }
-    console.error('Google Workspace authorization failed:', error);
-    throw error;
+    // Preserve our explicit account/scope validation messages.
+    if (!code) throw error;
+    throw new Error(describeGoogleOAuthError(error));
+  }
+};
+
+/** Completes a Google redirect login after the browser returns to SIPANDU. */
+export const completeGoogleRedirectSignIn = async (): Promise<{
+  user: User;
+  accessToken: string;
+} | null> => {
+  try {
+    const result = await getRedirectResult(workspaceAuth);
+    if (!result) return null;
+    return await finishWorkspaceSignIn(result);
+  } catch (error) {
+    const { code } = getErrorParts(error);
+    if (!code) throw error;
+    throw new Error(describeGoogleOAuthError(error));
   }
 };
 
