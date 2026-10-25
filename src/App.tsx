@@ -14,7 +14,9 @@ import { SettingsModal } from './components/SettingsModal';
 import { NotificationsModal } from './components/NotificationsModal';
 import { GoogleWorkspaceModal } from './components/GoogleWorkspaceModal';
 import { onAuthStateChanged, signOut, getIdTokenResult } from 'firebase/auth';
-import { auth } from './lib/firebase';
+import { auth, getAccessToken, savePPKSToFirestore } from './lib/firebase';
+import { ensureSIPANDUDatabaseSheet, extractSpreadsheetId, upsertPPKSInSpreadsheet } from './lib/googleWorkspace';
+import { GOOGLE_SIPANDU_RESOURCES } from './lib/googleSIPANDUResources';
 
 export default function App() {
   // Firebase Authentication is the source of truth; URL/localStorage flags cannot bypass login.
@@ -101,6 +103,8 @@ export default function App() {
     return initialAppSettings;
   });
 
+  const [cloudSyncNotice, setCloudSyncNotice] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
   // Modals state
   const [isEditProfileOpen, setIsEditProfileOpen] = useState<boolean>(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
@@ -134,15 +138,65 @@ export default function App() {
     }
   };
 
+  // A record edit/add is persisted locally first, then pushed to each configured cloud target.
+  // Each service reports independently so partial sync can never be shown as full success.
+  const persistRecordToCloud = async (record: PPKSRecord) => {
+    const completed: string[] = [];
+    const failed: string[] = [];
+
+    try {
+      await savePPKSToFirestore(record);
+      completed.push('Firebase Firestore berhasil');
+    } catch (error: any) {
+      failed.push(`Firebase: ${error?.message || String(error)}`);
+    }
+
+    const sheetUrl = settings.googleSpreadsheetUrl?.trim() || '';
+    if (!sheetUrl || sheetUrl.includes('1yA8KemensosODHIVSumut2026_LiveSync')) {
+      failed.push('Google Sheets belum dikonfigurasi. Buat spreadsheet database terpisah di Google Workspace & Cloud Hub.');
+    } else {
+      try {
+        const targetId = extractSpreadsheetId(sheetUrl);
+        if (targetId === GOOGLE_SIPANDU_RESOURCES.responseSpreadsheetId) {
+          throw new Error('Spreadsheet respons Google Form tidak boleh menjadi tujuan database PPKS.');
+        }
+        const accessToken = await getAccessToken();
+        if (!accessToken) {
+          throw new Error('Token Google tidak tersedia pada sesi ini. Buka Google Workspace & Cloud Hub → Koneksi Akun → Pulihkan Izin Google API.');
+        }
+        await ensureSIPANDUDatabaseSheet(sheetUrl);
+        const syncResult = await upsertPPKSInSpreadsheet(sheetUrl, record);
+        completed.push(syncResult === 'inserted' ? 'Google Sheets: baris baru ditambahkan' : 'Google Sheets: baris diperbarui');
+      } catch (error: any) {
+        failed.push(`Google Sheets: ${error?.message || String(error)}`);
+      }
+    }
+
+    const summary = [`Record ${record.id}`, ...completed, ...failed].join(' · ');
+    setCloudSyncNotice({ type: failed.length ? 'error' : 'success', text: summary });
+    if (failed.length) console.error('SIPANDU cloud sync incomplete:', { recordId: record.id, failures: failed });
+  };
+
   // Data update handlers
   const handleUpdatePPKS = (updated: PPKSRecord) => {
     setPpksList((prev) =>
       prev.map((item) => (item.id === updated.id ? updated : item))
     );
+    void persistRecordToCloud(updated);
   };
 
   const handleAddNewPPKS = (newPPKS: PPKSRecord) => {
     setPpksList((prev) => [newPPKS, ...prev]);
+    void persistRecordToCloud(newPPKS);
+  };
+
+  const handleLoadPPKSFromCloud = (cloudRecords: PPKSRecord[]) => {
+    setPpksList((localRecords) => {
+      const merged = new Map<string, PPKSRecord>();
+      localRecords.forEach((record) => merged.set(record.id, record));
+      cloudRecords.forEach((record) => merged.set(record.id, record));
+      return Array.from(merged.values());
+    });
   };
 
   // Avoid showing protected UI until Firebase has resolved the current session.
@@ -184,6 +238,14 @@ export default function App() {
 
       {/* Main Dashboard Content Area */}
       <main className="relative z-10 flex-1 max-w-7xl w-full mx-auto p-4 md:p-6 pb-28">
+        {cloudSyncNotice && (
+          <div role="status" aria-live="polite" className={`mb-4 rounded-xl border p-3 text-xs break-words ${cloudSyncNotice.type === 'success' ? 'border-emerald-500/40 bg-emerald-950/70 text-emerald-100' : 'border-amber-500/50 bg-amber-950/80 text-amber-100'}`}>
+            <div className="flex items-start justify-between gap-3">
+              <span>{cloudSyncNotice.text}</span>
+              <button type="button" className="shrink-0 underline" onClick={() => setCloudSyncNotice(null)}>Tutup</button>
+            </div>
+          </div>
+        )}
         {activeTab === 'beranda' && (
           <BerandaView
             ppksList={ppksList}
@@ -246,6 +308,7 @@ export default function App() {
         ppksList={ppksList}
         settings={settings}
         onUpdateSettings={(updated) => setSettings(updated)}
+        onLoadPPKSFromCloud={handleLoadPPKSFromCloud}
       />
     </div>
   );

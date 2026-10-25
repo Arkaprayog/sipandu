@@ -94,8 +94,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 setFormData({ ...formData, googleSpreadsheetUrl: e.target.value })
               }
               className="w-full p-2.5 rounded bg-black/60 border border-rose-500/30 font-mono text-white"
-              required
             />
+            <p className="mt-1 text-[10px] text-neutral-400">Kosongkan bila belum punya database terpisah. Buat database melalui Google Workspace & Cloud Hub; jangan gunakan spreadsheet respons Google Form.</p>
           </div>
 
           <div>

@@ -18,7 +18,7 @@ export interface GoogleFormResponse {
 }
 
 function requireToken(token: string | null): string {
-  if (!token) throw new Error('Silakan masuk dengan akun Google yang memiliki akses ke sumber SIPANDU.');
+  if (!token) throw new Error('Token akses Google belum tersedia atau telah hilang setelah halaman dimuat ulang. Buka Koneksi Akun dan tekan “Pulihkan Izin Google API”, lalu ulangi operasi.');
   return token;
 }
 
@@ -34,8 +34,22 @@ async function googleJson<T>(url: string, init: RequestInit = {}): Promise<T> {
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
-    const message = (data as { error?: { message?: string } }).error?.message;
-    throw new Error(message || `Google API gagal (HTTP ${res.status}). Periksa izin akun dan API yang diaktifkan.`);
+    const apiError = (data as { error?: { message?: string; status?: string; errors?: { reason?: string }[] } }).error;
+    const message = apiError?.message || `HTTP ${res.status}`;
+    const reason = apiError?.errors?.[0]?.reason || apiError?.status || '';
+    if (res.status === 401) {
+      throw new Error('Google API menolak token (HTTP 401). Token mungkin kedaluwarsa; tekan “Pulihkan Izin Google API” di tab Koneksi Akun lalu ulangi operasi.');
+    }
+    if (res.status === 403 && /insufficient|scope/i.test(`${reason} ${message}`)) {
+      throw new Error(`Izin OAuth Google kurang (HTTP 403): ${message}. Otorisasi ulang dan pastikan scope Drive/Sheets/Forms disetujui akun.`);
+    }
+    if (res.status === 403 && /SERVICE_DISABLED|has not been used|disabled/i.test(`${reason} ${message}`)) {
+      throw new Error(`Google API belum diaktifkan pada Google Cloud project OAuth: ${message}. Aktifkan API yang disebutkan pada Google Cloud Console.`);
+    }
+    if (res.status === 403) {
+      throw new Error(`Akses Google API ditolak (HTTP 403): ${message}. Pastikan akun Google mempunyai akses editor pada spreadsheet/folder dan scope disetujui.`);
+    }
+    throw new Error(`Google API gagal (HTTP ${res.status}): ${message}`);
   }
   return data as T;
 }
@@ -102,6 +116,50 @@ export async function getSpreadsheetSheetTitles(spreadsheetIdOrUrl: string): Pro
   return (data.sheets || []).map(sheet => sheet.properties?.title || '').filter(Boolean);
 }
 
+export const SIPANDU_DATABASE_HEADERS = [
+  'ID',
+  'Timestamp',
+  'Nama Lengkap',
+  'NIK',
+  'Usia',
+  'Jenis Kelamin',
+  'Kota Domisili',
+  'No HP/WA',
+  'Jenis Bantuan',
+  'Intervensi Mental',
+  'Desil',
+] as const;
+
+/**
+ * Ensures a dedicated SIPANDU database tab exists. This is deliberately separate
+ * from the Google Form response spreadsheet, whose rows are owned by Forms.
+ */
+export async function ensureSIPANDUDatabaseSheet(spreadsheetIdOrUrl: string): Promise<void> {
+  const id = extractSpreadsheetId(spreadsheetIdOrUrl);
+  const titles = await getSpreadsheetSheetTitles(id);
+  if (!titles.includes('SIPANDU')) {
+    await googleJson(`https://sheets.googleapis.com/v4/spreadsheets/${id}:batchUpdate`, {
+      method: 'POST',
+      body: JSON.stringify({ requests: [{ addSheet: { properties: { title: 'SIPANDU' } } }] }),
+    });
+  }
+
+  const current = await readSpreadsheetData(id, 'SIPANDU!A1:K1');
+  const header = current[0] || [];
+  if (header.every((cell) => !cell.trim())) {
+    await googleJson(`https://sheets.googleapis.com/v4/spreadsheets/${id}/values/${encodeURIComponent('SIPANDU!A1:K1')}?valueInputOption=RAW`, {
+      method: 'PUT',
+      body: JSON.stringify({ values: [[...SIPANDU_DATABASE_HEADERS]] }),
+    });
+    return;
+  }
+
+  const isExpected = SIPANDU_DATABASE_HEADERS.every((expected, index) => header[index]?.trim() === expected);
+  if (!isExpected) {
+    throw new Error('Tab SIPANDU sudah berisi header yang tidak sesuai. Data tidak diubah. Gunakan spreadsheet database SIPANDU khusus atau sesuaikan 11 header: ID, Timestamp, Nama Lengkap, NIK, Usia, Jenis Kelamin, Kota Domisili, No HP/WA, Jenis Bantuan, Intervensi Mental, Desil.');
+  }
+}
+
 /** GOOGLE SHEETS API */
 export async function readSpreadsheetData(spreadsheetIdOrUrl: string, range = 'Sheet1!A1:Z100'): Promise<string[][]> {
   const id = extractSpreadsheetId(spreadsheetIdOrUrl);
@@ -116,24 +174,18 @@ export async function readSpreadsheetData(spreadsheetIdOrUrl: string, range = 'S
  * Do not point this at the Google Form's response tab: that tab is owned by Forms.
  * API errors are thrown rather than reported as a successful sync.
  */
-export async function appendPPKSToSpreadsheet(
+export async function upsertPPKSInSpreadsheet(
   spreadsheetIdOrUrl: string,
   ppks: PPKSRecord,
   range = 'SIPANDU!A:K',
-): Promise<boolean> {
+): Promise<'inserted' | 'updated'> {
   const id = extractSpreadsheetId(spreadsheetIdOrUrl);
   const existingRows = await readSpreadsheetData(id, range);
   const headers = existingRows[0] || [];
-  const idIndex = headers.findIndex(h => h.trim().toLowerCase() === 'id');
-  const nikIndex = headers.findIndex(h => ['nik', 'nomor induk kependudukan'].includes(h.trim().toLowerCase()));
-  if (existingRows.slice(1).some(row =>
-    (idIndex >= 0 && row[idIndex] === ppks.id) ||
-    (nikIndex >= 0 && ppks.nik && row[nikIndex] === ppks.nik)
-  )) {
-    return true; // already present; do not append a duplicate
-  }
-  if (existingRows.length === 0) {
-    throw new Error(`Tab/rentang ${range} belum memiliki baris header. Buat tab SIPANDU dan header termasuk kolom ID sebelum sinkronisasi.`);
+  const idIndex = headers.findIndex((h) => h.trim().toLowerCase() === 'id');
+  const nikIndex = headers.findIndex((h) => ['nik', 'nomor induk kependudukan'].includes(h.trim().toLowerCase()));
+  if (idIndex < 0 || nikIndex < 0) {
+    throw new Error('Header tab database tidak memiliki kolom ID/NIK yang diperlukan. Periksa tab SIPANDU.');
   }
 
   const row = [
@@ -149,12 +201,32 @@ export async function appendPPKSToSpreadsheet(
     ppks.intervensiMental,
     `Desil ${ppks.desil}`,
   ];
-  await googleJson('https://sheets.googleapis.com/v4/spreadsheets/' + id +
-    '/values/' + encodeURIComponent(range) + ':append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS', {
-      method: 'POST',
+
+  const matchingIdIndex = existingRows.findIndex((cells, index) =>
+    index > 0 && cells[idIndex] === ppks.id
+  );
+  if (matchingIdIndex > 0) {
+    const sheetRow = matchingIdIndex + 1; // array row 1 is spreadsheet row 2
+    const updateRange = `SIPANDU!A${sheetRow}:K${sheetRow}`;
+    await googleJson(`https://sheets.googleapis.com/v4/spreadsheets/${id}/values/${encodeURIComponent(updateRange)}?valueInputOption=USER_ENTERED`, {
+      method: 'PUT',
       body: JSON.stringify({ values: [row] }),
     });
-  return true;
+    return 'updated';
+  }
+
+  const matchingNikIndex = ppks.nik
+    ? existingRows.findIndex((cells, index) => index > 0 && cells[nikIndex] === ppks.nik)
+    : -1;
+  if (matchingNikIndex > 0) {
+    throw new Error('NIK sudah terdaftar pada ID PPKS lain di tab SIPANDU. Sinkronisasi dihentikan untuk mencegah penggabungan dua record yang berbeda; periksa duplikasi di database.');
+  }
+
+  await googleJson(`https://sheets.googleapis.com/v4/spreadsheets/${id}/values/${encodeURIComponent(range)}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`, {
+    method: 'POST',
+    body: JSON.stringify({ values: [row] }),
+  });
+  return 'inserted';
 }
 
 export async function createGoogleSpreadsheet(title: string): Promise<string> {
@@ -169,7 +241,7 @@ export async function createGoogleSpreadsheet(title: string): Promise<string> {
           startRow: 0,
           startColumn: 0,
           rowData: [{
-            values: ['ID', 'Timestamp', 'Nama Lengkap', 'NIK', 'Usia', 'Jenis Kelamin', 'Kota Domisili', 'No HP/WA', 'Jenis Bantuan', 'Intervensi Mental', 'Desil']
+            values: [...SIPANDU_DATABASE_HEADERS]
               .map(value => ({ userEnteredValue: { stringValue: value } })),
           }],
         }],
