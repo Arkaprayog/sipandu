@@ -366,8 +366,8 @@ function mapRowsToPPKSRecords(rows: string[][]): PPKSRecord[] {
     ]);
     if (!namaLengkap) return;
 
-    const timestamp = readCellByAliases(headers, row, ['timestamp', 'capWaktu', 'waktuPengiriman', 'tanggalWaktu', 'createTime']);
-    const nik = readCellByAliases(headers, row, ['nik', 'nomorIndukKependudukan', 'nomorKTP', 'NIKKTP']);
+    const timestamp = readCellByAliases(headers, row, ['timestamp', 'capWaktu', 'waktuPengiriman', 'waktuPengisian', 'tanggalWaktu', 'createTime']);
+    const nik = readCellByAliases(headers, row, ['nik', 'nomorIndukKependudukan', 'nomorKTP', 'NIKKTP', 'noKTPNIK', 'KTPNIK']);
     const externalId = readCellByAliases(headers, row, ['idPPKS', 'recordId', 'id']);
     const stableSource = [timestamp, nik, namaLengkap, ...row].join('|');
     let hash = 2166136261;
@@ -385,16 +385,21 @@ function mapRowsToPPKSRecords(rows: string[][]): PPKSRecord[] {
     const alamat = readCellByAliases(headers, row, ['alamatLengkap', 'alamatDomisili', 'alamatResponden', 'alamat']);
     const jenisBantuan = readCellByAliases(headers, row, ['jenisBantuan', 'bantuanDibutuhkan', 'jenisBantuanAtensi', 'kebutuhanBantuan']);
     const integratedValues: Partial<Record<keyof IntegratedFormData, string | number | boolean>> = {};
-    let integratedCount = 0;
+    const integratedMarkerKeys = new Set<keyof IntegratedFormData>([
+      'nomorRegistrasi', 'noBpjs', 'statusPernikahan', 'pendidikanTerakhir',
+      'tahunDiagnosa', 'faskesPdpRujukan', 'statusArv', 'nilaiCd4Terakhir',
+      'viralLoadTerakhir', 'kontakDaruratNama', 'statusKeterbukaanStatus',
+    ]);
+    let hasIntegratedAssessmentData = false;
     for (const field of INTEGRATED_SHEET_FIELDS) {
       const rawValue = readCellByAliases(headers, row, field.aliases);
-      if (rawValue) integratedCount++;
+      if (rawValue && integratedMarkerKeys.has(field.key)) hasIntegratedAssessmentData = true;
       if (field.kind === 'number') integratedValues[field.key] = parseSheetNumber(rawValue, 0);
       else if (field.kind === 'boolean') integratedValues[field.key] = parseSheetBoolean(rawValue);
       else integratedValues[field.key] = rawValue;
     }
 
-    const integratedForm = integratedCount > 0
+    const integratedForm = hasIntegratedAssessmentData
       ? (integratedValues as IntegratedFormData)
       : undefined;
     const desil = parseSheetNumber(readCellByAliases(headers, row, ['desil', 'desilKemiskinan']), 0);
