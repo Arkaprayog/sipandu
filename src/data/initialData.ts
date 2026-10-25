@@ -59,7 +59,9 @@ export function isLegacySamplePPKS(record: Pick<PPKSRecord, 'id' | 'namaLengkap'
 // Start with an empty database; real PPKS records must be entered or loaded from an authorized source.
 export const initialPPKSList: PPKSRecord[] = [];
 
-// Do not seed the Documents module with fictitious official letters.\nexport const initialSuratList: SuratRecord[] = [];\n
+// Do not seed the Documents module with fictitious official letters.
+export const initialSuratList: SuratRecord[] = [];
+
 export const SUMUT_DISTRICTS = [
   { id: 'medan', name: 'Kota Medan', lat: 3.5952, lng: 98.6722 },
   { id: 'deliserdang', name: 'Kab. Deli Serdang', lat: 3.5542, lng: 98.8631 },
