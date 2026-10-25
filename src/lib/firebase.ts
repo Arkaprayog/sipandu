@@ -42,18 +42,47 @@ googleAuthProvider.addScope('https://www.googleapis.com/auth/forms.responses.rea
 let cachedAccessToken: string | null = null;
 let isSigningIn = false;
 
-// Test connection on boot
-export async function testFirestoreConnection() {
+export type ConnectionCheckResult = {
+  service: 'Firebase Auth' | 'Firestore';
+  ok: boolean;
+  message: string;
+  checkedAt: string;
+};
+
+function describeConnectionError(error: unknown): string {
+  const e = error as { code?: string; message?: string };
+  const code = e?.code ? String(e.code) : 'unknown';
+  const message = e?.message || (error instanceof Error ? error.message : String(error));
+  if (code.includes('permission-denied')) return 'Akses Firestore ditolak. Periksa Firestore Security Rules dan akun yang masuk.';
+  if (code.includes('unavailable') || /offline|network/i.test(message)) return 'Layanan tidak tersedia atau koneksi jaringan bermasalah.';
+  if (code.includes('unauthenticated')) return 'Sesi Firebase tidak terautentikasi. Masuk kembali ke aplikasi.';
+  return `Kode: ${code}. ${message}`;
+}
+
+/** Performs an explicit server-side read and returns visible diagnostic details. */
+export async function testFirestoreConnection(): Promise<ConnectionCheckResult> {
+  const checkedAt = new Date().toISOString();
   try {
     await getDocFromServer(doc(db, 'test', 'connection'));
-    console.log('Connected to Firestore successfully');
+    return { service: 'Firestore', ok: true, message: 'Server Firestore merespons. Dokumen pemeriksaan dapat dibaca.', checkedAt };
   } catch (error) {
-    if (error instanceof Error && error.message.includes('the client is offline')) {
-      console.warn('Firestore offline fallback active.');
-    }
+    return { service: 'Firestore', ok: false, message: describeConnectionError(error), checkedAt };
   }
 }
-testFirestoreConnection();
+
+export async function testFirebaseAuthConnection(): Promise<ConnectionCheckResult> {
+  const checkedAt = new Date().toISOString();
+  try {
+    if (!auth.app.options.apiKey || !auth.app.options.projectId) {
+      throw new Error('Konfigurasi Firebase apiKey/projectId tidak lengkap.');
+    }
+    return { service: 'Firebase Auth', ok: true, message: auth.currentUser
+      ? `Firebase Auth siap; sesi aktif untuk ${auth.currentUser.email || 'akun tanpa email'}.`
+      : 'Firebase Auth SDK siap, tetapi belum ada pengguna yang masuk.', checkedAt };
+  } catch (error) {
+    return { service: 'Firebase Auth', ok: false, message: error instanceof Error ? error.message : String(error), checkedAt };
+  }
+}
 
 /**
  * Sign in with Google to obtain Workspace access token
