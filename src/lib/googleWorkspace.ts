@@ -649,6 +649,14 @@ export async function removeLegacyDemoRowsFromSpreadsheet(spreadsheetUrlOrId: st
 
 function isObviousDemoDriveName(name: string): boolean {
   const normalized = normalizeSheetHeader(name);
+  const exactLegacyArtifacts = [
+    'Database_PPKS_ODHIV_Sumut_2026.xlsx',
+    'SRT-ST-001',
+    'SRT-BA-002',
+    'SRT-SP-003',
+    '1yA8KemensosODHIVSumut2026_LiveSync',
+  ].map(normalizeSheetHeader);
+  if (exactLegacyArtifacts.some((marker) => normalized.includes(marker))) return true;
   if ([...LEGACY_SAMPLE_PPKS_IDS].some((id) => normalized.includes(normalizeSheetHeader(id)))) return true;
   if ([...LEGACY_SAMPLE_PPKS_NAMES].some((sampleName) => normalized.includes(normalizeSheetHeader(sampleName)))) return true;
   return /(^|[^a-z])(demo|sample|contoh|dummy|uji[\s_-]?coba|data[\s_-]?uji|uji[\s_-]?data|test[\s_-]?data|data[\s_-]?test)([^a-z]|$)/i.test(name);
