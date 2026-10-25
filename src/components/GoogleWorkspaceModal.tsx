@@ -5,6 +5,7 @@ import {
   getAccessToken,
   initAuthListener,
   savePPKSToFirestore,
+  fetchPPKSFromFirestore,
   testFirestoreConnection,
   testFirebaseAuthConnection,
 } from '../lib/firebase';
@@ -14,6 +15,8 @@ import {
   readSpreadsheetData,
   getSpreadsheetSheetTitles,
   appendPPKSToSpreadsheet,
+  ensureSIPANDUDatabaseSheet,
+  extractSpreadsheetId,
   createGoogleSpreadsheet,
   fetchFormResponses,
   GoogleDriveFile,
@@ -44,6 +47,7 @@ interface GoogleWorkspaceModalProps {
   ppksList: PPKSRecord[];
   settings: AppSettings;
   onUpdateSettings: (settings: AppSettings) => void;
+  onLoadPPKSFromCloud: (records: PPKSRecord[]) => void;
 }
 
 export const GoogleWorkspaceModal: React.FC<GoogleWorkspaceModalProps> = ({
@@ -52,6 +56,7 @@ export const GoogleWorkspaceModal: React.FC<GoogleWorkspaceModalProps> = ({
   ppksList,
   settings,
   onUpdateSettings,
+  onLoadPPKSFromCloud,
 }) => {
   const [activeTab, setActiveTab] = useState<'overview' | 'drive' | 'sheets' | 'forms'>('overview');
   const [googleUser, setGoogleUser] = useState<any>(null);
@@ -64,7 +69,18 @@ export const GoogleWorkspaceModal: React.FC<GoogleWorkspaceModalProps> = ({
   const [newFolderName, setNewFolderName] = useState<string>('SIPANDU ODHIV - Berkas Kemensos Sumut 2026');
 
   // Sheets state
-  const [spreadsheetIdInput, setSpreadsheetIdInput] = useState<string>(settings.googleSpreadsheetUrl.includes('1yA8KemensosODHIVSumut2026_LiveSync') ? GOOGLE_SIPANDU_RESOURCES.responseSpreadsheetUrl : settings.googleSpreadsheetUrl);
+  const [spreadsheetIdInput, setSpreadsheetIdInput] = useState<string>(() => {
+    const configured = settings.googleSpreadsheetUrl?.trim() || '';
+    // The previous default was a placeholder and the fallback silently selected
+    // the Form response sheet. Never use that sheet as the PPKS write destination.
+    if (!configured || configured.includes('1yA8KemensosODHIVSumut2026_LiveSync')) return '';
+    try {
+      if (extractSpreadsheetId(configured) === GOOGLE_SIPANDU_RESOURCES.responseSpreadsheetId) return '';
+    } catch {
+      return '';
+    }
+    return configured;
+  });
   const [sheetRows, setSheetRows] = useState<string[][]>([]);
 
   // Forms state
@@ -150,7 +166,11 @@ export const GoogleWorkspaceModal: React.FC<GoogleWorkspaceModalProps> = ({
     setLoading(true);
     setStatusMessage(null);
     try {
-      const files = await listDriveFiles('', GOOGLE_SIPANDU_RESOURCES.driveFolderId);
+      const configuredFolder = settings.googleDriveFolderUrl?.trim() || '';
+      const folderToRead = configuredFolder.includes('1Kemensos_Sumut_Berkas_PPKS_ODHIV')
+        ? GOOGLE_SIPANDU_RESOURCES.driveFolderId
+        : (configuredFolder || GOOGLE_SIPANDU_RESOURCES.driveFolderId);
+      const files = await listDriveFiles('', folderToRead);
       setDriveFiles(files);
       setStatusMessage({ type: 'success', text: `Ditemukan ${files.length} berkas di Google Drive.` });
     } catch (err: any) {
@@ -194,10 +214,39 @@ export const GoogleWorkspaceModal: React.FC<GoogleWorkspaceModalProps> = ({
   const handleSyncAllToSheet = async () => {
     setLoading(true);
     setStatusMessage(null);
+    let inserted = 0;
+    let alreadyPresent = 0;
+    const failures: string[] = [];
     try {
-      throw new Error('Spreadsheet yang dikonfigurasi adalah sumber respons Google Form. Untuk mencegah perubahan pada respons asli, sinkronisasi data PPKS harus menggunakan Spreadsheet database terpisah dengan tab SIPANDU dan header yang sesuai.');
-    } catch (err: any) {
-      setStatusMessage({ type: 'error', text: err.message });
+      const target = spreadsheetIdInput.trim();
+      if (!target) {
+        throw new Error('Tujuan database Google Sheets belum diatur. Klik “Buat Spreadsheet Baru SIPANDU ODHIV” atau masukkan URL spreadsheet database khusus.');
+      }
+      const targetId = extractSpreadsheetId(target);
+      if (targetId === GOOGLE_SIPANDU_RESOURCES.responseSpreadsheetId) {
+        throw new Error('Demi menjaga respons Google Form tetap utuh, data PPKS tidak boleh diekspor ke spreadsheet respons Form. Buat spreadsheet database SIPANDU terpisah terlebih dahulu.');
+      }
+      await ensureSIPANDUDatabaseSheet(target);
+      for (const record of ppksList) {
+        try {
+          const result = await appendPPKSToSpreadsheet(target, record);
+          if (result === 'inserted') inserted++;
+          else alreadyPresent++;
+        } catch (error: any) {
+          failures.push(`${record.id}: ${error?.message || String(error)}`);
+          // The same permission/schema error is likely to affect the remaining rows.
+          if (failures.length >= 1) break;
+        }
+      }
+      const refreshedRows = await readSpreadsheetData(target, 'SIPANDU!A1:K100');
+      setSheetRows(refreshedRows);
+      if (failures.length) {
+        setStatusMessage({ type: 'error', text: `Ekspor belum tuntas: ${inserted} baris baru, ${alreadyPresent} sudah ada, ${failures.length} gagal. Penyebab pertama: ${failures[0]}` });
+      } else {
+        setStatusMessage({ type: 'success', text: `Google Sheets tersinkron: ${inserted} baris baru ditambahkan; ${alreadyPresent} sudah ada sehingga tidak digandakan. Target: tab SIPANDU.` });
+      }
+    } catch (error: any) {
+      setStatusMessage({ type: 'error', text: `Sinkronisasi Google Sheets gagal: ${error?.message || String(error)}` });
     } finally {
       setLoading(false);
     }
@@ -233,26 +282,43 @@ export const GoogleWorkspaceModal: React.FC<GoogleWorkspaceModalProps> = ({
     }
   };
 
-  // Firestore Sync All
+  // Firestore Sync All — exceptions are surfaced with the actual permission/network reason.
   const handleSyncFirestore = async () => {
     setLoading(true);
     setStatusMessage(null);
     let count = 0;
-    let failed = 0;
+    const failures: string[] = [];
     try {
-      for (const p of ppksList) {
-        const ok = await savePPKSToFirestore(p);
-        if (ok) count++;
-        else failed++;
+      for (const record of ppksList) {
+        try {
+          await savePPKSToFirestore(record);
+          count++;
+        } catch (error: any) {
+          failures.push(`${record.id}: ${error?.message || String(error)}`);
+        }
       }
       setFirestoreSyncedCount(count);
-      if (failed > 0) {
-        setStatusMessage({ type: 'error', text: `Sinkronisasi Firestore sebagian gagal: ${count} berhasil, ${failed} gagal. Jalankan “Periksa Koneksi Sekarang” dan periksa Security Rules.` });
+      if (failures.length) {
+        setStatusMessage({ type: 'error', text: `Sinkronisasi Firestore: ${count} berhasil, ${failures.length} gagal. Penyebab pertama: ${failures[0]}` });
       } else {
-        setStatusMessage({ type: 'success', text: `${count} berkas PPKS berhasil disimpan ke Firebase Firestore.` });
+        setStatusMessage({ type: 'success', text: `${count} berkas berhasil disimpan ke Firebase Firestore.` });
       }
     } catch (error: any) {
       setStatusMessage({ type: 'error', text: `Sinkronisasi Firestore gagal: ${error?.message || String(error)}` });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleLoadFirestore = async () => {
+    setLoading(true);
+    setStatusMessage(null);
+    try {
+      const records = await fetchPPKSFromFirestore();
+      onLoadPPKSFromCloud(records);
+      setStatusMessage({ type: 'success', text: `Pembacaan Firestore berhasil: ${records.length} record cloud dimuat dan digabungkan dengan data lokal.` });
+    } catch (error: any) {
+      setStatusMessage({ type: 'error', text: `Gagal memuat data Firestore: ${error?.message || String(error)}` });
     } finally {
       setLoading(false);
     }
@@ -421,7 +487,7 @@ export const GoogleWorkspaceModal: React.FC<GoogleWorkspaceModalProps> = ({
                 </div>
 
                 <div>
-                  {!googleUser ? (
+                  {(!googleUser || !token) ? (
                     <button
                       type="button"
                       onClick={handleSignIn}
@@ -446,7 +512,7 @@ export const GoogleWorkspaceModal: React.FC<GoogleWorkspaceModalProps> = ({
                           d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
                         />
                       </svg>
-                      <span>Masuk dengan Google</span>
+                      <span>{googleUser ? 'Pulihkan Izin Google API' : 'Masuk dengan Google'}</span>
                     </button>
                   ) : (
                     <button
@@ -468,12 +534,12 @@ export const GoogleWorkspaceModal: React.FC<GoogleWorkspaceModalProps> = ({
                     <Database className="w-4 h-4 text-sky-300" />
                     <span className="font-bold text-white">Firebase Firestore Database</span>
                   </div>
-                  <span className="px-2 py-0.5 rounded text-[10px] bg-emerald-950 text-emerald-300 border border-emerald-500/30">
-                    Aktif (asia-southeast1)
+                  <span className="px-2 py-0.5 rounded text-[10px] bg-neutral-900 text-neutral-300 border border-neutral-700">
+                    Belum diverifikasi
                   </span>
                 </div>
                 <p className="text-neutral-300 text-[11px]">
-                  Database cloud NoSQL aktif untuk persistensi data PPKS, dokumen, dan pengaturan aplikasi secara real-time.
+                  Uji akses dilakukan terhadap koleksi ppks yang dilindungi Firestore Rules. Penyimpanan lokal browser tidak otomatis berarti data sudah tersimpan di cloud.
                 </p>
                 <div className="pt-2 flex items-center gap-2">
                   <button
@@ -483,7 +549,16 @@ export const GoogleWorkspaceModal: React.FC<GoogleWorkspaceModalProps> = ({
                     className="px-3.5 py-2 rounded-lg bg-emerald-800/80 hover:bg-emerald-700 text-white font-semibold text-xs flex items-center gap-1.5 cursor-pointer"
                   >
                     <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
-                    <span>Sinkronkan {ppksList.length} PPKS ke Firestore</span>
+                    <span>Kirim {ppksList.length} PPKS ke Firestore</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleLoadFirestore}
+                    disabled={loading}
+                    className="px-3.5 py-2 rounded-lg bg-sky-900 hover:bg-sky-800 text-white font-semibold text-xs flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+                    <span>Muat dari Firestore</span>
                   </button>
                 </div>
               </div>
