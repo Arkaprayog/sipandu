@@ -29,16 +29,15 @@ interface DatabasePpksViewProps {
 }
 
 function resolveProfileNIK(record: PPKSRecord): string {
-  const masterValue = String(record.nik || '').replace(/\\D/g, '');
-  if (/^\\d{16}$/.test(masterValue)) return masterValue;
+  const masterValue = String(record.nik || '').replace(/\D/g, '');
+  if (/^\d{16}$/.test(masterValue)) return masterValue;
   const assessmentValue = record.officialAssessment?.q23;
   if (typeof assessmentValue === 'string') {
-    const assessmentNIK = assessmentValue.replace(/\\D/g, '');
-    if (/^\\d{16}$/.test(assessmentNIK)) return assessmentNIK;
+    const assessmentNIK = assessmentValue.replace(/\D/g, '');
+    if (/^\d{16}$/.test(assessmentNIK)) return assessmentNIK;
   }
   return '';
 }
-
 export const DatabasePpksView: React.FC<DatabasePpksViewProps> = ({
   ppksList,
   onUpdatePPKS,
