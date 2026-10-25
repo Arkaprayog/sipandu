@@ -14,7 +14,7 @@ import {
   createDriveFolder,
   readSpreadsheetData,
   getSpreadsheetSheetTitles,
-  appendPPKSToSpreadsheet,
+  upsertPPKSInSpreadsheet,
   ensureSIPANDUDatabaseSheet,
   extractSpreadsheetId,
   createGoogleSpreadsheet,
@@ -233,7 +233,7 @@ export const GoogleWorkspaceModal: React.FC<GoogleWorkspaceModalProps> = ({
     setLoading(true);
     setStatusMessage(null);
     let inserted = 0;
-    let alreadyPresent = 0;
+    let updated = 0;
     const failures: string[] = [];
     try {
       const target = spreadsheetIdInput.trim();
@@ -247,9 +247,9 @@ export const GoogleWorkspaceModal: React.FC<GoogleWorkspaceModalProps> = ({
       await ensureSIPANDUDatabaseSheet(target);
       for (const record of ppksList) {
         try {
-          const result = await appendPPKSToSpreadsheet(target, record);
+          const result = await upsertPPKSInSpreadsheet(target, record);
           if (result === 'inserted') inserted++;
-          else alreadyPresent++;
+          else updated++;
         } catch (error: any) {
           failures.push(`${record.id}: ${error?.message || String(error)}`);
           // The same permission/schema error is likely to affect the remaining rows.
@@ -259,9 +259,9 @@ export const GoogleWorkspaceModal: React.FC<GoogleWorkspaceModalProps> = ({
       const refreshedRows = await readSpreadsheetData(target, 'SIPANDU!A1:K100');
       setSheetRows(refreshedRows);
       if (failures.length) {
-        setStatusMessage({ type: 'error', text: `Ekspor dihentikan saat memproses ${failures[0]}. ${inserted} baris baru ditambahkan, ${alreadyPresent} sudah ada; record sisanya belum dicoba. Periksa akses/format database lalu ulangi ekspor.` });
+        setStatusMessage({ type: 'error', text: `Ekspor dihentikan saat memproses ${failures[0]}. ${inserted} baris baru ditambahkan, ${updated} record diperbarui; record sisanya belum dicoba. Periksa akses/format database lalu ulangi ekspor.` });
       } else {
-        setStatusMessage({ type: 'success', text: `Google Sheets tersinkron: ${inserted} baris baru ditambahkan; ${alreadyPresent} sudah ada sehingga tidak digandakan. Target: tab SIPANDU.` });
+        setStatusMessage({ type: 'success', text: `Google Sheets tersinkron: ${inserted} baris baru ditambahkan, ${updated} record diperbarui. Target: tab SIPANDU.` });
       }
     } catch (error: any) {
       setStatusMessage({ type: 'error', text: `Sinkronisasi Google Sheets gagal: ${error?.message || String(error)}` });
