@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { ProfileUser } from '../types';
 import { getWaktuGreeting } from '../utils/helpers';
-import { Bell, Settings, LogOut, Edit3, ShieldAlert, Cloud } from 'lucide-react';
+import { Bell, Settings, LogOut, Edit3, ShieldAlert, Cloud, UserRound } from 'lucide-react';
 import { KemensosLogo } from './KemensosLogo';
 
 interface HeaderProps {
@@ -18,7 +18,7 @@ interface HeaderProps {
 export const Header: React.FC<HeaderProps> = ({
   currentUser,
   profile,
-  unreadNotificationsCount = 3,
+  unreadNotificationsCount = 0,
   onOpenEditProfile,
   onOpenSettings,
   onOpenNotifications,
@@ -63,16 +63,18 @@ export const Header: React.FC<HeaderProps> = ({
             {/* Foto profil + Menu Edit Profil di bawahnya */}
             <div className="flex flex-col items-center">
               <div className="relative w-14 h-14 md:w-16 md:h-16 rounded-full p-0.5 border-2 border-rose-500/50 shadow-[0_0_12px_rgba(244,63,94,0.3)] bg-black/40 overflow-hidden">
-                <img
-                  src={profile.photoUrl}
-                  alt={profile.nama}
-                  className="w-full h-full object-cover rounded-full"
-                  onError={(e) => {
-                    // Fallback avatar
-                    (e.target as HTMLImageElement).src =
-                      'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80';
-                  }}
-                />
+                {profile.photoUrl ? (
+                  <img
+                    src={profile.photoUrl}
+                    alt={profile.nama}
+                    className="w-full h-full object-cover rounded-full"
+                    onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                  />
+                ) : (
+                  <div className="flex h-full w-full items-center justify-center text-neutral-400" aria-label="Foto profil belum diatur">
+                    <UserRound className="h-7 w-7" />
+                  </div>
+                )}
               </div>
               <button
                 type="button"
