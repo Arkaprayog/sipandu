@@ -357,10 +357,9 @@ function readCellByAliases(headers: string[], row: string[], aliases: string[]):
 
 /** Remove an official-question number before classifying a NIK header (for example, "23. NIK **"). */
 function normalizeNIKHeader(header: string): string {
-  const label = String(header ?? '').trim().replace(/^\\s*(?:q(?:uestion)?\\s*)?\\d{1,2}\\s*[.)\\-:]\\s*/i, '');
+  const label = String(header ?? '').trim().replace(/^\s*(?:q(?:uestion)?\s*)?\d{1,2}\s*[.)\-:]\s*/i, '');
   return normalizeSheetHeader(label);
 }
-
 /** Returns whether a column header refers to the respondent's own NIK/KTP, not a relative or worker. */
 export function isLikelyRespondentNIKHeader(header: string): boolean {
   const normalized = normalizeNIKHeader(header);
