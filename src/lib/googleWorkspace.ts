@@ -1,7 +1,7 @@
 import { getAccessToken, invalidateAccessToken } from './firebase';
 import { IntegratedFormData, PPKSRecord } from '../types';
 import { isLegacySamplePPKS, isObviousDemoMarker, LEGACY_SAMPLE_PPKS_IDS, LEGACY_SAMPLE_PPKS_NAMES } from '../data/initialData';
-import { findNIKHeaders, readNIKFromSheetRow } from './nikMapping';
+import { findNIKHeaders, isLikelyRespondentNIKHeader, readNIKFromSheetRow } from './nikMapping';
 
 export interface GoogleDriveFile {
   id: string;
@@ -221,7 +221,7 @@ export async function readSpreadsheetRichData(
   const params = new URLSearchParams({
     ranges: range,
     includeGridData: 'true',
-    fields: 'sheets(properties(title),data(rowData(values(formattedValue,userEnteredValue.stringValue,effectiveValue.stringValue,hyperlink,textFormatRuns(format(link(uri)))))))',
+    fields: 'sheets(properties(title),data(rowData(values(formattedValue,userEnteredValue.stringValue,userEnteredValue.numberValue,effectiveValue.stringValue,effectiveValue.numberValue,hyperlink,textFormatRuns(format(link(uri)))))))',
   });
   const data = await googleJson<{
     sheets?: {
@@ -230,8 +230,8 @@ export async function readSpreadsheetRichData(
         rowData?: {
           values?: {
             formattedValue?: string;
-            userEnteredValue?: { stringValue?: string };
-            effectiveValue?: { stringValue?: string };
+            userEnteredValue?: { stringValue?: string; numberValue?: number };
+            effectiveValue?: { stringValue?: string; numberValue?: number };
             hyperlink?: string;
             textFormatRuns?: Array<{ format?: { link?: { uri?: string } } }>;
           }[];
@@ -260,9 +260,22 @@ export async function readSpreadsheetRichData(
     const header = headers[columnIndex] || '';
     const isFileOrPhotoColumn = /(foto|photo|gambar|image|upload|unggah|lampiran|scan|dokumen|berkas|file|tautan|linkdrive)/.test(header);
     // Only replace displayed text with its hyperlink on file/photo columns.
-    // This prevents a rich-text NIK/name cell from turning into the link URL
-    // instead of the respondent value displayed in Google Sheets.
+    // This prevents a rich-text NIK/name cell from turning into the link URL.
     if (rowIndex > 0 && isFileOrPhotoColumn) return String(cell.hyperlink || runLink || displayValue);
+
+    // Google Sheets may store a 16-digit NIK as a numeric cell. formattedValue
+    // can then use scientific notation. Read the underlying number only when
+    // it is an exact safe integer and the header is the respondent's NIK.
+    if (rowIndex > 0 && isLikelyRespondentNIKHeader(header)) {
+      const numberValue = cell.effectiveValue?.numberValue ?? cell.userEnteredValue?.numberValue;
+      if (
+        typeof numberValue === 'number' &&
+        Number.isSafeInteger(numberValue) &&
+        String(numberValue).length === 16
+      ) {
+        return String(numberValue);
+      }
+    }
     return displayValue;
   }));
 }
