@@ -31,13 +31,12 @@ function normalizeAppSettings(value: unknown): AppSettings {
   }
 
   let sourceUrl = saved.googleSpreadsheetSourceUrl?.trim() || '';
-  if (!sourceUrl || sourceUrl.includes('1yA8KemensosODHIVSumut2026_LiveSync')) {
-    sourceUrl = GOOGLE_SIPANDU_RESOURCES.responseSpreadsheetUrl;
-  } else {
+  if (sourceUrl.includes('1yA8KemensosODHIVSumut2026_LiveSync')) sourceUrl = '';
+  if (sourceUrl) {
     try {
       extractSpreadsheetId(sourceUrl);
     } catch {
-      sourceUrl = GOOGLE_SIPANDU_RESOURCES.responseSpreadsheetUrl;
+      sourceUrl = '';
     }
   }
 
@@ -257,7 +256,8 @@ export default function App() {
   };
 
   const handleSyncGoogleSpreadsheet = async (): Promise<number> => {
-    const sourceUrl = settings.googleSpreadsheetSourceUrl?.trim() || GOOGLE_SIPANDU_RESOURCES.responseSpreadsheetUrl;
+    const sourceUrl = settings.googleSpreadsheetSourceUrl?.trim() || '';
+    if (!sourceUrl) throw new Error('Spreadsheet sumber belum dipilih. Buka Google Workspace & Cloud Hub → Google Sheets → Cari Spreadsheet Saya, lalu pilih file Anda.');
     const imported = await importPPKSFromSpreadsheet(
       sourceUrl,
       settings.googleSpreadsheetSourceTab?.trim() || undefined
@@ -328,7 +328,7 @@ export default function App() {
         {activeTab === 'beranda' && (
           <BerandaView
             ppksList={ppksList}
-            googleSpreadsheetUrl={settings.googleSpreadsheetSourceUrl || GOOGLE_SIPANDU_RESOURCES.responseSpreadsheetUrl}
+            googleSpreadsheetUrl={settings.googleSpreadsheetSourceUrl || ''}
             googleSpreadsheetName={settings.googleSpreadsheetSourceName || ''}
             onSyncGoogleSpreadsheet={handleSyncGoogleSpreadsheet}
           />
