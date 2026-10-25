@@ -10,104 +10,138 @@ export interface GoogleDriveFile {
   createdTime?: string;
 }
 
-export interface GoogleSpreadsheetData {
-  spreadsheetId: string;
-  title: string;
-  sheets: { title: string; rowCount: number }[];
-  rows: string[][];
-}
-
 export interface GoogleFormResponse {
   responseId: string;
   createTime: string;
+  lastSubmittedTime?: string;
   answers: Record<string, { textAnswers?: { answers: { value: string }[] } }>;
 }
 
-/**
- * GOOGLE DRIVE API
- */
-export async function listDriveFiles(query: string = ""): Promise<GoogleDriveFile[]> {
-  const token = await getAccessToken();
-  if (!token) throw new Error('Silakan Masuk dengan Akun Google terlebih dahulu.');
+function requireToken(token: string | null): string {
+  if (!token) throw new Error('Silakan masuk dengan akun Google yang memiliki akses ke sumber SIPANDU.');
+  return token;
+}
 
-  const q = query ? encodeURIComponent(query) : encodeURIComponent("trashed = false");
-  const url = `https://www.googleapis.com/drive/v3/files?pageSize=20&fields=files(id,name,mimeType,webViewLink,iconLink,createdTime)&q=${q}`;
-
+async function googleJson<T>(url: string, init: RequestInit = {}): Promise<T> {
+  const token = requireToken(await getAccessToken());
   const res = await fetch(url, {
-    headers: { Authorization: `Bearer ${token}` },
+    ...init,
+    headers: {
+      Authorization: `Bearer ${token}`,
+      ...(init.body ? { 'Content-Type': 'application/json' } : {}),
+      ...init.headers,
+    },
   });
-
+  const data = await res.json().catch(() => ({}));
   if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.error?.message || `Gagal membaca Google Drive (${res.status})`);
+    const message = (data as { error?: { message?: string } }).error?.message;
+    throw new Error(message || `Google API gagal (HTTP ${res.status}). Periksa izin akun dan API yang diaktifkan.`);
   }
+  return data as T;
+}
 
-  const data = await res.json();
+/** Extracts a Google Drive folder ID from either an ID or a Drive folder URL. */
+export function extractDriveFolderId(input: string): string {
+  const value = input.trim();
+  const match = value.match(/\/folders\/([a-zA-Z0-9_-]+)/);
+  const id = match?.[1] || value;
+  if (!/^[a-zA-Z0-9_-]{10,}$/.test(id)) throw new Error('ID/URL folder Google Drive tidak valid.');
+  return id;
+}
+
+/** Extracts a spreadsheet ID from either an ID or a Google Sheets URL. */
+export function extractSpreadsheetId(input: string): string {
+  const value = input.trim();
+  const match = value.match(/\/spreadsheets\/d\/([a-zA-Z0-9_-]+)/);
+  const id = match?.[1] || value;
+  if (!/^[a-zA-Z0-9_-]{10,}$/.test(id)) throw new Error('ID/URL Google Spreadsheet tidak valid.');
+  return id;
+}
+
+/** Extracts a Form ID from the editor URL or a raw Form ID. Short forms.gle links are not API IDs. */
+export function extractFormId(input: string): string {
+  const value = input.trim();
+  if (/forms\.gle\//i.test(value)) {
+    throw new Error('Gunakan URL editor Google Form (docs.google.com/forms/d/FORM_ID/edit), bukan tautan pendek forms.gle.');
+  }
+  const match = value.match(/\/forms\/d\/([a-zA-Z0-9_-]+)/);
+  const id = match?.[1] || value;
+  if (!/^[a-zA-Z0-9_-]{10,}$/.test(id)) throw new Error('ID/URL Google Form tidak valid.');
+  return id;
+}
+
+/** GOOGLE DRIVE API — lists only items inside the configured folder when folder URL/ID is provided. */
+export async function listDriveFiles(query = '', folderUrlOrId?: string): Promise<GoogleDriveFile[]> {
+  const clauses = ['trashed = false'];
+  if (folderUrlOrId?.trim()) clauses.push(`'${extractDriveFolderId(folderUrlOrId)}' in parents`);
+  if (query.trim()) clauses.push(query.trim());
+  const params = new URLSearchParams({
+    pageSize: '100',
+    orderBy: 'name',
+    fields: 'nextPageToken,files(id,name,mimeType,webViewLink,iconLink,createdTime)',
+    q: clauses.join(' and '),
+  });
+  const data = await googleJson<{ files?: GoogleDriveFile[] }>(`https://www.googleapis.com/drive/v3/files?${params}`);
   return data.files || [];
 }
 
 export async function createDriveFolder(folderName: string): Promise<GoogleDriveFile> {
-  const token = await getAccessToken();
-  if (!token) throw new Error('Silakan Masuk dengan Akun Google terlebih dahulu.');
-
-  const metadata = {
-    name: folderName,
-    mimeType: 'application/vnd.google-apps.folder',
-  };
-
-  const res = await fetch('https://www.googleapis.com/drive/v3/files', {
+  if (!folderName.trim()) throw new Error('Nama folder tidak boleh kosong.');
+  return googleJson<GoogleDriveFile>('https://www.googleapis.com/drive/v3/files', {
     method: 'POST',
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(metadata),
+    body: JSON.stringify({ name: folderName.trim(), mimeType: 'application/vnd.google-apps.folder' }),
   });
+}
 
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.error?.message || 'Gagal membuat folder di Google Drive');
-  }
+/** Returns actual tab titles from the spreadsheet metadata; does not assume a tab name. */
+export async function getSpreadsheetSheetTitles(spreadsheetIdOrUrl: string): Promise<string[]> {
+  const id = extractSpreadsheetId(spreadsheetIdOrUrl);
+  const data = await googleJson<{ sheets?: { properties?: { title?: string } }[] }>(
+    `https://sheets.googleapis.com/v4/spreadsheets/${id}?fields=sheets.properties.title`
+  );
+  return (data.sheets || []).map(sheet => sheet.properties?.title || '').filter(Boolean);
+}
 
-  return await res.json();
+/** GOOGLE SHEETS API */
+export async function readSpreadsheetData(spreadsheetIdOrUrl: string, range = 'Sheet1!A1:Z100'): Promise<string[][]> {
+  const id = extractSpreadsheetId(spreadsheetIdOrUrl);
+  const data = await googleJson<{ values?: unknown[][] }>(
+    `https://sheets.googleapis.com/v4/spreadsheets/${id}/values/${encodeURIComponent(range)}`
+  );
+  return (data.values || []).map(row => row.map(value => String(value ?? '')));
 }
 
 /**
- * GOOGLE SHEETS API
+ * Appends a SIPANDU database row to a dedicated SIPANDU data sheet only.
+ * Do not point this at the Google Form's response tab: that tab is owned by Forms.
+ * API errors are thrown rather than reported as a successful sync.
  */
-export async function readSpreadsheetData(spreadsheetId: string, range: string = 'Sheet1!A1:Z50'): Promise<string[][]> {
-  const token = await getAccessToken();
-  if (!token) throw new Error('Silakan Masuk dengan Akun Google terlebih dahulu.');
-
-  const cleanId = extractSpreadsheetId(spreadsheetId);
-  const url = `https://sheets.googleapis.com/v4/spreadsheets/${cleanId}/values/${encodeURIComponent(range)}`;
-
-  const res = await fetch(url, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.error?.message || `Gagal membaca Google Sheets (${res.status})`);
+export async function appendPPKSToSpreadsheet(
+  spreadsheetIdOrUrl: string,
+  ppks: PPKSRecord,
+  range = 'SIPANDU!A:K',
+): Promise<boolean> {
+  const id = extractSpreadsheetId(spreadsheetIdOrUrl);
+  const existingRows = await readSpreadsheetData(id, range);
+  const headers = existingRows[0] || [];
+  const idIndex = headers.findIndex(h => h.trim().toLowerCase() === 'id');
+  const nikIndex = headers.findIndex(h => ['nik', 'nomor induk kependudukan'].includes(h.trim().toLowerCase()));
+  if (existingRows.slice(1).some(row =>
+    (idIndex >= 0 && row[idIndex] === ppks.id) ||
+    (nikIndex >= 0 && ppks.nik && row[nikIndex] === ppks.nik)
+  )) {
+    return true; // already present; do not append a duplicate
+  }
+  if (existingRows.length === 0) {
+    throw new Error(`Tab/rentang ${range} belum memiliki baris header. Buat tab SIPANDU dan header termasuk kolom ID sebelum sinkronisasi.`);
   }
 
-  const data = await res.json();
-  return data.values || [];
-}
-
-export async function appendPPKSToSpreadsheet(spreadsheetId: string, ppks: PPKSRecord): Promise<boolean> {
-  const token = await getAccessToken();
-  if (!token) throw new Error('Silakan Masuk dengan Akun Google terlebih dahulu.');
-
-  const cleanId = extractSpreadsheetId(spreadsheetId);
-  const range = 'Sheet1!A:J';
-  const url = `https://sheets.googleapis.com/v4/spreadsheets/${cleanId}/values/${encodeURIComponent(range)}:append?valueInputOption=USER_ENTERED`;
-
   const row = [
+    ppks.id,
     ppks.timestamp,
     ppks.namaLengkap,
     ppks.nik,
-    ppks.usia.toString(),
+    String(ppks.usia),
     ppks.jenisKelamin,
     ppks.kotaDomisili,
     ppks.noHpWa,
@@ -115,110 +149,50 @@ export async function appendPPKSToSpreadsheet(spreadsheetId: string, ppks: PPKSR
     ppks.intervensiMental,
     `Desil ${ppks.desil}`,
   ];
-
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      values: [row],
-    }),
-  });
-
-  return res.ok;
+  await googleJson('https://sheets.googleapis.com/v4/spreadsheets/' + id +
+    '/values/' + encodeURIComponent(range) + ':append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS', {
+      method: 'POST',
+      body: JSON.stringify({ values: [row] }),
+    });
+  return true;
 }
 
 export async function createGoogleSpreadsheet(title: string): Promise<string> {
-  const token = await getAccessToken();
-  if (!token) throw new Error('Silakan Masuk dengan Akun Google terlebih dahulu.');
-
-  const res = await fetch('https://sheets.googleapis.com/v4/spreadsheets', {
+  if (!title.trim()) throw new Error('Judul Spreadsheet tidak boleh kosong.');
+  const data = await googleJson<{ spreadsheetId: string }>('https://sheets.googleapis.com/v4/spreadsheets', {
     method: 'POST',
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    },
     body: JSON.stringify({
-      properties: { title },
-      sheets: [
-        {
-          properties: { title: 'Sheet1' },
-          data: [
-            {
-              startRow: 0,
-              startColumn: 0,
-              rowData: [
-                {
-                  values: [
-                    { userEnteredValue: { stringValue: 'Timestamp' } },
-                    { userEnteredValue: { stringValue: 'Nama Lengkap' } },
-                    { userEnteredValue: { stringValue: 'NIK' } },
-                    { userEnteredValue: { stringValue: 'Usia' } },
-                    { userEnteredValue: { stringValue: 'Jenis Kelamin' } },
-                    { userEnteredValue: { stringValue: 'Kota Domisili' } },
-                    { userEnteredValue: { stringValue: 'No HP/WA' } },
-                    { userEnteredValue: { stringValue: 'Jenis Bantuan' } },
-                    { userEnteredValue: { stringValue: 'Intervensi Mental' } },
-                    { userEnteredValue: { stringValue: 'Desil' } },
-                  ],
-                },
-              ],
-            },
-          ],
-        },
-      ],
+      properties: { title: title.trim() },
+      sheets: [{
+        properties: { title: 'SIPANDU' },
+        data: [{
+          startRow: 0,
+          startColumn: 0,
+          rowData: [{
+            values: ['ID', 'Timestamp', 'Nama Lengkap', 'NIK', 'Usia', 'Jenis Kelamin', 'Kota Domisili', 'No HP/WA', 'Jenis Bantuan', 'Intervensi Mental', 'Desil']
+              .map(value => ({ userEnteredValue: { stringValue: value } })),
+          }],
+        }],
+      }],
     }),
   });
-
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.error?.message || 'Gagal membuat Google Spreadsheet baru');
-  }
-
-  const data = await res.json();
+  if (!data.spreadsheetId) throw new Error('Google tidak mengembalikan ID Spreadsheet.');
   return data.spreadsheetId;
 }
 
-/**
- * GOOGLE FORMS API
- */
-export async function fetchFormResponses(formId: string): Promise<GoogleFormResponse[]> {
-  const token = await getAccessToken();
-  if (!token) throw new Error('Silakan Masuk dengan Akun Google terlebih dahulu.');
-
-  const cleanId = extractFormId(formId);
-  const url = `https://forms.googleapis.com/v1/forms/${cleanId}/responses`;
-
-  const res = await fetch(url, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.error?.message || `Gagal mengambil respon Google Forms (${res.status})`);
-  }
-
-  const data = await res.json();
-  return data.responses || [];
-}
-
-/**
- * Utilities
- */
-function extractSpreadsheetId(input: string): string {
-  if (input.includes('/d/')) {
-    const parts = input.split('/d/');
-    return parts[1].split('/')[0];
-  }
-  return input.trim();
-}
-
-function extractFormId(input: string): string {
-  if (input.includes('/forms/d/')) {
-    const parts = input.split('/forms/d/');
-    return parts[1].split('/')[0];
-  }
-  return input.trim();
+/** GOOGLE FORMS API — fetches all pages, not just the first page. */
+export async function fetchFormResponses(formUrlOrId: string): Promise<GoogleFormResponse[]> {
+  const formId = extractFormId(formUrlOrId);
+  const all: GoogleFormResponse[] = [];
+  let pageToken = '';
+  do {
+    const params = new URLSearchParams({ pageSize: '500' });
+    if (pageToken) params.set('pageToken', pageToken);
+    const data = await googleJson<{ responses?: GoogleFormResponse[]; nextPageToken?: string }>(
+      `https://forms.googleapis.com/v1/forms/${formId}/responses?${params}`
+    );
+    all.push(...(data.responses || []));
+    pageToken = data.nextPageToken || '';
+  } while (pageToken);
+  return all;
 }

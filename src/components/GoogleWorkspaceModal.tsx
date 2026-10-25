@@ -10,11 +10,13 @@ import {
   listDriveFiles,
   createDriveFolder,
   readSpreadsheetData,
+  getSpreadsheetSheetTitles,
   appendPPKSToSpreadsheet,
   createGoogleSpreadsheet,
   fetchFormResponses,
   GoogleDriveFile,
 } from '../lib/googleWorkspace';
+import { GOOGLE_SIPANDU_RESOURCES } from '../lib/googleSIPANDUResources';
 import { PPKSRecord, AppSettings } from '../types';
 import {
   X,
@@ -60,11 +62,11 @@ export const GoogleWorkspaceModal: React.FC<GoogleWorkspaceModalProps> = ({
   const [newFolderName, setNewFolderName] = useState<string>('SIPANDU ODHIV - Berkas Kemensos Sumut 2026');
 
   // Sheets state
-  const [spreadsheetIdInput, setSpreadsheetIdInput] = useState<string>(settings.googleSpreadsheetUrl);
+  const [spreadsheetIdInput, setSpreadsheetIdInput] = useState<string>(settings.googleSpreadsheetUrl.includes('1yA8KemensosODHIVSumut2026_LiveSync') ? GOOGLE_SIPANDU_RESOURCES.responseSpreadsheetUrl : settings.googleSpreadsheetUrl);
   const [sheetRows, setSheetRows] = useState<string[][]>([]);
 
   // Forms state
-  const [formIdInput, setFormIdInput] = useState<string>(settings.googleFormTahapAwalUrl);
+  const [formIdInput, setFormIdInput] = useState<string>(settings.googleFormTahapAwalUrl.includes('SIPANDU-ODHIV-Lanjutan-Sumut') ? GOOGLE_SIPANDU_RESOURCES.formEditorUrl : settings.googleFormTahapAwalUrl);
   const [formResponsesCount, setFormResponsesCount] = useState<number | null>(null);
 
   // Firestore sync state
@@ -116,7 +118,7 @@ export const GoogleWorkspaceModal: React.FC<GoogleWorkspaceModalProps> = ({
     setLoading(true);
     setStatusMessage(null);
     try {
-      const files = await listDriveFiles();
+      const files = await listDriveFiles('', GOOGLE_SIPANDU_RESOURCES.driveFolderId);
       setDriveFiles(files);
       setStatusMessage({ type: 'success', text: `Ditemukan ${files.length} berkas di Google Drive.` });
     } catch (err: any) {
@@ -145,7 +147,9 @@ export const GoogleWorkspaceModal: React.FC<GoogleWorkspaceModalProps> = ({
     setLoading(true);
     setStatusMessage(null);
     try {
-      const rows = await readSpreadsheetData(spreadsheetIdInput);
+      const tabs = await getSpreadsheetSheetTitles(spreadsheetIdInput);
+      if (!tabs.length) throw new Error('Spreadsheet tidak memiliki tab yang dapat dibaca.');
+      const rows = await readSpreadsheetData(spreadsheetIdInput, `'${tabs[0].replace(/'/g, "''")}'!A1:Z100`);
       setSheetRows(rows);
       setStatusMessage({ type: 'success', text: `Berhasil membaca ${rows.length} baris dari Google Sheet.` });
     } catch (err: any) {
@@ -159,13 +163,7 @@ export const GoogleWorkspaceModal: React.FC<GoogleWorkspaceModalProps> = ({
     setLoading(true);
     setStatusMessage(null);
     try {
-      let count = 0;
-      for (const p of ppksList) {
-        await appendPPKSToSpreadsheet(spreadsheetIdInput, p);
-        count++;
-      }
-      setStatusMessage({ type: 'success', text: `Berhasil menyinkronkan ${count} data PPKS ke Google Spreadsheet!` });
-      handleReadSheet();
+      throw new Error('Spreadsheet yang dikonfigurasi adalah sumber respons Google Form. Untuk mencegah perubahan pada respons asli, sinkronisasi data PPKS harus menggunakan Spreadsheet database terpisah dengan tab SIPANDU dan header yang sesuai.');
     } catch (err: any) {
       setStatusMessage({ type: 'error', text: err.message });
     } finally {
