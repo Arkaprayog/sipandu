@@ -420,13 +420,22 @@ export function isLikelyRespondentNIKHeader(header: string): boolean {
 /** NIK is an identity string, never a numeric calculation. Preserve text zeros,
  * reject rounded scientific notation, and only return validated 16-digit values. */
 function normalizeNIKCellValue(value: string): string {
-  // Google Sheets can format text and number cells differently. Remove only
-  // wrappers/separators; never guess a missing digit or expand rounded notation.
-  const raw = String(value ?? '').trim().replace(/^['\u0060]/, '').replace(/\.0+$/, '');
+  // A NIK is an identifier, not a number. Preserve leading zeroes, accept a
+  // single 16-digit run even if a form label surrounds it, and never infer
+  // missing digits from scientific notation or a rounded numeric cell.
+  const raw = String(value ?? '').trim().replace(/^['"`]/, '').replace(/\.0+$/, '');
   if (!raw) return '';
   if (/^[+-]?\d+(?:[.,]\d+)?e[+-]?\d+$/i.test(raw)) return '';
+
+  // Supports separated display formats only if the combined digit count is
+  // exactly 16; no zero-padding or guessed digit is ever added.
   const digits = raw.replace(/\D/g, '');
-  return /^\d{16}$/.test(digits) ? digits : '';
+  if (/^\d{16}$/.test(digits)) return digits;
+
+  // A label may contain its own number. Accept only one explicit, contiguous
+  // 16-digit sequence in that case, otherwise leave NIK blank for diagnosis.
+  const matches = [...raw.matchAll(/\d{16}/g)].map((match) => match[0]);
+  return matches.length === 1 ? matches[0] : '';
 }
 /** Maps respondent NIK from descriptive Google Forms/Sheets headers. */
 export function readNIKFromSheetRow(headers: string[], row: string[]): string {
