@@ -353,49 +353,57 @@ function readCellByAliases(headers: string[], row: string[], aliases: string[]):
   return '';
 }
 
-/** Maps respondent NIK from the common header variants used by Google Forms/Sheets. */
-function isLikelyRespondentNIKHeader(header: string): boolean {
+/** Returns whether a column header refers to the respondent's own NIK/KTP, not a relative or worker. */
+export function isLikelyRespondentNIKHeader(header: string): boolean {
   const normalized = normalizeSheetHeader(header);
   if (!normalized) return false;
 
-  // Reject identity numbers of relatives, pendamping/staff, assessors, or contacts.
-  const excludedTokens = [
-    'nikayah', 'nikibu', 'nikorangtua', 'nikwali', 'niksuami', 'nikistri',
-    'nikpasangan', 'nikkeluarga', 'nikpendamping', 'nikpetugas', 'nikasesor',
-    'nikasessor', 'niksupervisor', 'nikkontakdarurat', 'nikpenanggungjawab',
-  ];
-  if (excludedTokens.some((prefix) => normalized.startsWith(prefix))) return false;
-  if (/(ayah|ibu|orangtua|wali|suami|istri|pasangan|keluarga|pendamping|petugas|asesor|asessor|supervisor|penanggungjawab)/.test(normalized)
-      && /(nik|nomorindukkependudukan|nomorktp|noktp)/.test(normalized)) return false;
+  // Exclude numbers belonging to relatives, staff, assessors, or emergency contacts.
+  if (/(ayah|ibu|orangtua|wali|suami|istri|pasangan|keluarga|pendamping|petugas|asesor|asessor|supervisor|penanggungjawab|kontakdarurat)/.test(normalized)) {
+    return false;
+  }
+  // "Nikah" and "teknik" are not identity-number headers.
+  if (normalized.startsWith('nikah') || normalized.startsWith('teknik')) return false;
 
-  return normalized === 'nik' ||
-    normalized.startsWith('nik') ||
-    normalized.endsWith('nik') ||
-    normalized.includes('nikresponden') ||
-    normalized.includes('nikppks') ||
-    normalized.includes('nikcalonresponden') ||
-    normalized.includes('nomorindukkependudukan') ||
-    normalized.includes('nomorkartutandapenduduk') ||
-    normalized.includes('nomorktp') ||
-    normalized.includes('noktp') ||
-    normalized.includes('ktpnik') ||
-    normalized.includes('noidentitas') ||
-    normalized.includes('nomoridentitas') ||
-    normalized.includes('nokependudukan') ||
-    normalized.includes('noindukkependudukan');
+  const positivePatterns = [
+    'nik',
+    'nomorindukkependudukan',
+    'noindukkependudukan',
+    'nomorkartutandapenduduk',
+    'nokartutandapenduduk',
+    'nomorktp',
+    'noktp',
+    'ktpnik',
+    'ktpresponden',
+    'ktppks',
+    'nikresponden',
+    'nikppks',
+    'nikcalonresponden',
+    'noidentitas',
+    'nomoridentitas',
+    'nokependudukan',
+    'nomorkependudukan',
+    'nomoridentitaspenduduk',
+  ];
+  return positivePatterns.some((pattern) =>
+    pattern === 'nik'
+      ? normalized === 'nik' || normalized.startsWith('nik') || normalized.includes('nikresponden') || normalized.includes('nikppks')
+      : normalized.includes(pattern)
+  );
 }
 
+/** NIK is an identifier, never a number. Accept 16 digits and repair one
+ * leading zero only when Google Sheets has reduced a 16-digit NIK to 15 digits. */
 function normalizeNIKCellValue(value: string): string {
   const raw = String(value ?? '').trim();
   if (!raw) return '';
   const digits = raw.replace(/\D/g, '');
-  if (!digits) return '';
-  // NIK must be kept as text. This recovers a leading zero if Sheets coerced
-  // a 16-digit NIK to a 15-digit number; never coerce it back to Number.
-  return digits.length === 15 ? `0${digits}` : digits;
+  if (digits.length === 16) return digits;
+  if (digits.length === 15) return '0' + digits;
+  return '';
 }
 
-/** Maps respondent NIK from exact and descriptive Google Forms question headers. */
+/** Maps respondent NIK from descriptive Google Forms/Sheets headers. */
 export function readNIKFromSheetRow(headers: string[], row: string[]): string {
   const candidates = headers
     .map((header, index) => ({
@@ -409,17 +417,19 @@ export function readNIKFromSheetRow(headers: string[], row: string[]): string {
   const score = (header: string): number => {
     const normalized = normalizeSheetHeader(header);
     let points = 0;
-    if (['nik', 'nikresponden', 'nikppks', 'nomorindukkependudukan', 'nomorktp', 'noktp'].includes(normalized)) points += 100;
+    if (normalized === 'nik' || normalized === 'nomorktp' || normalized === 'noktp' ||
+        normalized === 'nomorindukkependudukan' || normalized === 'nokartutandapenduduk') points += 120;
     if (normalized.includes('responden') || normalized.includes('ppks') || normalized.includes('calonresponden')) points += 60;
     if (normalized.includes('nik')) points += 35;
-    if (normalized.includes('ktp')) points += 20;
-    if (normalized.includes('nomorindukkependudukan')) points += 15;
+    if (normalized.includes('ktp')) points += 25;
+    if (normalized.includes('nomorindukkependudukan')) points += 20;
+    if (/(ayah|ibu|orangtua|wali|suami|istri|pasangan|keluarga|pendamping|petugas|asesor|asessor|supervisor|penanggungjawab|kontakdarurat)/.test(normalized)) points -= 1000;
     if (normalized.length > 100) points -= 10;
     return points;
   };
 
-  // Iterate every matching column: duplicate headings occur in Google Forms,
-  // and the first duplicate may be blank while a later one holds the NIK.
+  // Duplicate Forms headings can occur; use the strongest respondent-specific header
+  // and keep iterating if its value is blank or not a valid 16-digit NIK.
   candidates.sort((a, b) => score(b.header) - score(a.header) || a.index - b.index);
   for (const candidate of candidates) {
     const nik = normalizeNIKCellValue(candidate.value);

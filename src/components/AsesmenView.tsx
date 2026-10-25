@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { PPKSRecord, AppSettings } from '../types';
 import { KemensosQRCode } from './KemensosQRCode';
 import { CameraCaptureModal } from './CameraCaptureModal';
+import { PrivateDriveImage } from './PrivateDriveImage';
 import {
   buildWhatsAppMessage,
   createWhatsAppLink,
@@ -41,8 +42,8 @@ export const AsesmenView: React.FC<AsesmenViewProps> = ({
   const [namaLengkap, setNamaLengkap] = useState<string>('');
   const [nik, setNik] = useState<string>('');
   const [usia, setUsia] = useState<string>('');
-  const [jenisKelamin, setJenisKelamin] = useState<'Laki-laki' | 'Perempuan'>('Laki-laki');
-  const [kotaDomisili, setKotaDomisili] = useState<string>('Kota Medan');
+  const [jenisKelamin, setJenisKelamin] = useState<'Laki-laki' | 'Perempuan' | ''>('');
+  const [kotaDomisili, setKotaDomisili] = useState<string>('');
   const [fotoDiri, setFotoDiri] = useState<string>('');
   const [fotoDiriName, setFotoDiriName] = useState<string>('');
   const [fotoKtp, setFotoKtp] = useState<string>('');
@@ -97,23 +98,40 @@ export const AsesmenView: React.FC<AsesmenViewProps> = ({
   const handleSubmitTahapAwal = (e: React.FormEvent) => {
     e.preventDefault();
 
+    const cleanNik = nik.replace(/\D/g, '');
+    const parsedAge = Number(usia);
+    if (!/^\d{16}$/.test(cleanNik)) {
+      alert('NIK harus terdiri dari tepat 16 digit angka. Periksa kembali NIK responden sebelum menyimpan.');
+      return;
+    }
+    if (!Number.isInteger(parsedAge) || parsedAge < 1 || parsedAge > 100) {
+      alert('Usia responden wajib diisi dengan angka antara 1 sampai 100 tahun.');
+      return;
+    }
+    if (!namaLengkap.trim() || !kotaDomisili.trim() || !jenisKelamin || !noHpWa.trim()) {
+      alert('Lengkapi Nama Lengkap, NIK, Usia, Jenis Kelamin, Kota Domisili, dan No. HP/WA dengan data responden yang sebenarnya.');
+      return;
+    }
+
     // Timestamp automatically generated when respondent/user presses complete/kirim
     const now = new Date();
     const formattedTimestamp = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
 
     const newPPKS: PPKSRecord = {
-      id: `PPKS-SU-2026-${String(ppksList.length + 1).padStart(3, '0')}`,
+      id: `PPKS-SU-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       timestamp: formattedTimestamp,
-      namaLengkap,
-      nik,
-      usia: parseInt(usia, 10) || 30,
-      jenisKelamin,
-      kotaDomisili,
-      alamatLengkap: `${kotaDomisili}, Sumatera Utara`,
+      namaLengkap: namaLengkap.trim(),
+      nik: cleanNik,
+      usia: parsedAge,
+      jenisKelamin: jenisKelamin as PPKSRecord['jenisKelamin'],
+      kotaDomisili: kotaDomisili.trim(),
+      // Street address, intervention, and DTKS decile stay blank/unregistered
+      // unless they were actually supplied or assessed.
+      alamatLengkap: '',
       noHpWa: noHpWa.trim(),
       jenisBantuan: jenisBantuan.trim(),
-      intervensiMental: 'Perlu asesmen lanjutan kesehatan mental ODHIV dan kepatuhan ARV',
-      desil: 2,
+      intervensiMental: '',
+      desil: 0,
       // Never insert stock/demo images as a respondent's identity documents.
       // Empty photo fields remain visibly missing until a genuine upload is supplied.
       fotoDiri,
@@ -135,6 +153,8 @@ export const AsesmenView: React.FC<AsesmenViewProps> = ({
     setFotoDiriName('');
     setFotoKtp('');
     setFotoKtpName('');
+    setKotaDomisili('');
+    setJenisKelamin('');
 
     setTimeout(() => setFormSubmitted(false), 4500);
   };
@@ -300,9 +320,9 @@ export const AsesmenView: React.FC<AsesmenViewProps> = ({
                 <div className="mb-5 p-4 rounded-xl bg-emerald-950/90 border border-emerald-500 text-emerald-200 text-xs flex items-center gap-3">
                   <CheckCircle className="w-5 h-5 text-emerald-400 shrink-0" />
                   <div>
-                    <span className="font-bold">Data Asesmen Berhasil Dikirim!</span>
+                    <span className="font-bold">Data Asesmen Ditambahkan ke Aplikasi</span>
                     <p className="text-[11px] text-emerald-300">
-                      Tersinkronisasi otomatis ke Google Form, Google Spreadsheet, dan Google Drive. Responden baru telah terdaftar di database.
+                      Data responden telah ditambahkan ke daftar SIPANDU. Status penyimpanan cloud ditampilkan terpisah agar aplikasi tidak menyatakan sinkronisasi berhasil sebelum layanan cloud mengonfirmasi.
                     </p>
                   </div>
                 </div>
@@ -341,8 +361,11 @@ export const AsesmenView: React.FC<AsesmenViewProps> = ({
                     <input
                       type="text"
                       maxLength={16}
+                      minLength={16}
+                      inputMode="numeric"
+                      pattern="[0-9]{16}"
                       value={nik}
-                      onChange={(e) => setNik(e.target.value)}
+                      onChange={(e) => setNik(e.target.value.replace(/\D/g, '').slice(0, 16))}
                       placeholder="1271xxxxxxxxxxxx"
                       className="w-full p-2.5 rounded-lg bg-black/60 border border-rose-500/30 text-white text-xs focus:outline-none focus:border-sky-400 font-mono"
                       required
@@ -373,9 +396,11 @@ export const AsesmenView: React.FC<AsesmenViewProps> = ({
                     </label>
                     <select
                       value={jenisKelamin}
-                      onChange={(e) => setJenisKelamin(e.target.value as any)}
+                      onChange={(e) => setJenisKelamin(e.target.value as 'Laki-laki' | 'Perempuan' | '')}
+                      required
                       className="w-full p-2.5 rounded-lg bg-black/60 border border-rose-500/30 text-white text-xs focus:outline-none focus:border-sky-400"
                     >
+                      <option value="">Pilih jenis kelamin responden</option>
                       <option value="Laki-laki">Laki-laki (Hijau Lumut)</option>
                       <option value="Perempuan">Perempuan (Pink)</option>
                     </select>
@@ -389,8 +414,10 @@ export const AsesmenView: React.FC<AsesmenViewProps> = ({
                     <select
                       value={kotaDomisili}
                       onChange={(e) => setKotaDomisili(e.target.value)}
+                      required
                       className="w-full p-2.5 rounded-lg bg-black/60 border border-rose-500/30 text-white text-xs focus:outline-none focus:border-sky-400"
                     >
+                      <option value="">Pilih kota/kabupaten responden</option>
                       <option value="Kota Medan">Kota Medan</option>
                       <option value="Kab. Deli Serdang">Kab. Deli Serdang</option>
                       <option value="Kota Binjai">Kota Binjai</option>
@@ -736,22 +763,28 @@ export const AsesmenView: React.FC<AsesmenViewProps> = ({
                     {ppks.kotaDomisili}
                   </td>
                   <td className="py-3 px-2">
-                    <div className="w-10 h-10 rounded-lg overflow-hidden border border-rose-500/35 mx-auto bg-black">
-                      <img
-                        src={ppks.fotoDiri}
-                        alt="Diri"
-                        className="w-full h-full object-cover"
+                    {ppks.fotoDiri ? (
+                      <PrivateDriveImage
+                        source={ppks.fotoDiri}
+                        alt={`Foto diri ${ppks.namaLengkap}`}
+                        className="mx-auto h-10 w-10 rounded-lg"
+                        objectFit="cover"
                       />
-                    </div>
+                    ) : (
+                      <span className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-white/10 bg-black/30 text-[8px] text-neutral-500">Tidak ada</span>
+                    )}
                   </td>
                   <td className="py-3 px-2">
-                    <div className="w-12 h-8 rounded border border-rose-500/35 overflow-hidden mx-auto bg-black">
-                      <img
-                        src={ppks.fotoKtp}
-                        alt="KTP"
-                        className="w-full h-full object-cover"
+                    {ppks.fotoKtp ? (
+                      <PrivateDriveImage
+                        source={ppks.fotoKtp}
+                        alt={`Foto KTP ${ppks.namaLengkap}`}
+                        className="mx-auto h-8 w-12 rounded"
+                        objectFit="contain"
                       />
-                    </div>
+                    ) : (
+                      <span className="inline-flex h-8 w-12 items-center justify-center rounded border border-white/10 bg-black/30 text-[8px] text-neutral-500">Tidak ada</span>
+                    )}
                   </td>
                   <td className="py-3 px-3 whitespace-nowrap">
                     <button

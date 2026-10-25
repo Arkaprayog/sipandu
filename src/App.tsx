@@ -14,7 +14,7 @@ import { SettingsModal } from './components/SettingsModal';
 import { NotificationsModal } from './components/NotificationsModal';
 import { GoogleWorkspaceModal } from './components/GoogleWorkspaceModal';
 import { onAuthStateChanged, signOut, getIdTokenResult } from 'firebase/auth';
-import { auth, getAccessToken, savePPKSToFirestore, googleLogout } from './lib/firebase';
+import { auth, getAccessToken, savePPKSToFirestore, googleLogout, removeLegacyDemoPPKSFromFirestore } from './lib/firebase';
 import { ensureSIPANDUDatabaseSheet, extractSpreadsheetId, importPPKSFromSpreadsheet, removeLegacyDemoRowsFromSpreadsheet, removeObviousDemoFilesFromDrive, upsertPPKSInSpreadsheet } from './lib/googleWorkspace';
 import { GOOGLE_SIPANDU_RESOURCES } from './lib/googleSIPANDUResources';
 
@@ -59,7 +59,7 @@ function mergePPKSRecords(localRecords: PPKSRecord[], cloudRecords: PPKSRecord[]
   const normalizePhone = (value: string | undefined) => String(value || '').replace(/\D/g, '');
 
   for (const record of cloudRecords) {
-    if (!record || LEGACY_SAMPLE_PPKS_IDS.has(String(record.id || ''))) continue;
+    if (!record || isLegacySamplePPKS(record)) continue;
     const key = recordKey(record);
     let existingKey = key;
     let existing = merged.get(key);
@@ -459,7 +459,7 @@ export default function App() {
         }
       }
 
-      const cleanupKey = 'sipandu_legacy_demo_cleanup_v2:' + [
+      const cleanupKey = 'sipandu_legacy_demo_cleanup_v3:' + [
         ...[...uniqueSheets.keys()].sort(),
         GOOGLE_SIPANDU_RESOURCES.driveFolderId,
       ].join('|');
@@ -632,7 +632,7 @@ export default function App() {
           />
         )}
 
-        {activeTab === 'dokumen' && <DokumenView />}
+        {activeTab === 'dokumen' && <DokumenView profile={profile} />}
       </main>
 
       {/* Bottom Navigation Bar: BERANDA - DATABASE PPKS - ASESMEN - FROM ASESMEN TERINTEGRASI - DOKUMEN */}

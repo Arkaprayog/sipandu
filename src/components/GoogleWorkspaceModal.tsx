@@ -8,6 +8,7 @@ import {
   initAuthListener,
   savePPKSToFirestore,
   fetchPPKSFromFirestore,
+  removeLegacyDemoPPKSFromFirestore,
   testFirestoreConnection,
   testFirebaseAuthConnection,
 } from '../lib/firebase';
@@ -411,6 +412,13 @@ export const GoogleWorkspaceModal: React.FC<GoogleWorkspaceModalProps> = ({
     try {
       if (!(await getAccessToken())) {
         throw new Error('Izin Google API belum tersedia. Pulihkan izin Google terlebih dahulu; pembersihan tidak akan membuka popup login otomatis.');
+      }
+
+      try {
+        const firestoreDeleted = await removeLegacyDemoPPKSFromFirestore();
+        results.push(`Firebase Firestore: ${firestoreDeleted} dokumen PPKS contoh yang dikenali dihapus; data lainnya dipertahankan.`);
+      } catch (error: any) {
+        errors.push(`Firebase Firestore: ${error?.message || String(error)}`);
       }
 
       const candidates = [
@@ -943,7 +951,7 @@ export const GoogleWorkspaceModal: React.FC<GoogleWorkspaceModalProps> = ({
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                   <div>
                     <h5 className="text-rose-100 text-xs font-bold">Bersihkan Data Contoh Lama</h5>
-                    <p className="text-[10px] text-neutral-300">Menghapus baris bertanda ID/nama contoh yang dikenali dari spreadsheet respons/sumber/database dan file yang jelas bertanda demo/contoh dari folder Drive SIPANDU. Data lain dipertahankan.</p>
+                    <p className="text-[10px] text-neutral-300">Menghapus hanya record PPKS contoh yang dikenali di Firestore, baris demo yang jelas dari spreadsheet respons/sumber/database, serta file demo/contoh dari folder Drive SIPANDU. Data responden non-demo dipertahankan.</p>
                   </div>
                   <button
                     type="button"

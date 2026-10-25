@@ -31,8 +31,10 @@ export const BerandaView: React.FC<BerandaViewProps> = ({
   const [lastSyncTime, setLastSyncTime] = useState<string>('');
   const [syncMessage, setSyncMessage] = useState<string>('');
 
-  // Compute live statistics based on ppksList
+  // Compute live statistics based on ppksList; an empty database displays zero, never demo percentages.
   const totalPPKS = ppksList.length;
+  const productiveAgeCount = ppksList.filter((record) => record.usia >= 26 && record.usia <= 45).length;
+  const productiveAgePercent = totalPPKS > 0 ? Math.round((productiveAgeCount / totalPPKS) * 100) : 0;
 
   // Gender breakdown
   const maleCount = ppksList.filter((p) => p.jenisKelamin === 'Laki-laki').length;
@@ -410,7 +412,7 @@ export const BerandaView: React.FC<BerandaViewProps> = ({
               </h3>
             </div>
             <span className="text-xs text-sky-300 font-semibold">
-              Usia Produktif 26-45 Thn (75%)
+              Usia Produktif 26–45 Thn ({productiveAgePercent}%)
             </span>
           </div>
 
