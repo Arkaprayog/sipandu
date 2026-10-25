@@ -236,14 +236,26 @@ export const GoogleWorkspaceModal: React.FC<GoogleWorkspaceModalProps> = ({
   // Firestore Sync All
   const handleSyncFirestore = async () => {
     setLoading(true);
+    setStatusMessage(null);
     let count = 0;
-    for (const p of ppksList) {
-      const ok = await savePPKSToFirestore(p);
-      if (ok) count++;
+    let failed = 0;
+    try {
+      for (const p of ppksList) {
+        const ok = await savePPKSToFirestore(p);
+        if (ok) count++;
+        else failed++;
+      }
+      setFirestoreSyncedCount(count);
+      if (failed > 0) {
+        setStatusMessage({ type: 'error', text: `Sinkronisasi Firestore sebagian gagal: ${count} berhasil, ${failed} gagal. Jalankan “Periksa Koneksi Sekarang” dan periksa Security Rules.` });
+      } else {
+        setStatusMessage({ type: 'success', text: `${count} berkas PPKS berhasil disimpan ke Firebase Firestore.` });
+      }
+    } catch (error: any) {
+      setStatusMessage({ type: 'error', text: `Sinkronisasi Firestore gagal: ${error?.message || String(error)}` });
+    } finally {
+      setLoading(false);
     }
-    setFirestoreSyncedCount(count);
-    setStatusMessage({ type: 'success', text: `${count} berkas PPKS tersimpan ke database Firebase Firestore!` });
-    setLoading(false);
   };
 
   return (
