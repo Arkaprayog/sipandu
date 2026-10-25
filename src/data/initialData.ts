@@ -50,10 +50,20 @@ export const LEGACY_SAMPLE_PPKS_NAMES: ReadonlySet<string> = new Set([
   'aisyah putri tanjung',
 ]);
 
+export function isObviousDemoMarker(value: unknown): boolean {
+  const text = String(value ?? '').trim();
+  if (!text) return false;
+  return /^(?:demo|sample|contoh|dummy|uji[\\s_-]?coba|data[\\s_-]?uji|uji[\\s_-]?data|test(?:[\\s_-]?data)?)(?:$|[\\s:._-])/i.test(text) ||
+    /^(?:PPKS|RESPONDEN|RECORD|DATA|ID)[\\s_-]*(?:DEMO|SAMPLE|CONTOH|DUMMY|TEST|UJI)[\\s_-]*/i.test(text);
+}
+
 export function isLegacySamplePPKS(record: Pick<PPKSRecord, 'id' | 'namaLengkap'> | null | undefined): boolean {
   if (!record) return false;
-  if (LEGACY_SAMPLE_PPKS_IDS.has(String(record.id || '').trim())) return true;
-  return LEGACY_SAMPLE_PPKS_NAMES.has(String(record.namaLengkap || '').trim().toLocaleLowerCase('id-ID'));
+  const id = String(record.id || '').trim();
+  const name = String(record.namaLengkap || '').trim();
+  if (LEGACY_SAMPLE_PPKS_IDS.has(id)) return true;
+  if (LEGACY_SAMPLE_PPKS_NAMES.has(name.toLocaleLowerCase('id-ID'))) return true;
+  return isObviousDemoMarker(id) || isObviousDemoMarker(name);
 }
 
 // Start with an empty database; real PPKS records must be entered or loaded from an authorized source.
