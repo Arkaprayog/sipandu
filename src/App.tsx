@@ -14,7 +14,9 @@ import { SettingsModal } from './components/SettingsModal';
 import { NotificationsModal } from './components/NotificationsModal';
 import { GoogleWorkspaceModal } from './components/GoogleWorkspaceModal';
 import { onAuthStateChanged, signOut, getIdTokenResult } from 'firebase/auth';
-import { auth, savePPKSToFirestore } from './lib/firebase';
+import { auth, getAccessToken, savePPKSToFirestore } from './lib/firebase';
+import { ensureSIPANDUDatabaseSheet, extractSpreadsheetId, upsertPPKSInSpreadsheet } from './lib/googleWorkspace';
+import { GOOGLE_SIPANDU_RESOURCES } from './lib/googleSIPANDUResources';
 
 export default function App() {
   // Firebase Authentication is the source of truth; URL/localStorage flags cannot bypass login.
@@ -136,18 +138,43 @@ export default function App() {
     }
   };
 
-  // Local-first save with an explicit visible result for the Firebase write.
-  const persistRecordToFirestore = async (record: PPKSRecord) => {
+  // A record edit/add is persisted locally first, then pushed to each configured cloud target.
+  // Each service reports independently so partial sync can never be shown as full success.
+  const persistRecordToCloud = async (record: PPKSRecord) => {
+    const completed: string[] = [];
+    const failed: string[] = [];
+
     try {
       await savePPKSToFirestore(record);
-      setCloudSyncNotice({ type: 'success', text: `Record ${record.id} tersimpan di Firebase Firestore.` });
+      completed.push('Firebase Firestore berhasil');
     } catch (error: any) {
-      console.error('PPKS Firestore sync failed:', error);
-      setCloudSyncNotice({
-        type: 'error',
-        text: `Record ${record.id} tersimpan di browser, tetapi belum masuk Firebase: ${error?.message || String(error)}`,
-      });
+      failed.push(`Firebase: ${error?.message || String(error)}`);
     }
+
+    const sheetUrl = settings.googleSpreadsheetUrl?.trim() || '';
+    if (!sheetUrl || sheetUrl.includes('1yA8KemensosODHIVSumut2026_LiveSync')) {
+      failed.push('Google Sheets belum dikonfigurasi. Buat spreadsheet database terpisah di Google Workspace & Cloud Hub.');
+    } else {
+      try {
+        const targetId = extractSpreadsheetId(sheetUrl);
+        if (targetId === GOOGLE_SIPANDU_RESOURCES.responseSpreadsheetId) {
+          throw new Error('Spreadsheet respons Google Form tidak boleh menjadi tujuan database PPKS.');
+        }
+        const accessToken = await getAccessToken();
+        if (!accessToken) {
+          throw new Error('Token Google tidak tersedia pada sesi ini. Buka Google Workspace & Cloud Hub → Koneksi Akun → Pulihkan Izin Google API.');
+        }
+        await ensureSIPANDUDatabaseSheet(sheetUrl);
+        const syncResult = await upsertPPKSInSpreadsheet(sheetUrl, record);
+        completed.push(syncResult === 'inserted' ? 'Google Sheets: baris baru ditambahkan' : 'Google Sheets: baris diperbarui');
+      } catch (error: any) {
+        failed.push(`Google Sheets: ${error?.message || String(error)}`);
+      }
+    }
+
+    const summary = [`Record ${record.id}`, ...completed, ...failed].join(' · ');
+    setCloudSyncNotice({ type: failed.length ? 'error' : 'success', text: summary });
+    if (failed.length) console.error('SIPANDU cloud sync incomplete:', { recordId: record.id, failures: failed });
   };
 
   // Data update handlers
@@ -155,12 +182,12 @@ export default function App() {
     setPpksList((prev) =>
       prev.map((item) => (item.id === updated.id ? updated : item))
     );
-    void persistRecordToFirestore(updated);
+    void persistRecordToCloud(updated);
   };
 
   const handleAddNewPPKS = (newPPKS: PPKSRecord) => {
     setPpksList((prev) => [newPPKS, ...prev]);
-    void persistRecordToFirestore(newPPKS);
+    void persistRecordToCloud(newPPKS);
   };
 
   const handleLoadPPKSFromCloud = (cloudRecords: PPKSRecord[]) => {
