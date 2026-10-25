@@ -19,6 +19,7 @@ import {
 } from 'firebase/auth';
 import firebaseConfig from '../../firebase-applet-config.json';
 import { PPKSRecord } from '../types';
+import { GOOGLE_WORKSPACE_EMAIL } from './googleSIPANDUResources';
 
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
@@ -39,6 +40,7 @@ export const workspaceAuth = getAuth(workspaceApp);
 
 // Configure Google Auth Provider with Workspace scopes
 export const googleAuthProvider = new GoogleAuthProvider();
+googleAuthProvider.setCustomParameters({ login_hint: GOOGLE_WORKSPACE_EMAIL });
 googleAuthProvider.addScope('https://www.googleapis.com/auth/drive');
 googleAuthProvider.addScope('https://www.googleapis.com/auth/drive.file');
 googleAuthProvider.addScope('https://www.googleapis.com/auth/spreadsheets');
@@ -187,6 +189,11 @@ export const googleSignIn = async (): Promise<{
 } | null> => {
   try {
     const result = await signInWithPopup(workspaceAuth, googleAuthProvider);
+    if ((result.user.email || '').toLowerCase() !== GOOGLE_WORKSPACE_EMAIL) {
+      await signOut(workspaceAuth);
+      cacheWorkspaceToken(null);
+      throw new Error(`Sumber data SIPANDU telah dibagikan ke ${GOOGLE_WORKSPACE_EMAIL}. Akun yang dipilih adalah ${result.user.email || 'akun tanpa email'}; pilih akun yang benar lalu ulangi.`);
+    }
     const credential = GoogleAuthProvider.credentialFromResult(result);
     if (!credential?.accessToken) {
       throw new Error('Google berhasil merespons tetapi tidak memberikan access token untuk Drive/Sheets/Forms. Periksa consent screen, scope OAuth, dan API yang diaktifkan.');
@@ -236,8 +243,12 @@ export const invalidateAccessToken = (): void => {
 };
 
 export const googleLogout = async () => {
-  await signOut(workspaceAuth);
-  cacheWorkspaceToken(null);
+  try {
+    await signOut(workspaceAuth);
+  } finally {
+    // Always remove the tab-scoped bearer token, even if signOut encounters an error.
+    cacheWorkspaceToken(null);
+  }
 };
 
 export const initAuthListener = (
