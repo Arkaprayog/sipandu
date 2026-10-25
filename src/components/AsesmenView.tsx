@@ -351,8 +351,10 @@ export const AsesmenView: React.FC<AsesmenViewProps> = ({
                     <input
                       type="text"
                       maxLength={16}
+                      inputMode="numeric"
+                      pattern="[0-9]{16}"
                       value={nik}
-                      onChange={(e) => setNik(e.target.value)}
+                      onChange={(e) => setNik(e.target.value.replace(/\D/g, "").slice(0, 16))}
                       placeholder="1271xxxxxxxxxxxx"
                       className="w-full p-2.5 rounded-lg bg-black/60 border border-rose-500/30 text-white text-xs focus:outline-none focus:border-sky-400 font-mono"
                       required
@@ -383,7 +385,8 @@ export const AsesmenView: React.FC<AsesmenViewProps> = ({
                     </label>
                     <select
                       value={jenisKelamin}
-                      onChange={(e) => setJenisKelamin(e.target.value as any)}
+                      onChange={(e) => setJenisKelamin(e.target.value as 'Laki-laki' | 'Perempuan' | '')}
+                      required
                       className="w-full p-2.5 rounded-lg bg-black/60 border border-rose-500/30 text-white text-xs focus:outline-none focus:border-sky-400"
                     >
                       <option value="" disabled>Pilih jenis kelamin</option>
@@ -400,6 +403,7 @@ export const AsesmenView: React.FC<AsesmenViewProps> = ({
                     <select
                       value={kotaDomisili}
                       onChange={(e) => setKotaDomisili(e.target.value)}
+                      required
                       className="w-full p-2.5 rounded-lg bg-black/60 border border-rose-500/30 text-white text-xs focus:outline-none focus:border-sky-400"
                     >
                       <option value="" disabled>Pilih kabupaten/kota</option>
