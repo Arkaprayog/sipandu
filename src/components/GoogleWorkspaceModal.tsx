@@ -23,6 +23,8 @@ import {
   extractSpreadsheetId,
   createGoogleSpreadsheet,
   fetchFormResponses,
+  removeLegacyDemoRowsFromSpreadsheet,
+  removeObviousDemoFilesFromDrive,
   GoogleDriveFile,
 } from '../lib/googleWorkspace';
 import { GOOGLE_SIPANDU_RESOURCES, GOOGLE_WORKSPACE_EMAIL } from '../lib/googleSIPANDUResources';
@@ -385,12 +387,85 @@ export const GoogleWorkspaceModal: React.FC<GoogleWorkspaceModalProps> = ({
         );
       }
       onLoadPPKSFromCloud(imported.records);
+      const nikStatus = imported.recordsWithNIK === imported.records.length
+        ? `NIK terpetakan: ${imported.recordsWithNIK}/${imported.records.length} responden.`
+        : imported.recordsWithNIK > 0
+          ? `NIK terpetakan: ${imported.recordsWithNIK}/${imported.records.length}; ${imported.recordsMissingNIK} responden belum memiliki NIK terbaca. Kolom yang dikenali: ${imported.nikHeadersFound.join(', ') || 'tidak ditemukan'}.`
+          : `NIK belum terpetakan. Kolom yang dikenali: ${imported.nikHeadersFound.join(', ') || 'tidak ditemukan'}. Periksa judul kolom NIK pada tab sumber.`;
       setStatusMessage({
-        type: 'success',
-        text: `Berhasil memuat ${imported.records.length} data PPKS/Asesmen dari “${imported.spreadsheetTitle}” → tab “${imported.selectedTab}” (${imported.rowsRead} baris dibaca). Data sekarang tersedia di Database PPKS dan From Asesmen Terintegrasi. Sumber tidak diubah.`,
+        type: imported.recordsWithNIK === 0 ? 'error' : 'success',
+        text: `Berhasil memuat ${imported.records.length} data PPKS/Asesmen dari “${imported.spreadsheetTitle}” → tab “${imported.selectedTab}” (${imported.rowsRead} baris dibaca). ${nikStatus} Data tersedia di Database PPKS dan From Asesmen Terintegrasi. Sumber tidak diubah.`,
       });
     } catch (err: any) {
       setStatusMessage({ type: 'error', text: err?.message || String(err) });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCleanKnownDemoData = async () => {
+    setLoading(true);
+    setStatusMessage(null);
+    const results: string[] = [];
+    const errors: string[] = [];
+    try {
+      if (!(await getAccessToken())) {
+        throw new Error('Izin Google API belum tersedia. Pulihkan izin Google terlebih dahulu; pembersihan tidak akan membuka popup login otomatis.');
+      }
+
+      const candidates = [
+        sourceSpreadsheetUrl,
+        settings.googleSpreadsheetSourceUrl || '',
+        settings.googleSpreadsheetUrl || '',
+        GOOGLE_SIPANDU_RESOURCES.responseSpreadsheetUrl,
+      ].filter(Boolean);
+      const uniqueSheets = new Map<string, string>();
+      for (const url of candidates) {
+        try {
+          uniqueSheets.set(extractSpreadsheetId(url), url);
+        } catch {
+          errors.push('Konfigurasi spreadsheet dilewati karena URL/ID tidak valid.');
+        }
+      }
+
+      let totalRowsCleared = 0;
+      for (const [spreadsheetId, url] of uniqueSheets) {
+        try {
+          const cleaned = await removeLegacyDemoRowsFromSpreadsheet(url);
+          totalRowsCleared += cleaned.rowsCleared;
+          results.push(`Google Sheets “${cleaned.spreadsheetTitle}”: ${cleaned.rowsCleared} baris contoh dibersihkan dari ${cleaned.tabsScanned} tab`);
+        } catch (error: any) {
+          errors.push(`Spreadsheet ${spreadsheetId}: ${error?.message || String(error)}`);
+        }
+      }
+
+      try {
+        const drive = await removeObviousDemoFilesFromDrive(GOOGLE_SIPANDU_RESOURCES.driveFolderId);
+        results.push(`Google Drive: ${drive.filesDeleted} file contoh yang dikenali dihapus; ${drive.filesScanned} file diperiksa.`);
+      } catch (error: any) {
+        errors.push(`Google Drive: ${error?.message || String(error)}`);
+      }
+
+      onLoadPPKSFromCloud([]);
+      setSheetRows([]);
+      const cleanupKey = 'sipandu_legacy_demo_cleanup_v1:' + [
+        ...[...uniqueSheets.keys()].sort(),
+        GOOGLE_SIPANDU_RESOURCES.driveFolderId,
+      ].join('|');
+      if (!errors.length) {
+        try { localStorage.setItem(cleanupKey, new Date().toISOString()); } catch { /* optional cache */ }
+      }
+      setStatusMessage({
+        type: errors.length ? 'error' : 'success',
+        text: [
+          `Pembersihan selesai: ${totalRowsCleared} baris contoh dihapus dari Google Sheets.`,
+          ...results,
+          ...(errors.length ? [`Gagal pada ${errors.length} target: ${errors.join(' · ')}`] : []),
+          'Data responden non-demo dipertahankan. Catatan: API Google Forms tidak menyediakan penghapusan respons individual; tindakan ini membersihkan baris spreadsheet dan file Google Drive contoh, bukan daftar respons di dalam Google Form.',
+        ].join(' | '),
+      });
+    } catch (error: any) {
+      setStatusMessage({ type: 'error', text: error?.message || String(error) });
     } finally {
       setLoading(false);
     }
@@ -862,6 +937,23 @@ export const GoogleWorkspaceModal: React.FC<GoogleWorkspaceModalProps> = ({
                 <p className="text-[11px] text-neutral-300">
                   Sinkronisasi baris data PPKS ke lembar kerja spreadsheet secara otomatis.
                 </p>
+              </div>
+
+              <div className="p-3.5 rounded-xl bg-rose-950/30 border border-rose-500/35 space-y-2">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <h5 className="text-rose-100 text-xs font-bold">Bersihkan Data Contoh Lama</h5>
+                    <p className="text-[10px] text-neutral-300">Menghapus baris bertanda ID/nama contoh yang dikenali dari spreadsheet respons/sumber/database dan file yang jelas bertanda demo/contoh dari folder Drive SIPANDU. Data lain dipertahankan.</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleCleanKnownDemoData}
+                    disabled={loading || !token}
+                    className="shrink-0 rounded-lg border border-rose-400/40 bg-rose-800/80 px-3 py-2 text-[11px] font-bold text-white hover:bg-rose-700 disabled:opacity-50"
+                  >
+                    {loading ? 'Membersihkan…' : 'Bersihkan Data Contoh'}
+                  </button>
+                </div>
               </div>
 
               <div className="p-3.5 rounded-xl bg-black/50 border border-sky-500/35 space-y-3">
