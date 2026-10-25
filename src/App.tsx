@@ -488,18 +488,18 @@ export default function App() {
         try {
           const result = await removeLegacyDemoRowsFromSpreadsheet(url);
           rowsCleared += result.rowsCleared;
-          messages.push(\`\${result.spreadsheetTitle}: \${result.rowsCleared} baris contoh dibersihkan dari \${result.tabsScanned} tab\`);
+          messages.push(`${result.spreadsheetTitle}: ${result.rowsCleared} baris contoh dibersihkan dari ${result.tabsScanned} tab`);
         } catch (error) {
-          failures.push(\`Spreadsheet \${spreadsheetId}: \${error instanceof Error ? error.message : String(error)}\`);
+          failures.push(`Spreadsheet ${spreadsheetId}: ${error instanceof Error ? error.message : String(error)}`);
         }
       }
 
       if (active) {
         try {
           const drive = await removeObviousDemoFilesFromDrive(GOOGLE_SIPANDU_RESOURCES.driveFolderId);
-          messages.push(\`Google Drive: \${drive.filesDeleted} file contoh yang dikenali dihapus\`);
+          messages.push(`Google Drive: ${drive.filesDeleted} file contoh yang dikenali dihapus`);
         } catch (error) {
-          failures.push(\`Google Drive: \${error instanceof Error ? error.message : String(error)}\`);
+          failures.push(`Google Drive: ${error instanceof Error ? error.message : String(error)}`);
         }
       }
 
@@ -512,9 +512,9 @@ export default function App() {
       setCloudSyncNotice({
         type: allDone ? 'success' : 'error',
         text: [
-          \`Pembersihan data contoh \${allDone ? 'selesai' : 'sebagian selesai'}: \${rowsCleared} baris contoh dihapus dari Google Sheets.\`,
+          `Pembersihan data contoh ${allDone ? 'selesai' : 'sebagian selesai'}: ${rowsCleared} baris contoh dihapus dari Google Sheets.`,
           ...messages,
-          ...(failures.length ? [\`Target yang belum selesai (\${failures.length}): \${failures.join(' · ')}\`] : []),
+          ...(failures.length ? [`Target yang belum selesai (${failures.length}): ${failures.join(' · ')}`] : []),
           'Data non-demo dipertahankan. Pembersihan ini tidak menghapus respons dari penyimpanan internal Google Forms.',
         ].join(' | '),
       });
