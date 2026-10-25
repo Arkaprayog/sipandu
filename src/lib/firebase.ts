@@ -3,7 +3,10 @@ import {
   getFirestore,
   doc,
   collection,
+  getDoc,
   getDocs,
+  deleteDoc,
+  where,
   setDoc,
   query,
   limit,
@@ -24,6 +27,7 @@ import {
 } from 'firebase/auth';
 import firebaseConfig from '../../firebase-applet-config.json';
 import { PPKSRecord } from '../types';
+import { isLegacySamplePPKS, LEGACY_SAMPLE_PPKS_IDS, LEGACY_SAMPLE_PPKS_NAMES } from '../data/initialData';
 import { GOOGLE_WORKSPACE_EMAIL } from './googleSIPANDUResources';
 
 // Initialize Firebase
@@ -405,6 +409,55 @@ export const initAuthListener = (
     }
   });
 };
+
+/**
+ * Removes only the retired, known sample PPKS documents by exact legacy IDs or
+ * exact legacy names. It deliberately does not scan or download all PPKS PII.
+ * Caller must restrict this operation to owner/supervisor staff roles.
+ */
+export async function removeKnownDemoPPKSDocuments(): Promise<{
+  documentsChecked: number;
+  documentsDeleted: number;
+  deletedDocumentIds: string[];
+}> {
+  const targets = new Map<string, { ref: ReturnType<typeof doc>; id: string }>();
+  let documentsChecked = 0;
+
+  for (const legacyId of LEGACY_SAMPLE_PPKS_IDS) {
+    const reference = doc(db, 'ppks', legacyId);
+    const snapshot = await getDoc(reference);
+    documentsChecked++;
+    if (!snapshot.exists()) continue;
+    const data = snapshot.data() as Partial<PPKSRecord>;
+    const record = { id: String(data.id || snapshot.id), namaLengkap: String(data.namaLengkap || '') };
+    if (isLegacySamplePPKS(record)) targets.set(snapshot.id, { ref: reference, id: snapshot.id });
+  }
+
+  const exactTitleNames = [...LEGACY_SAMPLE_PPKS_NAMES].map((name) =>
+    name.split(/\s+/).map((part) => part ? part[0].toLocaleUpperCase('id-ID') + part.slice(1) : part).join(' ')
+  );
+  if (exactTitleNames.length) {
+    const named = await getDocs(query(
+      collection(db, 'ppks'),
+      where('namaLengkap', 'in', exactTitleNames)
+    ));
+    documentsChecked += named.size;
+    for (const snapshot of named.docs) {
+      const data = snapshot.data() as Partial<PPKSRecord>;
+      const record = { id: String(data.id || snapshot.id), namaLengkap: String(data.namaLengkap || '') };
+      if (isLegacySamplePPKS(record)) {
+        targets.set(snapshot.id, { ref: snapshot.ref, id: snapshot.id });
+      }
+    }
+  }
+
+  await Promise.all([...targets.values()].map(({ ref }) => deleteDoc(ref)));
+  return {
+    documentsChecked,
+    documentsDeleted: targets.size,
+    deletedDocumentIds: [...targets.keys()],
+  };
+}
 
 /**
  * Firestore PPKS Sync Helpers
