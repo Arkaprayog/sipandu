@@ -336,37 +336,36 @@ function isLikelyRespondentNIKHeader(header: string): boolean {
   const normalized = normalizeSheetHeader(header);
   if (!normalized) return false;
 
-  // Do not accidentally display the NIK of a relative, caseworker, assessor,
-  // supervisor, or emergency contact as the respondent's identity.
-  const excludedPrefixes = [
-    'nikayah', 'nikibu', 'nikorangtua', 'nikwali', 'niksuami', 'nikistri',
-    'nikpasangan', 'nikkeluarga', 'nikpendamping', 'nikpetugas', 'nikasesor',
-    'nikasessor', 'niksupervisor', 'nikkontakdarurat', 'nikpenanggungjawab',
+  // A respondent NIK is allowed; NIKs belonging to family members, caseworkers,
+  // assessors, supervisors, or emergency contacts must never be displayed as theirs.
+  const excludedPeople = [
+    'ayah', 'ibu', 'orangtua', 'wali', 'suami', 'istri', 'pasangan',
+    'keluarga', 'pendamping', 'petugas', 'asesor', 'asessor',
+    'supervisor', 'kontakdarurat', 'penanggungjawab',
   ];
-  if (excludedPrefixes.some((prefix) => normalized.startsWith(prefix))) return false;
-  if (/(ayah|ibu|orangtua|wali|suami|istri|pasangan|pendamping|petugas|asesor|asessor|supervisor|penanggungjawab)/.test(normalized)
-      && /(nik|nomorktp|noktp|nomorindukkependudukan)/.test(normalized)) return false;
+  if (excludedPeople.some((word) => normalized.includes(word)) &&
+      /(nik|ktp|kependudukan|identitas)/.test(normalized)) return false;
 
+  // Include Indonesian variants such as "No. NIK/KTP (16 digit)",
+  // "Nomor Identitas Kependudukan", and longer Google Forms question prompts.
   return normalized === 'nik' ||
-    normalized.includes('nikresponden') ||
-    normalized.includes('nikppks') ||
-    normalized.includes('nikcalonresponden') ||
+    normalized.includes('nik') ||
     normalized.includes('nomorindukkependudukan') ||
+    normalized.includes('indukkependudukan') ||
+    normalized.includes('nomorkartuidentitas') ||
     normalized.includes('nomorkartutandapenduduk') ||
     normalized.includes('nomorktp') ||
     normalized.includes('noktp') ||
-    normalized.includes('ktpnik') ||
+    normalized.includes('ktp') ||
     normalized.includes('noidentitas') ||
     normalized.includes('nomoridentitas') ||
+    normalized.includes('identitasresponden') ||
     normalized.includes('nokependudukan') ||
     normalized.includes('noindukkependudukan') ||
-    /^nik[0-9]+digit/.test(normalized) ||
-    normalized.startsWith('nik') ||
-    normalized.endsWith('nik');
+    /^no\d*nik/.test(normalized) ||
+    /^nik\d*digit/.test(normalized);
 }
 
-/** Keeps NIK as a string so leading zeros are preserved. Fifteen-digit numeric
- * values are left-padded once because spreadsheets sometimes dropped a leading 0. */
 function normalizeNIKCellValue(value: string): string {
   const raw = String(value ?? '').trim();
   if (!raw) return '';
