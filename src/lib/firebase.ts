@@ -459,11 +459,13 @@ export async function removeLegacyDemoPPKSFromFirestore(): Promise<number> {
   let deletedCount = 0;
   for (const item of snapshot.docs) {
     const data = item.data() as Partial<PPKSRecord>;
-    const candidate = {
-      id: String(data.id || item.id),
-      namaLengkap: String(data.namaLengkap || ''),
-    };
-    if (!isLegacySamplePPKS(candidate)) continue;
+    const candidateName = String(data.namaLengkap || '');
+    // Check both the stored record ID and the actual Firestore document ID.
+    // Older demo documents may have mismatched or missing data.id fields.
+    const isDemo =
+      isLegacySamplePPKS({ id: item.id, namaLengkap: candidateName }) ||
+      isLegacySamplePPKS({ id: String(data.id || ''), namaLengkap: candidateName });
+    if (!isDemo) continue;
     await deleteDoc(doc(db, 'ppks', item.id));
     deletedCount++;
   }
