@@ -95,7 +95,29 @@ function mergePPKSRecords(localRecords: PPKSRecord[], cloudRecords: PPKSRecord[]
     if (existingKey !== key) merged.delete(existingKey);
     merged.set(key, combined);
   }
-  return Array.from(merged.values());
+  const parseTimestamp = (value: unknown): number => {
+    if (value === null || value === undefined || String(value).trim() === '') return Number.POSITIVE_INFINITY;
+    const raw = String(value).trim();
+    const parsed = Date.parse(raw);
+    if (Number.isFinite(parsed)) return parsed;
+    // Google Forms timestamps often look like "25/10/2026 14.06.16" in Indonesian locales.
+    const match = raw.match(/^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{2,4})(?:[, ]+)(\d{1,2})[:.](\d{2})(?:[:.](\d{2}))?/);
+    if (match) {
+      const year = Number(match[3]) < 100 ? 2000 + Number(match[3]) : Number(match[3]);
+      const valueMs = new Date(year, Number(match[2]) - 1, Number(match[1]), Number(match[4]), Number(match[5]), Number(match[6] || 0)).getTime();
+      if (Number.isFinite(valueMs)) return valueMs;
+    }
+    return Number.POSITIVE_INFINITY;
+  };
+  return Array.from(merged.values()).sort((a, b) => {
+    const timeDiff = parseTimestamp(a.timestamp) - parseTimestamp(b.timestamp);
+    if (Number.isFinite(timeDiff) && timeDiff !== 0) return timeDiff;
+    if (timeDiff === 0) return String(a.id || '').localeCompare(String(b.id || ''));
+    // Rows with missing/unparseable timestamps stay at the end, consistently.
+    return parseTimestamp(a.timestamp) === parseTimestamp(b.timestamp)
+      ? String(a.id || '').localeCompare(String(b.id || ''))
+      : Number.isFinite(parseTimestamp(a.timestamp)) ? -1 : 1;
+  });
 }
 
 function normalizeAppSettings(value: unknown): AppSettings {
