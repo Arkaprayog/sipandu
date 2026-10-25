@@ -1,6 +1,7 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { CheckCircle2, FileText, Printer, RotateCcw, Save, Search } from 'lucide-react';
 import { PPKSRecord } from '../types';
+import { getAccessToken } from '../lib/firebase';
 import '../officialAssessment.css';
 
 type AnswerValue = string | string[];
@@ -213,6 +214,15 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
   const [selectedPPKSId, setSelectedPPKSId] = useState<string>(ppksList[0]?.id || '');
   const [answers, setAnswers] = useState<Record<string, AnswerValue>>(() => answersForRecord(ppksList.find((record) => record.id === selectedPPKSId)));
   const [statusMessage, setStatusMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [printPhotoUrls, setPrintPhotoUrls] = useState<Record<string, string>>({});
+  const [printPhotoErrors, setPrintPhotoErrors] = useState<Record<string, string>>({});
+  const [preparingPrint, setPreparingPrint] = useState(false);
+  const printObjectUrlsRef = useRef<string[]>([]);
+
+  const releasePrintPhotoUrls = () => {
+    printObjectUrlsRef.current.forEach((url) => URL.revokeObjectURL(url));
+    printObjectUrlsRef.current = [];
+  };
 
   useEffect(() => {
     if (ppksList.some((record) => record.id === selectedPPKSId)) return;
@@ -224,6 +234,9 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
   const currentPPKS = useMemo(() => ppksList.find((record) => record.id === selectedPPKSId), [ppksList, selectedPPKSId]);
 
   const choosePPKS = (id: string) => {
+    releasePrintPhotoUrls();
+    setPrintPhotoUrls({});
+    setPrintPhotoErrors({});
     setSelectedPPKSId(id);
     setAnswers(answersForRecord(ppksList.find((record) => record.id === id)));
     setStatusMessage(null);
@@ -274,29 +287,129 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
     setStatusMessage({ type: 'success', text: 'Jawaban Form Asesmen Terintegrasi resmi tersimpan pada data PPKS.' });
   };
 
-  const handlePrint = async () => {
-    const shell = document.querySelector('.official-assessment-shell');
-    const images = shell ? Array.from(shell.querySelectorAll('img')) : [];
-    await Promise.all(images.map((image) => {
-      if (image.complete && image.naturalWidth > 0) return Promise.resolve();
-      return new Promise<void>((resolve) => {
-        let finished = false;
-        const finish = () => {
-          if (finished) return;
-          finished = true;
-          window.clearTimeout(timer);
-          image.removeEventListener('load', finish);
-          image.removeEventListener('error', finish);
-          resolve();
-        };
-        const timer = window.setTimeout(finish, 2500);
-        image.addEventListener('load', finish, { once: true });
-        image.addEventListener('error', finish, { once: true });
-      });
-    }));
-    if (document.fonts?.ready) await document.fonts.ready;
-    window.print();
+  const printablePhotos = [
+    { key: 'fotoDiri', title: 'FOTO DIRI PPKS (CLOSE-UP)', source: currentPPKS?.fotoDiri || '' },
+    { key: 'fotoKtp', title: 'FOTO KTP', source: currentPPKS?.fotoKtp || '' },
+    { key: 'fotoKk', title: 'FOTO KARTU KELUARGA', source: currentPPKS?.fotoKk || '' },
+    { key: 'fotoRumah', title: 'FOTO RUMAH TAMPAK DEPAN', source: currentPPKS?.fotoRumah || '' },
+  ];
+
+  const getDriveFileId = (value: string): string | null => {
+    const trimmed = value.trim();
+    const markdownLink = trimmed.match(/\]\((https?:\/\/[^)]+)\)/);
+    const source = markdownLink?.[1] || trimmed.match(/https?:\/\/[^\s,;]+/i)?.[0] || trimmed;
+    const pathId = source.match(/\/file\/d\/([a-zA-Z0-9_-]+)/);
+    if (pathId) return pathId[1];
+    const queryId = source.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+    if (queryId && /drive\.google\.com|docs\.google\.com/i.test(source)) return queryId[1];
+    if (/^[a-zA-Z0-9_-]{20,}$/.test(source)) return source;
+    return null;
   };
+
+  const resolvePhotoForPrint = async (source: string): Promise<{ url: string; error: string; temporary: boolean }> => {
+    const trimmed = source.trim();
+    if (!trimmed) return { url: '', error: 'Foto belum tersedia di sumber data responden.', temporary: false };
+
+    const fileId = getDriveFileId(trimmed);
+    if (!fileId) {
+      if (/^https?:\/\//i.test(trimmed) || /^data:image\//i.test(trimmed)) {
+        return { url: trimmed, error: '', temporary: false };
+      }
+      return { url: '', error: 'Kolom sumber tidak berisi URL gambar atau ID file Google Drive yang dikenali.', temporary: false };
+    }
+
+    const token = await getAccessToken();
+    if (!token) {
+      return { url: '', error: 'Foto tersimpan di Google Drive privat. Izin Google Workspace perlu dipulihkan sebelum foto dapat dicetak.', temporary: false };
+    }
+    const response = await fetch(
+      `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?alt=media`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+    if (!response.ok) {
+      const payload = await response.json().catch(() => ({}));
+      const message = (payload as { error?: { message?: string } }).error?.message;
+      return { url: '', error: message || `Google Drive tidak dapat membaca foto (HTTP ${response.status}).`, temporary: false };
+    }
+    const blob = await response.blob();
+    if (!blob.type.startsWith('image/')) {
+      return { url: '', error: 'File yang ditautkan dari Drive bukan format gambar yang dapat dicetak.', temporary: false };
+    }
+    const url = URL.createObjectURL(blob);
+    printObjectUrlsRef.current.push(url);
+    return { url, error: '', temporary: true };
+  };
+
+  const handlePrint = async () => {
+    setPreparingPrint(true);
+    setStatusMessage(null);
+    releasePrintPhotoUrls();
+
+    const urls: Record<string, string> = {};
+    const errors: Record<string, string> = {};
+    try {
+      // Always prepare all four photo appendices. Missing files get an explicit
+      // explanation page instead of a blank sheet.
+      await Promise.all(printablePhotos.map(async (photo) => {
+        try {
+          const resolved = await resolvePhotoForPrint(photo.source);
+          if (resolved.url) urls[photo.key] = resolved.url;
+          if (resolved.error) errors[photo.key] = resolved.error;
+        } catch (error) {
+          errors[photo.key] = error instanceof Error ? error.message : String(error);
+        }
+      }));
+
+      setPrintPhotoUrls(urls);
+      setPrintPhotoErrors(errors);
+      // Allow React to render the print appendices before checking their images.
+      await new Promise<void>((resolve) => requestAnimationFrame(() =>
+        requestAnimationFrame(() => resolve())
+      ));
+
+      const shell = document.querySelector('.official-assessment-shell');
+      const images = shell ? Array.from(shell.querySelectorAll('img')) : [];
+      await Promise.all(images.map((image) => {
+        if (image.complete && image.naturalWidth > 0) return Promise.resolve();
+        return new Promise<void>((resolve) => {
+          let finished = false;
+          const finish = () => {
+            if (finished) return;
+            finished = true;
+            window.clearTimeout(timer);
+            image.removeEventListener('load', finish);
+            image.removeEventListener('error', finish);
+            resolve();
+          };
+          const timer = window.setTimeout(finish, 3500);
+          image.addEventListener('load', finish, { once: true });
+          image.addEventListener('error', finish, { once: true });
+        });
+      }));
+      if (document.fonts?.ready) await document.fonts.ready;
+      setPreparingPrint(false);
+      window.print();
+    } catch (error) {
+      setPreparingPrint(false);
+      setStatusMessage({
+        type: 'error',
+        text: `Persiapan cetak tidak selesai: ${error instanceof Error ? error.message : String(error)}. Coba cetak kembali.`,
+      });
+    }
+  };
+
+  useEffect(() => {
+    const cleanup = () => {
+      releasePrintPhotoUrls();
+      setPrintPhotoUrls({});
+      setPrintPhotoErrors({});
+    };
+    window.addEventListener('afterprint', cleanup);
+    return () => {
+      window.removeEventListener('afterprint', cleanup);
+      releasePrintPhotoUrls();
+    };
+  }, []);
 
   const renderAnswer = (item: OfficialField) => {
     const value = answers[item.key] ?? (item.key === 'q25' ? '-' : '');
@@ -381,8 +494,8 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
           <button type="button" onClick={handleSave} disabled={!currentPPKS} className="inline-flex items-center gap-2 rounded-lg bg-emerald-700 px-4 py-2 text-xs font-bold text-white disabled:opacity-50">
             <Save className="h-4 w-4" /> Simpan Form
           </button>
-          <button type="button" onClick={() => { void handlePrint(); }} className="inline-flex items-center gap-2 rounded-lg border border-sky-400/40 bg-sky-950/50 px-4 py-2 text-xs font-bold text-white">
-            <Printer className="h-4 w-4" /> Cetak / Simpan PDF
+          <button type="button" onClick={() => { void handlePrint(); }} disabled={preparingPrint} className="inline-flex items-center gap-2 rounded-lg border border-sky-400/40 bg-sky-950/50 px-4 py-2 text-xs font-bold text-white disabled:opacity-60">
+            <Printer className="h-4 w-4" /> {preparingPrint ? 'Menyiapkan 10 halaman…' : 'Cetak / Simpan PDF'}
           </button>
           <button type="button" onClick={handleReset} className="inline-flex items-center gap-2 rounded-lg border border-rose-400/40 bg-rose-950/40 px-4 py-2 text-xs font-bold text-white">
             <RotateCcw className="h-4 w-4" /> Kosongkan Form
@@ -469,6 +582,36 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
               <div className="official-signature"><div>Petugas</div><div className="official-signature-line">( ........................................ )</div></div>
             </>
           )}
+        </section>
+      ))}
+
+      {currentPPKS && printablePhotos.map((photo, index) => (
+        <section className="official-page official-photo-appendix" key={photo.key} aria-label={photo.title}>
+          <div className="official-photo-appendix-heading">
+            <h2>{photo.title}</h2>
+            <p>Form Asesmen Terintegrasi · Lampiran {index + 7} dari 10</p>
+            <div className="official-photo-respondent">
+              <span>Nama PPKS: <strong>{currentPPKS.namaLengkap || '-'}</strong></span>
+              <span>NIK: <strong>{currentPPKS.nik || 'Belum terpetakan'}</strong></span>
+            </div>
+          </div>
+          <div className="official-photo-print-frame">
+            {printPhotoUrls[photo.key] ? (
+              <img
+                src={printPhotoUrls[photo.key]}
+                alt={`${photo.title} — ${currentPPKS.namaLengkap}`}
+                onError={() => setPrintPhotoErrors((current) => ({
+                  ...current,
+                  [photo.key]: 'Gambar tidak dapat dimuat. Periksa file sumber dan izin berbagi Google Drive.',
+                }))}
+              />
+            ) : (
+              <div className="official-photo-missing">
+                <strong>{photo.title}</strong>
+                <span>{printPhotoErrors[photo.key] || 'Foto belum tersedia. Halaman lampiran ini sengaja menampilkan keterangan agar hasil cetak tidak kosong.'}</span>
+              </div>
+            )}
+          </div>
         </section>
       ))}
     </div>
