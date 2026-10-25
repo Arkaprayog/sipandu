@@ -18,6 +18,8 @@ export interface PPKSRecord {
   statusAsesmen: 'Tahap Awal' | 'Lanjutan' | 'Terintegrasi' | 'Selesai';
   googleFormSync?: boolean;
   integratedForm?: IntegratedFormData;
+  /** Answers keyed to the official Form Asesmen Terintegrasi PDF questions (q1..q91). */
+  officialAssessment?: Record<string, string | string[]>;
 }
 
 export interface IntegratedFormData {
