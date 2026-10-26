@@ -1,7 +1,7 @@
 import { getAccessToken, invalidateAccessToken } from './firebase';
 import { IntegratedFormData, PPKSRecord } from '../types';
 import { normalizeExactNumericNIK } from './nikNumeric';
-import { sortPPKSRecordsByTimestamp } from './ppksData';
+import { deduplicatePPKSRecords, sortPPKSRecordsByTimestamp } from './ppksData';
 import { isLegacySamplePPKS, isObviousDemoMarker, LEGACY_SAMPLE_PPKS_IDS, LEGACY_SAMPLE_PPKS_NAMES } from '../data/initialData';
 
 export interface GoogleDriveFile {
@@ -746,6 +746,7 @@ export async function importPPKSFromSpreadsheet(
   rowsWithoutRecognizedName: number;
   recordsBeforeDemoFilter: number;
   sampleRecordsFiltered: number;
+  duplicateRowsCollapsed: number;
   records: PPKSRecord[];
   recordsWithNIK: number;
   recordsMissingNIK: number;
@@ -775,8 +776,10 @@ export async function importPPKSFromSpreadsheet(
   const dataRows = rows.slice(1);
   const sourceRowsWithName = dataRows.filter((row) => Boolean(readRespondentName(headers, row))).length;
   const allMappedRecords = mapRowsToPPKSRecords(rows);
-  const records = allMappedRecords.filter((record) => !isLegacySamplePPKS(record));
-  const sampleRecordsFiltered = allMappedRecords.length - records.length;
+  const recordsAfterSampleFilter = allMappedRecords.filter((record) => !isLegacySamplePPKS(record));
+  const records = sortPPKSRecordsByTimestamp(deduplicatePPKSRecords(recordsAfterSampleFilter));
+  const sampleRecordsFiltered = allMappedRecords.length - recordsAfterSampleFilter.length;
+  const duplicateRowsCollapsed = recordsAfterSampleFilter.length - records.length;
   const nikHeadersFound = headers.filter((header) => isLikelyRespondentNIKHeader(header)).map((header) => header.trim());
   const recordsWithNIK = records.filter((record) => Boolean(String(record.nik || '').trim())).length;
   // Diagnose the source headers and value quality without returning any actual NIK values.
@@ -804,6 +807,7 @@ export async function importPPKSFromSpreadsheet(
     rowsWithoutRecognizedName: Math.max(0, dataRows.length - sourceRowsWithName),
     recordsBeforeDemoFilter: allMappedRecords.length,
     sampleRecordsFiltered,
+    duplicateRowsCollapsed,
     records,
     recordsWithNIK,
     recordsMissingNIK: records.length - recordsWithNIK,
