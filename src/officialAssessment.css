@@ -205,3 +205,127 @@
   .official-option input { width:9px; height:9px; }
   input,textarea,select { print-color-adjust:exact; -webkit-print-color-adjust:exact; }
 }
+
+/*
+ * Mobile-safe PDF rendering.
+ * The component builds a temporary, isolated print root as a direct child of
+ * <body>. Hiding the application root cannot accidentally hide the assessment
+ * or leave the print engine with only empty pages when the React layout changes.
+ */
+@media print {
+  @page { size: A4 portrait; margin: 8mm; }
+
+  html,
+  body {
+    display: block !important;
+    width: 100% !important;
+    height: auto !important;
+    min-height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: visible !important;
+    background: #fff !important;
+  }
+
+  body.official-assessment-printing > :not(#sipandu-official-print-root) {
+    display: none !important;
+  }
+
+  body.official-assessment-printing > #sipandu-official-print-root {
+    display: block !important;
+    position: static !important;
+    inset: auto !important;
+    width: 100% !important;
+    max-width: none !important;
+    height: auto !important;
+    min-height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: visible !important;
+    visibility: visible !important;
+    background: #fff !important;
+  }
+
+  body.official-assessment-printing #sipandu-official-print-root .official-assessment-shell,
+  body.official-assessment-printing #sipandu-official-print-root .official-assessment-shell * {
+    visibility: visible !important;
+  }
+
+  body.official-assessment-printing #sipandu-official-print-root .official-assessment-shell {
+    display: block !important;
+    position: static !important;
+    width: 100% !important;
+    max-width: none !important;
+    height: auto !important;
+    min-height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: visible !important;
+    box-shadow: none !important;
+    background: #fff !important;
+    color: #111 !important;
+  }
+
+  body.official-assessment-printing #sipandu-official-print-root .official-toolbar,
+  body.official-assessment-printing #sipandu-official-print-root .official-status {
+    display: none !important;
+  }
+
+  body.official-assessment-printing #sipandu-official-print-root .official-page {
+    display: block !important;
+    position: relative !important;
+    inset: auto !important;
+    float: none !important;
+    box-sizing: border-box !important;
+    width: 100% !important;
+    max-width: none !important;
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: visible !important;
+    box-shadow: none !important;
+    background: #fff !important;
+    color: #111 !important;
+    page-break-after: always !important;
+    break-after: page !important;
+  }
+
+  body.official-assessment-printing #sipandu-official-print-root .official-page:last-child {
+    page-break-after: auto !important;
+    break-after: auto !important;
+  }
+
+  body.official-assessment-printing #sipandu-official-print-root .official-photo-appendix {
+    display: flex !important;
+    flex-direction: column !important;
+    position: relative !important;
+    height: 281mm !important;
+    min-height: 281mm !important;
+    max-height: 281mm !important;
+    overflow: hidden !important;
+    page-break-after: always !important;
+    break-after: page !important;
+  }
+
+  body.official-assessment-printing #sipandu-official-print-root .official-photo-appendix:last-child {
+    page-break-after: auto !important;
+    break-after: auto !important;
+  }
+
+  body.official-assessment-printing #sipandu-official-print-root .official-photo-print-frame {
+    flex: 1 1 auto !important;
+    width: 100% !important;
+    height: 230mm !important;
+    min-height: 230mm !important;
+    max-height: 230mm !important;
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+
+  body.official-assessment-printing #sipandu-official-print-root img {
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+}
