@@ -1,0 +1,9 @@
+{
+  "appId": "id.my.sipandu.odhiv",
+  "appName": "SIPANDU ODHIV",
+  "webDir": "dist",
+  "bundledWebRuntime": false,
+  "android": {
+    "allowMixedContent": false
+  }
+}
