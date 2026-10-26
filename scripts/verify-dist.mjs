@@ -39,7 +39,7 @@ for (const reference of [...scriptRefs, ...cssRefs]) {
 // Vite can emit dynamic imports using quote characters or a template literal.
 const assetDirectory = path.join(dist, 'assets');
 if (fs.existsSync(assetDirectory)) {
-  const splitAppModules = fs.readdirSync(assetDirectory).filter((name) => /^App-[^.]+\\.js$/i.test(name));
+  const splitAppModules = fs.readdirSync(assetDirectory).filter((name) => name.startsWith('App-') && name.endsWith('.js'));
   if (splitAppModules.length) {
     fail('Aplikasi utama terpisah menjadi chunk App-[hash].js; bundel aplikasi harus ikut entry agar tidak gagal dimuat pada domain khusus.');
   }
