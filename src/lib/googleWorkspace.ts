@@ -2,7 +2,9 @@ import { getAccessToken, invalidateAccessToken, refreshWorkspaceAccessToken } fr
 import { IntegratedFormData, PPKSRecord } from '../types';
 import { normalizeExactNumericNIK } from './nikNumeric';
 import { deduplicatePPKSRecords, sortPPKSRecordsByTimestamp } from './ppksData';
-import { readPPKSPhotoSourceByKind } from './photoSources';
+import { classifyPPKSPhotoHeader, readPPKSPhotoSourceByKind } from './photoSources';
+import { googleDriveViewUrl, matchFormPhotoResponseForPPKS, FormPhotoResponseCandidate } from './formPhotoRecovery';
+import { GOOGLE_SIPANDU_RESOURCES } from './googleSIPANDUResources';
 import { isLegacySamplePPKS, isObviousDemoMarker, LEGACY_SAMPLE_PPKS_IDS, LEGACY_SAMPLE_PPKS_NAMES } from '../data/initialData';
 
 export interface GoogleDriveFile {
@@ -18,7 +20,10 @@ export interface GoogleFormResponse {
   responseId: string;
   createTime: string;
   lastSubmittedTime?: string;
-  answers: Record<string, { textAnswers?: { answers: { value: string }[] } }>;
+  answers: Record<string, {
+    textAnswers?: { answers: { value: string }[] };
+    fileUploadAnswers?: { answers: { fileId: string; fileName?: string; mimeType?: string }[] };
+  }>;
 }
 
 function requireToken(token: string | null): string {
@@ -763,6 +768,109 @@ function mapRowsToPPKSRecords(rows: string[][]): PPKSRecord[] {
     records.push(sourceRecord);
   });
   return sortPPKSRecordsByTimestamp(records);
+}
+
+interface GoogleFormPhotoMetadata {
+  items?: Array<{
+    title?: string;
+    questionItem?: {
+      question?: {
+        questionId?: string;
+        fileUploadQuestion?: Record<string, unknown>;
+      };
+    };
+  }>;
+}
+
+/**
+ * If the linked response Sheet did not expose Drive hyperlinks in photo cells,
+ * recover file IDs straight from Google Forms' fileUploadAnswers. This fallback
+ * runs only for SIPANDU's verified response spreadsheet and only when at least
+ * one photo field is missing; a conservative name/timestamp match prevents
+ * assigning another respondent's attachment.
+ */
+async function recoverPhotosFromGoogleForms(
+  records: PPKSRecord[],
+  formId: string,
+): Promise<{ records: PPKSRecord[]; linksRecovered: number }> {
+  const missingPhotos = records.some((record) =>
+    !record.fotoDiri || !record.fotoKtp || !record.fotoKk || !record.fotoRumah
+  );
+  if (!missingPhotos || !records.length) return { records, linksRecovered: 0 };
+
+  const [form, responses] = await Promise.all([
+    googleJson<GoogleFormPhotoMetadata>(`https://forms.googleapis.com/v1/forms/${extractFormId(formId)}`),
+    fetchFormResponses(formId),
+  ]);
+
+  const kindByQuestionId = new Map<string, ReturnType<typeof classifyPPKSPhotoHeader>>();
+  const nameQuestionIds = new Set<string>();
+  const questionTitles = new Map<string, string>();
+  for (const item of form.items || []) {
+    const question = item.questionItem?.question;
+    const questionId = String(question?.questionId || '').trim();
+    const title = String(item.title || '').trim();
+    if (!questionId || !title) continue;
+    questionTitles.set(questionId, title);
+    if (question?.fileUploadQuestion) {
+      const kind = classifyPPKSPhotoHeader(title);
+      if (kind) kindByQuestionId.set(questionId, kind);
+    }
+    const normalizedTitle = normalizeSheetHeader(title);
+    if (
+      /nama/.test(normalizedTitle) &&
+      !/(asesor|asessor|petugas|pendamping|supervisor|ayah|ibu|wali|pasangan|suami|istri|kontakdarurat|penanggungjawab)/.test(normalizedTitle)
+    ) {
+      nameQuestionIds.add(questionId);
+    }
+  }
+
+  const candidates: FormPhotoResponseCandidate[] = responses.map((response) => {
+    const photos: FormPhotoResponseCandidate['photos'] = {};
+    let respondentName = '';
+    for (const [questionId, answer] of Object.entries(response.answers || {})) {
+      const title = questionTitles.get(questionId) || '';
+      if (nameQuestionIds.has(questionId) && !respondentName) {
+        respondentName = (answer.textAnswers?.answers || [])
+          .map((entry) => String(entry.value || '').trim())
+          .find(Boolean) || '';
+      }
+      const kind = kindByQuestionId.get(questionId);
+      if (!kind || photos[kind]) continue;
+      const file = (answer.fileUploadAnswers?.answers || []).find((entry) => entry.fileId);
+      if (file?.fileId) photos[kind] = googleDriveViewUrl(file.fileId);
+      // Keep title referenced here to make it explicit that only classified upload
+      // question IDs (not arbitrary file answers) can map into a photo field.
+      void title;
+    }
+    return {
+      responseId: response.responseId,
+      timestamp: response.createTime || response.lastSubmittedTime || '',
+      respondentName,
+      photos,
+    };
+  }).filter((candidate) => Object.values(candidate.photos).some(Boolean));
+
+  if (!candidates.length) return { records, linksRecovered: 0 };
+  let linksRecovered = 0;
+  const enriched = records.map((record) => {
+    if (record.fotoDiri && record.fotoKtp && record.fotoKk && record.fotoRumah) return record;
+    const match = matchFormPhotoResponseForPPKS(record.namaLengkap, record.timestamp, candidates);
+    if (!match) return record;
+    const updated: PPKSRecord = {
+      ...record,
+      fotoDiri: record.fotoDiri || match.photos.diri || '',
+      fotoKtp: record.fotoKtp || match.photos.ktp || '',
+      fotoKk: record.fotoKk || match.photos.kk || '',
+      fotoRumah: record.fotoRumah || match.photos.rumah || '',
+    };
+    if (!record.fotoDiri && updated.fotoDiri) linksRecovered++;
+    if (!record.fotoKtp && updated.fotoKtp) linksRecovered++;
+    if (!record.fotoKk && updated.fotoKk) linksRecovered++;
+    if (!record.fotoRumah && updated.fotoRumah) linksRecovered++;
+    return updated;
+  });
+  return { records: enriched, linksRecovered };
 }
 
 /** Imports respondent records from an authorized spreadsheet without writing to the source. */
