@@ -5,8 +5,10 @@ import { CameraCaptureModal } from './CameraCaptureModal';
 import { PrivateDriveImage } from './PrivateDriveImage';
 import { compressImageForLocalStorage } from '../lib/imageCompression';
 import {
+  buildGoogleFormsPrefilledUrl,
   buildWhatsAppMessage,
   createWhatsAppLink,
+  toGoogleFormsRespondentUrl,
 } from '../utils/helpers';
 import {
   FileText,
@@ -61,6 +63,9 @@ export const AsesmenView: React.FC<AsesmenViewProps> = ({
   const [copyFeedback, setCopyFeedback] = useState<string>('');
   const [photoUploadError, setPhotoUploadError] = useState('');
   const [isCompressingPhoto, setIsCompressingPhoto] = useState(false);
+
+  // Always show respondents the public fill-in URL, never the editor URL.
+  const stageOneRespondentUrl = toGoogleFormsRespondentUrl(settings.googleFormTahapAwalUrl);
 
   const handleFileUpload = async (
     e: React.ChangeEvent<HTMLInputElement>,
@@ -157,7 +162,7 @@ export const AsesmenView: React.FC<AsesmenViewProps> = ({
       fotoDiri,
       fotoKtp,
       statusAsesmen: 'Tahap Awal',
-      googleFormSync: true,
+      // This staff quick-entry form is not a Google Forms response; the separate form link above is.
     };
 
     onAddNewPPKS(newPPKS);
@@ -186,15 +191,29 @@ export const AsesmenView: React.FC<AsesmenViewProps> = ({
   };
 
   const handleSendWA = (ppks: PPKSRecord) => {
+    try {
+      // Do not open WhatsApp with a generic or stage-one form link if the
+      // unique stage-two prefill is not fully configured.
+      buildGoogleFormsPrefilledUrl(
+        settings.googleFormTahapLanjutanUrl,
+        settings.googleFormTahapLanjutanIdEntry,
+        ppks.id
+      );
+    } catch (error) {
+      alert(error instanceof Error ? error.message + '\\n\\nBuka Pengaturan Integrasi Google & WhatsApp untuk melengkapi URL dan nomor entry formulir lanjutan.' : String(error));
+      return;
+    }
+
     const message = buildWhatsAppMessage(ppks, {
       senderName: settings.senderName,
       senderRole: settings.senderRole,
       senderUnit: settings.senderUnit,
-      googleFormTahapAwalUrl: settings.googleFormTahapAwalUrl,
+      googleFormTahapLanjutanUrl: settings.googleFormTahapLanjutanUrl,
+      googleFormTahapLanjutanIdEntry: settings.googleFormTahapLanjutanIdEntry,
       googleFormKesehatanMentalUrl: settings.googleFormKesehatanMentalUrl,
     });
     const link = createWhatsAppLink(ppks.noHpWa, message);
-    window.open(link, '_blank');
+    window.open(link, '_blank', 'noopener,noreferrer');
   };
 
   return (
@@ -289,13 +308,13 @@ export const AsesmenView: React.FC<AsesmenViewProps> = ({
                   <input
                     type="text"
                     readOnly
-                    value={settings.googleFormTahapAwalUrl}
+                    value={stageOneRespondentUrl}
                     className="flex-1 bg-transparent text-xs text-sky-200 font-mono focus:outline-none px-2 select-all"
                   />
                   <button
                     type="button"
                     onClick={() =>
-                      handleCopyLink(settings.googleFormTahapAwalUrl, 'Link Tahap Awal')
+                      handleCopyLink(stageOneRespondentUrl, 'Link Tahap Awal')
                     }
                     className="px-3 py-1.5 rounded-lg bg-emerald-800/80 hover:bg-emerald-700 text-white text-xs font-semibold flex items-center gap-1 cursor-pointer"
                   >
@@ -303,7 +322,7 @@ export const AsesmenView: React.FC<AsesmenViewProps> = ({
                     <span>Salin</span>
                   </button>
                   <a
-                    href={settings.googleFormTahapAwalUrl}
+                    href={stageOneRespondentUrl}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="p-1.5 rounded-lg bg-black/40 hover:bg-black/60 text-sky-300"
@@ -322,7 +341,7 @@ export const AsesmenView: React.FC<AsesmenViewProps> = ({
               {/* Barcode/QR Code with Kemensos logo inside */}
               <div className="flex flex-col items-center">
                 <KemensosQRCode
-                  value={settings.googleFormTahapAwalUrl}
+                  value={stageOneRespondentUrl}
                   size={190}
                   label="Scan Barcode Asesmen Tahap Awal"
                   downloadFileName="barcode-asesmen-tahap-awal.png"
@@ -590,7 +609,7 @@ export const AsesmenView: React.FC<AsesmenViewProps> = ({
                 <div className="p-2.5 rounded-lg bg-emerald-950/50 border border-emerald-500/30 flex items-center gap-2 text-[11px] text-emerald-200">
                   <CloudCheck className="w-4 h-4 text-emerald-400 shrink-0" />
                   <span>
-                    (ASESMEN TAHAP AWAL INI TERINTEGRASI DENGAN GOOGLE FORM, GOOGLE SPREADSHEET, GOOGLE DRIVE)
+                    Responden mengisi Google Form resmi melalui tautan di atas. Input cepat petugas ini dicatat ke database SIPANDU/Firebase dan spreadsheet database terpisah bila dikonfigurasi; isian di sini tidak dikirim menjadi respons Google Forms.
                   </span>
                 </div>
 
@@ -630,14 +649,14 @@ export const AsesmenView: React.FC<AsesmenViewProps> = ({
               <input
                 type="text"
                 readOnly
-                value={settings.googleFormTahapAwalUrl}
+                value={stageOneRespondentUrl}
                 className="w-full sm:flex-1 bg-transparent text-xs text-sky-200 font-mono focus:outline-none px-2 select-all truncate"
               />
               <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
                 <button
                   type="button"
                   onClick={() =>
-                    handleCopyLink(settings.googleFormTahapAwalUrl, 'Link Google Form')
+                    handleCopyLink(stageOneRespondentUrl, 'Link Google Form')
                   }
                   className="px-3 py-1.5 rounded-lg bg-emerald-800 hover:bg-emerald-700 text-white text-xs font-semibold flex items-center gap-1 cursor-pointer"
                 >
