@@ -202,9 +202,16 @@ function answersForRecord(record?: PPKSRecord): Record<string, AnswerValue> {
   // Old manually saved forms wrote all q1..q91 keys; migrate those only when the
   // record is still marked Terintegrasi. New saves always use the dedicated field.
   const legacyKeys = Array.from({ length: 91 }, (_, index) => 'q' + (index + 1));
-  const legacyManualAssessment = record?.statusAsesmen === 'Terintegrasi' &&
-    record.officialAssessment &&
-    legacyKeys.every((key) => Object.prototype.hasOwnProperty.call(record.officialAssessment, key))
+  const legacyMarkers = [
+    'metaSatker',
+    'metaYear',
+    'metaSequence',
+    'kesimpulanResumeKasus',
+    'rekomendasiCatatanPetugas',
+  ];
+  const legacyManualAssessment = record?.officialAssessment &&
+    legacyKeys.every((key) => Object.prototype.hasOwnProperty.call(record.officialAssessment, key)) &&
+    legacyMarkers.every((key) => Object.prototype.hasOwnProperty.call(record.officialAssessment, key))
     ? record.officialAssessment
     : undefined;
   const savedAssessment = record?.formAsesmenTerintegrasi || legacyManualAssessment;
