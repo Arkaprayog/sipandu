@@ -41,6 +41,9 @@ export function isLikelyRespondentNIKHeader(header: string): boolean {
     'nomoridentitas', 'noidentitas', 'identitasresponden', 'nomorindukpenduduk', 'noindukkependudukanresponden', 'niksesuaikartuidentitas', 'niksesuaiktpresponden',
     'niksesuaiktp', 'nomorindukkependudukanresponden',
     'nationalid', 'nationalidentitynumber', 'identitynumber',
+    'noidentitasppks', 'nomoridentitasppks', 'nomoridentitaskependudukan',
+    'nomorindukkependudukan(16digit)', 'nik/ktp', 'no.ktp/nik', 'no.ktpnik',
+    'niksesuaidenganktp', 'nomorindukkependudukan(nik)', 'nomoridentitas(nik)',
   ];
   return identityTokens.some((token) => normalized.includes(token)) ||
     normalized === 'ktp';
@@ -97,6 +100,8 @@ export function readNIKFromSheetRow(headers: string[], row: string[]): string {
     if (normalized.includes('nik')) points += 35;
     if (normalized.includes('ktp')) points += 20;
     if (normalized.includes('nomorindukkependudukan') || normalized.includes('noinduk')) points += 15;
+    if (normalized.includes('identitas') || normalized.includes('kependudukan')) points += 10;
+    if (/^(nik|nomorktp|noktp|nomorindukkependudukan|nikresponden|nikppks)$/.test(normalized)) points += 25;
     if (normalized.length > 100) points -= 10;
     return points;
   };
