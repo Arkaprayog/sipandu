@@ -112,7 +112,7 @@ async function showSystemNotification(item: RespondentNotification, uid: string)
   if (getRespondentNotificationPermission() !== 'granted') return;
 
   const basePath = import.meta.env.BASE_URL || './';
-  const options: NotificationOptions = {
+  const options: NotificationOptions & { vibrate?: number[] } = {
     body: item.body,
     icon: `${basePath}uploads/App%20Icon%20Picture.png`,
     badge: `${basePath}uploads/App%20Icon%20Picture.png`,
