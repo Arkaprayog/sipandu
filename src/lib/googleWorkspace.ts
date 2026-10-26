@@ -95,9 +95,9 @@ export async function uploadPPKSPhotoToDrive(
   if (!file.type.startsWith('image/')) throw new Error('Berkas harus berupa gambar.');
   if (file.size > 12 * 1024 * 1024) throw new Error('Ukuran foto maksimal 12 MB.');
   const token = requireToken(await getAccessToken());
-  const safeName = options.respondentName.replace(/[^\\p{L}\\p{N} _.-]/gu, '').trim().slice(0, 70) || 'PPKS';
+  const safeName = options.respondentName.replace(/[^\p{L}\p{N} _.-]/gu, '').trim().slice(0, 70) || 'PPKS';
   const photoLabel = { diri: 'Foto-Diri', ktp: 'Foto-KTP', kk: 'Foto-KK', rumah: 'Foto-Rumah' }[options.photoKind];
-  const fileName = `SIPANDU_${safeName}_${photoLabel}_${options.respondentId}_${Date.now()}${file.name.match(/\\.[a-zA-Z0-9]{2,5}$/)?.[0] || '.jpg'}`;
+  const fileName = `SIPANDU_${safeName}_${photoLabel}_${options.respondentId}_${Date.now()}${file.name.match(/\.[a-zA-Z0-9]{2,5}$/)?.[0] || '.jpg'}`;
   const boundary = `sipandu_upload_${Date.now()}`;
   const metadata = JSON.stringify({
     name: fileName,
@@ -106,9 +106,9 @@ export async function uploadPPKSPhotoToDrive(
     description: `Foto PPKS ${options.respondentName}; ID SIPANDU ${options.respondentId}; kategori ${photoLabel}`,
   });
   const body = new Blob([
-    `--${boundary}\\r\\nContent-Type: application/json; charset=UTF-8\\r\\n\\r\\n${metadata}\\r\\n--${boundary}\\r\\nContent-Type: ${file.type}\\r\\n\\r\\n`,
+    `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${metadata}\r\n--${boundary}\r\nContent-Type: ${file.type}\r\n\r\n`,
     await file.arrayBuffer(),
-    `\\r\\n--${boundary}--`,
+    `\r\n--${boundary}--`,
   ]);
   const response = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,webViewLink', {
     method: 'POST',
