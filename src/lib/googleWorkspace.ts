@@ -251,11 +251,18 @@ export async function readSpreadsheetRichData(
 
   return rowData.map((row, rowIndex) => (row.values || []).map((cell, columnIndex) => {
     const runLink = cell.textFormatRuns?.find((run) => run.format?.link?.uri)?.format?.link?.uri;
+    // Prefer Sheets' displayed value: numeric NIK cells may be formatted
+    // with all digits even when JavaScript's number conversion would use
+    // scientific notation. Text cells retain their exact entered value.
     const displayValue = String(
       cell.userEnteredValue?.stringValue ??
-      cell.effectiveValue?.stringValue ??
       cell.formattedValue ??
-      ''
+      cell.effectiveValue?.stringValue ??
+      (typeof cell.userEnteredValue?.numberValue === 'number'
+        ? String(cell.userEnteredValue.numberValue)
+        : typeof cell.effectiveValue?.numberValue === 'number'
+          ? String(cell.effectiveValue.numberValue)
+          : '')
     );
     const header = headers[columnIndex] || '';
     const isFileOrPhotoColumn = /(foto|photo|gambar|image|upload|unggah|lampiran|scan|dokumen|berkas|file|tautan|linkdrive)/.test(header);
