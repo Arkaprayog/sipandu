@@ -75,10 +75,21 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
       <img
         aria-hidden="true"
         alt=""
-        src={publicAssetUrl('Wallpaper Background Landingpage.jpg')}
+        src={publicAssetUrl('Wallpaper Background Landingpage.webp')}
         loading="eager"
         fetchPriority="high"
-        onError={(event) => { event.currentTarget.style.display = 'none'; }}
+        decoding="async"
+        onError={(event) => {
+          const image = event.currentTarget;
+          // The compressed WebP is the normal path; keep the original JPEG as a
+          // safe fallback for development servers or hosts that lack the asset.
+          if (image.currentSrc.toLowerCase().endsWith('.webp')) {
+            image.onerror = () => { image.style.display = 'none'; };
+            image.src = publicAssetUrl('Wallpaper Background Landingpage.jpg');
+          } else {
+            image.style.display = 'none';
+          }
+        }}
         className="absolute inset-0 z-0 h-full w-full object-cover object-center"
       />
 
