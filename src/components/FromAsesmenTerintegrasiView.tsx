@@ -631,33 +631,6 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
         </div>
       )}
 
-      {currentPPKS && Object.entries(currentPPKS.officialAssessment || {}).some(
-        ([key, value]) => key.startsWith('field_') &&
-          (Array.isArray(value) ? value.length > 0 : String(value ?? '').trim() !== '')
-      ) && (
-        <div className="official-toolbar mb-4 rounded-xl border border-sky-500/30 bg-black/40 p-4">
-          <h3 className="mb-2 text-sm font-bold text-white">Jawaban Tambahan dari Google Form Lanjutan</h3>
-          <p className="mb-3 text-[11px] text-neutral-300">
-            Jawaban ini dipadankan menggunakan ID PPKS dari link WhatsApp. Jawaban ditampilkan sebagai data tambahan dan tidak mengubah format 10 halaman PDF resmi.
-          </p>
-          <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
-            {Object.entries(currentPPKS.officialAssessment || {})
-              .filter(([key, value]) => key.startsWith('field_') &&
-                (Array.isArray(value) ? value.length > 0 : String(value ?? '').trim() !== ''))
-              .map(([key, value]) => (
-                <div key={key} className="rounded-lg border border-white/10 bg-black/30 p-3">
-                  <div className="mb-1 text-[10px] font-bold uppercase tracking-wide text-sky-200">
-                    {key.slice(6)}
-                  </div>
-                  <div className="whitespace-pre-wrap break-words text-xs text-white">
-                    {Array.isArray(value) ? value.join(', ') : String(value)}
-                  </div>
-                </div>
-              ))}
-          </div>
-        </div>
-      )}
-
       {pages.map((page, pageIndex) => (
         <section className="official-page" key={'page-' + pageIndex}>
           {page.hasLetterhead && (
