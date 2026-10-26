@@ -14,10 +14,10 @@ import { SettingsModal } from './components/SettingsModal';
 import { NotificationsModal } from './components/NotificationsModal';
 import { GoogleWorkspaceModal } from './components/GoogleWorkspaceModal';
 import { onAuthStateChanged, signOut, getIdTokenResult } from 'firebase/auth';
-import { auth, getAccessToken, savePPKSToFirestore, googleLogout, removeLegacyDemoPPKSFromFirestore, collapseDuplicatePPKSRecordsInFirestore } from './lib/firebase';
+import { auth, getAccessToken, savePPKSToFirestore, googleLogout, removeLegacyDemoPPKSFromFirestore, reconcilePPKSFirestoreWithSpreadsheet } from './lib/firebase';
 import { ensureSIPANDUDatabaseSheet, extractSpreadsheetId, importPPKSFromSpreadsheet, removeLegacyDemoRowsFromSpreadsheet, removeObviousDemoFilesFromDrive, upsertPPKSInSpreadsheet } from './lib/googleWorkspace';
 import { GOOGLE_SIPANDU_RESOURCES } from './lib/googleSIPANDUResources';
-import { deduplicatePPKSRecords, parsePPKSTimestamp, samePPKSIdentity, sortPPKSRecordsByName, sortPPKSRecordsByTimestamp } from './lib/ppksData';
+import { deduplicatePPKSRecords, EXPECTED_REAL_PPKS_COUNT, parsePPKSTimestamp, samePPKSIdentity, sortPPKSRecordsByName, sortPPKSRecordsByTimestamp } from './lib/ppksData';
 
 function isSixteenDigitNIK(value: string): boolean {
   return /^\d{16}$/.test(String(value || '').replace(/\D/g, ''));
@@ -275,8 +275,8 @@ export default function App() {
 
   const demoCleanupAttemptedRef = useRef('');
   const demoCleanupRunningRef = useRef(false);
-  const firestoreDuplicateCleanupAttemptedRef = useRef(false);
-  const firestoreDuplicateCleanupInFlightRef = useRef<Promise<number> | null>(null);
+  const firestoreRosterReconciliationAttemptedRef = useRef(false);
+  const firestoreRosterReconciliationInFlightRef = useRef<Promise<number> | null>(null);
   const [cloudSyncNotice, setCloudSyncNotice] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [liveSyncState, setLiveSyncState] = useState<{
     type: 'idle' | 'success' | 'paused' | 'error';
@@ -374,27 +374,31 @@ export default function App() {
     setPpksList((localRecords) => mergePPKSRecords(localRecords, cloudRecords));
   };
 
-  // Collapse duplicate Firestore documents only after the roster source is read successfully.
-  // A shared promise prevents polling and a manual sync from running the delete pass twice.
-  const runFirestoreDuplicateCleanup = async (force = false): Promise<number | null> => {
+  // Reconcile Firestore only after a successful import from the selected source.
+  // The 44-record guard prevents a wrong tab/partial read from deleting valid data.
+  const runFirestoreRosterReconciliation = async (
+    sourceRecords: PPKSRecord[],
+    force = false
+  ): Promise<number | null> => {
     if (currentUserRole !== 'owner' && currentUserRole !== 'supervisor') return null;
-    if (firestoreDuplicateCleanupInFlightRef.current) {
-      return firestoreDuplicateCleanupInFlightRef.current;
+    if (sourceRecords.length !== EXPECTED_REAL_PPKS_COUNT) return null;
+    if (firestoreRosterReconciliationInFlightRef.current) {
+      return firestoreRosterReconciliationInFlightRef.current;
     }
-    if (!force && firestoreDuplicateCleanupAttemptedRef.current) return 0;
+    if (!force && firestoreRosterReconciliationAttemptedRef.current) return 0;
 
-    const operation = collapseDuplicatePPKSRecordsInFirestore();
-    firestoreDuplicateCleanupInFlightRef.current = operation;
+    const operation = reconcilePPKSFirestoreWithSpreadsheet(sourceRecords);
+    firestoreRosterReconciliationInFlightRef.current = operation;
     try {
-      const deleted = await operation;
-      firestoreDuplicateCleanupAttemptedRef.current = true;
-      return deleted;
+      const removed = await operation;
+      firestoreRosterReconciliationAttemptedRef.current = true;
+      return removed;
     } catch (error) {
-      firestoreDuplicateCleanupAttemptedRef.current = false;
-      console.warn('SIPANDU Firestore duplicate cleanup skipped:', error);
+      firestoreRosterReconciliationAttemptedRef.current = false;
+      console.warn('SIPANDU Firestore roster reconciliation skipped:', error);
       return null;
     } finally {
-      firestoreDuplicateCleanupInFlightRef.current = null;
+      firestoreRosterReconciliationInFlightRef.current = null;
     }
   };
 
@@ -411,7 +415,7 @@ export default function App() {
         `Spreadsheet “${imported.spreadsheetTitle}”, tab “${imported.selectedTab}” berhasil dibaca (${imported.rowsRead} baris), tetapi tidak ditemukan baris responden yang memiliki kolom nama dikenali. Periksa judul kolom. Header: ${headers || '(kosong)'}`
       );
     }
-    const firestoreDuplicatesDeleted = await runFirestoreDuplicateCleanup(true);
+    const firestoreDocumentsRemoved = await runFirestoreRosterReconciliation(imported.records, true);
     setPpksList((localRecords) => reconcileSpreadsheetPPKSRecords(localRecords, imported.records));
     setSettings((current) => ({
       ...current,
@@ -420,9 +424,15 @@ export default function App() {
       googleSpreadsheetSourceTab: imported.selectedTab,
     }));
     const updatedAt = new Date().toLocaleString('id-ID');
+    const hasExpectedRoster = imported.records.length === EXPECTED_REAL_PPKS_COUNT;
+    const firestoreMessage = !hasExpectedRoster
+      ? `Firestore TIDAK diubah: spreadsheet memuat ${imported.records.length} PPKS unik, sedangkan roster terverifikasi harus ${EXPECTED_REAL_PPKS_COUNT}. Periksa tab/hasil impor; tidak ada dokumen yang dihapus.`
+      : firestoreDocumentsRemoved === null
+        ? 'Firestore belum diselaraskan; periksa izin akun owner/supervisor atau koneksi Firebase. Data Firestore tidak dihapus oleh proses yang gagal.'
+        : `Firestore diselaraskan ke ${EXPECTED_REAL_PPKS_COUNT} PPKS; ${firestoreDocumentsRemoved} dokumen lama/duplikat di luar roster dibersihkan.`;
     setLiveSyncState({
-      type: 'success',
-      message: `Sumber “${imported.spreadsheetTitle}” → “${imported.selectedTab}”: ${imported.sourceDataRows} baris data, ${imported.records.length} PPKS unik dimuat, ${imported.duplicateRowsCollapsed} baris duplikat spreadsheet digabung, ${imported.sampleRecordsFiltered} contoh disaring; Firestore: ${firestoreDuplicatesDeleted === null ? 'pembersihan gagal/perlu izin' : firestoreDuplicatesDeleted + ' dokumen duplikat dihapus'}; NIK terpetakan ${imported.recordsWithNIK}/${imported.records.length}. Sinkronisasi otomatis setiap 2 menit selama izin Google masih berlaku.`,
+      type: hasExpectedRoster && firestoreDocumentsRemoved !== null ? 'success' : 'error',
+      message: `Sumber “${imported.spreadsheetTitle}” → “${imported.selectedTab}”: ${imported.sourceDataRows} baris data, ${imported.records.length} PPKS unik dimuat, ${imported.duplicateRowsCollapsed} duplikat spreadsheet digabung, ${imported.sampleRecordsFiltered} contoh disaring; ${firestoreMessage} NIK terpetakan ${imported.recordsWithNIK}/${imported.records.length}. Sinkronisasi otomatis setiap 2 menit selama izin Google masih berlaku.`,
       lastUpdatedAt: updatedAt,
     });
     return {
@@ -472,8 +482,9 @@ export default function App() {
           });
           return;
         }
-        if (!firestoreDuplicateCleanupAttemptedRef.current) {
-          await runFirestoreDuplicateCleanup(false);
+        let firestoreDocumentsRemoved: number | null = null;
+        if (!firestoreRosterReconciliationAttemptedRef.current && imported.records.length === EXPECTED_REAL_PPKS_COUNT) {
+          firestoreDocumentsRemoved = await runFirestoreRosterReconciliation(imported.records, false);
           if (!active) return;
         }
         setPpksList((current) => reconcileSpreadsheetPPKSRecords(current, imported.records));
@@ -489,9 +500,17 @@ export default function App() {
             googleSpreadsheetSourceTab: imported.selectedTab,
           };
         });
+        const hasExpectedRoster = imported.records.length === EXPECTED_REAL_PPKS_COUNT;
+        const firestoreMessage = !hasExpectedRoster
+          ? `Firestore tidak diubah: ${imported.records.length} PPKS unik terbaca, seharusnya ${EXPECTED_REAL_PPKS_COUNT}. Periksa tab spreadsheet; tidak ada dokumen yang dihapus.`
+          : firestoreDocumentsRemoved === null && !firestoreRosterReconciliationAttemptedRef.current
+            ? 'Firestore belum berhasil diselaraskan; pastikan akun owner/supervisor aktif dan Firebase dapat diakses.'
+            : firestoreRosterReconciliationAttemptedRef.current
+              ? 'Roster Firestore telah diselaraskan pada sesi ini.'
+              : 'Penyelarasan Firestore belum dijalankan pada sesi ini.';
         setLiveSyncState({
-          type: 'success',
-          message: `LIVE SYNC — “${imported.spreadsheetTitle}” → “${imported.selectedTab}”: ${imported.records.length} PPKS unik dimuat dari ${imported.sourceDataRows} baris; ${imported.duplicateRowsCollapsed} duplikat digabung; ${imported.sampleRecordsFiltered} contoh disaring; NIK ${imported.recordsWithNIK}/${imported.records.length}.`,
+          type: hasExpectedRoster && (firestoreRosterReconciliationAttemptedRef.current || firestoreDocumentsRemoved !== null) ? 'success' : 'error',
+          message: `LIVE SYNC — “${imported.spreadsheetTitle}” → “${imported.selectedTab}”: ${imported.records.length} PPKS unik dimuat dari ${imported.sourceDataRows} baris; ${imported.duplicateRowsCollapsed} duplikat digabung; ${imported.sampleRecordsFiltered} contoh disaring; ${firestoreMessage} NIK ${imported.recordsWithNIK}/${imported.records.length}.`,
           lastUpdatedAt: new Date().toLocaleString('id-ID'),
         });
       } catch (error) {
