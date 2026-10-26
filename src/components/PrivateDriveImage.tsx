@@ -98,7 +98,7 @@ export const PrivateDriveImage: React.FC<PrivateDriveImageProps> = ({
     void (async () => {
       try {
         let token = await getAccessToken();
-        if (!token) token = await refreshWorkspaceAccessToken(true);
+        if (!token) token = await refreshWorkspaceAccessToken();
         if (!token) throw new Error('SIPANDU mencoba memulihkan token Google secara otomatis tetapi sesi Workspace tidak dapat diperbarui. Buka Koneksi Akun hanya bila foto tetap tidak tampil.');
         const mediaUrl = `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(driveId)}?alt=media`;
         let response = await fetch(mediaUrl, {
