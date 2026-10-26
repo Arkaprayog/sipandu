@@ -565,10 +565,13 @@ export async function reconcilePPKSFirestoreWithSpreadsheet(sourceRecords: PPKSR
     // Conflicting verified NIKs are never treated as one person, even if a path
     // or name happens to be equal.
     if (storedNik && sourceNik) return storedNik === sourceNik;
-    if (stored.documentId === source.id) return true;
 
     const storedName = normalizedName(stored.record.namaLengkap);
     const sourceName = normalizedName(source.namaLengkap);
+    if (stored.documentId === source.id) {
+      // A matching path is useful only if the visible names do not conflict.
+      return !storedName || !sourceName || storedName === sourceName;
+    }
     if (!storedName || storedName !== sourceName) return false;
     const storedPhone = normalizedPhone(stored.record.noHpWa);
     const sourcePhone = normalizedPhone(source.noHpWa);
