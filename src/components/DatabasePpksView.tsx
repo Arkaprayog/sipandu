@@ -3,6 +3,7 @@ import { PPKSRecord, AppSettings } from '../types';
 import { PrivateDriveImage } from './PrivateDriveImage';
 import { deduplicatePPKSRecords, formatPPKSTimestamp, sortPPKSRecordsByName } from '../lib/ppksData';
 import {
+  buildGoogleFormsPrefilledUrl,
   buildWhatsAppMessage,
   createWhatsAppLink,
   getDesilDescription,
@@ -103,15 +104,26 @@ export const DatabasePpksView: React.FC<DatabasePpksViewProps> = ({
         senderName: settings.senderName,
         senderRole: settings.senderRole,
         senderUnit: settings.senderUnit,
-        googleFormTahapAwalUrl: settings.googleFormTahapAwalUrl,
+        googleFormTahapLanjutanUrl: settings.googleFormTahapLanjutanUrl,
+        googleFormTahapLanjutanIdEntry: settings.googleFormTahapLanjutanIdEntry,
         googleFormKesehatanMentalUrl: settings.googleFormKesehatanMentalUrl,
       })
     : '';
 
   const handleOpenWhatsApp = () => {
     if (!currentPPKS) return;
+    try {
+      buildGoogleFormsPrefilledUrl(
+        settings.googleFormTahapLanjutanUrl,
+        settings.googleFormTahapLanjutanIdEntry,
+        currentPPKS.id
+      );
+    } catch (error) {
+      alert(error instanceof Error ? error.message + '\\n\\nBuka Pengaturan Integrasi Google & WhatsApp untuk melengkapi URL dan nomor entry formulir lanjutan.' : String(error));
+      return;
+    }
     const link = createWhatsAppLink(currentPPKS.noHpWa, currentWaMessage);
-    window.open(link, '_blank');
+    window.open(link, '_blank', 'noopener,noreferrer');
   };
 
   return (
