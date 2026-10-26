@@ -1397,6 +1397,26 @@ export async function fetchFormResponses(formUrlOrId: string): Promise<GoogleFor
   return all;
 }
 
+/**
+ * Resolve the response spreadsheet that Google Forms itself has linked to a
+ * form. The dashboard reads this source only; Google Forms owns its response
+ * rows, and SIPANDU never writes into that sheet directly.
+ */
+export async function getLinkedSpreadsheetUrlForForm(formUrlOrId: string): Promise<string> {
+  const formId = extractFormId(formUrlOrId);
+  const form = await googleJson<{ formId?: string; info?: { title?: string }; linkedSheetId?: string }>(
+    `https://forms.googleapis.com/v1/forms/${formId}`
+  );
+  const linkedSheetId = String(form.linkedSheetId || '').trim();
+  if (!linkedSheetId) {
+    const title = String(form.info?.title || 'Formulir Google Forms');
+    throw new Error(
+      `${title} belum ditautkan ke Google Spreadsheet respons. Buka Google Forms → Respons → Tautkan ke Spreadsheet, lalu pilih/buat spreadsheet respons.`
+    );
+  }
+  return `https://docs.google.com/spreadsheets/d/${encodeURIComponent(linkedSheetId)}/edit`;
+}
+
 
 
 /**
