@@ -6,6 +6,7 @@ export interface FormPhotoResponseCandidate {
   timestamp?: string;
   respondentName?: string;
   respondentNIK?: string;
+  respondentPhone?: string;
   photos: Partial<Record<PPKSPhotoKind, string>>;
 }
 
@@ -30,6 +31,42 @@ export function isGoogleFormLinkedToSpreadsheet(
   return Boolean(formLinkedSheetId && spreadsheetId && formLinkedSheetId === spreadsheetId);
 }
 
+function normalizePhone(value: unknown): string {
+  const digits = String(value ?? '').replace(/\D/g, '');
+  if (!digits) return '';
+  // Normalize Indonesian local numbers and +62 numbers to the same national
+  // subscriber form without making assumptions about the subscriber's identity.
+  if (digits.startsWith('0062')) return digits.slice(4).replace(/^0+/, '');
+  if (digits.startsWith('62')) return digits.slice(2).replace(/^0+/, '');
+  return digits.replace(/^0+/, '');
+}
+
+export function extractGoogleDriveFileId(value: unknown): string {
+  const raw = String(value ?? '').trim();
+  if (!raw) return '';
+  const markdown = raw.match(/\]\((https?:\/\/[^)]+)\)/i);
+  const url = markdown?.[1] || raw.match(/https?:\/\/[^\s,;]+/i)?.[0] || raw;
+  const path = url.match(/\/(?:file\/)?d\/([a-zA-Z0-9_-]{15,})/);
+  if (path) return path[1];
+  const query = url.match(/[?&](?:id|fileId)=([a-zA-Z0-9_-]{15,})/);
+  if (query && /drive\.google\.com|docs\.google\.com/i.test(url)) return query[1];
+  if (/^[a-zA-Z0-9_-]{20,}$/.test(url)) return url;
+  return '';
+}
+
+export function countSharedPhotoFileIds(
+  sourcePhotos: Partial<Record<PPKSPhotoKind, string>>,
+  candidatePhotos: Partial<Record<PPKSPhotoKind, string>>,
+): number {
+  let count = 0;
+  for (const kind of ['diri', 'ktp', 'kk', 'rumah'] as const) {
+    const sourceId = extractGoogleDriveFileId(sourcePhotos[kind]);
+    const candidateId = extractGoogleDriveFileId(candidatePhotos[kind]);
+    if (sourceId && candidateId && sourceId === candidateId) count++;
+  }
+  return count;
+}
+
 function normalizeNIK(value: unknown): string {
   const digits = String(value ?? '').replace(/\D/g, '');
   return /^\d{16}$/.test(digits) ? digits : '';
@@ -46,21 +83,26 @@ export function matchFormPhotoResponseForPPKS(
   candidates: FormPhotoResponseCandidate[],
   toleranceMs = 3 * 60 * 1000,
   respondentNIK = '',
+  respondentPhone = '',
 ): FormPhotoResponseCandidate | null {
   const sourceName = normalizePersonName(respondentName);
   const sourceTime = parsePPKSTimestamp(respondentTimestamp);
   const sourceNIK = normalizeNIK(respondentNIK);
+  const sourcePhone = normalizePhone(respondentPhone);
 
   const scored = candidates.map((candidate) => {
     const candidateName = normalizePersonName(candidate.respondentName);
     const candidateTime = parsePPKSTimestamp(candidate.timestamp);
     const candidateNIK = normalizeNIK(candidate.respondentNIK);
+    const candidatePhone = normalizePhone(candidate.respondentPhone);
     const nameMatch = !!sourceName && !!candidateName && sourceName === candidateName;
     const nameConflict = !!sourceName && !!candidateName && sourceName !== candidateName;
     const timeDelta = sourceTime !== null && candidateTime !== null
       ? Math.abs(sourceTime - candidateTime)
       : null;
-    return { candidate, candidateName, candidateNIK, nameMatch, nameConflict, timeDelta };
+    const phoneMatch = !!sourcePhone && !!candidatePhone && sourcePhone === candidatePhone;
+    const phoneConflict = !!sourcePhone && !!candidatePhone && sourcePhone !== candidatePhone;
+    return { candidate, candidateName, candidateNIK, candidatePhone, nameMatch, nameConflict, phoneMatch, phoneConflict, timeDelta };
   });
 
   if (sourceNIK) {
@@ -79,9 +121,29 @@ export function matchFormPhotoResponseForPPKS(
     }
   }
 
+  if (sourcePhone) {
+    const samePhone = scored.filter((entry) =>
+      entry.phoneMatch &&
+      !(sourceNIK && entry.candidateNIK && entry.candidateNIK !== sourceNIK)
+    );
+    if (samePhone.length === 1) return samePhone[0].candidate;
+    if (samePhone.length > 1) {
+      const nameMatches = samePhone.filter((entry) => entry.nameMatch);
+      if (nameMatches.length === 1) return nameMatches[0].candidate;
+      const timeMatches = samePhone
+        .filter((entry) => entry.timeDelta !== null && entry.timeDelta <= toleranceMs)
+        .sort((a, b) => (a.timeDelta || 0) - (b.timeDelta || 0));
+      if (timeMatches.length && (!timeMatches[1] || timeMatches[0].timeDelta !== timeMatches[1].timeDelta)) {
+        return timeMatches[0].candidate;
+      }
+      return null;
+    }
+  }
+
   const nameSafe = scored.filter((entry) =>
     !entry.nameConflict &&
-    !(sourceNIK && entry.candidateNIK && entry.candidateNIK !== sourceNIK)
+    !(sourceNIK && entry.candidateNIK && entry.candidateNIK !== sourceNIK) &&
+    !(sourcePhone && entry.candidatePhone && entry.candidatePhone !== sourcePhone)
   );
   const timestampMatches = nameSafe
     .filter((entry) => entry.timeDelta !== null && entry.timeDelta <= toleranceMs)
