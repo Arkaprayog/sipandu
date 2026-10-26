@@ -343,14 +343,14 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
       return { url: '', error: 'SIPANDU telah mencoba menyegarkan token otomatis. Hubungkan akun Google Workspace jika foto privat masih tidak dapat dibaca.', temporary: false };
     }
 
-    const mediaUrl = \`https://www.googleapis.com/drive/v3/files/\${encodeURIComponent(fileId)}?alt=media\`;
-    let response = await fetch(mediaUrl, { headers: { Authorization: \`Bearer \${token}\` } });
+    const mediaUrl = `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?alt=media`;
+    let response = await fetch(mediaUrl, { headers: { Authorization: `Bearer ${token}` } });
     if (response.status === 401) {
       invalidateAccessToken();
       const refreshedToken = await refreshWorkspaceAccessToken();
       if (refreshedToken) {
         token = refreshedToken;
-        response = await fetch(mediaUrl, { headers: { Authorization: \`Bearer \${token}\` } });
+        response = await fetch(mediaUrl, { headers: { Authorization: `Bearer ${token}` } });
       }
     }
     if (!response.ok) {
@@ -361,8 +361,8 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
         error: response.status === 401
           ? 'Token Google ditolak setelah percobaan refresh otomatis. Coba cetak kembali setelah sinkronisasi token selesai.'
           : response.status === 403
-            ? \`Akun Google tidak memiliki izin untuk membuka foto ini. Periksa akses file di Drive. \${message || ''}\`.trim()
-            : message || \`Google Drive tidak dapat membaca foto (HTTP \${response.status}).\`,
+            ? `Akun Google tidak memiliki izin untuk membuka foto ini. Periksa akses file di Drive. ${message || ''}`.trim()
+            : message || `Google Drive tidak dapat membaca foto (HTTP ${response.status}).`,
         temporary: false,
       };
     }
