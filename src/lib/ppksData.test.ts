@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { deduplicatePPKSRecords, EXPECTED_REAL_PPKS_COUNT, formatPPKSTimestamp, samePPKSIdentity, sortPPKSRecordsByName } from './ppksData';
+import { deduplicatePPKSRecords, EXPECTED_REAL_PPKS_COUNT, formatPPKSTimestamp, getPPKSNIKCandidates, getSharedPPKSNIK, samePPKSIdentity, sortPPKSRecordsByName } from './ppksData';
 import type { PPKSRecord } from '../types';
 
 function record(overrides: Partial<PPKSRecord> = {}): PPKSRecord {
@@ -109,4 +109,32 @@ test('preserves the original timestamp string received from Google Sheets', () =
 
 test('the destructive Firestore reconciliation guard matches the verified 44-person roster', () => {
   assert.equal(EXPECTED_REAL_PPKS_COUNT, 44);
+});
+
+test('uses official assessment Q23 to identify a duplicate when the secondary NIK field conflicts', () => {
+  const first = record({
+    nik: '1271011505920004',
+    officialAssessment: { q23: '1271011505920003', q24: 'jawaban pertama' },
+    fotoDiri: 'https://example.test/diri.jpg',
+  });
+  const duplicate = record({
+    id: 'record-duplicate',
+    timestamp: '10/26/2026 11:29:19 AM',
+    nik: '1271011505920005',
+    officialAssessment: { q23: '1271011505920003', q25: 'jawaban kedua' },
+    fotoKtp: 'https://example.test/ktp.jpg',
+  });
+
+  assert.deepEqual(getPPKSNIKCandidates(first), ['1271011505920004', '1271011505920003']);
+  assert.equal(getSharedPPKSNIK(first, duplicate), '1271011505920003');
+  assert.equal(samePPKSIdentity(first, duplicate), true);
+
+  const merged = deduplicatePPKSRecords([first, duplicate]);
+  assert.equal(merged.length, 1);
+  assert.equal(merged[0].nik, '1271011505920003');
+  assert.equal(merged[0].officialAssessment?.q23, '1271011505920003');
+  assert.equal(merged[0].officialAssessment?.q24, 'jawaban pertama');
+  assert.equal(merged[0].officialAssessment?.q25, 'jawaban kedua');
+  assert.equal(merged[0].fotoDiri, 'https://example.test/diri.jpg');
+  assert.equal(merged[0].fotoKtp, 'https://example.test/ktp.jpg');
 });

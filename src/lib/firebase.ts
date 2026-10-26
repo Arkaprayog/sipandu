@@ -69,7 +69,13 @@ googleAuthProvider.addScope('https://www.googleapis.com/auth/forms.responses.rea
 // reconnect, and discard them conservatively before Google's usual 1-hour expiry.
 const WORKSPACE_TOKEN_STORAGE_KEY = 'sipandu_google_workspace_token_v1';
 const WORKSPACE_TOKEN_TTL_MS = 55 * 60 * 1000;
+// Proactively renew before expiry so the two-minute live-sync and private photos
+// usually continue without a manual "Pulihkan Izin" click.
+const WORKSPACE_TOKEN_REFRESH_AFTER_MS = 42 * 60 * 1000;
+const WORKSPACE_TOKEN_REFRESH_RETRY_MS = 5 * 60 * 1000;
 let cachedAccessTokenSavedAt = 0;
+let lastWorkspaceAutoRefreshAttemptAt = 0;
+let workspaceTokenRefreshInFlight: Promise<string | null> | null = null;
 
 function readStoredWorkspaceToken(): string | null {
   if (typeof window === 'undefined') return null;
@@ -371,12 +377,65 @@ export const completeGoogleRedirectSignIn = async (): Promise<{
   }
 };
 
-export const getAccessToken = async (): Promise<string | null> => {
-  if (cachedAccessToken && Date.now() - cachedAccessTokenSavedAt >= WORKSPACE_TOKEN_TTL_MS) {
-    cacheWorkspaceToken(null);
+/**
+ * Automatically renew the short-lived Google API token using the already signed-in
+ * Workspace identity and previously granted scopes. The OAuth prompt is set to
+ * "none"; no account selection or consent screen is requested during refresh.
+ * A single in-flight refresh is shared by polling and image requests.
+ */
+export const refreshWorkspaceAccessToken = async (): Promise<string | null> => {
+  if (workspaceTokenRefreshInFlight) return workspaceTokenRefreshInFlight;
+
+  const user = workspaceAuth.currentUser;
+  if (!user) return null;
+  const selectedEmail = getWorkspaceGoogleEmail(user);
+  if (!selectedEmail || selectedEmail.toLowerCase() !== GOOGLE_WORKSPACE_EMAIL.toLowerCase()) {
+    return null;
   }
+
+  const now = Date.now();
+  if (now - lastWorkspaceAutoRefreshAttemptAt < WORKSPACE_TOKEN_REFRESH_RETRY_MS) {
+    const age = cachedAccessToken ? now - cachedAccessTokenSavedAt : WORKSPACE_TOKEN_TTL_MS;
+    return age < WORKSPACE_TOKEN_TTL_MS ? cachedAccessToken : null;
+  }
+  lastWorkspaceAutoRefreshAttemptAt = now;
+
+  const operation = reauthenticateWithPopup(user, buildWorkspaceProvider('none'))
+    .then(async (result) => {
+      const refreshed = await finishWorkspaceSignIn(result);
+      lastWorkspaceAutoRefreshAttemptAt = 0;
+      return refreshed.accessToken;
+    })
+    .catch((error: unknown) => {
+      // The current access token remains usable until its expiry even if a browser
+      // blocks the silent popup; retry is throttled to avoid repeated popups.
+      console.warn('SIPANDU automatic Google token refresh did not complete:', error);
+      return null;
+    })
+    .finally(() => {
+      workspaceTokenRefreshInFlight = null;
+    });
+  workspaceTokenRefreshInFlight = operation;
+  return operation;
+};
+
+export const getAccessToken = async (): Promise<string | null> => {
   if (!cachedAccessToken) cachedAccessToken = readStoredWorkspaceToken();
-  return cachedAccessToken;
+  const age = cachedAccessToken ? Date.now() - cachedAccessTokenSavedAt : WORKSPACE_TOKEN_TTL_MS;
+
+  if (cachedAccessToken && age < WORKSPACE_TOKEN_REFRESH_AFTER_MS) {
+    return cachedAccessToken;
+  }
+
+  // Refresh early while the current credential still works. If the browser blocks
+  // the silent OAuth window, keep the old token until actual expiry.
+  if (cachedAccessToken && age < WORKSPACE_TOKEN_TTL_MS) {
+    const refreshed = await refreshWorkspaceAccessToken(false);
+    return refreshed || cachedAccessToken;
+  }
+
+  if (cachedAccessToken) cacheWorkspaceToken(null);
+  return await refreshWorkspaceAccessToken(false);
 };
 
 /** Clears an expired/rejected token without signing the Google user out of SIPANDU. */
@@ -550,7 +609,7 @@ export async function reconcilePPKSFirestoreWithSpreadsheet(sourceRecords: PPKSR
     .replace(/[^a-z0-9]/g, '');
   const normalizedPhone = (value: unknown) => String(value ?? '').replace(/\D/g, '');
   const validNIK = (record: PPKSRecord) => {
-    const candidate = String(record.nik || record.officialAssessment?.q23 || '').replace(/\D/g, '');
+    const candidate = String(record.officialAssessment?.q23 || record.nik || '').replace(/\D/g, '');
     return /^\d{16}$/.test(candidate) ? candidate : '';
   };
   const sourceNameCounts = new Map<string, number>();

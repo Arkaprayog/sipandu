@@ -1,7 +1,8 @@
-import { getAccessToken, invalidateAccessToken } from './firebase';
+import { getAccessToken, invalidateAccessToken, refreshWorkspaceAccessToken } from './firebase';
 import { IntegratedFormData, PPKSRecord } from '../types';
 import { normalizeExactNumericNIK } from './nikNumeric';
 import { deduplicatePPKSRecords, sortPPKSRecordsByTimestamp } from './ppksData';
+import { readPPKSPhotoSourceByKind } from './photoSources';
 import { isLegacySamplePPKS, isObviousDemoMarker, LEGACY_SAMPLE_PPKS_IDS, LEGACY_SAMPLE_PPKS_NAMES } from '../data/initialData';
 
 export interface GoogleDriveFile {
@@ -21,28 +22,42 @@ export interface GoogleFormResponse {
 }
 
 function requireToken(token: string | null): string {
-  if (!token) throw new Error('Token akses Google belum tersedia atau telah hilang setelah halaman dimuat ulang. Buka Koneksi Akun dan tekan “Pulihkan Izin Google API”, lalu ulangi operasi.');
+  if (!token) throw new Error('Token Google belum tersedia setelah upaya penyegaran otomatis. Pastikan sesi akun Google Workspace masih aktif; jika browser memblokir refresh tanpa dialog, pulihkan izin satu kali melalui Koneksi Akun.');
   return token;
 }
 
 async function googleJson<T>(url: string, init: RequestInit = {}): Promise<T> {
-  const token = requireToken(await getAccessToken());
-  const res = await fetch(url, {
-    ...init,
-    headers: {
-      Authorization: `Bearer ${token}`,
-      ...(init.body ? { 'Content-Type': 'application/json' } : {}),
-      ...init.headers,
-    },
-  });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) {
+  let token = requireToken(await getAccessToken());
+
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const res = await fetch(url, {
+      ...init,
+      headers: {
+        Authorization: `Bearer ${token}`,
+        ...(init.body ? { 'Content-Type': 'application/json' } : {}),
+        ...init.headers,
+      },
+    });
+    if (res.ok) return await res.json() as T;
+
+    const data = await res.json().catch(() => ({}));
     const apiError = (data as { error?: { message?: string; status?: string; errors?: { reason?: string }[] } }).error;
     const message = apiError?.message || `HTTP ${res.status}`;
     const reason = apiError?.errors?.[0]?.reason || apiError?.status || '';
+
+    if (res.status === 401 && attempt === 0) {
+      invalidateAccessToken();
+      // Retry once using a newly issued token from the existing Workspace session.
+      const refreshed = await refreshWorkspaceAccessToken();
+      if (refreshed) {
+        token = refreshed;
+        continue;
+      }
+      throw new Error('Token Google API telah kedaluwarsa. SIPANDU sudah mencoba memperbaruinya otomatis, tetapi browser tidak menyelesaikan refresh tersembunyi. Jika sinkronisasi tetap berhenti, gunakan “Pulihkan Izin Google API” satu kali untuk memulihkan sesi.');
+    }
     if (res.status === 401) {
       invalidateAccessToken();
-      throw new Error('Token Google API telah kedaluwarsa atau dicabut. Sesi akun tetap tersimpan, tetapi izin API perlu dipulihkan sekali lagi melalui Koneksi Akun. Muat ulang tidak akan menghapus token yang masih berlaku.');
+      throw new Error('Token Google API ditolak setelah percobaan refresh otomatis. Periksa izin Google Workspace dan ulangi sinkronisasi.');
     }
     if (res.status === 403 && /insufficient|scope/i.test(`${reason} ${message}`)) {
       throw new Error(`Izin OAuth Google kurang (HTTP 403): ${message}. Otorisasi ulang dan pastikan scope Drive/Sheets/Forms disetujui akun.`);
@@ -55,7 +70,8 @@ async function googleJson<T>(url: string, init: RequestInit = {}): Promise<T> {
     }
     throw new Error(`Google API gagal (HTTP ${res.status}): ${message}`);
   }
-  return data as T;
+
+  throw new Error('Google API gagal setelah percobaan refresh token otomatis.');
 }
 
 
@@ -257,7 +273,7 @@ export async function readSpreadsheetRichData(
 
     // Do not classify standalone KTP/NIK headers as photo cells. A header such
     // as "NIK/No. KTP" must preserve the displayed NIK, not substitute its hyperlink.
-    if (/(foto|photo|gambar|image|upload|unggah|lampiran|scan|dokumen|berkas|file|tautan|linkdrive)/i.test(header)) {
+    if (/(foto|photo|gambar|image|upload|unggah|lampiran|scan|dokumen|berkas|file|tautan|linkdrive|bukti|dokumentasi|selfie|pasfoto|portrait)/i.test(header)) {
       photoColumns.add(index);
     }
   });
@@ -647,13 +663,22 @@ function mapRowsToPPKSRecords(rows: string[][]): PPKSRecord[] {
         officialAssessment.q16 = value;
       }
     });
-    // Numbered official-PDF headings such as "23. NIK **" are first stored in
-    // officialAssessment.q23. Recover the validated 16-digit NIK from that
-    // canonical answer when the general column detector did not recognize it.
-    if (!nik && typeof officialAssessment.q23 === 'string') {
+    // Official question 23 is the canonical respondent NIK field in the
+    // integrated assessment. Prefer it over generic NIK/KTP header scoring,
+    // which may otherwise select a secondary identity-number column.
+    const officialQ23NIK = typeof officialAssessment.q23 === 'string'
+      ? normalizeNIKCellValue(officialAssessment.q23)
+      : '';
+    if (officialQ23NIK) {
+      nik = officialQ23NIK;
+      officialAssessment.q23 = officialQ23NIK;
+    } else if (!nik && typeof officialAssessment.q23 === 'string') {
       nik = normalizeNIKCellValue(officialAssessment.q23);
+      if (nik) officialAssessment.q23 = nik;
+    } else if (nik && !String(officialAssessment.q23 ?? '').trim()) {
+      // Preserve the recognized respondent NIK for forms without numbered Q23.
+      officialAssessment.q23 = nik;
     }
-    if (nik) officialAssessment.q23 = nik;
     // Use only fields that identify a specific submission, not a generic "ID"
     // or NIK that may be repeated across multiple submitted rows.
     const externalId = readCellByAliases(headers, row, [
@@ -702,10 +727,17 @@ function mapRowsToPPKSRecords(rows: string[][]): PPKSRecord[] {
       ? (integratedValues as IntegratedFormData)
       : undefined;
     const desil = parseSheetNumber(readCellByAliases(headers, row, ['desil', 'desilKemiskinan', 'desilDTKS', 'desilEkonomi']), 0);
-    const fotoDiri = readCellByAliases(headers, row, ['fotoDiri', 'fotoDiriPPKS', 'fotoResponden', 'uploadFotoDiri', 'tautanFotoDiri', 'linkFotoDiri', 'fotoDiriCloseUp', 'fotoDiriResponden', 'foto']);
-    const fotoKtp = readCellByAliases(headers, row, ['fotoKtp', 'fotoKTP', 'uploadFotoKTP', 'dokumenKTP', 'tautanFotoKTP', 'linkFotoKTP', 'fotoKartuIdentitas', 'scanKTP']);
-    const fotoKk = readCellByAliases(headers, row, ['fotoKk', 'fotoKK', 'uploadFotoKK', 'dokumenKK', 'tautanFotoKK', 'linkFotoKK', 'scanKK']);
-    const fotoRumah = readCellByAliases(headers, row, ['fotoRumah', 'fotoRumahTampakDepan', 'uploadFotoRumah', 'tautanFotoRumah', 'linkFotoRumah', 'fotoDepanRumah', 'fotoTampakDepanRumah']);
+    // Prefer category-aware upload-column detection so a longer Google Forms
+    // question title still maps correctly, while never treating KTP/KK/house
+    // attachments as the respondent portrait.
+    const fotoDiri = readPPKSPhotoSourceByKind(headers, row, 'diri') ||
+      readCellByAliases(headers, row, ['fotoDiri', 'fotoDiriPPKS', 'fotoResponden', 'uploadFotoDiri', 'tautanFotoDiri', 'linkFotoDiri', 'fotoDiriCloseUp', 'fotoDiriResponden']);
+    const fotoKtp = readPPKSPhotoSourceByKind(headers, row, 'ktp') ||
+      readCellByAliases(headers, row, ['fotoKtp', 'fotoKTP', 'uploadFotoKTP', 'dokumenKTP', 'tautanFotoKTP', 'linkFotoKTP', 'fotoKartuIdentitas', 'scanKTP']);
+    const fotoKk = readPPKSPhotoSourceByKind(headers, row, 'kk') ||
+      readCellByAliases(headers, row, ['fotoKk', 'fotoKK', 'uploadFotoKK', 'dokumenKK', 'tautanFotoKK', 'linkFotoKK', 'scanKK']);
+    const fotoRumah = readPPKSPhotoSourceByKind(headers, row, 'rumah') ||
+      readCellByAliases(headers, row, ['fotoRumah', 'fotoRumahTampakDepan', 'uploadFotoRumah', 'tautanFotoRumah', 'linkFotoRumah', 'fotoDepanRumah', 'fotoTampakDepanRumah']);
     const sourceRecord: PPKSRecord = {
       id: recordId || `SHEET-ROW-${rowIndex + 2}`,
       timestamp,

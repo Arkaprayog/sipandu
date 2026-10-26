@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { ImageOff, LoaderCircle } from 'lucide-react';
-import { getAccessToken } from '../lib/firebase';
+import { getAccessToken, invalidateAccessToken, refreshWorkspaceAccessToken } from '../lib/firebase';
 
 interface PrivateDriveImageProps {
   source?: string | null;
@@ -14,19 +14,35 @@ function firstLink(value: string): string {
   const markdown = trimmed.match(/\]\((https?:\/\/[^)]+)\)/);
   if (markdown) return markdown[1];
   const url = trimmed.match(/https?:\/\/[^\s,;]+/i);
-  return (url?.[0] || trimmed).replace(/[)\]}]+$/, '');
+  return (url?.[0] || trimmed).replace(/[)\]}>.,]+$/, '');
+}
+
+function inferImageMimeType(buffer: ArrayBuffer): string {
+  const bytes = new Uint8Array(buffer);
+  if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return 'image/jpeg';
+  if (bytes.length >= 8 && bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47) return 'image/png';
+  if (bytes.length >= 6 && String.fromCharCode(...bytes.slice(0, 6)).startsWith('GIF8')) return 'image/gif';
+  if (bytes.length >= 12 && String.fromCharCode(...bytes.slice(0, 4)) === 'RIFF' && String.fromCharCode(...bytes.slice(8, 12)) === 'WEBP') return 'image/webp';
+  if (bytes.length >= 2 && String.fromCharCode(...bytes.slice(0, 2)) === 'BM') return 'image/bmp';
+  if (bytes.length >= 12 && String.fromCharCode(...bytes.slice(4, 8)) === 'ftyp') {
+    const brand = String.fromCharCode(...bytes.slice(8, 12)).toLowerCase();
+    if (/(heic|heix|hevc|hevx|mif1|msf1)/.test(brand)) return 'image/heic';
+    if (/(avif|avis)/.test(brand)) return 'image/avif';
+  }
+  return '';
 }
 
 function driveFileId(value: string): string | null {
   const source = firstLink(value);
-  const pathMatch = source.match(/\/file\/d\/([a-zA-Z0-9_-]+)/);
+  const pathMatch = source.match(/\/(?:file\/)?d\/([a-zA-Z0-9_-]{15,})/);
   if (pathMatch) return pathMatch[1];
-  const queryMatch = source.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+  const driveFilesPath = source.match(/\/drive\/u\/\d+\/files\/([a-zA-Z0-9_-]{15,})/);
+  if (driveFilesPath) return driveFilesPath[1];
+  const queryMatch = source.match(/[?&](?:id|fileId)=([a-zA-Z0-9_-]{15,})/);
   if (queryMatch && /drive\.google\.com|docs\.google\.com/i.test(source)) return queryMatch[1];
   if (/^[a-zA-Z0-9_-]{20,}$/.test(source)) return source;
   return null;
 }
-
 /**
  * Renders public image URLs directly and private Google Drive upload links by
  * fetching their bytes with the authorized Workspace token. No fake person/photo
@@ -97,20 +113,45 @@ export const PrivateDriveImage: React.FC<PrivateDriveImageProps> = ({
     setStatus('loading');
     void (async () => {
       try {
-        const token = await getAccessToken();
-        if (!token) throw new Error('Izin Google Drive telah berakhir. Hubungkan ulang akun Google untuk melihat foto privat.');
-        const response = await fetch(
-          `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(driveId)}?alt=media`,
-          { headers: { Authorization: `Bearer ${token}` } }
-        );
+        let token = await getAccessToken();
+        if (!token) token = await refreshWorkspaceAccessToken();
+        if (!token) throw new Error('SIPANDU mencoba memulihkan token Google secara otomatis tetapi sesi Workspace tidak dapat diperbarui. Buka Koneksi Akun hanya bila foto tetap tidak tampil.');
+        const mediaUrl = `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(driveId)}?alt=media`;
+        let response = await fetch(mediaUrl, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (response.status === 401) {
+          invalidateAccessToken();
+          const refreshedToken = await refreshWorkspaceAccessToken(true);
+          if (refreshedToken) {
+            token = refreshedToken;
+            response = await fetch(mediaUrl, {
+              headers: { Authorization: `Bearer ${token}` },
+            });
+          }
+        }
         if (!response.ok) {
           const payload = await response.json().catch(() => ({}));
           const message = (payload as { error?: { message?: string } }).error?.message;
+          if (response.status === 401) {
+            throw new Error('Token Google Drive ditolak setelah refresh otomatis. Foto akan dicoba kembali saat token tersedia.');
+          }
+          if (response.status === 403) {
+            throw new Error(`Tidak ada izin membaca file foto di Google Drive (HTTP 403). Pastikan akun Workspace memiliki akses ke file tersebut. ${message || ''}`.trim());
+          }
           throw new Error(message || `Google Drive menolak akses foto (HTTP ${response.status}).`);
         }
-        const blob = await response.blob();
+        const downloadedBlob = await response.blob();
+        let blob = downloadedBlob;
         if (!blob.type.startsWith('image/')) {
-          throw new Error('File Drive yang ditautkan bukan file gambar yang bisa ditampilkan.');
+          // Some Drive uploads return application/octet-stream despite containing
+          // an actual image. Detect common image signatures before rejecting them.
+          const bytes = await downloadedBlob.arrayBuffer();
+          const inferredMime = inferImageMimeType(bytes);
+          if (!inferredMime) {
+            throw new Error('File Drive yang ditautkan bukan file gambar yang bisa ditampilkan.');
+          }
+          blob = new Blob([bytes], { type: inferredMime });
         }
         objectUrl = URL.createObjectURL(blob);
         if (!active) {
