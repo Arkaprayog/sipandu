@@ -3,7 +3,7 @@ import { IntegratedFormData, PPKSRecord } from '../types';
 import { normalizeExactNumericNIK } from './nikNumeric';
 import { deduplicatePPKSRecords, sortPPKSRecordsByTimestamp } from './ppksData';
 import { classifyPPKSPhotoHeader, normalizePPKSPhotoSource, readPPKSPhotoSourceByKind } from './photoSources';
-import { googleDriveViewUrl, matchFormPhotoResponseForPPKS, type FormPhotoResponseCandidate } from './formPhotoRecovery';
+import { googleDriveViewUrl, matchFormPhotoResponseForPPKS, isGoogleFormLinkedToSpreadsheet, type FormPhotoResponseCandidate } from './formPhotoRecovery';
 import { GOOGLE_SIPANDU_RESOURCES } from './googleSIPANDUResources';
 import { isLegacySamplePPKS, isObviousDemoMarker, LEGACY_SAMPLE_PPKS_IDS, LEGACY_SAMPLE_PPKS_NAMES } from '../data/initialData';
 
@@ -861,7 +861,7 @@ async function resolveFormLinkedToSpreadsheet(
       const form = await googleJson<GoogleFormPhotoMetadata>(
         `https://forms.googleapis.com/v1/forms/${extractFormId(formId)}`
       );
-      if (form.linkedSheetId === spreadsheetId) {
+      if (isGoogleFormLinkedToSpreadsheet(form.linkedSheetId, spreadsheetId)) {
         inspected.set(formId, form);
         return form;
       }
@@ -927,7 +927,7 @@ async function resolveFormLinkedToSpreadsheet(
     .slice(0, 15);
   for (const candidate of ranked) {
     const form = await inspect(candidate.id);
-    if (form?.linkedSheetId === spreadsheetId) return form;
+    if (form && isGoogleFormLinkedToSpreadsheet(form.linkedSheetId, spreadsheetId)) return form;
     if (form && !form.linkedSheetId &&
         spreadsheetId === GOOGLE_SIPANDU_RESOURCES.responseSpreadsheetId &&
         candidate.id === GOOGLE_SIPANDU_RESOURCES.formId) return form;
