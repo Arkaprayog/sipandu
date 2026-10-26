@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { classifyPPKSPhotoHeader, readPPKSPhotoSourceByKind } from './photoSources';
+import { classifyPPKSPhotoHeader, normalizePPKSPhotoSource, readPPKSPhotoSourceByKind } from './photoSources';
 import { googleDriveViewUrl, matchFormPhotoResponseForPPKS } from './formPhotoRecovery';
 
 test('maps each uploaded image to its own photo category from long Google Forms headers', () => {
@@ -92,4 +92,17 @@ test('does not assign ambiguous timestamp ties to a respondent', () => {
 test('builds a valid Drive view URL only for plausible file IDs', () => {
   assert.equal(googleDriveViewUrl('Abcdefghijklmnop12345'), 'https://drive.google.com/file/d/Abcdefghijklmnop12345/view');
   assert.equal(googleDriveViewUrl('bad id'), '');
+});
+
+test('normalizes real photo URLs and file IDs while rejecting bare filenames', () => {
+  assert.equal(
+    normalizePPKSPhotoSource('https://drive.google.com/open?id=Abcdefghijklmnop12345'),
+    'https://drive.google.com/open?id=Abcdefghijklmnop12345'
+  );
+  assert.equal(
+    normalizePPKSPhotoSource('Abcdefghijklmnop12345'),
+    'https://drive.google.com/file/d/Abcdefghijklmnop12345/view'
+  );
+  assert.equal(normalizePPKSPhotoSource('IMG_20261026.jpg'), '');
+  assert.equal(normalizePPKSPhotoSource(''), '');
 });
