@@ -309,6 +309,22 @@ export const googleSignIn = async (): Promise<{
   // access token is still held only in sessionStorage for security.
   await setPersistence(workspaceAuth, browserLocalPersistence);
 
+  // Google blocks popup-based OAuth in many mobile and embedded WebViews.
+  // Start a top-level redirect directly from the user's tap on those clients.
+  // The result is consumed by completeGoogleRedirectSignIn during app startup.
+  const userAgent = typeof navigator !== 'undefined' ? navigator.userAgent : '';
+  const isMobileOrEmbedded = /Android|iPhone|iPad|iPod/i.test(userAgent) ||
+    /; wv\\)|\\bWebView\\b|Capacitor/i.test(userAgent);
+  if (isMobileOrEmbedded) {
+    const provider = buildWorkspaceProvider('select_account');
+    try {
+      await signInWithRedirect(workspaceAuth, provider);
+      return null;
+    } catch (redirectError) {
+      throw new Error(describeGoogleOAuthError(redirectError));
+    }
+  }
+
   const existingUser = workspaceAuth.currentUser;
   if (
     existingUser &&
