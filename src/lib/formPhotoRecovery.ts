@@ -23,6 +23,14 @@ function normalizePersonName(value: unknown): string {
  * timestamp proximity alone must be very close. If timestamp is unavailable,
  * allow name-only only when that name occurs exactly once in the response list.
  */
+/** A Form title match is insufficient; the linked response spreadsheet ID must match exactly. */
+export function isGoogleFormLinkedToSpreadsheet(
+  formLinkedSheetId: string | null | undefined,
+  spreadsheetId: string,
+): boolean {
+  return Boolean(formLinkedSheetId && spreadsheetId && formLinkedSheetId === spreadsheetId);
+}
+
 function normalizeNIK(value: unknown): string {
   const digits = String(value ?? '').replace(/\D/g, '');
   return /^\d{16}$/.test(digits) ? digits : '';
