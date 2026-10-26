@@ -2,6 +2,7 @@ import React from 'react';
 import App from './App';
 import { createRoot } from 'react-dom/client';
 import './index.css';
+import { reloadSIPANDUWithFreshDocument } from './lib/lazyImportRecovery';
 
 const rootElement = document.getElementById('root');
 
@@ -42,7 +43,7 @@ class StartupErrorBoundary extends React.Component<
               Modul utama berhasil diunduh, tetapi antarmuka mengalami kesalahan saat dirender. Data browser tidak dihapus.
             </p>
             <code style={{ display: 'block', whiteSpace: 'pre-wrap', padding: 10, background: '#fee2e2', borderRadius: 8, fontSize: 12 }}>{this.state.error.slice(0, 3000)}</code>
-            <button type="button" onClick={() => window.location.reload()} style={{ marginTop: 14, padding: '10px 16px', border: 0, borderRadius: 10, background: '#166534', color: '#fff', fontWeight: 700, cursor: 'pointer' }}>
+            <button type="button" onClick={() => reloadSIPANDUWithFreshDocument()} style={{ marginTop: 14, padding: '10px 16px', border: 0, borderRadius: 10, background: '#166534', color: '#fff', fontWeight: 700, cursor: 'pointer' }}>
               Muat ulang aplikasi
             </button>
           </section>
@@ -56,7 +57,7 @@ class StartupErrorBoundary extends React.Component<
 const retryButton = () => (
   <button
     type="button"
-    onClick={() => window.location.reload()}
+    onClick={() => reloadSIPANDUWithFreshDocument()}
     style={{
       marginTop: 14,
       padding: '10px 16px',
