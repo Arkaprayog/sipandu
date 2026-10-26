@@ -609,7 +609,7 @@ export async function reconcilePPKSFirestoreWithSpreadsheet(sourceRecords: PPKSR
     .replace(/[^a-z0-9]/g, '');
   const normalizedPhone = (value: unknown) => String(value ?? '').replace(/\D/g, '');
   const validNIK = (record: PPKSRecord) => {
-    const candidate = String(record.nik || record.officialAssessment?.q23 || '').replace(/\D/g, '');
+    const candidate = String(record.officialAssessment?.q23 || record.nik || '').replace(/\D/g, '');
     return /^\d{16}$/.test(candidate) ? candidate : '';
   };
   const sourceNameCounts = new Map<string, number>();
