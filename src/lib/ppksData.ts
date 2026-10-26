@@ -1,5 +1,8 @@
 import { PPKSRecord } from '../types';
 
+/** Guardrail: the verified source roster currently contains 44 real PPKS. Update only when the official roster changes. */
+export const EXPECTED_REAL_PPKS_COUNT = 44;
+
 /**
  * Parses spreadsheet timestamps without trusting the browser's locale-dependent
  * Date.parse behavior for Indonesian dd/MM/yyyy values.
