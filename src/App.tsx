@@ -15,7 +15,7 @@ import { NotificationsModal } from './components/NotificationsModal';
 import { GoogleWorkspaceModal } from './components/GoogleWorkspaceModal';
 import { onAuthStateChanged, signOut, getIdTokenResult } from 'firebase/auth';
 import { auth, getAccessToken, savePPKSToFirestore, googleLogout, removeLegacyDemoPPKSFromFirestore, reconcilePPKSFirestoreWithSpreadsheet } from './lib/firebase';
-import { ensureSIPANDUDatabaseSheet, extractSpreadsheetId, importPPKSFromSpreadsheet, removeLegacyDemoRowsFromSpreadsheet, removeObviousDemoFilesFromDrive, upsertPPKSInSpreadsheet } from './lib/googleWorkspace';
+import { ensureSIPANDUDatabaseSheet, extractSpreadsheetId, getLinkedSpreadsheetUrlForForm, importPPKSFromSpreadsheet, removeLegacyDemoRowsFromSpreadsheet, removeObviousDemoFilesFromDrive, upsertPPKSInSpreadsheet } from './lib/googleWorkspace';
 import { GOOGLE_SIPANDU_RESOURCES } from './lib/googleSIPANDUResources';
 import { deduplicatePPKSRecords, EXPECTED_REAL_PPKS_COUNT, parsePPKSTimestamp, samePPKSIdentity, sortPPKSRecordsByName, sortPPKSRecordsByTimestamp } from './lib/ppksData';
 import { normalizePPKSPhotoSource } from './lib/photoSources';
@@ -291,6 +291,7 @@ export default function App() {
   const demoCleanupRunningRef = useRef(false);
   const firestoreRosterReconciliationAttemptedRef = useRef(false);
   const firestoreRosterReconciliationInFlightRef = useRef<Promise<number> | null>(null);
+  const continuationSheetCacheRef = useRef<{ formUrl: string; spreadsheetUrl: string } | null>(null);
   const [cloudSyncNotice, setCloudSyncNotice] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [liveSyncState, setLiveSyncState] = useState<{
     type: 'idle' | 'success' | 'paused' | 'error';
@@ -429,6 +430,55 @@ export default function App() {
       return null;
     } finally {
       firestoreRosterReconciliationInFlightRef.current = null;
+    }
+  };
+
+  /**
+   * Load follow-up answers from the response Sheet that Google Forms has linked
+   * to the configured stage-two Form. Merge only rows carrying an ID that exists
+   * in the stage-one roster; unmatched responses never create duplicate PPKS.
+   */
+  const mergeContinuationResponses = async (stageOneRecords: PPKSRecord[]): Promise<{
+    records: PPKSRecord[];
+    matchedResponses: number;
+    warning: string;
+  }> => {
+    const formUrl = settings.googleFormTahapLanjutanUrl?.trim() || '';
+    if (!formUrl) {
+      return {
+        records: stageOneRecords,
+        matchedResponses: 0,
+        warning: 'Formulir lanjutan belum dikonfigurasi; sinkronisasi tahap awal tetap berjalan.',
+      };
+    }
+
+    try {
+      let spreadsheetUrl = continuationSheetCacheRef.current?.formUrl === formUrl
+        ? continuationSheetCacheRef.current.spreadsheetUrl
+        : '';
+      if (!spreadsheetUrl) {
+        spreadsheetUrl = await getLinkedSpreadsheetUrlForForm(formUrl);
+        continuationSheetCacheRef.current = { formUrl, spreadsheetUrl };
+      }
+
+      const followUpImport = await importPPKSFromSpreadsheet(spreadsheetUrl);
+      const stageOneIds = new Set(stageOneRecords.map((record) => record.id));
+      const matched = followUpImport.records.filter((record) => stageOneIds.has(record.id));
+      const unmatchedCount = followUpImport.records.length - matched.length;
+      return {
+        records: mergePPKSRecords(stageOneRecords, matched),
+        matchedResponses: matched.length,
+        warning: unmatchedCount > 0
+          ? `${unmatchedCount} respons lanjutan belum dipadankan. Pastikan formulir lanjutan memiliki pertanyaan “ID PPKS” dengan entry praisi yang sesuai.`
+          : '',
+      };
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      return {
+        records: stageOneRecords,
+        matchedResponses: 0,
+        warning: `Sinkronisasi Form lanjutan belum aktif: ${detail}`,
+      };
     }
   };
 
