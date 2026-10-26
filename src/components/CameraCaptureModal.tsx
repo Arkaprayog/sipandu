@@ -16,16 +16,25 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
 }) => {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const [stream, setStream] = useState<MediaStream | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
   const [cameraError, setCameraError] = useState<string>('');
 
   useEffect(() => {
+    let cancelled = false;
+    let effectStream: MediaStream | null = null;
+
+    const stopStream = (mediaStream: MediaStream | null) => {
+      if (!mediaStream) return;
+      mediaStream.getTracks().forEach((track) => {
+        try { track.stop(); } catch { /* track may already be stopped */ }
+      });
+      if (videoRef.current?.srcObject === mediaStream) videoRef.current.srcObject = null;
+      if (streamRef.current === mediaStream) streamRef.current = null;
+    };
+
     if (!isOpen) {
-      if (stream) {
-        stream.getTracks().forEach((track) => track.stop());
-        setStream(null);
-      }
+      stopStream(streamRef.current);
       setCapturedImage(null);
       setCameraError('');
       return;
@@ -34,56 +43,58 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
     const startCamera = async () => {
       try {
         setCameraError('');
+        if (!navigator.mediaDevices?.getUserMedia) {
+          throw new Error('Browser tidak mendukung akses kamera melalui getUserMedia.');
+        }
         const mediaStream = await navigator.mediaDevices.getUserMedia({
           video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } },
           audio: false,
         });
-        setStream(mediaStream);
+
+        // The modal may close while the browser is waiting for camera permission.
+        if (cancelled) {
+          stopStream(mediaStream);
+          return;
+        }
+
+        effectStream = mediaStream;
+        streamRef.current = mediaStream;
         if (videoRef.current) {
           videoRef.current.srcObject = mediaStream;
+          try { await videoRef.current.play(); } catch { /* autoplay policy may delay playback */ }
+        } else {
+          stopStream(mediaStream);
         }
-      } catch (err: any) {
+      } catch (err) {
+        if (cancelled) return;
         console.warn('Camera access error:', err);
         setCameraError(
-          'Tidak dapat mengakses kamera fisik (kamera sibuk atau izin diblokir). Anda dapat menggunakan fitur Unggah File atau Simulasi Jepret Foto.'
+          'Kamera tidak dapat diakses (izin diblokir, kamera sibuk, atau browser tidak mendukung). Gunakan fitur Unggah Berkas. SIPANDU tidak membuat foto simulasi.'
         );
       }
     };
 
-    startCamera();
-
+    void startCamera();
     return () => {
-      if (stream) {
-        stream.getTracks().forEach((track) => track.stop());
-      }
+      cancelled = true;
+      stopStream(effectStream);
     };
   }, [isOpen]);
 
   const handleTakeSnapshot = () => {
     if (!videoRef.current || !canvasRef.current) {
-      // Fallback simulated snapshot if video stream not active
-      const canvas = document.createElement('canvas');
-      canvas.width = 640;
-      canvas.height = 480;
-      const ctx = canvas.getContext('2d');
-      if (ctx) {
-        ctx.fillStyle = '#1c3621';
-        ctx.fillRect(0, 0, 640, 480);
-        ctx.fillStyle = '#ffffff';
-        ctx.font = 'bold 20px sans-serif';
-        ctx.textAlign = 'center';
-        ctx.fillText(title, 320, 220);
-        ctx.font = '14px sans-serif';
-        ctx.fillText(`Live Captured: ${new Date().toLocaleTimeString()} WIB`, 320, 260);
-        setCapturedImage(canvas.toDataURL('image/jpeg'));
-      }
+      setCameraError('Kamera belum siap. Izinkan akses kamera atau gunakan Unggah Berkas; foto simulasi tidak akan disimpan sebagai foto responden.');
       return;
     }
 
     const video = videoRef.current;
     const canvas = canvasRef.current;
-    canvas.width = video.videoWidth || 640;
-    canvas.height = video.videoHeight || 480;
+    if (video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA || !video.videoWidth || !video.videoHeight) {
+      setCameraError('Kamera belum menghasilkan gambar. Tunggu hingga pratinjau kamera tampil, lalu coba lagi atau gunakan Unggah Berkas.');
+      return;
+    }
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
     const ctx = canvas.getContext('2d');
     if (ctx) {
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);

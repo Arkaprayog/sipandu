@@ -117,7 +117,6 @@ async function showSystemNotification(item: RespondentNotification, uid: string)
     icon: `${basePath}uploads/App%20Icon%20Picture.png`,
     badge: `${basePath}uploads/App%20Icon%20Picture.png`,
     tag: item.id,
-    renotify: true,
     timestamp: Date.parse(item.createdAt) || Date.now(),
     data: { url: basePath, notificationId: item.id, uid },
     vibrate: [250, 120, 250, 120, 450],

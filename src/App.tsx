@@ -15,10 +15,10 @@ const SettingsModal = lazy(() => import('./components/SettingsModal').then((modu
 const NotificationsModal = lazy(() => import('./components/NotificationsModal').then((module) => ({ default: module.NotificationsModal })));
 const GoogleWorkspaceModal = lazy(() => import('./components/GoogleWorkspaceModal').then((module) => ({ default: module.GoogleWorkspaceModal })));
 import { onAuthStateChanged, signOut, getIdTokenResult } from 'firebase/auth';
-import { auth, getAccessToken, savePPKSToFirestore, googleLogout, removeLegacyDemoPPKSFromFirestore, reconcilePPKSFirestoreWithSpreadsheet } from './lib/firebase';
-import { ensureSIPANDUDatabaseSheet, extractSpreadsheetId, getLinkedSpreadsheetUrlForForm, importPPKSFromSpreadsheet, removeLegacyDemoRowsFromSpreadsheet, removeObviousDemoFilesFromDrive, upsertPPKSInSpreadsheet } from './lib/googleWorkspace';
+import { auth, getAccessToken, savePPKSToFirestore, googleLogout } from './lib/firebase';
+import { ensureSIPANDUDatabaseSheet, extractSpreadsheetId, getLinkedSpreadsheetUrlForForm, importPPKSFromSpreadsheet, upsertPPKSInSpreadsheet } from './lib/googleWorkspace';
 import { GOOGLE_SIPANDU_RESOURCES } from './lib/googleSIPANDUResources';
-import { deduplicatePPKSRecords, EXPECTED_REAL_PPKS_COUNT, parsePPKSTimestamp, samePPKSIdentity, sortPPKSRecordsByName, sortPPKSRecordsByTimestamp } from './lib/ppksData';
+import { deduplicatePPKSRecords, parsePPKSTimestamp, samePPKSIdentity, sortPPKSRecordsByName, sortPPKSRecordsByTimestamp } from './lib/ppksData';
 import { normalizePPKSPhotoSource } from './lib/photoSources';
 import {
   enableRespondentNotifications,
@@ -204,102 +204,68 @@ export default function App() {
   const [currentUserName, setCurrentUserName] = useState('');
   const [currentUserRole, setCurrentUserRole] = useState('');
   const [authError, setAuthError] = useState('');
+  const [localCacheReady, setLocalCacheReady] = useState(false);
 
   useEffect(() => {
+    let active = true;
+    let authEventGeneration = 0;
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      const generation = ++authEventGeneration;
       setAuthReady(false);
+      setLocalCacheReady(false);
       setAuthError('');
       if (!user) {
         setIsAuthenticated(false);
         setCurrentUserName('');
         setCurrentUserRole('');
+        setPpksList([]);
+        setProfile(initialProfileUser);
+        setSettings(initialAppSettings);
         setAuthReady(true);
         return;
       }
       try {
         const token = await getIdTokenResult(user, true);
+        if (!active || generation !== authEventGeneration || auth.currentUser?.uid !== user.uid) return;
         const role = token.claims.role;
         if (role !== 'owner' && role !== 'supervisor' && role !== 'pendamping') {
           setIsAuthenticated(false);
+          setCurrentUserName('');
           setCurrentUserRole('');
           setAuthError('Akun berhasil dikenali, tetapi peran resmi belum ditetapkan. Hubungi administrator SIPANDU.');
-          await signOut(auth);
+          await signOut(auth).catch((error) => console.warn('Gagal menutup sesi tanpa peran SIPANDU:', error));
         } else {
           setIsAuthenticated(true);
           setCurrentUserRole(role);
           setCurrentUserName(user.displayName || user.email || '');
         }
       } catch (error) {
+        if (!active || generation !== authEventGeneration || auth.currentUser?.uid !== user.uid) return;
         console.error('Gagal memverifikasi peran SIPANDU:', error);
         setIsAuthenticated(false);
+        setCurrentUserName('');
         setCurrentUserRole('');
         setAuthError('Sesi tidak dapat diverifikasi. Silakan masuk kembali atau hubungi administrator.');
-        await signOut(auth);
+        await signOut(auth).catch((signOutError) => console.warn('Gagal menutup sesi yang tidak dapat diverifikasi:', signOutError));
       } finally {
-        setAuthReady(true);
+        if (active && generation === authEventGeneration && (!user || auth.currentUser?.uid === user.uid)) setAuthReady(true);
       }
     });
-    return unsubscribe;
+    return () => {
+      active = false;
+      authEventGeneration++;
+      unsubscribe();
+    };
   }, []);
 
   // App Navigation tab
   const [activeTab, setActiveTab] = useState<TabKey>('beranda');
 
-  // Master Data in state (with localStorage caching)
-  const [ppksList, setPpksList] = useState<PPKSRecord[]>(() => {
-    const cached = localStorage.getItem('sipandu_ppks');
-    if (cached) {
-      try {
-        const parsed: unknown = JSON.parse(cached);
-        if (Array.isArray(parsed)) {
-          // Remove the exact legacy demo IDs and persist the clean cache.
-          const clean = deduplicatePPKSRecords((parsed as PPKSRecord[]).filter(
-            (record) => record && !isLegacySamplePPKS(record)
-          ));
-          if (clean.length !== parsed.length) localStorage.setItem('sipandu_ppks', JSON.stringify(clean));
-          return sortPPKSRecordsByTimestamp(clean);
-        }
-        console.warn('Cached PPKS data is not an array; starting with an empty list.');
-      } catch (e) {
-        console.error('Failed to parse cached PPKS list', e);
-      }
-    }
-    return initialPPKSList;
-  });
+  // Defer parsing potentially large PPKS/photo data until Firebase confirms authorization.
+  const [ppksList, setPpksList] = useState<PPKSRecord[]>([]);
+  const [profile, setProfile] = useState<ProfileUser>(initialProfileUser);
+  const [settings, setSettings] = useState<AppSettings>(initialAppSettings);
 
-  const [profile, setProfile] = useState<ProfileUser>(() => {
-    const cached = localStorage.getItem('sipandu_profile');
-    if (cached) {
-      try {
-        const parsed = JSON.parse(cached);
-        if (parsed?.nama === 'Deny Arifin Martyon S.' && parsed?.nip === '19920315 202012 1 002') {
-          localStorage.removeItem('sipandu_profile');
-          return initialProfileUser;
-        }
-        return parsed;
-      } catch (e) {
-        console.error('Failed to parse cached profile', e);
-      }
-    }
-    return initialProfileUser;
-  });
-
-  const [settings, setSettings] = useState<AppSettings>(() => {
-    const cached = localStorage.getItem('sipandu_settings');
-    if (cached) {
-      try {
-        return normalizeAppSettings(JSON.parse(cached));
-      } catch (e) {
-        console.error('Failed to parse cached settings', e);
-      }
-    }
-    return initialAppSettings;
-  });
-
-  const demoCleanupAttemptedRef = useRef('');
-  const demoCleanupRunningRef = useRef(false);
-  const firestoreRosterReconciliationAttemptedRef = useRef(false);
-  const firestoreRosterReconciliationInFlightRef = useRef<Promise<number> | null>(null);
   const continuationSheetCacheRef = useRef<{ formUrl: string; spreadsheetUrl: string } | null>(null);
   const [cloudSyncNotice, setCloudSyncNotice] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [respondentNotifications, setRespondentNotifications] = useState<RespondentNotification[]>(() => loadRespondentNotifications(auth.currentUser?.uid || 'default'));
@@ -316,34 +282,79 @@ export default function App() {
   const [isNotificationsOpen, setIsNotificationsOpen] = useState<boolean>(false);
   const [isGoogleWorkspaceOpen, setIsGoogleWorkspaceOpen] = useState<boolean>(false);
 
-  // Sync to local storage
   useEffect(() => {
+    if (!authReady || !isAuthenticated) return;
+    let nextRecords: PPKSRecord[] = initialPPKSList;
+    let nextProfile: ProfileUser = initialProfileUser;
+    let nextSettings: AppSettings = initialAppSettings;
     try {
-      localStorage.setItem('sipandu_ppks', JSON.stringify(ppksList));
+      const raw = localStorage.getItem('sipandu_ppks');
+      if (raw) {
+        const parsed: unknown = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          nextRecords = sortPPKSRecordsByTimestamp(deduplicatePPKSRecords(
+            (parsed as PPKSRecord[]).filter((record) => record && !isLegacySamplePPKS(record))
+          ));
+        } else {
+          console.warn('Cached PPKS data is not an array; starting with the default roster.');
+        }
+      }
     } catch (error) {
-      console.error('SIPANDU PPKS cache could not be persisted in browser storage:', error);
-      setCloudSyncNotice({
-        type: 'error',
-        text: 'Browser kehabisan ruang penyimpanan untuk cache lokal. Foto yang diunggah sudah dikompres, tetapi data baru mungkin belum tersimpan di perangkat; pastikan sinkronisasi Firebase berhasil sebelum menutup atau memuat ulang aplikasi.',
-      });
+      console.warn('SIPANDU could not read its local PPKS cache:', error);
     }
-  }, [ppksList]);
+    try {
+      const raw = localStorage.getItem('sipandu_profile');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (!(parsed?.nama === 'Deny Arifin Martyon S.' && parsed?.nip === '19920315 202012 1 002')) nextProfile = parsed as ProfileUser;
+      }
+    } catch (error) {
+      console.warn('SIPANDU could not read its local profile cache:', error);
+    }
+    try {
+      const raw = localStorage.getItem('sipandu_settings');
+      if (raw) nextSettings = normalizeAppSettings(JSON.parse(raw));
+    } catch (error) {
+      console.warn('SIPANDU could not read its local settings cache:', error);
+    }
+    setPpksList(nextRecords);
+    setProfile(nextProfile);
+    setSettings(nextSettings);
+    setLocalCacheReady(true);
+  }, [authReady, isAuthenticated]);
+
+  // Debounce large JSON serialization/writes to reduce synchronous main-thread work.
+  // This is a convenience cache and is not a replacement for authenticated server storage.
+  useEffect(() => {
+    if (!isAuthenticated || !localCacheReady) return;
+    const timer = window.setTimeout(() => {
+      try {
+        localStorage.setItem('sipandu_ppks', JSON.stringify(ppksList));
+      } catch (error) {
+        console.error('SIPANDU PPKS cache could not be persisted:', error);
+        setCloudSyncNotice({ type: 'error', text: 'Browser kehabisan ruang penyimpanan untuk cache lokal. Pastikan data sudah tersinkron ke Firebase/Google Sheets sebelum menutup aplikasi.' });
+      }
+    }, 650);
+    return () => window.clearTimeout(timer);
+  }, [ppksList, localCacheReady, isAuthenticated]);
 
   useEffect(() => {
-    try {
-      localStorage.setItem('sipandu_profile', JSON.stringify(profile));
-    } catch (error) {
-      console.error('SIPANDU profile could not be persisted in browser storage:', error);
-      setCloudSyncNotice({
-        type: 'error',
-        text: 'Foto/profil berubah pada sesi ini, tetapi browser menolak penyimpanan lokal. Foto profil dioptimalkan; jika pesan ini tetap muncul, tutup tab lama SIPANDU dan muat ulang agar ruang penyimpanan tersedia.',
-      });
-    }
-  }, [profile]);
+    if (!isAuthenticated || !localCacheReady) return;
+    const timer = window.setTimeout(() => {
+      try { localStorage.setItem('sipandu_profile', JSON.stringify(profile)); }
+      catch (error) { console.error('SIPANDU profile cache could not be persisted:', error); }
+    }, 250);
+    return () => window.clearTimeout(timer);
+  }, [profile, localCacheReady, isAuthenticated]);
 
   useEffect(() => {
-    localStorage.setItem('sipandu_settings', JSON.stringify(settings));
-  }, [settings]);
+    if (!isAuthenticated || !localCacheReady) return;
+    const timer = window.setTimeout(() => {
+      try { localStorage.setItem('sipandu_settings', JSON.stringify(settings)); }
+      catch (error) { console.warn('SIPANDU settings cache could not be persisted:', error); }
+    }, 250);
+    return () => window.clearTimeout(timer);
+  }, [settings, localCacheReady, isAuthenticated]);
 
   useEffect(() => {
     if (!isAuthenticated) return;
@@ -445,34 +456,6 @@ export default function App() {
     setPpksList((localRecords) => mergePPKSRecords(localRecords, cloudRecords));
   };
 
-  // Reconcile Firestore only after a successful import from the selected source.
-  // The 44-record guard prevents a wrong tab/partial read from deleting valid data.
-  const runFirestoreRosterReconciliation = async (
-    sourceRecords: PPKSRecord[],
-    force = false
-  ): Promise<number | null> => {
-    if (currentUserRole !== 'owner' && currentUserRole !== 'supervisor') return null;
-    if (sourceRecords.length !== EXPECTED_REAL_PPKS_COUNT) return null;
-    if (firestoreRosterReconciliationInFlightRef.current) {
-      return firestoreRosterReconciliationInFlightRef.current;
-    }
-    if (!force && firestoreRosterReconciliationAttemptedRef.current) return 0;
-
-    const operation = reconcilePPKSFirestoreWithSpreadsheet(sourceRecords);
-    firestoreRosterReconciliationInFlightRef.current = operation;
-    try {
-      const removed = await operation;
-      firestoreRosterReconciliationAttemptedRef.current = true;
-      return removed;
-    } catch (error) {
-      firestoreRosterReconciliationAttemptedRef.current = false;
-      console.warn('SIPANDU Firestore roster reconciliation skipped:', error);
-      return null;
-    } finally {
-      firestoreRosterReconciliationInFlightRef.current = null;
-    }
-  };
-
   /**
    * Load follow-up answers from the response Sheet that Google Forms has linked
    * to the configured stage-two Form. Merge only rows carrying an ID that exists
@@ -562,7 +545,6 @@ export default function App() {
     const notificationUid = auth.currentUser?.uid || 'default';
     await processRespondentSubmissionEvents(notificationUid, imported.records, recordsForSync as unknown as Array<Record<string, unknown>>);
     setRespondentNotifications(loadRespondentNotifications(notificationUid));
-    const firestoreDocumentsRemoved = await runFirestoreRosterReconciliation(recordsForSync, true);
     setPpksList((localRecords) => reconcileSpreadsheetPPKSRecords(localRecords, recordsForSync));
     setSettings((current) => ({
       ...current,
@@ -571,12 +553,7 @@ export default function App() {
       googleSpreadsheetSourceTab: imported.selectedTab,
     }));
     const updatedAt = new Date().toLocaleString('id-ID');
-    const hasExpectedRoster = recordsForSync.length === EXPECTED_REAL_PPKS_COUNT;
-    const firestoreMessage = !hasExpectedRoster
-      ? `Firestore penyelarasan penuh dilewati: ${recordsForSync.length} PPKS unik terbaca, sedangkan roster yang dipakai untuk pembersihan harus ${EXPECTED_REAL_PPKS_COUNT}. Data sumber tetap dimuat; tidak ada dokumen yang dihapus.`
-      : firestoreDocumentsRemoved === null
-        ? 'Data Sheets berhasil dimuat, tetapi Firestore belum diselaraskan; periksa izin owner/supervisor atau koneksi Firebase.'
-        : `Firestore diselaraskan ke ${EXPECTED_REAL_PPKS_COUNT} PPKS; ${firestoreDocumentsRemoved} dokumen lama/duplikat di luar roster dibersihkan.`;
+    const firestoreMessage = 'Firestore tidak dihapus atau direkonsiliasi oleh tombol sinkronisasi. Penghapusan data harus menjadi tindakan administrasi terpisah dan disengaja.';
     setLiveSyncState({
       type: 'success',
       message: `Sumber “${imported.spreadsheetTitle}” → “${imported.selectedTab}”: ${imported.sourceDataRows} baris data, ${recordsForSync.length} PPKS unik dimuat, ${imported.duplicateRowsCollapsed} duplikat spreadsheet digabung, ${imported.sampleRecordsFiltered} contoh disaring. Respons Form lanjutan dipadankan: ${continuation.matchedResponses}. ${continuation.warning ? continuation.warning + ' ' : ''}Foto sumber: diri ${imported.photoCounts.diri}/${imported.records.length}, KTP ${imported.photoCounts.ktp}/${imported.records.length}, KK ${imported.photoCounts.kk}/${imported.records.length}, rumah ${imported.photoCounts.rumah}/${imported.records.length}; tautan dipulihkan dari Forms: ${imported.photosRecoveredFromForm}; status pemulihan: ${imported.photoRecoveryStatus} — ${imported.photoRecoveryDetail} ${firestoreMessage} NIK terpetakan ${imported.recordsWithNIK}/${imported.records.length}. Sinkronisasi otomatis setiap 5 menit saat dashboard terbuka dan izin Google masih berlaku.`,
@@ -643,11 +620,6 @@ export default function App() {
         await processRespondentSubmissionEvents(notificationUid, imported.records, recordsForSync as unknown as Array<Record<string, unknown>>);
         if (!active) return;
         setRespondentNotifications(loadRespondentNotifications(notificationUid));
-        let firestoreDocumentsRemoved: number | null = null;
-        if (!firestoreRosterReconciliationAttemptedRef.current && recordsForSync.length === EXPECTED_REAL_PPKS_COUNT) {
-          firestoreDocumentsRemoved = await runFirestoreRosterReconciliation(recordsForSync, false);
-          if (!active) return;
-        }
         setPpksList((current) => reconcileSpreadsheetPPKSRecords(current, recordsForSync));
         setSettings((current) => {
           if (
@@ -661,14 +633,7 @@ export default function App() {
             googleSpreadsheetSourceTab: imported.selectedTab,
           };
         });
-        const hasExpectedRoster = recordsForSync.length === EXPECTED_REAL_PPKS_COUNT;
-        const firestoreMessage = !hasExpectedRoster
-          ? `Penyelarasan penuh Firestore dilewati karena roster berisi ${recordsForSync.length} PPKS unik (ambang aman saat ini ${EXPECTED_REAL_PPKS_COUNT}); data respons tetap dimuat dan tidak ada dokumen yang dihapus.`
-          : firestoreDocumentsRemoved === null && !firestoreRosterReconciliationAttemptedRef.current
-            ? 'Data Sheets berhasil dimuat, tetapi Firestore belum diselaraskan; periksa izin owner/supervisor dan Firebase.'
-            : firestoreRosterReconciliationAttemptedRef.current
-              ? 'Roster Firestore telah diselaraskan pada sesi ini.'
-              : 'Penyelarasan Firestore belum dijalankan pada sesi ini.';
+        const firestoreMessage = 'Live sync tidak menghapus atau merekonsiliasi dokumen Firestore secara otomatis; penghapusan data memerlukan tindakan operator yang disengaja.';
         setLiveSyncState({
           type: 'success',
           message: `LIVE SYNC — “${imported.spreadsheetTitle}” → “${imported.selectedTab}”: ${recordsForSync.length} PPKS unik dimuat dari ${imported.sourceDataRows} baris tahap awal; ${imported.duplicateRowsCollapsed} duplikat digabung; ${imported.sampleRecordsFiltered} contoh disaring; respons Google Form lanjutan yang dipadankan: ${continuation.matchedResponses}. ${continuation.warning ? continuation.warning + ' ' : ''}Foto diri ${imported.photoCounts.diri}/${imported.records.length}, KTP ${imported.photoCounts.ktp}/${imported.records.length}, KK ${imported.photoCounts.kk}/${imported.records.length}, rumah ${imported.photoCounts.rumah}/${imported.records.length}; tautan Forms dipulihkan: ${imported.photosRecoveredFromForm} (${imported.photoRecoveryStatus}); diagnosis: ${imported.photoRecoveryDetail}; ${firestoreMessage} NIK ${imported.recordsWithNIK}/${imported.records.length}.`,
@@ -685,7 +650,8 @@ export default function App() {
       }
     };
 
-    void syncOnce();
+    // Let the dashboard render before reading the response spreadsheet.
+    const initialSyncTimer = window.setTimeout(() => { void syncOnce(); }, 1500);
     const timer = window.setInterval(() => { void syncOnce(); }, 5 * 60 * 1000);
     const onVisibilityChange = () => {
       if (document.visibilityState === 'visible') void syncOnce();
@@ -695,125 +661,23 @@ export default function App() {
     window.addEventListener('sipandu-workspace-token-updated', onWorkspaceTokenUpdated);
     return () => {
       active = false;
+      window.clearTimeout(initialSyncTimer);
       window.clearInterval(timer);
       document.removeEventListener('visibilitychange', onVisibilityChange);
       window.removeEventListener('sipandu-workspace-token-updated', onWorkspaceTokenUpdated);
     };
   }, [isAuthenticated, settings.googleSpreadsheetSourceUrl, settings.googleSpreadsheetSourceTab, settings.googleFormTahapLanjutanUrl, currentUserRole]);
 
-  // Automatically remove clearly marked legacy demo rows/files after a Google API
-  // token is already available. This never opens an OAuth popup by itself.
-  useEffect(() => {
-    let active = true;
-    const runCleanup = async () => {
-      if (!active || !isAuthenticated || demoCleanupRunningRef.current) return;
-      const candidates = [
-        GOOGLE_SIPANDU_RESOURCES.responseSpreadsheetUrl,
-        settings.googleSpreadsheetSourceUrl || '',
-        settings.googleSpreadsheetUrl || '',
-      ].filter(Boolean);
-      const uniqueSheets = new Map<string, string>();
-      const failures: string[] = [];
-      for (const url of candidates) {
-        try {
-          uniqueSheets.set(extractSpreadsheetId(url), url);
-        } catch {
-          failures.push('Konfigurasi spreadsheet dilewati karena URL/ID tidak valid.');
-        }
-      }
-
-      const cleanupKey = 'sipandu_legacy_demo_cleanup_v3:' + [
-        ...[...uniqueSheets.keys()].sort(),
-        GOOGLE_SIPANDU_RESOURCES.driveFolderId,
-      ].join('|');
-      // Keep this guard only in memory for the current page session. Do not
-      // trust a permanent localStorage flag: demo rows/files may be reintroduced
-      // or a previous run may have been unable to scan every cloud target.
-      if (demoCleanupAttemptedRef.current === cleanupKey) return;
-
-      const token = await getAccessToken();
-
-      demoCleanupRunningRef.current = true;
-      const messages: string[] = [];
-      let firestoreDeleted = 0;
-      let rowsCleared = 0;
-      let filesDeleted = 0;
-      try {
-        // Firestore cleanup uses the already-authenticated SIPANDU staff account,
-        // so it must not be blocked by the separate Google Workspace API token.
-        if (active) {
-          if (currentUserRole === 'owner' || currentUserRole === 'supervisor') {
-            try {
-              firestoreDeleted = await removeLegacyDemoPPKSFromFirestore();
-              messages.push(`Firestore: ${firestoreDeleted} dokumen PPKS contoh dihapus`);
-            } catch (error) {
-              failures.push(`Firestore: ${error instanceof Error ? error.message : String(error)}`);
-            }
-          } else {
-            failures.push('Firestore: pembersihan otomatis memerlukan peran owner/supervisor; data lainnya tidak diubah.');
-          }
-        }
-
-        if (!token) {
-          failures.push('Google Sheets/Drive: pembersihan menunggu izin Google API. Setelah izin dipulihkan, pembersihan akan berjalan otomatis tanpa meminta login lagi dari proses ini.');
-        } else {
-          for (const [spreadsheetId, url] of uniqueSheets) {
-            if (!active) return;
-            try {
-              const cleaned = await removeLegacyDemoRowsFromSpreadsheet(url);
-              rowsCleared += cleaned.rowsCleared;
-              messages.push(`Sheets “${cleaned.spreadsheetTitle}”: ${cleaned.rowsCleared} baris contoh dibersihkan dari ${cleaned.tabsScanned} tab`);
-            } catch (error) {
-              failures.push(`Spreadsheet ${spreadsheetId}: ${error instanceof Error ? error.message : String(error)}`);
-            }
-          }
-
-          if (active) {
-            try {
-              const drive = await removeObviousDemoFilesFromDrive(GOOGLE_SIPANDU_RESOURCES.driveFolderId);
-              filesDeleted = drive.filesDeleted;
-              messages.push(`Drive: ${drive.filesDeleted} file contoh dihapus; ${drive.filesScanned} file diperiksa; pemindaian seluruh Drive ${drive.accountWideScanCompleted ? 'berhasil' : 'tidak lengkap'}`);
-              if (!drive.accountWideScanCompleted) {
-                failures.push('Google Drive: pemindaian seluruh akun tidak berhasil. File contoh pada folder SIPANDU sudah diperiksa; pemindaian akan diulangi pada sesi berikutnya.');
-              }
-            } catch (error) {
-              failures.push(`Google Drive: ${error instanceof Error ? error.message : String(error)}`);
-            }
-          }
-        }
-      } finally {
-        demoCleanupRunningRef.current = false;
-      }
-
-      if (!active) return;
-      setPpksList((current) => mergePPKSRecords(current, []));
-      if (failures.length === 0) {
-        demoCleanupAttemptedRef.current = cleanupKey;
-        try { localStorage.setItem(cleanupKey, new Date().toISOString()); } catch { /* optional cache */ }
-      }
-      setCloudSyncNotice({
-        type: failures.length ? 'error' : 'success',
-        text: [
-          `Pembersihan data contoh ${failures.length ? 'sebagian selesai' : 'selesai'}: Firestore ${firestoreDeleted} dokumen, Google Sheets ${rowsCleared} baris, Google Drive ${filesDeleted} file contoh.`,
-          ...messages,
-          ...(failures.length ? [`Target yang belum selesai: ${failures.join(' · ')}`] : []),
-          'Data non-demo dipertahankan. Respons di dalam Google Form asli tidak dihapus karena Google Forms API tidak menyediakan operasi hapus respons individual; baris contoh pada spreadsheet respons tertaut dibersihkan secara terpisah.',
-        ].join(' | '),
-      });
-    };
-
-    const onTokenUpdated = () => { void runCleanup(); };
-    void runCleanup();
-    window.addEventListener('sipandu-workspace-token-updated', onTokenUpdated);
-    return () => {
-      active = false;
-      window.removeEventListener('sipandu-workspace-token-updated', onTokenUpdated);
-    };
-  }, [isAuthenticated, currentUserRole, settings.googleSpreadsheetSourceUrl, settings.googleSpreadsheetUrl]);
+  // Destructive demo-data cleanup is intentionally manual in Google Workspace & Cloud Hub.
+  // Login and ordinary live sync never delete cloud rows/files as automatic side effects.
 
   // Avoid showing protected UI until Firebase has resolved the current session.
   if (!authReady) {
     return <div className="min-h-screen flex items-center justify-center bg-[#0a140b] text-emerald-200">Memeriksa sesi SIPANDU…</div>;
+  }
+
+  if (isAuthenticated && !localCacheReady) {
+    return <div role="status" aria-live="polite" className="min-h-screen flex items-center justify-center bg-[#0a140b] text-emerald-200">Menyiapkan data SIPANDU…</div>;
   }
 
   // If not logged in, render Part 1: Landing Page / Login
