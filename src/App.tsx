@@ -18,6 +18,7 @@ import { auth, getAccessToken, savePPKSToFirestore, googleLogout, removeLegacyDe
 import { ensureSIPANDUDatabaseSheet, extractSpreadsheetId, importPPKSFromSpreadsheet, removeLegacyDemoRowsFromSpreadsheet, removeObviousDemoFilesFromDrive, upsertPPKSInSpreadsheet } from './lib/googleWorkspace';
 import { GOOGLE_SIPANDU_RESOURCES } from './lib/googleSIPANDUResources';
 import { deduplicatePPKSRecords, EXPECTED_REAL_PPKS_COUNT, parsePPKSTimestamp, samePPKSIdentity, sortPPKSRecordsByName, sortPPKSRecordsByTimestamp } from './lib/ppksData';
+import { normalizePPKSPhotoSource } from './lib/photoSources';
 
 function isSixteenDigitNIK(value: string): boolean {
   return /^\d{16}$/.test(String(value || '').replace(/\D/g, ''));
@@ -42,10 +43,10 @@ function mergePPKSRecords(localRecords: PPKSRecord[], cloudRecords: PPKSRecord[]
       noHpWa: next.noHpWa || previous.noHpWa,
       jenisBantuan: next.jenisBantuan || previous.jenisBantuan,
       intervensiMental: next.intervensiMental || previous.intervensiMental,
-      fotoDiri: next.fotoDiri || previous.fotoDiri,
-      fotoKtp: next.fotoKtp || previous.fotoKtp,
-      fotoKk: next.fotoKk || previous.fotoKk,
-      fotoRumah: next.fotoRumah || previous.fotoRumah,
+      fotoDiri: normalizePPKSPhotoSource(next.fotoDiri) || normalizePPKSPhotoSource(previous.fotoDiri),
+      fotoKtp: normalizePPKSPhotoSource(next.fotoKtp) || normalizePPKSPhotoSource(previous.fotoKtp),
+      fotoKk: normalizePPKSPhotoSource(next.fotoKk) || normalizePPKSPhotoSource(previous.fotoKk),
+      fotoRumah: normalizePPKSPhotoSource(next.fotoRumah) || normalizePPKSPhotoSource(previous.fotoRumah),
       integratedForm: next.integratedForm
         ? ({ ...(previous.integratedForm || {}), ...nextIntegrated } as NonNullable<PPKSRecord['integratedForm']>)
         : previous.integratedForm,
