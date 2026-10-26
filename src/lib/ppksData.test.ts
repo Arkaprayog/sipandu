@@ -138,3 +138,29 @@ test('uses official assessment Q23 to identify a duplicate when the secondary NI
   assert.equal(merged[0].fotoDiri, 'https://example.test/diri.jpg');
   assert.equal(merged[0].fotoKtp, 'https://example.test/ktp.jpg');
 });
+
+test('collapses a 45-row import to the 44 verified unique PPKS', () => {
+  const verified = Array.from({ length: EXPECTED_REAL_PPKS_COUNT }, (_, index) => {
+    const nik = String(index + 1).padStart(16, '0');
+    return record({
+      id: `sheet-row-${index + 2}`,
+      namaLengkap: `Responden ${index + 1}`,
+      nik,
+      timestamp: `2026-10-26T08:${String(index % 60).padStart(2, '0')}:00`,
+      officialAssessment: { q23: nik },
+    });
+  });
+  const duplicate = record({
+    id: 'sheet-row-46',
+    namaLengkap: 'Responden 1',
+    nik: '9999999999999999',
+    timestamp: '2026-10-26T09:30:00',
+    officialAssessment: { q23: '0000000000000001', q24: 'Data tambahan dari pengiriman ulang' },
+  });
+
+  const importedRows = [...verified, duplicate];
+  assert.equal(importedRows.length, 45);
+  const unique = deduplicatePPKSRecords(importedRows);
+  assert.equal(unique.length, EXPECTED_REAL_PPKS_COUNT);
+  assert.equal(unique.filter((item) => item.officialAssessment?.q24 === 'Data tambahan dari pengiriman ulang').length, 1);
+});
