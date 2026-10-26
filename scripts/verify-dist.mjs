@@ -45,13 +45,13 @@ if (fs.existsSync(assetDirectory)) {
       const reference = match[1];
       if (/^(?:https?:)?\/\//i.test(reference)) continue;
       if (reference.startsWith('/')) {
-        fail(\`URL modul dinamis harus relatif: \${fileName} → \${reference}\`);
+        fail('URL modul dinamis harus relatif: ' + fileName + ' → ' + reference);
         continue;
       }
       const pathname = decodeURIComponent(reference.split(/[?#]/, 1)[0]);
       const resolvedPath = path.resolve(assetDirectory, pathname);
       if (!resolvedPath.startsWith(assetDirectory + path.sep) || !fs.existsSync(resolvedPath)) {
-        fail(\`Chunk dinamis tidak ditemukan: \${fileName} → \${reference}\`);
+        fail('Chunk dinamis tidak ditemukan: ' + fileName + ' → ' + reference);
       }
     }
   }
