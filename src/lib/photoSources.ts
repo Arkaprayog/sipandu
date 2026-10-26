@@ -46,6 +46,18 @@ function scorePhotoHeader(normalized: string, kind: PPKSPhotoKind): number {
   return 0;
 }
 
+/** Classify a Google Forms item title only when the category is explicit enough to avoid attaching the wrong document. */
+export function classifyPPKSPhotoHeader(header: string): PPKSPhotoKind | null {
+  const normalized = normalizePhotoHeader(header);
+  const scores: Array<{ kind: PPKSPhotoKind; score: number }> = [
+    { kind: 'diri', score: scorePhotoHeader(normalized, 'diri') },
+    { kind: 'ktp', score: scorePhotoHeader(normalized, 'ktp') },
+    { kind: 'kk', score: scorePhotoHeader(normalized, 'kk') },
+    { kind: 'rumah', score: scorePhotoHeader(normalized, 'rumah') },
+  ].sort((a, b) => b.score - a.score);
+  return scores[0].score >= 70 ? scores[0].kind : null;
+}
+
 /** Select a non-empty file-upload cell for the requested photo/document category without confusing KTP/KK/house uploads. */
 export function readPPKSPhotoSourceByKind(
   headers: string[],
