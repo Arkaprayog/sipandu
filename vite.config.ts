@@ -5,7 +5,9 @@ import {defineConfig} from 'vite';
 
 export default defineConfig(() => {
   return {
-    base: process.env.GITHUB_ACTIONS === 'true' ? '/sipandu/' : '/',
+    // Relative asset URLs work on both the GitHub Pages project path (/sipandu/)
+    // and the custom-domain root (sipanduodhiv.my.id/).
+    base: './',
     plugins: [react(), tailwindcss()],
     resolve: {
       alias: {
