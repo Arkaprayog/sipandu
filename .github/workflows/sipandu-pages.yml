@@ -39,6 +39,8 @@ jobs:
         run: bun run test
       - name: Build SIPANDU
         run: bun run build
+      - name: Verify production assets and relative URLs
+        run: node scripts/verify-dist.mjs
       - name: Configure Pages
         uses: actions/configure-pages@v5
       - name: Upload Pages artifact

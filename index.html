@@ -39,21 +39,26 @@
         var panel = document.getElementById('sipandu-boot-error');
         var detail = document.getElementById('sipandu-boot-error-detail');
         var root = document.getElementById('root');
-        var showError = function (message) {
+        var hasSpecificError = false;
+        var showError = function (message, isSpecific) {
           if (root && root.childElementCount > 0) return;
+          // Keep a concrete asset/runtime error instead of replacing it with the
+          // generic boot timeout after eight seconds.
+          if (hasSpecificError && !isSpecific) return;
+          if (isSpecific) hasSpecificError = true;
           panel.style.display = 'block';
-          detail.textContent = String(message || 'Kesalahan tidak diketahui').slice(0, 1200);
+          detail.textContent = String(message || 'Kesalahan tidak diketahui').slice(0, 3000);
         };
         window.addEventListener('error', function (event) {
           var target = event.target;
           if (target && target !== window && (target.src || target.href)) {
-            showError('Aset gagal dimuat: ' + (target.src || target.href));
+            showError('Aset gagal dimuat: ' + (target.src || target.href), true);
           } else {
-            showError((event.message || 'JavaScript gagal dijalankan') + (event.filename ? '\\n' + event.filename + ':' + event.lineno : ''));
+            showError((event.message || 'JavaScript gagal dijalankan') + (event.filename ? '\\n' + event.filename + ':' + event.lineno : ''), true);
           }
         }, true);
         window.addEventListener('unhandledrejection', function (event) {
-          showError('Kesalahan proses aplikasi: ' + (event.reason && event.reason.message ? event.reason.message : event.reason));
+          showError('Kesalahan proses aplikasi: ' + (event.reason && event.reason.message ? event.reason.message : event.reason), true);
         });
         var observer = new MutationObserver(function () {
           if (root && root.childElementCount > 0) {
@@ -64,9 +69,9 @@
         observer.observe(root, { childList: true });
         window.setTimeout(function () {
           if (!root || root.childElementCount === 0) {
-            showError('Aplikasi tidak menampilkan antarmuka setelah 8 detik. Periksa koneksi, pemuatan berkas JavaScript, dan URL dasar GitHub Pages.');
+            showError('Aplikasi belum menampilkan antarmuka setelah 20 detik. Periksa koneksi, pemuatan berkas JavaScript, dan URL dasar GitHub Pages.');
           }
-        }, 8000);
+        }, 20000);
       })();
     </script>
     <script type="module" src="/src/main.tsx"></script>
