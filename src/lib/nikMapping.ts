@@ -33,10 +33,10 @@ export function isLikelyRespondentNIKHeader(header: string): boolean {
   ) return false;
 
   const identityTokens = [
-    'nik', 'nomornik', 'nonik', 'nikresponden', 'nikppks', 'nomornikresponden', 'noidentitasnik', 'nomorindukkependudukanppks', 'nomoridentitasresponden',
+    'nik', 'nomornik', 'nonik', 'nikresponden', 'nikppks', 'nomornikresponden', 'noidentitasnik', 'nomorindukkependudukanppks', 'nomoridentitasresponden', 'nomorindukkependudukanppks', 'nomorindukkependudukanresponden', 'nomorindukkependudukancalonresponden', 'nomorindukkependudukansesuaiktp', 'nomorindukkependudukansesuaikartutandapenduduk', 'niksesuaikartutandapenduduk', 'nomoridentitassesuaiktp', 'nomoridentitaspenduduk', 'nomorindukkependudukandiri', 'nikcalonresponden', 'nomoridentitasppks', 'niksesuaikartuidentitasresponden',
     'nomorindukkependudukan', 'noindukkependudukan', 'indukkependudukan',
     'noinduk', 'nokependudukan', 'nomorkependudukan',
-    'nomorktp', 'noktp', 'ktpnik', 'nikktp', 'nomornikktp',
+    'nomorktp', 'noktp', 'ktpnik', 'nikktp', 'nomornikktp', 'nomorindukktp', 'noindukktp', 'nomorindukkependudukanktp', 'niksesuaiktp', 'nomorindukkependudukanrespondenppks',
     'kartutandapenduduk', 'ektp', 'kependudukan',
     'nomoridentitas', 'noidentitas', 'identitasresponden', 'nomorindukpenduduk', 'noindukkependudukanresponden', 'niksesuaikartuidentitas', 'niksesuaiktpresponden',
     'niksesuaiktp', 'nomorindukkependudukanresponden',
@@ -90,7 +90,7 @@ export function readNIKFromSheetRow(headers: string[], row: string[]): string {
     let points = 0;
     if ([
       'nik', 'nikresponden', 'nikppks', 'nomorindukkependudukan',
-      'nomorindukkependudukanresponden', 'nomorktp', 'nomorktpresponden',
+      'nomorindukkependudukanresponden', 'nomorindukkependudukancalonresponden', 'nomorindukkependudukansesuaiktp', 'nomorindukkependudukanktp', 'nomoridentitasresponden', 'nomoridentitasppks', 'nikcalonresponden', 'nomorktp', 'nomorktpresponden',
       'noktp', 'noktpresponden', 'niksesuaiktp', 'ktpnik', 'nikktp',
     ].includes(normalized)) points += 100;
     if (normalized.includes('responden') || normalized.includes('ppks') || normalized.includes('calonresponden')) points += 60;
