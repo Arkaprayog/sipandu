@@ -700,6 +700,7 @@ export default function App() {
         <Header
           currentUser={currentUserName}
           profile={profile}
+          accountPhotoUrl={auth.currentUser?.photoURL || ''}
           unreadNotificationsCount={0}
           onOpenEditProfile={() => setIsEditProfileOpen(true)}
           onOpenSettings={() => setIsSettingsOpen(true)}
