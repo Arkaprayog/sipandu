@@ -75,6 +75,21 @@ if (fs.existsSync(assetDirectory)) {
   }
 }
 
+
+const loginBackground = path.join(dist, 'uploads', 'Wallpaper Background Landingpage.webp');
+const originalLoginBackground = path.join(dist, 'uploads', 'Wallpaper Background Landingpage.jpg');
+if (!fs.existsSync(loginBackground) || fs.statSync(loginBackground).size === 0) {
+  fail('Gambar WebP latar login tidak ada/kosong pada hasil build.');
+} else if (fs.existsSync(originalLoginBackground)) {
+  const webpBytes = fs.statSync(loginBackground).size;
+  const originalBytes = fs.statSync(originalLoginBackground).size;
+  if (webpBytes >= originalBytes * 0.6) {
+    fail(`Optimasi gambar latar login kurang efektif: WebP ${webpBytes} byte vs JPEG ${originalBytes} byte.`);
+  } else {
+    console.log(`Login background optimized: ${originalBytes} → ${webpBytes} bytes (${Math.round((1 - webpBytes / originalBytes) * 100)}% smaller).`);
+  }
+}
+
 for (const required of ['manifest.webmanifest', 'sw.js']) {
   const file = path.join(dist, required);
   if (!fs.existsSync(file) || fs.statSync(file).size === 0) {
