@@ -80,6 +80,51 @@ async function googleJson<T>(url: string, init: RequestInit = {}): Promise<T> {
 }
 
 
+
+export type PPKSPhotoKind = 'diri' | 'ktp' | 'kk' | 'rumah';
+
+/**
+ * Upload a missing respondent photo into the configured SIPANDU Drive folder.
+ * The returned Drive URL is then stored on the PPKS record so the existing
+ * cloud-sync pipeline can persist it to the configured SIPANDU database sheet.
+ */
+export async function uploadPPKSPhotoToDrive(
+  file: File,
+  options: { folderId: string; respondentName: string; respondentId: string; photoKind: PPKSPhotoKind }
+): Promise<string> {
+  if (!file.type.startsWith('image/')) throw new Error('Berkas harus berupa gambar.');
+  if (file.size > 12 * 1024 * 1024) throw new Error('Ukuran foto maksimal 12 MB.');
+  const token = requireToken(await getAccessToken());
+  const safeName = options.respondentName.replace(/[^\p{L}\p{N} _.-]/gu, '').trim().slice(0, 70) || 'PPKS';
+  const photoLabel = { diri: 'Foto-Diri', ktp: 'Foto-KTP', kk: 'Foto-KK', rumah: 'Foto-Rumah' }[options.photoKind];
+  const fileName = `SIPANDU_${safeName}_${photoLabel}_${options.respondentId}_${Date.now()}${file.name.match(/\.[a-zA-Z0-9]{2,5}$/)?.[0] || '.jpg'}`;
+  const boundary = `sipandu_upload_${Date.now()}`;
+  const metadata = JSON.stringify({
+    name: fileName,
+    mimeType: file.type,
+    parents: [options.folderId],
+    description: `Foto PPKS ${options.respondentName}; ID SIPANDU ${options.respondentId}; kategori ${photoLabel}`,
+  });
+  const body = new Blob([
+    `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${metadata}\r\n--${boundary}\r\nContent-Type: ${file.type}\r\n\r\n`,
+    await file.arrayBuffer(),
+    `\r\n--${boundary}--`,
+  ]);
+  const response = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,webViewLink', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': `multipart/related; boundary=${boundary}` },
+    body,
+  });
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({})) as { error?: { message?: string } };
+    throw new Error(data.error?.message || `Google Drive menolak unggahan (HTTP ${response.status}). Periksa izin Drive dan folder SIPANDU.`);
+  }
+  const uploaded = await response.json() as { id?: string; webViewLink?: string };
+  if (!uploaded.id) throw new Error('Google Drive tidak mengembalikan ID file setelah unggahan.');
+  // Keep the file private by default; do not expose sensitive identity documents publicly.
+  return uploaded.webViewLink || `https://drive.google.com/file/d/${uploaded.id}/view`;
+}
+
 /** Lists real Google Sheets files the authorized account can access across My Drive/shared drives. */
 export async function listDriveSpreadsheets(): Promise<GoogleDriveFile[]> {
   const all: GoogleDriveFile[] = [];
