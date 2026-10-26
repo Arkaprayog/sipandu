@@ -779,6 +779,9 @@ function mapRowsToPPKSRecords(rows: string[][]): PPKSRecord[] {
 }
 
 interface GoogleFormPhotoMetadata {
+  formId?: string;
+  linkedSheetId?: string;
+  info?: { title?: string; documentTitle?: string };
   items?: Array<{
     title?: string;
     questionItem?: {
@@ -789,44 +792,164 @@ interface GoogleFormPhotoMetadata {
     };
   }>;
 }
+type PhotoRecoveryStatus =
+  | 'not-needed'
+  | 'recovered'
+  | 'no-linked-form'
+  | 'no-upload-responses'
+  | 'no-match'
+  | 'failed'
+  | 'not-applicable';
 
-/**
- * If the linked response Sheet did not expose Drive hyperlinks in photo cells,
- * recover file IDs straight from Google Forms' fileUploadAnswers. This fallback
- * runs only for SIPANDU's verified response spreadsheet and only when at least
- * one photo field is missing; a conservative name/timestamp match prevents
- * assigning another respondent's attachment.
- */
+interface PhotoRecoveryDiagnostics {
+  status: PhotoRecoveryStatus;
+  formTitle: string;
+  responseCount: number;
+  responsesWithUploads: number;
+  recordsMatched: number;
+  linksRecovered: number;
+  detail: string;
+}
+
 interface CachedGoogleFormPhotoResponses {
   formId: string;
   loadedAt: number;
+  formTitle: string;
+  totalResponses: number;
   candidates: FormPhotoResponseCandidate[];
 }
 let cachedGoogleFormPhotoResponses: CachedGoogleFormPhotoResponses | null = null;
-let googleFormPhotoResponsesInFlight: Promise<FormPhotoResponseCandidate[]> | null = null;
+let googleFormPhotoResponsesInFlight: Promise<CachedGoogleFormPhotoResponses> | null = null;
 
-async function loadGoogleFormPhotoResponseCandidates(formId: string): Promise<FormPhotoResponseCandidate[]> {
+function normalizeFormName(value: string): string {
+  return normalizeSheetHeader(value)
+    .replace(/(responses?|answers?|jawaban|tanggapan|responseform|responsesheet)$/g, '');
+}
+
+function scoreFormNameMatch(spreadsheetTitle: string, formFileName: string): number {
+  const sheetStem = normalizeFormName(spreadsheetTitle);
+  const formStem = normalizeFormName(formFileName);
+  if (!sheetStem || !formStem) return 0;
+  if (sheetStem === formStem) return 1000;
+  if (sheetStem.startsWith(formStem) || formStem.startsWith(sheetStem)) {
+    return 600 + Math.min(sheetStem.length, formStem.length);
+  }
+  const sheetTokens = new Set(spreadsheetTitle.toLocaleLowerCase('id-ID').match(/[a-z0-9]+/g) || []);
+  const formTokens = new Set(formFileName.toLocaleLowerCase('id-ID').match(/[a-z0-9]+/g) || []);
+  for (const token of ['responses', 'response', 'jawaban', 'tanggapan', 'form', 'google', 'sheet', 'sheets']) {
+    sheetTokens.delete(token);
+    formTokens.delete(token);
+  }
+  const shared = [...sheetTokens].filter((token) => formTokens.has(token)).length;
+  return shared * 10;
+}
+
+/**
+ * Resolve the actual Google Form connected to this source spreadsheet. Earlier
+ * code always read the hard-coded SIPANDU form, even when the configured response
+ * sheet belonged to another form. linkedSheetId is the authoritative relationship.
+ */
+async function resolveFormLinkedToSpreadsheet(
+  spreadsheetId: string,
+  spreadsheetTitle: string,
+  preferredFormId: string,
+): Promise<GoogleFormPhotoMetadata | null> {
+  const inspected = new Map<string, GoogleFormPhotoMetadata | null>();
+  const inspect = async (formId: string): Promise<GoogleFormPhotoMetadata | null> => {
+    if (!formId || inspected.has(formId)) return inspected.get(formId) || null;
+    try {
+      const form = await googleJson<GoogleFormPhotoMetadata>(
+        \`https://forms.googleapis.com/v1/forms/\${extractFormId(formId)}\`
+      );
+      inspected.set(formId, form);
+      if (form.linkedSheetId === spreadsheetId) return form;
+      // Trust this configured ID pair only if legacy metadata omits linkedSheetId;
+      // never do this for a different custom spreadsheet.
+      if (
+        !form.linkedSheetId &&
+        spreadsheetId === GOOGLE_SIPANDU_RESOURCES.responseSpreadsheetId &&
+        formId === GOOGLE_SIPANDU_RESOURCES.formId
+      ) return form;
+    } catch (error) {
+      console.warn('SIPANDU could not inspect Google Form metadata:', error);
+      inspected.set(formId, null);
+    }
+    return null;
+  };
+
+  const preferred = await inspect(preferredFormId);
+  if (preferred) return preferred;
+
+  const words = (spreadsheetTitle.match(/[A-Za-z0-9]+/g) || [])
+    .filter((word) => word.length >= 5)
+    .filter((word) => !/^(responses?|answers?|jawaban|tanggapan|spreadsheet|google|forms?)$/i.test(word));
+  const probes = [...new Set(words)].slice(0, 4);
+  const driveForms = new Map<string, { id: string; name: string }>();
+
+  // Search Drive for candidate Form files, then confirm the exact linkedSheetId
+  // with Forms API; a similar title alone is never treated as proof of a link.
+  for (const word of probes) {
+    const escapedWord = word.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+    const params = new URLSearchParams({
+      q: \`mimeType = 'application/vnd.google-apps.form' and trashed = false and name contains '\${escapedWord}'\`,
+      pageSize: '100',
+      orderBy: 'name',
+      fields: 'nextPageToken,files(id,name,mimeType)',
+    });
+    let pageToken = '';
+    let pages = 0;
+    do {
+      if (pageToken) params.set('pageToken', pageToken);
+      const response = await googleJson<{
+        files?: Array<{ id?: string; name?: string; mimeType?: string }>;
+        nextPageToken?: string;
+      }>(\`https://www.googleapis.com/drive/v3/files?\${params.toString()}\`);
+      for (const file of response.files || []) {
+        if (file.id && file.mimeType === 'application/vnd.google-apps.form') {
+          driveForms.set(file.id, { id: file.id, name: String(file.name || '') });
+        }
+      }
+      pageToken = response.nextPageToken || '';
+      pages++;
+    } while (pageToken && pages < 3);
+  }
+
+  const ranked = [...driveForms.values()]
+    .map((file) => ({ ...file, score: scoreFormNameMatch(spreadsheetTitle, file.name) }))
+    .filter((file) => file.score > 0)
+    .sort((a, b) => b.score - a.score || a.name.localeCompare(b.name))
+    .slice(0, 15);
+  for (const candidate of ranked) {
+    const form = await inspect(candidate.id);
+    if (form?.linkedSheetId === spreadsheetId) return form;
+    if (form && !form.linkedSheetId &&
+        spreadsheetId === GOOGLE_SIPANDU_RESOURCES.responseSpreadsheetId &&
+        candidate.id === GOOGLE_SIPANDU_RESOURCES.formId) return form;
+  }
+  return null;
+}
+
+async function loadGoogleFormPhotoResponseCandidates(
+  form: GoogleFormPhotoMetadata,
+): Promise<CachedGoogleFormPhotoResponses> {
+  const formId = String(form.formId || '').trim();
+  if (!formId) throw new Error('Metadata Google Form tertaut tidak memiliki formId.');
   if (
     cachedGoogleFormPhotoResponses &&
     cachedGoogleFormPhotoResponses.formId === formId &&
     Date.now() - cachedGoogleFormPhotoResponses.loadedAt < 5 * 60 * 1000
-  ) return cachedGoogleFormPhotoResponses.candidates;
+  ) return cachedGoogleFormPhotoResponses;
   if (googleFormPhotoResponsesInFlight) return googleFormPhotoResponsesInFlight;
 
-  const operation = (async (): Promise<FormPhotoResponseCandidate[]> => {
-    const [form, responses] = await Promise.all([
-      googleJson<GoogleFormPhotoMetadata>(`https://forms.googleapis.com/v1/forms/${extractFormId(formId)}`),
-      fetchFormResponses(formId),
-    ]);
+  const operation = (async (): Promise<CachedGoogleFormPhotoResponses> => {
     const kindByQuestionId = new Map<string, ReturnType<typeof classifyPPKSPhotoHeader>>();
     const nameQuestionIds = new Set<string>();
-    const questionTitles = new Map<string, string>();
+    const nikQuestionIds = new Set<string>();
     for (const item of form.items || []) {
       const question = item.questionItem?.question;
       const questionId = String(question?.questionId || '').trim();
       const title = String(item.title || '').trim();
       if (!questionId || !title) continue;
-      questionTitles.set(questionId, title);
       if (question?.fileUploadQuestion) {
         const kind = classifyPPKSPhotoHeader(title);
         if (kind) kindByQuestionId.set(questionId, kind);
@@ -835,18 +958,24 @@ async function loadGoogleFormPhotoResponseCandidates(formId: string): Promise<Fo
       if (
         /nama/.test(normalizedTitle) &&
         !/(asesor|asessor|petugas|pendamping|supervisor|ayah|ibu|wali|pasangan|suami|istri|kontakdarurat|penanggungjawab)/.test(normalizedTitle)
-      ) {
-        nameQuestionIds.add(questionId);
-      }
+      ) nameQuestionIds.add(questionId);
+      if (isLikelyRespondentNIKHeader(title)) nikQuestionIds.add(questionId);
     }
 
-    return responses.map((response) => {
+    const responses = await fetchFormResponses(formId);
+    const candidates: FormPhotoResponseCandidate[] = responses.map((response) => {
       const photos: FormPhotoResponseCandidate['photos'] = {};
       let respondentName = '';
+      let respondentNIK = '';
       for (const [questionId, answer] of Object.entries(response.answers || {})) {
         if (nameQuestionIds.has(questionId) && !respondentName) {
           respondentName = (answer.textAnswers?.answers || [])
             .map((entry) => String(entry.value || '').trim())
+            .find(Boolean) || '';
+        }
+        if (nikQuestionIds.has(questionId) && !respondentNIK) {
+          respondentNIK = (answer.textAnswers?.answers || [])
+            .map((entry) => normalizeNIKCellValue(String(entry.value || '')))
             .find(Boolean) || '';
         }
         const kind = kindByQuestionId.get(questionId);
@@ -858,42 +987,79 @@ async function loadGoogleFormPhotoResponseCandidates(formId: string): Promise<Fo
         responseId: response.responseId,
         timestamp: response.createTime || response.lastSubmittedTime || '',
         respondentName,
+        respondentNIK,
         photos,
       };
     }).filter((candidate) => Object.values(candidate.photos).some(Boolean));
+
+    return {
+      formId,
+      loadedAt: Date.now(),
+      formTitle: String(form.info?.title || form.info?.documentTitle || 'Google Form tertaut'),
+      totalResponses: responses.length,
+      candidates,
+    };
   })();
   googleFormPhotoResponsesInFlight = operation;
   try {
-    const candidates = await operation;
-    cachedGoogleFormPhotoResponses = { formId, loadedAt: Date.now(), candidates };
-    return candidates;
+    const result = await operation;
+    cachedGoogleFormPhotoResponses = result;
+    return result;
   } finally {
     googleFormPhotoResponsesInFlight = null;
   }
 }
 
-/**
- * If the linked response Sheet did not expose Drive hyperlinks in photo cells,
- * recover file IDs straight from Google Forms' fileUploadAnswers. This fallback
- * runs only for SIPANDU's verified response spreadsheet and only when at least
- * one photo field is missing; a conservative name/timestamp match prevents
- * assigning another respondent's attachment.
- */
 async function recoverPhotosFromGoogleForms(
   records: PPKSRecord[],
-  formId: string,
-): Promise<{ records: PPKSRecord[]; linksRecovered: number }> {
+  spreadsheetId: string,
+  spreadsheetTitle: string,
+  preferredFormId: string,
+): Promise<{ records: PPKSRecord[]; diagnostics: PhotoRecoveryDiagnostics }> {
   const missingPhotos = records.some((record) =>
     !normalizePPKSPhotoSource(record.fotoDiri) ||
     !normalizePPKSPhotoSource(record.fotoKtp) ||
     !normalizePPKSPhotoSource(record.fotoKk) ||
     !normalizePPKSPhotoSource(record.fotoRumah)
   );
-  if (!missingPhotos || !records.length) return { records, linksRecovered: 0 };
+  if (!missingPhotos || !records.length) {
+    return {
+      records,
+      diagnostics: {
+        status: 'not-needed', formTitle: '', responseCount: 0,
+        responsesWithUploads: 0, recordsMatched: 0, linksRecovered: 0,
+        detail: 'Semua foto pada sumber spreadsheet sudah memiliki tautan.',
+      },
+    };
+  }
 
-  const candidates = await loadGoogleFormPhotoResponseCandidates(formId);
-  if (!candidates.length) return { records, linksRecovered: 0 };
+  const form = await resolveFormLinkedToSpreadsheet(spreadsheetId, spreadsheetTitle, preferredFormId);
+  if (!form) {
+    return {
+      records,
+      diagnostics: {
+        status: 'no-linked-form', formTitle: '', responseCount: 0,
+        responsesWithUploads: 0, recordsMatched: 0, linksRecovered: 0,
+        detail: 'Tidak ditemukan Google Form dengan linkedSheetId yang sama dengan spreadsheet sumber.',
+      },
+    };
+  }
+
+  const responseData = await loadGoogleFormPhotoResponseCandidates(form);
+  if (!responseData.candidates.length) {
+    return {
+      records,
+      diagnostics: {
+        status: 'no-upload-responses', formTitle: responseData.formTitle,
+        responseCount: responseData.totalResponses, responsesWithUploads: 0,
+        recordsMatched: 0, linksRecovered: 0,
+        detail: 'Form tertaut ditemukan, tetapi API tidak mengembalikan respons yang berisi unggahan foto.',
+      },
+    };
+  }
+
   let linksRecovered = 0;
+  let recordsMatched = 0;
   const enriched = records.map((record) => {
     const currentDiri = normalizePPKSPhotoSource(record.fotoDiri);
     const currentKtp = normalizePPKSPhotoSource(record.fotoKtp);
@@ -902,13 +1068,25 @@ async function recoverPhotosFromGoogleForms(
     if (currentDiri && currentKtp && currentKk && currentRumah) return {
       ...record, fotoDiri: currentDiri, fotoKtp: currentKtp, fotoKk: currentKk, fotoRumah: currentRumah,
     };
-    const match = matchFormPhotoResponseForPPKS(record.namaLengkap, record.timestamp, candidates);
+    const sourceNIK = String(record.officialAssessment?.q23 || record.nik || '');
+    const match = matchFormPhotoResponseForPPKS(
+      record.namaLengkap,
+      record.timestamp,
+      responseData.candidates,
+      3 * 60 * 1000,
+      sourceNIK,
+    );
+    if (!match) return {
+      ...record,
+      fotoDiri: currentDiri, fotoKtp: currentKtp, fotoKk: currentKk, fotoRumah: currentRumah,
+    };
+    recordsMatched++;
     const updated: PPKSRecord = {
       ...record,
-      fotoDiri: currentDiri || match?.photos.diri || '',
-      fotoKtp: currentKtp || match?.photos.ktp || '',
-      fotoKk: currentKk || match?.photos.kk || '',
-      fotoRumah: currentRumah || match?.photos.rumah || '',
+      fotoDiri: currentDiri || match.photos.diri || '',
+      fotoKtp: currentKtp || match.photos.ktp || '',
+      fotoKk: currentKk || match.photos.kk || '',
+      fotoRumah: currentRumah || match.photos.rumah || '',
     };
     if (!currentDiri && updated.fotoDiri) linksRecovered++;
     if (!currentKtp && updated.fotoKtp) linksRecovered++;
@@ -916,7 +1094,17 @@ async function recoverPhotosFromGoogleForms(
     if (!currentRumah && updated.fotoRumah) linksRecovered++;
     return updated;
   });
-  return { records: enriched, linksRecovered };
+
+  const diagnostics: PhotoRecoveryDiagnostics = {
+    status: linksRecovered > 0 ? 'recovered' : 'no-match',
+    formTitle: responseData.formTitle,
+    responseCount: responseData.totalResponses,
+    responsesWithUploads: responseData.candidates.length,
+    recordsMatched,
+    linksRecovered,
+    detail: \`\${responseData.formTitle}: \${responseData.totalResponses} respons, \${responseData.candidates.length} respons dengan unggahan foto, \${recordsMatched} PPKS cocok, \${linksRecovered} tautan foto dipulihkan.\`,
+  };
+  return { records: enriched, diagnostics };
 }
 
 /** Imports respondent records from an authorized spreadsheet without writing to the source. */
