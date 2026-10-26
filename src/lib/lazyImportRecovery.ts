@@ -24,7 +24,7 @@ export function isRecoverableChunkLoadError(error: unknown): boolean {
   const message = error instanceof Error
     ? `${error.name}: ${error.message}`
     : String(error ?? '');
-  return /failed to fetch dynamically imported module|importing a module script failed|failed to load module script|error loading dynamically imported module|loading chunk [^\\s]+ failed|chunkloaderror|unable to preload css for|css chunk[^\\n]*failed/i.test(message);
+  return /failed to fetch dynamically imported module|importing a module script failed|failed to load module script|error loading dynamically imported module|loading chunk .* failed|chunkloaderror|unable to preload css for|css chunk.*failed/i.test(message);
 }
 
 /**
