@@ -269,11 +269,13 @@ export async function readSpreadsheetRichData(
       cell.formattedValue ||
       ''
     );
-    // Sheets stores true dates as day serial numbers. Return the exact sheet
-    // wall-clock as ISO without a timezone so sort order is independent of the
-    // formatted display locale (US mm/dd vs Indonesian dd/mm).
+    // Preserve Google Sheets' displayed timestamp format when the underlying
+    // date is numeric. Use an ISO wall-clock only as a fallback if Sheets gives
+    // no formatted value, so the application matches the visible source cell.
     const timestampNumber = cell.effectiveValue?.numberValue ?? cell.userEnteredValue?.numberValue;
     if (timestampColumns.has(index) && typeof timestampNumber === 'number' && timestampNumber >= 20000 && timestampNumber <= 80000) {
+      const formattedTimestamp = String(cell.formattedValue || '').trim();
+      if (formattedTimestamp) return formattedTimestamp;
       const date = new Date(Date.UTC(1899, 11, 30) + Math.round(timestampNumber * 86400000));
       const pad = (number: number) => String(number).padStart(2, '0');
       return `${date.getUTCFullYear()}-${pad(date.getUTCMonth() + 1)}-${pad(date.getUTCDate())}T${pad(date.getUTCHours())}:${pad(date.getUTCMinutes())}:${pad(date.getUTCSeconds())}`;
