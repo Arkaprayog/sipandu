@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { classifyPPKSPhotoHeader, normalizePPKSPhotoSource, readPPKSPhotoSourceByKind } from './photoSources';
-import { googleDriveViewUrl, isGoogleFormLinkedToSpreadsheet, matchFormPhotoResponseForPPKS } from './formPhotoRecovery';
+import { countSharedPhotoFileIds, extractGoogleDriveFileId, googleDriveViewUrl, isGoogleFormLinkedToSpreadsheet, matchFormPhotoResponseForPPKS } from './formPhotoRecovery';
 
 test('maps each uploaded image to its own photo category from long Google Forms headers', () => {
   const headers = [
@@ -165,3 +165,46 @@ test('links the Form only when linkedSheetId exactly matches the source spreadsh
   assert.equal(isGoogleFormLinkedToSpreadsheet(undefined, 'sheet-response-123'), false);
 });
 
+test('matches Google Forms photo response by normalized Indonesian HP/WA when NIK is absent', () => {
+  const candidates = [
+    {
+      responseId: 'same-phone',
+      timestamp: '2026-10-26T06:00:00Z',
+      respondentName: 'Nama beda ejaan',
+      respondentPhone: '+62 812-3456-7890',
+      photos: { diri: 'https://drive.google.com/file/d/AAAAAAAAAAAAAAA111/view' },
+    },
+    {
+      responseId: 'wrong-phone',
+      timestamp: '2026-10-26T06:00:00Z',
+      respondentName: 'Lesmana',
+      respondentPhone: '081299999999',
+      photos: { diri: 'https://drive.google.com/file/d/BBBBBBBBBBBBBBB222/view' },
+    },
+  ];
+  assert.equal(
+    matchFormPhotoResponseForPPKS(
+      'Lesmana',
+      '26/10/2026 13:00:00',
+      candidates,
+      3 * 60 * 1000,
+      '',
+      '0812 3456 7890',
+    )?.responseId,
+    'same-phone'
+  );
+});
+
+test('uses existing Drive file IDs to anchor a source row to its exact Form response', () => {
+  const source = {
+    diri: 'https://drive.google.com/open?id=AAAAAAAAAAAAAAA111',
+    ktp: 'https://drive.google.com/file/d/BBBBBBBBBBBBBBB222/view',
+  };
+  const candidate = {
+    diri: 'https://drive.google.com/file/d/AAAAAAAAAAAAAAA111/view',
+    ktp: 'https://drive.google.com/open?id=BBBBBBBBBBBBBBB222',
+  };
+  assert.equal(extractGoogleDriveFileId(source.diri), 'AAAAAAAAAAAAAAA111');
+  assert.equal(countSharedPhotoFileIds(source, candidate), 2);
+  assert.equal(countSharedPhotoFileIds(source, { diri: 'https://drive.google.com/file/d/CCCCCCCCCCCCCCC333/view' }), 0);
+});
