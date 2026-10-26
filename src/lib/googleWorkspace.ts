@@ -889,6 +889,9 @@ export async function importPPKSFromSpreadsheet(
   recordsBeforeDemoFilter: number;
   sampleRecordsFiltered: number;
   duplicateRowsCollapsed: number;
+  photosRecoveredFromForm: number;
+  photoRecoveryStatus: 'not-needed' | 'recovered' | 'no-match' | 'failed' | 'not-applicable';
+  photoCounts: { diri: number; ktp: number; kk: number; rumah: number };
   records: PPKSRecord[];
   recordsWithNIK: number;
   recordsMissingNIK: number;
@@ -919,9 +922,33 @@ export async function importPPKSFromSpreadsheet(
   const sourceRowsWithName = dataRows.filter((row) => Boolean(readRespondentName(headers, row))).length;
   const allMappedRecords = mapRowsToPPKSRecords(rows);
   const recordsAfterSampleFilter = allMappedRecords.filter((record) => !isLegacySamplePPKS(record));
-  const records = sortPPKSRecordsByTimestamp(deduplicatePPKSRecords(recordsAfterSampleFilter));
+  let records = sortPPKSRecordsByTimestamp(deduplicatePPKSRecords(recordsAfterSampleFilter));
   const sampleRecordsFiltered = allMappedRecords.length - recordsAfterSampleFilter.length;
   const duplicateRowsCollapsed = recordsAfterSampleFilter.length - records.length;
+  let photosRecoveredFromForm = 0;
+  let photoRecoveryStatus: 'not-needed' | 'recovered' | 'no-match' | 'failed' | 'not-applicable' = 'not-applicable';
+
+  if (metadata.spreadsheetId === GOOGLE_SIPANDU_RESOURCES.responseSpreadsheetId) {
+    const hasMissingPhoto = records.some((record) =>
+      !record.fotoDiri || !record.fotoKtp || !record.fotoKk || !record.fotoRumah
+    );
+    if (hasMissingPhoto) {
+      photoRecoveryStatus = 'no-match';
+      try {
+        const recovery = await recoverPhotosFromGoogleForms(records, GOOGLE_SIPANDU_RESOURCES.formId);
+        records = recovery.records;
+        photosRecoveredFromForm = recovery.linksRecovered;
+        photoRecoveryStatus = photosRecoveredFromForm > 0 ? 'recovered' : 'no-match';
+      } catch (error) {
+        photoRecoveryStatus = 'failed';
+        // Never fail importing the spreadsheet because the optional Forms fallback
+        // is unavailable; the visible diagnostics report its status separately.
+        console.warn('SIPANDU photo recovery via Google Forms was unavailable:', error);
+      }
+    } else {
+      photoRecoveryStatus = 'not-needed';
+    }
+  }
   const nikHeadersFound = headers.filter((header) => isLikelyRespondentNIKHeader(header)).map((header) => header.trim());
   const recordsWithNIK = records.filter((record) => Boolean(String(record.nik || '').trim())).length;
   // Diagnose the source headers and value quality without returning any actual NIK values.
@@ -953,6 +980,14 @@ export async function importPPKSFromSpreadsheet(
     records,
     recordsWithNIK,
     recordsMissingNIK: records.length - recordsWithNIK,
+    photosRecoveredFromForm,
+    photoRecoveryStatus,
+    photoCounts: {
+      diri: records.filter((record) => Boolean(String(record.fotoDiri || '').trim())).length,
+      ktp: records.filter((record) => Boolean(String(record.fotoKtp || '').trim())).length,
+      kk: records.filter((record) => Boolean(String(record.fotoKk || '').trim())).length,
+      rumah: records.filter((record) => Boolean(String(record.fotoRumah || '').trim())).length,
+    },
     nikHeadersFound,
     nikColumnDiagnostics,
     previewRows: rows.slice(0, 8),
