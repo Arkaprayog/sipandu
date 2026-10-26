@@ -293,7 +293,15 @@ export default function App() {
 
   // Sync to local storage
   useEffect(() => {
-    localStorage.setItem('sipandu_ppks', JSON.stringify(ppksList));
+    try {
+      localStorage.setItem('sipandu_ppks', JSON.stringify(ppksList));
+    } catch (error) {
+      console.error('SIPANDU PPKS cache could not be persisted in browser storage:', error);
+      setCloudSyncNotice({
+        type: 'error',
+        text: 'Browser kehabisan ruang penyimpanan untuk cache lokal. Foto yang diunggah sudah dikompres, tetapi data baru mungkin belum tersimpan di perangkat; pastikan sinkronisasi Firebase berhasil sebelum menutup atau memuat ulang aplikasi.',
+      });
+    }
   }, [ppksList]);
 
   useEffect(() => {
