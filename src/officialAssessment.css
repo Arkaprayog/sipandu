@@ -1,6 +1,28 @@
 /* Official Form Asesmen Terintegrasi layout; letterhead content is static and locked. */
 .official-assessment-shell { color:#111; }
 .official-toolbar { color:#f8fafc; }
+
+/* On-screen gallery for the selected respondent's existing PPKS photo records. */
+.official-photo-gallery {
+  box-sizing:border-box;
+  width:100%;
+  max-width:210mm;
+  margin:0 auto 20px;
+  padding:12px;
+  border:1px solid rgba(148,163,184,.35);
+  border-radius:12px;
+  background:rgba(0,0,0,.28);
+  color:#f8fafc;
+}
+.official-photo-gallery-heading { margin:0 0 10px; }
+.official-photo-gallery-heading h3 { margin:0 0 4px; font-size:14px; line-height:1.3; font-weight:800; }
+.official-photo-gallery-heading p { margin:0; color:#cbd5e1; font-size:11px; line-height:1.45; }
+.official-photo-gallery-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
+.official-photo-preview-card { min-width:0; margin:0; padding:9px; border:1px solid rgba(255,255,255,.15); border-radius:9px; background:rgba(0,0,0,.22); }
+.official-photo-preview-card figcaption { margin:0 0 7px; color:#e0f2fe; font-size:10px; line-height:1.4; font-weight:800; }
+.official-photo-preview-frame { display:flex; align-items:center; justify-content:center; min-height:135px; height:180px; overflow:hidden; border:1px solid rgba(255,255,255,.12); border-radius:6px; background:rgba(15,23,42,.65); }
+.official-photo-preview-frame img { display:block; max-width:100%; max-height:100%; width:auto; height:auto; object-fit:contain; }
+.official-photo-preview-message { padding:12px; color:#cbd5e1; font-size:11px; line-height:1.5; text-align:center; overflow-wrap:anywhere; }
 .official-page {
   box-sizing:border-box; width:100%; max-width:210mm; min-height:297mm;
   margin:0 auto 20px; padding:10mm 9mm 11mm; background:#fff; color:#111;
@@ -8,7 +30,7 @@
 }
 
 /* Four print-only photo appendices. Kept off-screen in the editor, but rendered
-   in print so the PDF contains pages 7–10 without adding a duplicate profile card. */
+   in print so the PDF contains pages 9–12 without adding a duplicate profile card. */
 .official-photo-appendix {
   position:absolute; left:-100000px; top:0; width:190mm; max-width:190mm;
   min-height:280mm; margin:0; padding:10mm; box-sizing:border-box;
@@ -139,6 +161,7 @@
   }
 
   .official-toolbar, .official-status { display:none !important; }
+  .official-photo-gallery { display:none !important; }
   .official-page {
     display:block !important;
     position:relative !important;
@@ -162,7 +185,7 @@
   }
   .official-page:last-child { page-break-after:auto !important; break-after:auto !important; }
 
-  /* Four appendices are four separate A4 pages (7–10), not off-screen nodes. */
+  /* Four appendices are four separate A4 pages (9–12), not off-screen nodes. */
   .official-photo-appendix {
     position:relative !important;
     left:auto !important;
@@ -268,6 +291,10 @@
 
   body.official-assessment-printing #sipandu-official-print-root .official-toolbar,
   body.official-assessment-printing #sipandu-official-print-root .official-status {
+    display: none !important;
+  }
+
+  body.official-assessment-printing #sipandu-official-print-root .official-photo-gallery {
     display: none !important;
   }
 
