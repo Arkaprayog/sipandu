@@ -19,6 +19,14 @@ import { ensureSIPANDUDatabaseSheet, extractSpreadsheetId, getLinkedSpreadsheetU
 import { GOOGLE_SIPANDU_RESOURCES } from './lib/googleSIPANDUResources';
 import { deduplicatePPKSRecords, EXPECTED_REAL_PPKS_COUNT, parsePPKSTimestamp, samePPKSIdentity, sortPPKSRecordsByName, sortPPKSRecordsByTimestamp } from './lib/ppksData';
 import { normalizePPKSPhotoSource } from './lib/photoSources';
+import {
+  enableRespondentNotifications,
+  getRespondentNotificationPermission,
+  loadRespondentNotifications,
+  markRespondentNotificationsRead,
+  processRespondentSubmissionEvents,
+  type RespondentNotification,
+} from './lib/respondentNotifications';
 
 function isSixteenDigitNIK(value: string): boolean {
   return /^\d{16}$/.test(String(value || '').replace(/\D/g, ''));
@@ -293,6 +301,8 @@ export default function App() {
   const firestoreRosterReconciliationInFlightRef = useRef<Promise<number> | null>(null);
   const continuationSheetCacheRef = useRef<{ formUrl: string; spreadsheetUrl: string } | null>(null);
   const [cloudSyncNotice, setCloudSyncNotice] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [respondentNotifications, setRespondentNotifications] = useState<RespondentNotification[]>(() => loadRespondentNotifications(auth.currentUser?.uid || 'default'));
+  const [notificationPermission, setNotificationPermission] = useState<NotificationPermission | 'unsupported'>(() => getRespondentNotificationPermission());
   const [liveSyncState, setLiveSyncState] = useState<{
     type: 'idle' | 'success' | 'paused' | 'error';
     message: string;
@@ -333,6 +343,35 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('sipandu_settings', JSON.stringify(settings));
   }, [settings]);
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    const uid = auth.currentUser?.uid || 'default';
+    setRespondentNotifications(loadRespondentNotifications(uid));
+    setNotificationPermission(getRespondentNotificationPermission());
+    const onNotificationHistoryUpdated = (event: Event) => {
+      const eventUid = (event as CustomEvent<{ uid?: string }>).detail?.uid || '';
+      if (eventUid === uid) setRespondentNotifications(loadRespondentNotifications(uid));
+    };
+    window.addEventListener('sipandu-respondent-notifications-updated', onNotificationHistoryUpdated);
+    return () => window.removeEventListener('sipandu-respondent-notifications-updated', onNotificationHistoryUpdated);
+  }, [isAuthenticated, currentUserRole]);
+
+  useEffect(() => {
+    const unreadCount = respondentNotifications.filter((item) => !item.read).length;
+    const badgeNavigator = navigator as Navigator & {
+      setAppBadge?: (count?: number) => Promise<void>;
+      clearAppBadge?: () => Promise<void>;
+    };
+    if (unreadCount > 0) void badgeNavigator.setAppBadge?.(unreadCount).catch(() => undefined);
+    else void badgeNavigator.clearAppBadge?.().catch(() => undefined);
+  }, [respondentNotifications]);
+
+  const handleEnableRespondentNotifications = async (): Promise<NotificationPermission | 'unsupported'> => {
+    const permission = await enableRespondentNotifications();
+    setNotificationPermission(permission);
+    return permission;
+  };
 
   // Auth Handlers
   const handleLogin = (user: string) => {
@@ -519,6 +558,9 @@ export default function App() {
     }
     const continuation = await mergeContinuationResponses(imported.records);
     const recordsForSync = continuation.records;
+    const notificationUid = auth.currentUser?.uid || 'default';
+    await processRespondentSubmissionEvents(notificationUid, imported.records, recordsForSync as unknown as Array<Record<string, unknown>>);
+    setRespondentNotifications(loadRespondentNotifications(notificationUid));
     const firestoreDocumentsRemoved = await runFirestoreRosterReconciliation(recordsForSync, true);
     setPpksList((localRecords) => reconcileSpreadsheetPPKSRecords(localRecords, recordsForSync));
     setSettings((current) => ({
@@ -594,6 +636,10 @@ export default function App() {
         const continuation = await mergeContinuationResponses(imported.records);
         if (!active) return;
         const recordsForSync = continuation.records;
+        const notificationUid = auth.currentUser?.uid || 'default';
+        await processRespondentSubmissionEvents(notificationUid, imported.records, recordsForSync as unknown as Array<Record<string, unknown>>);
+        if (!active) return;
+        setRespondentNotifications(loadRespondentNotifications(notificationUid));
         let firestoreDocumentsRemoved: number | null = null;
         if (!firestoreRosterReconciliationAttemptedRef.current && recordsForSync.length === EXPECTED_REAL_PPKS_COUNT) {
           firestoreDocumentsRemoved = await runFirestoreRosterReconciliation(recordsForSync, false);
@@ -791,10 +837,14 @@ export default function App() {
           currentUser={currentUserName}
           profile={profile}
           accountPhotoUrl={auth.currentUser?.photoURL || ''}
-          unreadNotificationsCount={0}
+          unreadNotificationsCount={respondentNotifications.filter((item) => !item.read).length}
           onOpenEditProfile={() => setIsEditProfileOpen(true)}
           onOpenSettings={() => setIsSettingsOpen(true)}
-          onOpenNotifications={() => setIsNotificationsOpen(true)}
+          onOpenNotifications={() => {
+            const uid = auth.currentUser?.uid || 'default';
+            setRespondentNotifications(markRespondentNotificationsRead(uid));
+            setIsNotificationsOpen(true);
+          }}
           onOpenGoogleWorkspace={() => setIsGoogleWorkspaceOpen(true)}
           onLogout={handleLogout}
         />
@@ -884,6 +934,10 @@ export default function App() {
       <NotificationsModal
         isOpen={isNotificationsOpen}
         onClose={() => setIsNotificationsOpen(false)}
+        notifications={respondentNotifications}
+        permission={notificationPermission}
+        onEnableNotifications={handleEnableRespondentNotifications}
+        onMarkAllRead={() => setRespondentNotifications(markRespondentNotificationsRead(auth.currentUser?.uid || 'default'))}
       />
 
       <GoogleWorkspaceModal
