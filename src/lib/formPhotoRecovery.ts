@@ -18,10 +18,9 @@ function normalizePersonName(value: unknown): string {
 }
 
 /**
- * Match a response upload to a spreadsheet person conservatively. Prefer both
- * an exact normalized name and a close timestamp; if the name is unavailable,
- * timestamp proximity alone must be very close. If timestamp is unavailable,
- * allow name-only only when that name occurs exactly once in the response list.
+ * Match a response upload conservatively: exact validated NIK first, then safe
+ * name/timestamp fallbacks. The NIK match avoids timezone-related false negatives
+ * because Forms timestamps are UTC and Sheets timestamps are commonly local time.
  */
 /** A Form title match is insufficient; the linked response spreadsheet ID must match exactly. */
 export function isGoogleFormLinkedToSpreadsheet(
