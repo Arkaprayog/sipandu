@@ -1124,7 +1124,9 @@ export async function importPPKSFromSpreadsheet(
   sampleRecordsFiltered: number;
   duplicateRowsCollapsed: number;
   photosRecoveredFromForm: number;
-  photoRecoveryStatus: 'not-needed' | 'recovered' | 'no-match' | 'failed' | 'not-applicable';
+  photoRecoveryStatus: PhotoRecoveryStatus;
+  photoRecoveryDetail: string;
+  photoRecoveryDiagnostics: { responseCount: number; responsesWithUploads: number; recordsMatched: number };
   photoCounts: { diri: number; ktp: number; kk: number; rumah: number };
   records: PPKSRecord[];
   recordsWithNIK: number;
@@ -1160,7 +1162,9 @@ export async function importPPKSFromSpreadsheet(
   const sampleRecordsFiltered = allMappedRecords.length - recordsAfterSampleFilter.length;
   const duplicateRowsCollapsed = recordsAfterSampleFilter.length - records.length;
   let photosRecoveredFromForm = 0;
-  let photoRecoveryStatus: 'not-needed' | 'recovered' | 'no-match' | 'failed' | 'not-applicable' = 'not-applicable';
+  let photoRecoveryStatus: PhotoRecoveryStatus = 'not-applicable';
+  let photoRecoveryDetail = 'Sumber ini tidak dikenali sebagai spreadsheet respons ATENSI; pemulihan Google Forms tidak dijalankan.';
+  let photoRecoveryDiagnostics = { responseCount: 0, responsesWithUploads: 0, recordsMatched: 0 };
 
   const normalizedSpreadsheetTitle = normalizeSheetHeader(metadata.title);
   const normalizedSelectedTab = normalizeSheetHeader(selectedTab);
@@ -1173,23 +1177,40 @@ export async function importPPKSFromSpreadsheet(
     );
   if (isKnownATENSIResponseSheet) {
     const hasMissingPhoto = records.some((record) =>
-      !record.fotoDiri || !record.fotoKtp || !record.fotoKk || !record.fotoRumah
+      !normalizePPKSPhotoSource(record.fotoDiri) ||
+      !normalizePPKSPhotoSource(record.fotoKtp) ||
+      !normalizePPKSPhotoSource(record.fotoKk) ||
+      !normalizePPKSPhotoSource(record.fotoRumah)
     );
     if (hasMissingPhoto) {
       photoRecoveryStatus = 'no-match';
+      photoRecoveryDetail = 'Mencari Google Form yang benar-benar tertaut ke spreadsheet sumber…';
       try {
-        const recovery = await recoverPhotosFromGoogleForms(records, GOOGLE_SIPANDU_RESOURCES.formId);
+        const recovery = await recoverPhotosFromGoogleForms(
+          records,
+          metadata.spreadsheetId,
+          metadata.title,
+          GOOGLE_SIPANDU_RESOURCES.formId,
+        );
         records = recovery.records;
-        photosRecoveredFromForm = recovery.linksRecovered;
-        photoRecoveryStatus = photosRecoveredFromForm > 0 ? 'recovered' : 'no-match';
+        photosRecoveredFromForm = recovery.diagnostics.linksRecovered;
+        photoRecoveryStatus = recovery.diagnostics.status;
+        photoRecoveryDetail = recovery.diagnostics.detail;
+        photoRecoveryDiagnostics = {
+          responseCount: recovery.diagnostics.responseCount,
+          responsesWithUploads: recovery.diagnostics.responsesWithUploads,
+          recordsMatched: recovery.diagnostics.recordsMatched,
+        };
       } catch (error) {
         photoRecoveryStatus = 'failed';
+        photoRecoveryDetail = `Google Forms tidak dapat dibaca: ${error instanceof Error ? error.message : String(error)}`;
         // Never fail importing the spreadsheet because the optional Forms fallback
-        // is unavailable; the visible diagnostics report its status separately.
-        console.warn('SIPANDU photo recovery via Google Forms was unavailable:', error);
+        // is unavailable; the visible diagnostics explain why recovery failed.
+        console.warn('SIPANDU photo recovery via the linked Google Form failed:', error);
       }
     } else {
       photoRecoveryStatus = 'not-needed';
+      photoRecoveryDetail = 'Semua rekaman sudah memiliki tautan sumber foto.';
     }
   }
   const nikHeadersFound = headers.filter((header) => isLikelyRespondentNIKHeader(header)).map((header) => header.trim());
@@ -1225,6 +1246,8 @@ export async function importPPKSFromSpreadsheet(
     recordsMissingNIK: records.length - recordsWithNIK,
     photosRecoveredFromForm,
     photoRecoveryStatus,
+    photoRecoveryDetail,
+    photoRecoveryDiagnostics,
     photoCounts: {
       diri: records.filter((record) => Boolean(normalizePPKSPhotoSource(record.fotoDiri))).length,
       ktp: records.filter((record) => Boolean(normalizePPKSPhotoSource(record.fotoKtp))).length,
