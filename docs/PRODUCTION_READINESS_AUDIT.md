@@ -1,116 +1,78 @@
-# Audit Kesiapan Produksi SIPANDU ODHIV — v1.0.0
+# Audit Kesiapan Produksi — SIPANDU v1.0.0
 
-Tanggal audit: 2026-10-26  
-Repository: `Arkaprayog/sipandu`  
-Baseline kode: `a6c28ed35a052fb1aafa58045771453eb37a4cbf` (versi 0.0.30 sebelum hardening rilis mayor)
+Tanggal audit: 26 Oktober 2026  
+Ruang lingkup: review code statis dan perubahan hardening pada branch rilis. Ini bukan sertifikasi keamanan dan bukan bukti uji end-to-end terhadap project Firebase/Google Workspace produksi.
 
-> **Kesimpulan:** perubahan pada versi 1.0.0 memperbaiki beberapa risiko performa, lifecycle, dan operasi destruktif. Namun, rilis ini **belum boleh dinyatakan production-ready untuk data responden/ODHIV nyata** sampai blocker privasi di bawah ditutup dan konfigurasi Firebase aktif diverifikasi. Build yang sukses bukan bukti bahwa keamanan database produksi atau sinkronisasi end-to-end sudah lulus.
+## Teknologi dan struktur
 
-## 1. Teknologi dan arsitektur yang diperiksa
+- React 19, TypeScript, Vite 8, Tailwind CSS 4.
+- Firebase Authentication dan Cloud Firestore.
+- Google Forms, Sheets, dan Drive melalui OAuth Workspace.
+- Capacitor 7 untuk wrapper Android; GitHub Actions menghasilkan APK debug.
+- Bun untuk install dependency dan menjalankan tes.
 
-- React 19 + TypeScript, Vite 8, Tailwind CSS 4.
-- Firebase Authentication dan Cloud Firestore, dengan custom claim `role`.
-- Google Forms/Sheets/Drive APIs melalui OAuth Workspace.
-- Capacitor 7 untuk membangun aplikasi Android dari web build; GitHub Actions membuat debug APK memakai Java 21 dan Android SDK 35.
-- Bun sebagai package manager dan test runner; GitHub Actions untuk tes, build, verifikasi aset, deployment Pages, dan APK.
+Area penting: `src/App.tsx` (sesi, cache, sinkronisasi, navigasi), `src/components/` (login dan modul UI), `src/lib/firebase.ts`, `src/lib/googleWorkspace.ts`, `src/lib/imageCompression.ts`, `firestore.rules`, `admin-tools/`, `scripts/`, dan `.github/workflows/`.
 
-Struktur penting:
+## Perubahan hardening pada branch ini
 
-- `src/App.tsx`: auth gate, state/cache PPKS, navigasi, live sync dan orkestrasi data.
-- `src/components/LoginPage.tsx`, `Header.tsx`, `BottomNav.tsx`: login dan navigasi.
-- `src/components/AsesmenView.tsx`, `DatabasePpksView.tsx`, `FromAsesmenTerintegrasiView.tsx`, `BerandaView.tsx`, `DokumenView.tsx`: alur fitur utama.
-- `src/components/CameraCaptureModal.tsx`, `PrivateDriveImage.tsx`, `KemensosQRCode.tsx`: kamera, akses foto privat dan barcode.
-- `src/lib/firebase.ts`, `googleWorkspace.ts`, `imageCompression.ts`, `formPhotoRecovery.ts`, `respondentNotifications.ts`: akses layanan, foto, kompresi, notifikasi.
-- `firestore.rules`: aturan akses sumber kontrol versi; penerapan pada project/database Firebase aktif harus diverifikasi terpisah.
-- `admin-tools/set-user-role.mjs`: utilitas Admin SDK yang harus dijalankan dari lingkungan administrator tepercaya.
-- `scripts/optimize-login-background.mjs`, `scripts/verify-dist.mjs`: optimasi aset login dan pemeriksaan hasil build.
-- `.github/workflows/`: pipeline Pages dan Android debug APK.
+1. Menunda parsing cache PPKS yang dapat berisi foto base64 sampai Firebase mengonfirmasi sesi/peran. Ini mengurangi pekerjaan sinkron yang tidak perlu di jalur login.
+2. Men-debounce penulisan cache besar, menangani kegagalan kuota penyimpanan, dan memastikan penulisan tidak terjadi sebelum cache terhidrasi.
+3. Mengabaikan callback autentikasi usang ketika login/logout berganti cepat, memaksa refresh token saat memeriksa custom claim peran, dan menutup sesi bila peran tidak dapat diverifikasi.
+4. Menunda sinkronisasi spreadsheet awal sedikit setelah dashboard mulai tampil, supaya permukaan UI bisa dirender dahulu.
+5. Menghapus rekonsiliasi/penghapusan Firestore dan pembersihan demo Drive/Sheets otomatis dari alur login dan sinkronisasi. Penghapusan cloud harus eksplisit, bukan efek samping masuk atau refresh.
+6. Memastikan kamera menghentikan track saat modal ditutup, termasuk jika izin kamera selesai setelah modal ditutup; foto sintetis tidak boleh menyamar sebagai foto responden.
+7. Mencabut object URL foto sementara ketika layar asesmen dilepas.
+8. Menambahkan validasi referensi aset produksi ke workflow Pages dan dokumentasi teknologi/rilis; menargetkan versi aplikasi 1.0.0.
 
-## 2. Perbaikan yang diterapkan pada v1.0.0
+## Temuan risiko dan batasan
 
-| Area | Perbaikan |
-|---|---|
-| Startup / memori | Parsing cache PPKS dan foto dipindahkan hingga sesi Firebase dinyatakan sah. Pada logout, data besar dibuang dari state aplikasi. |
-| CPU / penyimpanan | Penulisan JSON ke localStorage di-debounce agar perubahan beruntun tidak melakukan serialisasi dan penulisan sinkron berkali-kali. |
-| Race condition auth | Callback autentikasi sekarang memakai generation guard dan memeriksa UID sesi terbaru sebelum mengubah state. |
-| Network startup | Live sync awal ditunda 1,5 detik agar dashboard sempat render; interval dan event listener dibersihkan saat effect unmount. |
-| Operasi destruktif | Pembersihan baris/file contoh tidak lagi otomatis berjalan saat login. Sinkronisasi spreadsheet biasa juga tidak melakukan penghapusan/reconciliation Firestore. Penghapusan tetap tersedia sebagai tindakan manual pada Google Workspace & Cloud Hub. |
-| Kamera | Semua track kamera dihentikan saat modal ditutup/unmount, termasuk kasus izin kamera selesai setelah modal ditutup. |
-| Integritas data foto | Foto simulasi tidak lagi dapat disimpan sebagai foto responden jika kamera tidak aktif. Gunakan kamera nyata atau unggah berkas. |
-| RAM / blob foto | URL objek foto Drive pada menu asesmen dicabut ketika komponen dilepas. |
-| Test suite | `src/utils/helpers.test.ts` ditambahkan ke perintah tes agar tidak terlewat pada CI. |
-| Versi native | Workflow Android mengatur `versionName` dan `versionCode` dari versi paket, serta memberi nama artefak debug berdasarkan versi. |
-| Security automation | GitHub CodeQL ditambahkan untuk analisis statis JavaScript/TypeScript. |
+- Cache PPKS di `localStorage` dapat berisi data pribadi/foto, bukan penyimpanan terenkripsi. Perangkat bersama atau browser yang terkompromi tetap berisiko. Rekomendasi jangka menengah: jangan menyimpan base64 foto besar dalam localStorage; gunakan penyimpanan file privat dengan kontrol akses dan URL sementara, atau IndexedDB dengan retensi yang jelas.
+- Pemeriksaan custom claim di klien hanya untuk UX. Otorisasi wajib ditegakkan di Firestore Security Rules/server; jangan mengandalkan state React untuk melindungi data.
+- `firebase-applet-config.json` adalah konfigurasi klien, bukan pengganti aturan akses. Batasi API key dengan API/referrer yang sesuai dan pastikan rules production diuji.
+- `admin-tools/` harus hanya berjalan di lingkungan admin tepercaya; service-account key tidak boleh disimpan di frontend, repo, atau artifact.
+- Token OAuth dan akses Google Workspace harus dikelola dengan scope minimum dan dibersihkan ketika akun keluar; pastikan setiap endpoint/operasi memeriksa user dan scope yang tepat.
+- Tidak dapat menyatakan tidak ada secret di seluruh history Git hanya dari pemeriksaan file saat ini. Jalankan secret scanning di GitHub dan rotasi credential jika ada indikasi kebocoran.
+- APK yang dibuat adalah debug APK, bukan artefak release bertanda tangan untuk Play Store/distribusi resmi. Sebelum distribusi, buat release build, konfigurasi signing melalui secrets, verifikasi package ID/versi, dan uji upgrade.
+- Keberhasilan build/test tidak membuktikan domain custom, OAuth consent, rules yang benar-benar deployed, izin Drive, push notification saat aplikasi tertutup, atau sinkronisasi data end-to-end sudah berhasil.
 
-## 3. Temuan keamanan dan release gates
+## Checklist QA sebelum rilis
 
-### P0 — Penyimpanan lokal berisi PII/foto sensitif (blocker)
+### Build dan kualitas kode
+- [ ] `bun install --frozen-lockfile`
+- [ ] `bun run test`
+- [ ] `bun run lint`
+- [ ] `bun run build`
+- [ ] `node scripts/verify-dist.mjs`
+- [ ] Uji di Android dengan jaringan lambat, offline, dan perangkat RAM rendah.
 
-`src/App.tsx` menyimpan cache `sipandu_ppks` dan `sipandu_profile` ke localStorage. Record bisa memuat NIK, nomor telepon, status/asesmen dan data foto identitas/rumah; notifikasi responden juga disimpan di localStorage oleh `src/lib/respondentNotifications.ts`.
+### Autentikasi/otorisasi
+- [ ] Owner, supervisor, pendamping: hak akses sesuai peran.
+- [ ] Pengguna tanpa custom claim, token kedaluwarsa, akun dinonaktifkan, dan jaringan gagal: ditolak secara aman.
+- [ ] Login/logout berulang cepat tidak memunculkan dashboard akun lama.
+- [ ] Firestore Rules diuji dengan Firebase Emulator atau Rules Unit Testing; pengguna satu peran tidak dapat membaca/menulis data peran lain.
 
-Konsekuensi:
-- Data tidak dienkripsi oleh aplikasi dan dapat dibaca JavaScript yang berjalan pada origin yang sama.
-- Cache bertahan setelah logout dan berada di perangkat/browser bersama.
-- Cache tidak di-scope per UID pengguna; akun lain pada perangkat sama dapat membaca cache yang sama ketika masuk.
-- Foto sebagai data URL dapat memperbesar serialisasi, penggunaan RAM, dan kuota browser.
+### Data, foto, dan sinkronisasi
+- [ ] Impor Sheet kosong, besar, duplikat, format salah, timeout, dan quota exceeded.
+- [ ] Sinkronisasi gagal tidak menimpa data lokal valid dengan daftar kosong.
+- [ ] Tidak ada penghapusan dokumen/Drive/Sheet saat login atau refresh biasa.
+- [ ] Foto valid dikompresi; ukuran/format salah ditolak; unggah terputus bisa dicoba ulang.
+- [ ] Akses URL foto privat ditolak untuk pengguna tanpa hak.
+- [ ] Cache penuh dan localStorage dinonaktifkan menghasilkan pesan yang aman tanpa kehilangan data server.
 
-Perubahan v1.0.0 menunda pembacaan cache sampai auth berhasil dan men-debounce penulisan, **tetapi tidak menghilangkan risiko penyimpanan plaintext**. Jangan gunakan data PPKS/ODHIV nyata pada perangkat/browser bersama sampai cache dimigrasikan ke model server-authoritative yang hanya membaca data setelah otorisasi Firestore tervalidasi dan cache perangkat memiliki kebijakan retensi/penghapusan yang sesuai. Jangan menghapus cache lama secara membabi buta: data yang belum tersinkron harus direkonsiliasi lebih dulu.
+### UI dan resource
+- [ ] Login tampak sebelum sinkronisasi spreadsheet berjalan.
+- [ ] Navigasi antar tab/modul tidak mengulang fetch yang sama tanpa alasan.
+- [ ] Kamera berhenti saat modal ditutup/navigasi/logout; izin ditolak memberi fallback unggah.
+- [ ] Object URL dicabut, interval/timeout/listener dibersihkan, dan modal tidak menggandakan listener.
+- [ ] Layar kosong, spinner tanpa akhir, dan error boundary diuji dengan kegagalan jaringan/modul.
 
-### P1 — Hak baca Firestore terlalu luas antarstaf
+### Google Workspace dan rilis
+- [ ] OAuth consent/scope sesuai kebutuhan dan refresh token tidak dicatat di log.
+- [ ] Form, Sheet, Drive diuji dengan akun produksi yang benar tanpa data ODHIV asli di staging.
+- [ ] Notifikasi diuji foreground/background/closed-app; notifikasi browser bukan pengganti FCM server-side untuk aplikasi tertutup.
+- [ ] Domain custom diverifikasi dari perangkat nyata.
+- [ ] APK release ditandatangani dan diuji instalasi baru serta upgrade.
 
-`firestore.rules` mengizinkan semua akun dengan custom claim `owner`, `supervisor`, atau `pendamping` membaca seluruh `/ppks/{recordId}`. Write/create/update/delete dibatasi ke owner/supervisor, ini baik sebagai baseline, tetapi prinsip least privilege untuk akses baca belum diterapkan per wilayah/penugasan/record.
+## Keputusan
 
-Keputusan kebijakan akses perlu ditetapkan (siapa boleh melihat seluruh data sensitif vs responden yang ditugaskan). Setelah itu buat pengujian Firebase Emulator untuk semua role dan pastikan rules tersebut benar-benar diterapkan ke database ID yang digunakan aplikasi. File rules dalam repo tidak membuktikan rules produksi sudah sama.
-
-### P1 — Kredensial klien Firebase dan lingkungan
-
-`firebase-applet-config.json` berisi konfigurasi Firebase browser, termasuk Web API key. Web API key Firebase umumnya merupakan pengenal klien publik, **bukan** service-account secret; otorisasi tetap harus bergantung pada Auth dan Rules. Batasi API key dengan API restrictions dan referrer restriction yang tepat. Tidak ditemukan service-account private key atau client secret dalam file sumber yang dipindai pada audit ini, tetapi ini tidak menggantikan pemindaian riwayat Git dan konfigurasi Secrets di GitHub/Google Cloud.
-
-Jangan pernah menyimpan `service-account.json`, refresh token OAuth, password, private key, atau rahasia server di repo atau bundle. Admin SDK hanya memakai Application Default Credentials dari lingkungan administrator tepercaya.
-
-### P1 — Verifikasi integrasi produksi belum end-to-end
-
-Build CI tidak mengakses token OAuth milik Anda sehingga belum memvalidasi izin aktual pada Google Form, spreadsheet dan folder Drive. Ia juga tidak membuktikan Firestore Rules yang deployed identik dengan file repo. Uji menggunakan akun dan data sintetis di lingkungan target sebelum membuka akses data nyata.
-
-### P2 — Sinkronisasi dan ukuran payload
-
-- Live sync membaca/menormalisasi seluruh roster sumber dan mungkin menggabungkan jawaban Form lanjutan. Frekuensi default 5 menit; ini wajar untuk roster kecil, tetapi perlu pagination/modified-since atau sinkronisasi incremental jika jumlah baris/foto tumbuh.
-- Foto dikompresi sebelum cache; walau meringankan payload, base64/data URL tetap mahal saat diserialisasi dan memperbesar cache. Penyimpanan foto di Drive dengan hanya metadata/ID di dokumen data lebih scalable daripada menyimpan bytes di record.
-- Browser notification polling tidak menjamin notifikasi saat aplikasi tertutup; hal itu memerlukan backend push yang terotorisasi (misalnya FCM sender tepercaya), bukan timer browser.
-
-### P2 — Error handling dan observability
-
-Beberapa alur penting sudah memiliki try/catch dan status UI. Masih perlu standardisasi error antar-API (permintaan dibatalkan, timeout, rate limit, koneksi putus), retry/backoff dengan batas, dan logging produksi yang tidak memuat PII/NIK/token. Jangan kirim object record lengkap ke console atau issue.
-
-## 4. Uji fungsional / QA yang wajib sebelum rilis publik
-
-### Auth dan role
-- [ ] Login benar, password salah, akun nonaktif, jaringan putus dan timeout.
-- [ ] User tanpa custom claim/role valid ditolak.
-- [ ] Sign-out saat token claim masih diverifikasi tidak boleh mengembalikan user lama ke dashboard.
-- [ ] Login akun A → logout → login akun B pada browser yang sama; pastikan tidak ada data/cache yang bocor antar akun.
-- [ ] Owner, supervisor, dan pendamping diuji terhadap Firestore Rules aktual.
-
-### Data dan integrasi
-- [ ] Baca Forms/Sheets/Drive hanya dengan token OAuth yang valid dan akun yang tepat.
-- [ ] Data sumber kosong/salah tab/kolom berubah/row duplikat/NIK notasi ilmiah ditangani dengan pesan yang jelas.
-- [ ] Simpan perubahan data: cek hasil Firestore dan spreadsheet; simulasi satu target gagal dan pastikan UI tidak mengklaim sinkronisasi penuh.
-- [ ] Sinkronisasi gagal/401/403/429/offline dan token kedaluwarsa tidak menyebabkan loop atau duplikasi.
-- [ ] Verifikasi tidak ada penghapusan data cloud otomatis dari login atau sinkronisasi biasa.
-- [ ] Foto asli, upload besar, format rusak, akses Drive 403, dan foto yang hilang diuji tanpa membuat foto placeholder.
-
-### UX, performa dan native
-- [ ] Cold start dan login di Android dengan jaringan cepat, 3G lambat, offline, cache kecil dan roster besar.
-- [ ] Navigasi setiap tab dan modal pertama kali (lazy-loaded), termasuk kegagalan chunk dengan pesan yang dapat dipulihkan.
-- [ ] Buka/tutup modal kamera berulang, izin ditolak, dan permission prompt ditutup; kamera harus berhenti dan indikator kamera hilang.
-- [ ] Form asesmen: validasi NIK, simpan, kosongkan, ekspor/cetak, foto lampiran dan pemulihan setelah refresh.
-- [ ] Barcode PNG dan tautan responden dapat dipindai/buka dari perangkat lain.
-- [ ] Notifikasi saat tab aktif/background/ditutup; catat keterbatasan browser dan uji APK native secara terpisah.
-- [ ] Instal APK debug v1.0.0; cek nama, versionName/versionCode, login, kamera, penyimpanan, orientasi, dan buka tautan eksternal.
-
-## 5. Status rilis
-
-- **Kualitas build:** menunggu workflow v1.0.0 lulus (tes, TypeScript lint, build dan verifikasi aset).
-- **Native:** workflow akan membuat **debug APK** v1.0.0; ini bukan APK rilis bertanda tangan untuk Play Store.
-- **Security:** **BELUM PRODUCTION-READY untuk data nyata** sampai blocker localStorage/retensi data dan hak baca Firestore ditangani, lalu konfigurasi aktif dan alur end-to-end diuji.
-- **Cakupan audit:** static review kode dan pipeline repo. Ini bukan penetration test, audit IAM penuh, atau pemeriksaan konfigurasi live Firebase/Google/Vercel yang membutuhkan akses akun.
+Status: **perbaikan hardening sedang diverifikasi; belum dinyatakan production-ready** sampai CI branch lulus dan checklist autentikasi, rules, sinkronisasi, domain, dan perangkat nyata diverifikasi. Jangan gunakan build debug ini sebagai bukti bahwa semua integrasi cloud sudah benar.
