@@ -14,7 +14,7 @@ import { SettingsModal } from './components/SettingsModal';
 import { NotificationsModal } from './components/NotificationsModal';
 import { GoogleWorkspaceModal } from './components/GoogleWorkspaceModal';
 import { onAuthStateChanged, signOut, getIdTokenResult } from 'firebase/auth';
-import { auth, getAccessToken, savePPKSToFirestore, googleLogout, removeLegacyDemoPPKSFromFirestore } from './lib/firebase';
+import { auth, getAccessToken, savePPKSToFirestore, googleLogout, removeLegacyDemoPPKSFromFirestore, collapseDuplicatePPKSRecordsInFirestore } from './lib/firebase';
 import { ensureSIPANDUDatabaseSheet, extractSpreadsheetId, importPPKSFromSpreadsheet, removeLegacyDemoRowsFromSpreadsheet, removeObviousDemoFilesFromDrive, upsertPPKSInSpreadsheet } from './lib/googleWorkspace';
 import { GOOGLE_SIPANDU_RESOURCES } from './lib/googleSIPANDUResources';
 import { deduplicatePPKSRecords, parsePPKSTimestamp, samePPKSIdentity, sortPPKSRecordsByName, sortPPKSRecordsByTimestamp } from './lib/ppksData';
@@ -275,6 +275,8 @@ export default function App() {
 
   const demoCleanupAttemptedRef = useRef('');
   const demoCleanupRunningRef = useRef(false);
+  const firestoreDuplicateCleanupAttemptedRef = useRef(false);
+  const firestoreDuplicateCleanupInFlightRef = useRef<Promise<number> | null>(null);
   const [cloudSyncNotice, setCloudSyncNotice] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [liveSyncState, setLiveSyncState] = useState<{
     type: 'idle' | 'success' | 'paused' | 'error';
@@ -372,6 +374,30 @@ export default function App() {
     setPpksList((localRecords) => mergePPKSRecords(localRecords, cloudRecords));
   };
 
+  // Collapse duplicate Firestore documents only after the roster source is read successfully.
+  // A shared promise prevents polling and a manual sync from running the delete pass twice.
+  const runFirestoreDuplicateCleanup = async (force = false): Promise<number | null> => {
+    if (currentUserRole !== 'owner' && currentUserRole !== 'supervisor') return null;
+    if (firestoreDuplicateCleanupInFlightRef.current) {
+      return firestoreDuplicateCleanupInFlightRef.current;
+    }
+    if (!force && firestoreDuplicateCleanupAttemptedRef.current) return 0;
+
+    const operation = collapseDuplicatePPKSRecordsInFirestore();
+    firestoreDuplicateCleanupInFlightRef.current = operation;
+    try {
+      const deleted = await operation;
+      firestoreDuplicateCleanupAttemptedRef.current = true;
+      return deleted;
+    } catch (error) {
+      firestoreDuplicateCleanupAttemptedRef.current = false;
+      console.warn('SIPANDU Firestore duplicate cleanup skipped:', error);
+      return null;
+    } finally {
+      firestoreDuplicateCleanupInFlightRef.current = null;
+    }
+  };
+
   const handleSyncGoogleSpreadsheet = async (): Promise<{ records: number; sourceDataRows: number; sourceRowsWithName: number; sampleRecordsFiltered: number; duplicateRowsCollapsed: number }> => {
     const sourceUrl = settings.googleSpreadsheetSourceUrl?.trim() || '';
     if (!sourceUrl) throw new Error('Spreadsheet sumber belum dipilih. Buka Google Workspace & Cloud Hub → Google Sheets → Cari Spreadsheet Saya, lalu pilih file Anda.');
@@ -385,6 +411,7 @@ export default function App() {
         `Spreadsheet “${imported.spreadsheetTitle}”, tab “${imported.selectedTab}” berhasil dibaca (${imported.rowsRead} baris), tetapi tidak ditemukan baris responden yang memiliki kolom nama dikenali. Periksa judul kolom. Header: ${headers || '(kosong)'}`
       );
     }
+    const firestoreDuplicatesDeleted = await runFirestoreDuplicateCleanup(true);
     setPpksList((localRecords) => reconcileSpreadsheetPPKSRecords(localRecords, imported.records));
     setSettings((current) => ({
       ...current,
@@ -395,7 +422,7 @@ export default function App() {
     const updatedAt = new Date().toLocaleString('id-ID');
     setLiveSyncState({
       type: 'success',
-      message: `Sumber “${imported.spreadsheetTitle}” → “${imported.selectedTab}”: ${imported.sourceDataRows} baris data, ${imported.records.length} PPKS unik dimuat, ${imported.duplicateRowsCollapsed} baris duplikat digabung, ${imported.sampleRecordsFiltered} contoh disaring; NIK terpetakan ${imported.recordsWithNIK}/${imported.records.length}. Sinkronisasi otomatis setiap 2 menit selama izin Google masih berlaku.`,
+      message: `Sumber “${imported.spreadsheetTitle}” → “${imported.selectedTab}”: ${imported.sourceDataRows} baris data, ${imported.records.length} PPKS unik dimuat, ${imported.duplicateRowsCollapsed} baris duplikat spreadsheet digabung, ${imported.sampleRecordsFiltered} contoh disaring; Firestore: ${firestoreDuplicatesDeleted === null ? 'pembersihan gagal/perlu izin' : firestoreDuplicatesDeleted + ' dokumen duplikat dihapus'}; NIK terpetakan ${imported.recordsWithNIK}/${imported.records.length}. Sinkronisasi otomatis setiap 2 menit selama izin Google masih berlaku.`,
       lastUpdatedAt: updatedAt,
     });
     return {
@@ -445,6 +472,10 @@ export default function App() {
           });
           return;
         }
+        if (!firestoreDuplicateCleanupAttemptedRef.current) {
+          await runFirestoreDuplicateCleanup(false);
+          if (!active) return;
+        }
         setPpksList((current) => reconcileSpreadsheetPPKSRecords(current, imported.records));
         setSettings((current) => {
           if (
@@ -488,7 +519,7 @@ export default function App() {
       document.removeEventListener('visibilitychange', onVisibilityChange);
       window.removeEventListener('sipandu-workspace-token-updated', onWorkspaceTokenUpdated);
     };
-  }, [isAuthenticated, settings.googleSpreadsheetSourceUrl, settings.googleSpreadsheetSourceTab]);
+  }, [isAuthenticated, settings.googleSpreadsheetSourceUrl, settings.googleSpreadsheetSourceTab, currentUserRole]);
 
   // Automatically remove clearly marked legacy demo rows/files after a Google API
   // token is already available. This never opens an OAuth popup by itself.

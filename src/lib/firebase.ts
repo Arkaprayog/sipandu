@@ -25,6 +25,7 @@ import {
 } from 'firebase/auth';
 import firebaseConfig from '../../firebase-applet-config.json';
 import { PPKSRecord } from '../types';
+import { deduplicatePPKSRecords, parsePPKSTimestamp } from './ppksData';
 import { isLegacySamplePPKS } from '../data/initialData';
 import { GOOGLE_WORKSPACE_EMAIL } from './googleSIPANDUResources';
 
@@ -489,6 +490,102 @@ export async function removeLegacyDemoPPKSFromFirestore(): Promise<number> {
     if (!isDemo) continue;
     await deleteDoc(doc(db, 'ppks', item.id));
     deletedCount++;
+  }
+  return deletedCount;
+}
+
+
+/**
+ * Physically removes only high-confidence duplicate respondent documents from Firestore.
+ * Two records are considered duplicates when they share the same valid 16-digit NIK,
+ * or when normalized full name AND a non-empty phone number match. If both NIKs are
+ * present but differ, they are never merged. Ambiguous name-only records are kept.
+ *
+ * A complete merged record is written to one canonical document before duplicates
+ * are deleted, so non-empty photos and assessment fields are retained.
+ */
+export async function collapseDuplicatePPKSRecordsInFirestore(): Promise<number> {
+  const user = auth.currentUser;
+  if (!user) throw new Error('Sesi SIPANDU belum aktif; masuk kembali sebelum membersihkan duplikasi Firestore.');
+
+  const token = await getIdTokenResult(user);
+  const role = token.claims.role;
+  if (role !== 'owner' && role !== 'supervisor') {
+    throw new Error('Pembersihan duplikasi Firestore memerlukan peran owner atau supervisor.');
+  }
+
+  const snapshot = await getDocs(collection(db, 'ppks'));
+  const documents = snapshot.docs.map((item) => {
+    const data = item.data() as Partial<PPKSRecord>;
+    return {
+      documentId: item.id,
+      record: { ...data, id: String(data.id || item.id) } as PPKSRecord,
+    };
+  });
+
+  const normalizedName = (value: unknown) => String(value ?? '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLocaleLowerCase('id-ID')
+    .replace(/[^a-z0-9]/g, '');
+  const normalizedPhone = (value: unknown) => String(value ?? '').replace(/\D/g, '');
+  const validNIK = (record: PPKSRecord) => {
+    const candidate = String(record.nik || record.officialAssessment?.q23 || '').replace(/\D/g, '');
+    return /^\d{16}$/.test(candidate) ? candidate : '';
+  };
+  const isClearDuplicate = (a: PPKSRecord, b: PPKSRecord) => {
+    const aNik = validNIK(a);
+    const bNik = validNIK(b);
+    if (aNik && bNik) return aNik === bNik;
+    const aName = normalizedName(a.namaLengkap);
+    const bName = normalizedName(b.namaLengkap);
+    const aPhone = normalizedPhone(a.noHpWa);
+    const bPhone = normalizedPhone(b.noHpWa);
+    return Boolean(aName && aName === bName && aPhone && aPhone === bPhone);
+  };
+
+  // Build conservative groups. Each new row must match every member, so a
+  // nameless/missing-NIK row cannot bridge two respondents whose NIKs conflict.
+  const groups: typeof documents[] = [];
+  for (const item of documents) {
+    const group = groups.find((candidate) =>
+      candidate.every((member) => isClearDuplicate(member.record, item.record))
+    );
+    if (group) group.push(item);
+    else groups.push([item]);
+  }
+
+  let deletedCount = 0;
+  for (const group of groups) {
+    if (group.length < 2) continue;
+
+    const merged = deduplicatePPKSRecords(group.map((item) => item.record))[0];
+    if (!merged) continue;
+
+    // Prefer an existing document whose actual path already matches its record ID.
+    // This avoids moving/re-keying documents unnecessarily and keeps references stable.
+    const canonical = group.find((item) => item.documentId === item.record.id)
+      || [...group].sort((a, b) => {
+        const aTime = parsePPKSTimestamp(a.record.timestamp);
+        const bTime = parsePPKSTimestamp(b.record.timestamp);
+        if (aTime === null && bTime === null) return 0;
+        if (aTime === null) return 1;
+        if (bTime === null) return -1;
+        return bTime - aTime;
+      })[0];
+
+    const payload = stripUndefinedForFirestore({
+      ...merged,
+      id: canonical.documentId,
+    }) as PPKSRecord;
+
+    // Save the full merged data before deleting any duplicate document.
+    await setDoc(doc(db, 'ppks', canonical.documentId), payload);
+    for (const duplicate of group) {
+      if (duplicate.documentId === canonical.documentId) continue;
+      await deleteDoc(doc(db, 'ppks', duplicate.documentId));
+      deletedCount++;
+    }
   }
   return deletedCount;
 }
