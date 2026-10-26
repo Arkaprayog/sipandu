@@ -577,10 +577,14 @@ export async function reconcilePPKSFirestoreWithSpreadsheet(sourceRecords: PPKSR
   }
 
   const uniqueSource = deduplicatePPKSRecords(sourceRecords);
-  if (sourceRecords.length !== EXPECTED_REAL_PPKS_COUNT || uniqueSource.length !== EXPECTED_REAL_PPKS_COUNT) {
+  // The source tab may contain repeated Google Forms submissions. Validate the
+  // deduplicated roster count, not the raw row count: 45 rows that resolve to
+  // the 44 verified people are a valid cleanup input, not a reason to abort.
+  if (uniqueSource.length !== EXPECTED_REAL_PPKS_COUNT) {
     throw new Error(
       'Pembersihan Firestore dibatalkan demi keamanan: roster spreadsheet yang terbaca berisi ' +
-      uniqueSource.length + ' PPKS unik, sedangkan jumlah terverifikasi saat ini ' +
+      sourceRecords.length + ' baris mentah dan ' + uniqueSource.length +
+      ' PPKS unik, sedangkan jumlah terverifikasi saat ini ' +
       EXPECTED_REAL_PPKS_COUNT +
       '. Tidak ada dokumen Firestore yang dihapus. Pastikan tab dan impor spreadsheet benar sebelum menyelaraskan database.'
     );
