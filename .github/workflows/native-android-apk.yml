@@ -45,6 +45,9 @@ jobs:
       - name: Run application tests
         run: bun run test
 
+      - name: TypeScript check
+        run: bun run lint
+
       - name: Build web application
         run: bun run build
 
