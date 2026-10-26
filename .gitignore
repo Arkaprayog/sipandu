@@ -1,0 +1,21 @@
+# Environment files and credentials
+.env
+.env.*
+!.env.example
+!.env.sample
+*.pem
+*.key
+*service-account*.json
+google-services.json
+GoogleService-Info.plist
+
+# Build/dependency output
+node_modules/
+dist/
+coverage/
+android/
+ios/
+.firebase/
+.capacitor/
+*.log
+.DS_Store
