@@ -318,7 +318,7 @@ export const googleSignIn = async (): Promise<{
   // nothing when the host uses a different authDomain and blocks third-party
   // redirect storage. Reserve redirect-first for an actual embedded WebView.
   const isEmbeddedWebView =
-    /;\\s*wv\\)|\\bwv\\b|webview|capacitor/i.test(userAgent) ||
+    /;\s*wv\)|\bwv\b|webview|capacitor/i.test(userAgent) ||
     ((/iPhone|iPad|iPod/i.test(userAgent)) &&
       /AppleWebKit/i.test(userAgent) && !/Safari/i.test(userAgent));
   if (isEmbeddedWebView) {
