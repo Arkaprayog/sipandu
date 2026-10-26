@@ -616,7 +616,16 @@ function mapRowsToPPKSRecords(rows: string[][]): PPKSRecord[] {
   rows.slice(1).forEach((sourceRow, rowIndex) => {
     const row = sourceRow.map((value) => String(value ?? '').trim());
     const namaLengkap = readRespondentName(headers, row);
-    if (!namaLengkap) return;
+    // The follow-up Form is prefilled with the original PPKS ID. It may not ask
+    // for the respondent's name again, so an exact valid ID is enough to accept
+    // that row for merging into its existing stage-one record.
+    const linkedPPKSIdValue = readCellByAliases(headers, row, [
+      'idPPKS', 'kodePPKS', 'idSIPANDUPPKS', 'SIPANDUIDPPKS', 'nomorIDPPKS',
+    ]);
+    const linkedPPKSId = /^[A-Za-z0-9_-]{3,120}$/.test(linkedPPKSIdValue)
+      ? linkedPPKSIdValue
+      : '';
+    if (!namaLengkap && !linkedPPKSId) return;
 
     const timestamp = readCellByAliases(headers, row, ['timestamp', 'capWaktu', 'waktuPengiriman', 'waktuPengisian', 'tanggalWaktu', 'createTime']);
     let nik = readNIKFromSheetRow(headers, row);
@@ -666,6 +675,13 @@ function mapRowsToPPKSRecords(rows: string[][]): PPKSRecord[] {
         officialAssessment.q23 = nik || value;
       } else if (normalized === 'namalengkap' || normalized === 'namaresponden' || normalized === 'namappks') {
         officialAssessment.q16 = value;
+      } else if (
+        normalized &&
+        !/^(?:timestamp|capwaktu|waktupengiriman|waktupengisian|tanggalwaktu|formresponseid|responseid|submissionid|idsubmission|idrespon|idppks|kodeppks|idsipanduppks|sipanduidppks|nomoridppks|nama|namapetugas|namaasesor)$/.test(normalized)
+      ) {
+        // Retain non-numbered Google Forms answers as named assessment fields;
+        // q1..q91 remain the canonical keys for numbered official assessment forms.
+        officialAssessment[`field_${normalized.slice(0, 70)}`] = value;
       }
     });
     // Official question 23 is the canonical respondent NIK field in the
@@ -695,9 +711,14 @@ function mapRowsToPPKSRecords(rows: string[][]): PPKSRecord[] {
       hash ^= stableSource.charCodeAt(i);
       hash = Math.imul(hash, 16777619);
     }
-    const baseRecordId = externalId
-      ? `SHEET-RESP-${externalId.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 80)}`
-      : `SHEET-${(hash >>> 0).toString(36)}`;
+    // Prefer the trusted ID that was prefilled in the continuation Form.
+    // Do not generate a new synthetic ID for a response that already points to
+    // a known PPKS record.
+    const baseRecordId = linkedPPKSId
+      ? linkedPPKSId
+      : externalId
+        ? `SHEET-RESP-${externalId.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 80)}`
+        : `SHEET-${(hash >>> 0).toString(36)}`;
     // Never drop an otherwise valid row because a source ID is repeated.
     // A collision receives a stable row-position suffix and is still counted.
     let recordId = baseRecordId;
@@ -768,7 +789,7 @@ function mapRowsToPPKSRecords(rows: string[][]): PPKSRecord[] {
       fotoKtp,
       fotoKk,
       fotoRumah,
-      statusAsesmen: integratedForm ? 'Terintegrasi' : 'Tahap Awal',
+      statusAsesmen: linkedPPKSId ? 'Lanjutan' : (integratedForm ? 'Terintegrasi' : 'Tahap Awal'),
       googleFormSync: true,
       integratedForm,
       officialAssessment: Object.keys(officialAssessment).length ? officialAssessment : undefined,
