@@ -64,6 +64,11 @@ function mergePPKSRecords(localRecords: PPKSRecord[], cloudRecords: PPKSRecord[]
       integratedForm: next.integratedForm
         ? ({ ...(previous.integratedForm || {}), ...nextIntegrated } as NonNullable<PPKSRecord['integratedForm']>)
         : previous.integratedForm,
+      // Google Forms roster/continuation sync must not overwrite the independent
+      // assessment form's answers.
+      formAsesmenTerintegrasi: next.formAsesmenTerintegrasi
+        ? ({ ...(previous.formAsesmenTerintegrasi || {}), ...next.formAsesmenTerintegrasi } as NonNullable<PPKSRecord['formAsesmenTerintegrasi']>)
+        : previous.formAsesmenTerintegrasi,
       officialAssessment: next.officialAssessment
         ? ({ ...(previous.officialAssessment || {}), ...Object.fromEntries(
             Object.entries(next.officialAssessment).filter(([, value]) =>
