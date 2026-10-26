@@ -107,18 +107,11 @@
         var observer = new MutationObserver(function () {
           if (root && root.childElementCount > 0) {
             panel.style.display = 'none';
+            clearBootRetryMarkers();
             observer.disconnect();
           }
         });
         observer.observe(root, { childList: true });
-        // Clear only our retry flags after the app successfully mounts. No app/user data is touched.
-        var mountObserver = new MutationObserver(function () {
-          if (root && root.childElementCount > 0) {
-            clearBootRetryMarkers();
-            mountObserver.disconnect();
-          }
-        });
-        mountObserver.observe(root, { childList: true });
         window.setTimeout(function () {
           if (!root || root.childElementCount === 0) {
             showError('Aplikasi belum menampilkan antarmuka setelah 20 detik. Periksa koneksi, pemuatan berkas JavaScript, dan URL dasar GitHub Pages.');
