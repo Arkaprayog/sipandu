@@ -72,7 +72,10 @@ export function matchFormPhotoResponseForPPKS(
     }
   }
 
-  const nameSafe = scored.filter((entry) => !entry.nameConflict);
+  const nameSafe = scored.filter((entry) =>
+    !entry.nameConflict &&
+    !(sourceNIK && entry.candidateNIK && entry.candidateNIK !== sourceNIK)
+  );
   const timestampMatches = nameSafe
     .filter((entry) => entry.timeDelta !== null && entry.timeDelta <= toleranceMs)
     .sort((a, b) => {
