@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { ImageOff, LoaderCircle } from 'lucide-react';
-import { getAccessToken } from '../lib/firebase';
+import { getAccessToken, invalidateAccessToken, refreshWorkspaceAccessToken } from '../lib/firebase';
 
 interface PrivateDriveImageProps {
   source?: string | null;
@@ -97,15 +97,32 @@ export const PrivateDriveImage: React.FC<PrivateDriveImageProps> = ({
     setStatus('loading');
     void (async () => {
       try {
-        const token = await getAccessToken();
-        if (!token) throw new Error('Izin Google Drive telah berakhir. Hubungkan ulang akun Google untuk melihat foto privat.');
-        const response = await fetch(
-          `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(driveId)}?alt=media`,
-          { headers: { Authorization: `Bearer ${token}` } }
-        );
+        let token = await getAccessToken();
+        if (!token) token = await refreshWorkspaceAccessToken(true);
+        if (!token) throw new Error('SIPANDU mencoba memulihkan token Google secara otomatis tetapi sesi Workspace tidak dapat diperbarui. Buka Koneksi Akun hanya bila foto tetap tidak tampil.');
+        const mediaUrl = `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(driveId)}?alt=media`;
+        let response = await fetch(mediaUrl, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (response.status === 401) {
+          invalidateAccessToken();
+          const refreshedToken = await refreshWorkspaceAccessToken(true);
+          if (refreshedToken) {
+            token = refreshedToken;
+            response = await fetch(mediaUrl, {
+              headers: { Authorization: `Bearer ${token}` },
+            });
+          }
+        }
         if (!response.ok) {
           const payload = await response.json().catch(() => ({}));
           const message = (payload as { error?: { message?: string } }).error?.message;
+          if (response.status === 401) {
+            throw new Error('Token Google Drive ditolak setelah refresh otomatis. Foto akan dicoba kembali saat token tersedia.');
+          }
+          if (response.status === 403) {
+            throw new Error(`Tidak ada izin membaca file foto di Google Drive (HTTP 403). Pastikan akun Workspace memiliki akses ke file tersebut. ${message || ''}`.trim());
+          }
           throw new Error(message || `Google Drive menolak akses foto (HTTP ${response.status}).`);
         }
         const blob = await response.blob();
