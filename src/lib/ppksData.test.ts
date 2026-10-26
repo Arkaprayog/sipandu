@@ -50,6 +50,31 @@ test('does not combine people with a different confirmed NIK or conflicting phon
   assert.equal(deduplicatePPKSRecords([first, differentNik, differentPhone]).length, 3);
 });
 
+test('deduplicates on NIK stored only in official assessment q23 and preserves both photos', () => {
+  const first = record({
+    nik: '',
+    namaLengkap: 'Nama Lama',
+    noHpWa: '081111111111',
+    fotoDiri: 'https://example.test/diri.jpg',
+    officialAssessment: { q23: '1271011505920003', q24: 'jawaban lama' },
+  });
+  const second = record({
+    id: 'record-q23',
+    nik: '',
+    namaLengkap: 'Nama Yang Diperbarui',
+    noHpWa: '082222222222',
+    fotoKtp: 'https://example.test/ktp-q23.jpg',
+    officialAssessment: { q23: '1271011505920003', q25: 'jawaban baru' },
+  });
+  const result = deduplicatePPKSRecords([first, second]);
+  assert.equal(result.length, 1);
+  assert.equal(result[0].nik, '1271011505920003');
+  assert.equal(result[0].fotoDiri, 'https://example.test/diri.jpg');
+  assert.equal(result[0].fotoKtp, 'https://example.test/ktp-q23.jpg');
+  assert.equal(result[0].officialAssessment?.q24, 'jawaban lama');
+  assert.equal(result[0].officialAssessment?.q25, 'jawaban baru');
+});
+
 test('sorts PPKS names alphabetically from Lesmana to Tukinem', () => {
   const sorted = sortPPKSRecordsByName([
     record({ namaLengkap: 'Tukinem' }),
