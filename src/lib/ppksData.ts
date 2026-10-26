@@ -93,6 +93,24 @@ function createLocalDate(
 type PPKSIdentityFields = Pick<PPKSRecord, 'id' | 'timestamp' | 'namaLengkap' | 'nik' | 'noHpWa'> &
   Pick<Partial<PPKSRecord>, 'officialAssessment'>;
 
+function normalizePPKSNIK(value: unknown): string {
+  const digits = String(value ?? '').replace(/\D/g, '');
+  return /^\d{16}$/.test(digits) ? digits : '';
+}
+
+/** All validated NIK candidates are checked; imported rows can contain both mapped NIK and official question 23. */
+export function getPPKSNIKCandidates(record: PPKSIdentityFields): string[] {
+  return [...new Set([
+    normalizePPKSNIK(record.nik),
+    normalizePPKSNIK(record.officialAssessment?.q23),
+  ].filter(Boolean))];
+}
+
+export function getSharedPPKSNIK(a: PPKSIdentityFields, b: PPKSIdentityFields): string {
+  const bNiks = new Set(getPPKSNIKCandidates(b));
+  return getPPKSNIKCandidates(a).find((nik) => bNiks.has(nik)) || '';
+}
+
 export function samePPKSIdentity(
   a: PPKSIdentityFields,
   b: PPKSIdentityFields
@@ -100,16 +118,16 @@ export function samePPKSIdentity(
   const normalizeText = (value: unknown) => String(value ?? '')
     .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
     .toLocaleLowerCase('id-ID').replace(/[^a-z0-9]/g, '');
-  const normalizeNIK = (value: unknown) => {
-    const digits = String(value ?? '').replace(/\D/g, '');
-    return /^\d{16}$/.test(digits) ? digits : '';
-  };
-  const normalizeRecordNIK = (record: PPKSIdentityFields) =>
-    normalizeNIK(record.nik) || normalizeNIK(record.officialAssessment?.q23);
   const normalizePhone = (value: unknown) => String(value ?? '').replace(/\D/g, '');
-  const aNik = normalizeRecordNIK(a);
-  const bNik = normalizeRecordNIK(b);
-  if (aNik && bNik) return aNik === bNik;
+  const aNiks = getPPKSNIKCandidates(a);
+  const bNiks = getPPKSNIKCandidates(b);
+
+  // A shared validated NIK wins even if a secondary mapped field conflicts.
+  // The prior single-field preference could miss repeated Forms submissions
+  // whenever the selected NIK column differed from the official Q23 answer.
+  if (aNiks.some((nik) => bNiks.includes(nik))) return true;
+  // Conflicting valid NIKs are not merged based only on name/phone.
+  if (aNiks.length && bNiks.length) return false;
 
   const aName = normalizeText(a.namaLengkap);
   const bName = normalizeText(b.namaLengkap);
@@ -155,8 +173,11 @@ export function deduplicatePPKSRecords<T extends PPKSRecord>(records: T[]): T[] 
     unique[duplicateIndex] = {
       ...previous,
       ...next,
-      nik: next.nik || previous.nik ||
-        (String(next.officialAssessment?.q23 ?? previous.officialAssessment?.q23 ?? '').replace(/\D/g, '').match(/^\d{16}$/)?.[0] || ''),
+      nik: getSharedPPKSNIK(previous, next) ||
+        normalizePPKSNIK(next.officialAssessment?.q23) ||
+        next.nik ||
+        normalizePPKSNIK(previous.officialAssessment?.q23) ||
+        previous.nik,
       usia: next.usia || previous.usia,
       kotaDomisili: next.kotaDomisili || previous.kotaDomisili,
       alamatLengkap: next.alamatLengkap || previous.alamatLengkap,
@@ -171,8 +192,16 @@ export function deduplicatePPKSRecords<T extends PPKSRecord>(records: T[]): T[] 
         ? ({ ...(previous.integratedForm || {}), ...nextIntegrated } as T['integratedForm'])
         : previous.integratedForm,
       officialAssessment: Object.keys(nextOfficial).length
-        ? ({ ...(previous.officialAssessment || {}), ...nextOfficial } as T['officialAssessment'])
-        : previous.officialAssessment,
+        ? ({
+            ...(previous.officialAssessment || {}),
+            ...nextOfficial,
+            ...(getSharedPPKSNIK(previous, next)
+              ? { q23: getSharedPPKSNIK(previous, next) }
+              : {}),
+          } as T['officialAssessment'])
+        : (getSharedPPKSNIK(previous, next)
+          ? ({ ...(previous.officialAssessment || {}), q23: getSharedPPKSNIK(previous, next) } as T['officialAssessment'])
+          : previous.officialAssessment),
       statusAsesmen: next.officialAssessment || next.integratedForm
         ? 'Terintegrasi'
         : (previous.statusAsesmen || next.statusAsesmen),
