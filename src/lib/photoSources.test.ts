@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { classifyPPKSPhotoHeader, normalizePPKSPhotoSource, readPPKSPhotoSourceByKind } from './photoSources';
-import { googleDriveViewUrl, matchFormPhotoResponseForPPKS } from './formPhotoRecovery';
+import { googleDriveViewUrl, isGoogleFormLinkedToSpreadsheet, matchFormPhotoResponseForPPKS } from './formPhotoRecovery';
 
 test('maps each uploaded image to its own photo category from long Google Forms headers', () => {
   const headers = [
@@ -157,3 +157,11 @@ test('never uses a conflicting NIK as a name/timestamp fallback', () => {
     null
   );
 });
+
+test('links the Form only when linkedSheetId exactly matches the source spreadsheet', () => {
+  assert.equal(isGoogleFormLinkedToSpreadsheet('sheet-response-123', 'sheet-response-123'), true);
+  assert.equal(isGoogleFormLinkedToSpreadsheet('another-sheet-456', 'sheet-response-123'), false);
+  assert.equal(isGoogleFormLinkedToSpreadsheet('', 'sheet-response-123'), false);
+  assert.equal(isGoogleFormLinkedToSpreadsheet(undefined, 'sheet-response-123'), false);
+});
+
