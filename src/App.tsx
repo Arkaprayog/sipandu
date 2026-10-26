@@ -486,8 +486,7 @@ export default function App() {
         if (sourceName && followUpName && sourceName !== followUpName) return false;
         return true;
       });
-      const matchedIds = new Set(matched.map((record) => record.id));
-      const unmatchedCount = followUpImport.records.filter((record) => !matchedIds.has(record.id)).length;
+      const unmatchedCount = Math.max(0, followUpImport.records.length - matched.length);
       return {
         records: mergePPKSRecords(stageOneRecords, matched),
         matchedResponses: matched.length,
