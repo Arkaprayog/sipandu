@@ -33,12 +33,12 @@ export function isLikelyRespondentNIKHeader(header: string): boolean {
   ) return false;
 
   const identityTokens = [
-    'nik', 'nomornik', 'nonik', 'nikresponden', 'nikppks',
+    'nik', 'nomornik', 'nonik', 'nikresponden', 'nikppks', 'nomornikresponden', 'noidentitasnik', 'nomorindukkependudukanppks', 'nomoridentitasresponden',
     'nomorindukkependudukan', 'noindukkependudukan', 'indukkependudukan',
     'noinduk', 'nokependudukan', 'nomorkependudukan',
     'nomorktp', 'noktp', 'ktpnik', 'nikktp', 'nomornikktp',
     'kartutandapenduduk', 'ektp', 'kependudukan',
-    'nomoridentitas', 'noidentitas', 'identitasresponden',
+    'nomoridentitas', 'noidentitas', 'identitasresponden', 'nomorindukpenduduk', 'noindukkependudukanresponden', 'niksesuaikartuidentitas', 'niksesuaiktpresponden',
     'niksesuaiktp', 'nomorindukkependudukanresponden',
     'nationalid', 'nationalidentitynumber', 'identitynumber',
   ];
