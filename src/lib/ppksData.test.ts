@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { deduplicatePPKSRecords, formatPPKSTimestamp, samePPKSIdentity, sortPPKSRecordsByName } from './ppksData';
+import { deduplicatePPKSRecords, EXPECTED_REAL_PPKS_COUNT, formatPPKSTimestamp, samePPKSIdentity, sortPPKSRecordsByName } from './ppksData';
 import type { PPKSRecord } from '../types';
 
 function record(overrides: Partial<PPKSRecord> = {}): PPKSRecord {
@@ -105,4 +105,8 @@ test('sorts PPKS names alphabetically from Lesmana to Tukinem', () => {
 test('preserves the original timestamp string received from Google Sheets', () => {
   const sourceValue = '10/26/2026 11:29:19 AM';
   assert.equal(formatPPKSTimestamp(sourceValue), sourceValue);
+});
+
+test('the destructive Firestore reconciliation guard matches the verified 44-person roster', () => {
+  assert.equal(EXPECTED_REAL_PPKS_COUNT, 44);
 });
