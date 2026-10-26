@@ -14,7 +14,7 @@ function firstLink(value: string): string {
   const markdown = trimmed.match(/\]\((https?:\/\/[^)]+)\)/);
   if (markdown) return markdown[1];
   const url = trimmed.match(/https?:\/\/[^\s,;]+/i);
-  return (url?.[0] || trimmed).replace(/[)\]}]+$/, '');
+  return (url?.[0] || trimmed).replace(/[)\]}>.,]+$/, '');
 }
 
 function inferImageMimeType(buffer: ArrayBuffer): string {
@@ -38,12 +38,11 @@ function driveFileId(value: string): string | null {
   if (pathMatch) return pathMatch[1];
   const driveFilesPath = source.match(/\/drive\/u\/\d+\/files\/([a-zA-Z0-9_-]{15,})/);
   if (driveFilesPath) return driveFilesPath[1];
-  const queryMatch = source.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+  const queryMatch = source.match(/[?&](?:id|fileId)=([a-zA-Z0-9_-]{15,})/);
   if (queryMatch && /drive\.google\.com|docs\.google\.com/i.test(source)) return queryMatch[1];
   if (/^[a-zA-Z0-9_-]{20,}$/.test(source)) return source;
   return null;
 }
-
 /**
  * Renders public image URLs directly and private Google Drive upload links by
  * fetching their bytes with the authorized Workspace token. No fake person/photo
