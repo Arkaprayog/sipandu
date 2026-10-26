@@ -1,18 +1,19 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { lazy, Suspense, useState, useEffect, useRef } from 'react';
 import { PPKSRecord, ProfileUser, AppSettings } from './types';
 import { initialPPKSList, initialProfileUser, initialAppSettings, isLegacySamplePPKS } from './data/initialData';
 import { LoginPage } from './components/LoginPage';
 import { Header } from './components/Header';
-import { BottomNav, TabKey } from './components/BottomNav';
-import { BerandaView } from './components/BerandaView';
-import { DatabasePpksView } from './components/DatabasePpksView';
-import { AsesmenView } from './components/AsesmenView';
-import { FromAsesmenTerintegrasiView } from './components/FromAsesmenTerintegrasiView';
-import { DokumenView } from './components/DokumenView';
-import { EditProfileModal } from './components/EditProfileModal';
-import { SettingsModal } from './components/SettingsModal';
-import { NotificationsModal } from './components/NotificationsModal';
-import { GoogleWorkspaceModal } from './components/GoogleWorkspaceModal';
+import { BottomNav } from './components/BottomNav';
+import type { TabKey } from './components/BottomNav';
+const BerandaView = lazy(() => import('./components/BerandaView').then((module) => ({ default: module.BerandaView })));
+const DatabasePpksView = lazy(() => import('./components/DatabasePpksView').then((module) => ({ default: module.DatabasePpksView })));
+const AsesmenView = lazy(() => import('./components/AsesmenView').then((module) => ({ default: module.AsesmenView })));
+const FromAsesmenTerintegrasiView = lazy(() => import('./components/FromAsesmenTerintegrasiView').then((module) => ({ default: module.FromAsesmenTerintegrasiView })));
+const DokumenView = lazy(() => import('./components/DokumenView').then((module) => ({ default: module.DokumenView })));
+const EditProfileModal = lazy(() => import('./components/EditProfileModal').then((module) => ({ default: module.EditProfileModal })));
+const SettingsModal = lazy(() => import('./components/SettingsModal').then((module) => ({ default: module.SettingsModal })));
+const NotificationsModal = lazy(() => import('./components/NotificationsModal').then((module) => ({ default: module.NotificationsModal })));
+const GoogleWorkspaceModal = lazy(() => import('./components/GoogleWorkspaceModal').then((module) => ({ default: module.GoogleWorkspaceModal })));
 import { onAuthStateChanged, signOut, getIdTokenResult } from 'firebase/auth';
 import { auth, getAccessToken, savePPKSToFirestore, googleLogout, removeLegacyDemoPPKSFromFirestore, reconcilePPKSFirestoreWithSpreadsheet } from './lib/firebase';
 import { ensureSIPANDUDatabaseSheet, extractSpreadsheetId, getLinkedSpreadsheetUrlForForm, importPPKSFromSpreadsheet, removeLegacyDemoRowsFromSpreadsheet, removeObviousDemoFilesFromDrive, upsertPPKSInSpreadsheet } from './lib/googleWorkspace';
@@ -880,76 +881,88 @@ export default function App() {
             </span>
           </div>
         </div>
-        {activeTab === 'beranda' && (
-          <BerandaView
-            ppksList={ppksList}
-            googleSpreadsheetUrl={settings.googleSpreadsheetSourceUrl || ''}
-            googleSpreadsheetName={settings.googleSpreadsheetSourceName || ''}
-            onSyncGoogleSpreadsheet={handleSyncGoogleSpreadsheet}
-          />
-        )}
+        <Suspense fallback={<div role="status" aria-live="polite" className="flex min-h-40 items-center justify-center text-sm text-emerald-200">Memuat menu SIPANDU…</div>}>
+          {activeTab === 'beranda' && (
+            <BerandaView
+              ppksList={ppksList}
+              googleSpreadsheetUrl={settings.googleSpreadsheetSourceUrl || ''}
+              googleSpreadsheetName={settings.googleSpreadsheetSourceName || ''}
+              onSyncGoogleSpreadsheet={handleSyncGoogleSpreadsheet}
+            />
+          )}
 
-        {activeTab === 'database-ppks' && (
-          <DatabasePpksView
-            ppksList={ppksList}
-            onUpdatePPKS={handleUpdatePPKS}
-            settings={settings}
-          />
-        )}
+          {activeTab === 'database-ppks' && (
+            <DatabasePpksView
+              ppksList={ppksList}
+              onUpdatePPKS={handleUpdatePPKS}
+              settings={settings}
+            />
+          )}
 
-        {activeTab === 'asesmen' && (
-          <AsesmenView
-            ppksList={ppksList}
-            onAddNewPPKS={handleAddNewPPKS}
-            settings={settings}
-          />
-        )}
+          {activeTab === 'asesmen' && (
+            <AsesmenView
+              ppksList={ppksList}
+              onAddNewPPKS={handleAddNewPPKS}
+              settings={settings}
+            />
+          )}
 
-        {activeTab === 'from-asesmen-terintegrasi' && (
-          <FromAsesmenTerintegrasiView
-            ppksList={ppksList}
-            onUpdatePPKS={handleUpdatePPKS}
-          />
-        )}
+          {activeTab === 'from-asesmen-terintegrasi' && (
+            <FromAsesmenTerintegrasiView
+              ppksList={ppksList}
+              onUpdatePPKS={handleUpdatePPKS}
+            />
+          )}
 
-        {activeTab === 'dokumen' && <DokumenView profile={profile} />}
+          {activeTab === 'dokumen' && <DokumenView profile={profile} />}
+        </Suspense>
       </main>
 
       {/* Bottom Navigation Bar: BERANDA - DATABASE PPKS - ASESMEN - FROM ASESMEN TERINTEGRASI - DOKUMEN */}
       <BottomNav activeTab={activeTab} onSelectTab={setActiveTab} />
 
-      {/* Modals */}
-      <EditProfileModal
-        isOpen={isEditProfileOpen}
-        onClose={() => setIsEditProfileOpen(false)}
-        profile={profile}
-        onSave={(updated) => setProfile(updated)}
-      />
+      {/* Load rarely used modal code only after the user opens that modal. */}
+      <Suspense fallback={null}>
+        {isEditProfileOpen && (
+          <EditProfileModal
+            isOpen={true}
+            onClose={() => setIsEditProfileOpen(false)}
+            profile={profile}
+            onSave={(updated) => setProfile(updated)}
+          />
+        )}
 
-      <SettingsModal
-        isOpen={isSettingsOpen}
-        onClose={() => setIsSettingsOpen(false)}
-        settings={settings}
-        onSave={(updated) => setSettings(updated)}
-      />
+        {isSettingsOpen && (
+          <SettingsModal
+            isOpen={true}
+            onClose={() => setIsSettingsOpen(false)}
+            settings={settings}
+            onSave={(updated) => setSettings(updated)}
+          />
+        )}
 
-      <NotificationsModal
-        isOpen={isNotificationsOpen}
-        onClose={() => setIsNotificationsOpen(false)}
-        notifications={respondentNotifications}
-        permission={notificationPermission}
-        onEnableNotifications={handleEnableRespondentNotifications}
-        onMarkAllRead={() => setRespondentNotifications(markRespondentNotificationsRead(auth.currentUser?.uid || 'default'))}
-      />
+        {isNotificationsOpen && (
+          <NotificationsModal
+            isOpen={true}
+            onClose={() => setIsNotificationsOpen(false)}
+            notifications={respondentNotifications}
+            permission={notificationPermission}
+            onEnableNotifications={handleEnableRespondentNotifications}
+            onMarkAllRead={() => setRespondentNotifications(markRespondentNotificationsRead(auth.currentUser?.uid || 'default'))}
+          />
+        )}
 
-      <GoogleWorkspaceModal
-        isOpen={isGoogleWorkspaceOpen}
-        onClose={() => setIsGoogleWorkspaceOpen(false)}
-        ppksList={ppksList}
-        settings={settings}
-        onUpdateSettings={(updated) => setSettings(updated)}
-        onLoadPPKSFromCloud={handleLoadPPKSFromCloud}
-      />
+        {isGoogleWorkspaceOpen && (
+          <GoogleWorkspaceModal
+            isOpen={true}
+            onClose={() => setIsGoogleWorkspaceOpen(false)}
+            ppksList={ppksList}
+            settings={settings}
+            onUpdateSettings={(updated) => setSettings(updated)}
+            onLoadPPKSFromCloud={handleLoadPPKSFromCloud}
+          />
+        )}
+      </Suspense>
     </div>
   );
 }

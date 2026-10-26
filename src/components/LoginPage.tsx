@@ -75,10 +75,20 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
       <img
         aria-hidden="true"
         alt=""
-        src={publicAssetUrl('Wallpaper Background Landingpage.jpg')}
+        src={publicAssetUrl('Wallpaper Background Landingpage.webp')}
         loading="eager"
         fetchPriority="high"
-        onError={(event) => { event.currentTarget.style.display = 'none'; }}
+        decoding="async"
+        onError={(event) => {
+          const image = event.currentTarget;
+          // Fall back to the source JPEG if the optimized asset is unavailable.
+          if (image.dataset.fallback !== '1') {
+            image.dataset.fallback = '1';
+            image.src = publicAssetUrl('Wallpaper Background Landingpage.jpg');
+          } else {
+            image.style.display = 'none';
+          }
+        }}
         className="absolute inset-0 z-0 h-full w-full object-cover object-center"
       />
 
