@@ -266,9 +266,11 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
     printObjectUrlsRef.current = [];
   };
 
-  const releasePreviewPhotoUrls = () => {
-    previewObjectUrlsRef.current.forEach((url) => URL.revokeObjectURL(url));
-    previewObjectUrlsRef.current = [];
+  const releasePreviewPhotoUrls = (urlsToRelease?: string[]) => {
+    const urls = urlsToRelease ?? [...previewObjectUrlsRef.current];
+    urls.forEach((url) => URL.revokeObjectURL(url));
+    const released = new Set(urls);
+    previewObjectUrlsRef.current = previewObjectUrlsRef.current.filter((url) => !released.has(url));
   };
 
   useEffect(() => () => {
@@ -438,7 +440,7 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
 
   useEffect(() => {
     let active = true;
-    releasePreviewPhotoUrls();
+    const effectPreviewUrls: string[] = [];
     setPreviewPhotoUrls({});
     setPreviewPhotoErrors({});
     if (!currentPPKS) {
@@ -453,6 +455,7 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
       await Promise.all(printablePhotos.map(async (photo) => {
         try {
           const resolved = await resolvePhotoForPrint(photo.source, 'preview');
+          if (resolved.temporary && resolved.url.startsWith('blob:')) effectPreviewUrls.push(resolved.url);
           if (resolved.url) urls[photo.key] = resolved.url;
           if (resolved.error) errors[photo.key] = resolved.error;
         } catch (error) {
@@ -460,7 +463,7 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
         }
       }));
       if (!active) {
-        releasePreviewPhotoUrls();
+        releasePreviewPhotoUrls(effectPreviewUrls);
         return;
       }
       setPreviewPhotoUrls(urls);
@@ -471,7 +474,7 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
 
     return () => {
       active = false;
-      releasePreviewPhotoUrls();
+      releasePreviewPhotoUrls(effectPreviewUrls);
     };
   }, [
     currentPPKS?.id,
@@ -603,6 +606,9 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
     } catch (error) {
       document.body.classList.remove('official-assessment-printing');
       document.getElementById('sipandu-official-print-root')?.remove();
+      releasePrintPhotoUrls();
+      setPrintPhotoUrls({});
+      setPrintPhotoErrors({});
       setPreparingPrint(false);
       setStatusMessage({
         type: 'error',
