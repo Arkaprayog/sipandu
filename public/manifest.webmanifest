@@ -1,0 +1,27 @@
+{
+  "id": "/sipandu/",
+  "name": "SIPANDU ODHIV",
+  "short_name": "SIPANDU",
+  "description": "Sistem Informasi & Pendampingan Terpadu Database PPKS ODHIV Sumatera Utara",
+  "lang": "id-ID",
+  "start_url": "/sipandu/",
+  "scope": "/sipandu/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0b140c",
+  "theme_color": "#0b140c",
+  "icons": [
+    {
+      "src": "./uploads/App%20Icon%20Picture.png",
+      "sizes": "any",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "./uploads/App%20Icon%20Picture.png",
+      "sizes": "any",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}
