@@ -681,7 +681,7 @@ function mapRowsToPPKSRecords(rows: string[][]): PPKSRecord[] {
       ) {
         // Retain non-numbered Google Forms answers as named assessment fields;
         // q1..q91 remain the canonical keys for numbered official assessment forms.
-        officialAssessment[`field_${normalized.slice(0, 70)}`] = value;
+        officialAssessment[`field_${label.slice(0, 100)}`] = value;
       }
     });
     // Official question 23 is the canonical respondent NIK field in the
