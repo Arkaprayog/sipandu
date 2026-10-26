@@ -20,6 +20,13 @@ service cloud.firestore {
       allow create, update, delete: if hasRole('owner') || hasRole('supervisor');
     }
 
+    // Each authenticated staff member can access only their own profile.
+    // This document contains staff identity/contact details, not PPKS records.
+    match /staffProfiles/{uid} {
+      allow read, create, update: if signedIn() && request.auth.uid == uid;
+      allow delete: if false;
+    }
+
     // Deny all collections unless a collection-specific policy is added.
     match /{document=**} {
       allow read, write: if false;
