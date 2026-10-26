@@ -87,7 +87,7 @@ function createLocalDate(
  * strongest; otherwise use the normalized full name while rejecting conflicting
  * NIKs or phone numbers. This intentionally does not delete cloud documents.
  */
-type PPKSIdentityFields = Pick<PPKSRecord, 'id' | 'namaLengkap' | 'nik' | 'noHpWa'> &
+type PPKSIdentityFields = Pick<PPKSRecord, 'id' | 'timestamp' | 'namaLengkap' | 'nik' | 'noHpWa'> &
   Pick<Partial<PPKSRecord>, 'officialAssessment'>;
 
 export function samePPKSIdentity(
@@ -115,8 +115,12 @@ export function samePPKSIdentity(
 
   const aPhone = normalizePhone(a.noHpWa);
   const bPhone = normalizePhone(b.noHpWa);
-  if (aPhone && bPhone && aPhone !== bPhone) return false;
-  return true;
+  // When a phone is available on both rows it must agree. Otherwise require an
+  // identical parsed submission timestamp; name alone is too ambiguous.
+  if (aPhone && bPhone) return aPhone === bPhone;
+  const aTimestamp = parsePPKSTimestamp(a.timestamp);
+  const bTimestamp = parsePPKSTimestamp(b.timestamp);
+  return aTimestamp !== null && bTimestamp !== null && aTimestamp === bTimestamp;
 }
 
 /** Collapse duplicate person rows while retaining the newest timestamp and any non-empty details. */
