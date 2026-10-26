@@ -50,7 +50,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
 
       {/* Satu-satunya card di halaman login; lebar 300 px dan latar sangat transparan. */}
       <main className="relative z-10 w-[300px] max-w-[calc(100vw-24px)]">
-        <section className="w-full rounded-xl border border-white/65 bg-white/[0.07] p-4 shadow-none">
+        <section className="w-full rounded-xl border border-black/25 bg-white/[0.10] p-4 shadow-none backdrop-blur-[1px]">
           <div className="mb-4 flex flex-col items-center text-center">
             <img
               src={`${import.meta.env.BASE_URL}uploads/Logo%20Kemensos%20Hadir.png`}
