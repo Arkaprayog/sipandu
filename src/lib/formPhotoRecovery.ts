@@ -1,4 +1,4 @@
-import { PPKSPhotoKind } from './photoSources';
+import type { PPKSPhotoKind } from './photoSources';
 import { parsePPKSTimestamp } from './ppksData';
 
 export interface FormPhotoResponseCandidate {
