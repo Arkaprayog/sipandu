@@ -68,6 +68,47 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
           <div>
             <label className="block text-sky-200 font-semibold mb-1 flex items-center gap-1.5">
+              <Link className="w-3.5 h-3.5 text-emerald-400" />
+              <span>URL Google Form Asesmen Tahap Lanjutan:</span>
+            </label>
+            <input
+              type="url"
+              value={formData.googleFormTahapLanjutanUrl || ''}
+              onChange={(e) =>
+                setFormData({ ...formData, googleFormTahapLanjutanUrl: e.target.value })
+              }
+              placeholder="https://docs.google.com/forms/d/FORM_ID/edit"
+              className="w-full p-2.5 rounded bg-black/60 border border-emerald-500/30 font-mono text-white"
+            />
+            <p className="mt-1 text-[10px] text-neutral-400">
+              Gunakan formulir lanjutan yang berbeda dari tahap awal. Tautan WhatsApp dibuat khusus untuk setiap ID PPKS.
+            </p>
+          </div>
+
+          <div>
+            <label className="block text-sky-200 font-semibold mb-1">
+              Nomor entry pertanyaan “ID PPKS” pada Form lanjutan:
+            </label>
+            <input
+              type="text"
+              inputMode="numeric"
+              value={formData.googleFormTahapLanjutanIdEntry || ''}
+              onChange={(e) =>
+                setFormData({ ...formData, googleFormTahapLanjutanIdEntry: e.target.value })
+              }
+              placeholder="Contoh: 123456789 (atau entry.123456789)"
+              className="w-full p-2.5 rounded bg-black/60 border border-emerald-500/30 font-mono text-white"
+            />
+            <p className="mt-1 text-[10px] text-neutral-400">
+              Ambil nomor asli dari Google Forms → menu tiga titik → Dapatkan link yang telah diisi sebelumnya. Buat pertanyaan “ID PPKS” di formulir lanjutan.
+            </p>
+            <p className="mt-1 text-[10px] text-emerald-200">
+              Agar jawaban lanjutan otomatis masuk ke record PPKS yang sama, buka tab Respons pada Form lanjutan, tautkan ke Google Spreadsheet, dan pastikan kolom pertanyaan prefill berjudul “ID PPKS”. SIPANDU akan menemukan sheet tertaut dan memadankan respons setiap 5 menit saat dashboard aktif.
+            </p>
+          </div>
+
+          <div>
+            <label className="block text-sky-200 font-semibold mb-1 flex items-center gap-1.5">
               <Link className="w-3.5 h-3.5 text-sky-300" />
               <span>URL Google Form Asesmen Kesehatan Mental:</span>
             </label>
@@ -78,7 +119,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 setFormData({ ...formData, googleFormKesehatanMentalUrl: e.target.value })
               }
               className="w-full p-2.5 rounded bg-black/60 border border-rose-500/30 font-mono text-white"
-              required
             />
           </div>
 
@@ -124,7 +164,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 value={formData.senderName}
                 onChange={(e) => setFormData({ ...formData, senderName: e.target.value })}
                 className="w-full p-2 rounded bg-black/60 border border-rose-500/30 text-white"
-                required
               />
             </div>
             <div>
@@ -136,7 +175,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 value={formData.senderRole}
                 onChange={(e) => setFormData({ ...formData, senderRole: e.target.value })}
                 className="w-full p-2 rounded bg-black/60 border border-rose-500/30 text-white"
-                required
               />
             </div>
           </div>

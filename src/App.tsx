@@ -15,7 +15,7 @@ import { NotificationsModal } from './components/NotificationsModal';
 import { GoogleWorkspaceModal } from './components/GoogleWorkspaceModal';
 import { onAuthStateChanged, signOut, getIdTokenResult } from 'firebase/auth';
 import { auth, getAccessToken, savePPKSToFirestore, googleLogout, removeLegacyDemoPPKSFromFirestore, reconcilePPKSFirestoreWithSpreadsheet } from './lib/firebase';
-import { ensureSIPANDUDatabaseSheet, extractSpreadsheetId, importPPKSFromSpreadsheet, removeLegacyDemoRowsFromSpreadsheet, removeObviousDemoFilesFromDrive, upsertPPKSInSpreadsheet } from './lib/googleWorkspace';
+import { ensureSIPANDUDatabaseSheet, extractSpreadsheetId, getLinkedSpreadsheetUrlForForm, importPPKSFromSpreadsheet, removeLegacyDemoRowsFromSpreadsheet, removeObviousDemoFilesFromDrive, upsertPPKSInSpreadsheet } from './lib/googleWorkspace';
 import { GOOGLE_SIPANDU_RESOURCES } from './lib/googleSIPANDUResources';
 import { deduplicatePPKSRecords, EXPECTED_REAL_PPKS_COUNT, parsePPKSTimestamp, samePPKSIdentity, sortPPKSRecordsByName, sortPPKSRecordsByTimestamp } from './lib/ppksData';
 import { normalizePPKSPhotoSource } from './lib/photoSources';
@@ -36,8 +36,13 @@ function mergePPKSRecords(localRecords: PPKSRecord[], cloudRecords: PPKSRecord[]
     return {
       ...previous,
       ...next,
+      // A continuation Form may ask only for the PPKS ID and assessment answers.
+      // Blank identity fields from that sheet must not erase the stage-one profile.
+      namaLengkap: next.namaLengkap || previous.namaLengkap,
+      jenisKelamin: next.namaLengkap ? next.jenisKelamin : previous.jenisKelamin,
       nik: next.nik || previous.nik,
       usia: next.usia || previous.usia,
+      desil: next.desil || previous.desil,
       alamatLengkap: next.alamatLengkap || previous.alamatLengkap,
       kotaDomisili: next.kotaDomisili || previous.kotaDomisili,
       noHpWa: next.noHpWa || previous.noHpWa,
@@ -57,9 +62,11 @@ function mergePPKSRecords(localRecords: PPKSRecord[], cloudRecords: PPKSRecord[]
             )
           ) } as NonNullable<PPKSRecord['officialAssessment']>)
         : previous.officialAssessment,
-      statusAsesmen: next.officialAssessment || next.integratedForm
-        ? 'Terintegrasi'
-        : (previous.statusAsesmen || next.statusAsesmen),
+      statusAsesmen: next.statusAsesmen === 'Lanjutan'
+        ? 'Lanjutan'
+        : (next.statusAsesmen === 'Terintegrasi' || next.integratedForm)
+          ? 'Terintegrasi'
+          : (previous.statusAsesmen || next.statusAsesmen),
     };
   };
 
@@ -164,12 +171,18 @@ function normalizeAppSettings(value: unknown): AppSettings {
   }
 
   const sourceName = wasAutoDefaultSource ? '' : (saved.googleSpreadsheetSourceName || '');
+  // Default the read-only source to the actual ATENSI Google Forms response
+  // spreadsheet already defined in the project resources. This enables live
+  // dashboard sync after OAuth is authorized, without selecting a write target.
+  const resolvedSourceUrl = sourceUrl || GOOGLE_SIPANDU_RESOURCES.responseSpreadsheetUrl;
 
   return {
     ...initialAppSettings,
     ...saved,
+    googleFormTahapLanjutanUrl: saved.googleFormTahapLanjutanUrl || '',
+    googleFormTahapLanjutanIdEntry: saved.googleFormTahapLanjutanIdEntry || '',
     googleSpreadsheetUrl: databaseUrl,
-    googleSpreadsheetSourceUrl: sourceUrl,
+    googleSpreadsheetSourceUrl: resolvedSourceUrl,
     googleSpreadsheetSourceName: sourceName,
     googleSpreadsheetSourceTab: saved.googleSpreadsheetSourceTab || '',
   };
@@ -278,6 +291,7 @@ export default function App() {
   const demoCleanupRunningRef = useRef(false);
   const firestoreRosterReconciliationAttemptedRef = useRef(false);
   const firestoreRosterReconciliationInFlightRef = useRef<Promise<number> | null>(null);
+  const continuationSheetCacheRef = useRef<{ formUrl: string; spreadsheetUrl: string } | null>(null);
   const [cloudSyncNotice, setCloudSyncNotice] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [liveSyncState, setLiveSyncState] = useState<{
     type: 'idle' | 'success' | 'paused' | 'error';
@@ -419,6 +433,77 @@ export default function App() {
     }
   };
 
+  /**
+   * Load follow-up answers from the response Sheet that Google Forms has linked
+   * to the configured stage-two Form. Merge only rows carrying an ID that exists
+   * in the stage-one roster; unmatched responses never create duplicate PPKS.
+   */
+  const mergeContinuationResponses = async (stageOneRecords: PPKSRecord[]): Promise<{
+    records: PPKSRecord[];
+    matchedResponses: number;
+    warning: string;
+  }> => {
+    const formUrl = settings.googleFormTahapLanjutanUrl?.trim() || '';
+    if (!formUrl) {
+      return {
+        records: stageOneRecords,
+        matchedResponses: 0,
+        warning: 'Formulir lanjutan belum dikonfigurasi; sinkronisasi tahap awal tetap berjalan.',
+      };
+    }
+
+    try {
+      let spreadsheetUrl = continuationSheetCacheRef.current?.formUrl === formUrl
+        ? continuationSheetCacheRef.current.spreadsheetUrl
+        : '';
+      if (!spreadsheetUrl) {
+        spreadsheetUrl = await getLinkedSpreadsheetUrlForForm(formUrl);
+        continuationSheetCacheRef.current = { formUrl, spreadsheetUrl };
+      }
+
+      const followUpImport = await importPPKSFromSpreadsheet(spreadsheetUrl);
+      const stageOneById = new Map(stageOneRecords.map((record) => [record.id, record]));
+      const normalizePersonName = (value: unknown) => String(value ?? '')
+        .normalize('NFD')
+        .replace(/[\\u0300-\\u036f]/g, '')
+        .toLocaleLowerCase('id-ID')
+        .replace(/[^a-z0-9]/g, '');
+      const resolveNIK = (record: PPKSRecord) => {
+        const candidate = String(record.nik || record.officialAssessment?.q23 || '').replace(/\\D/g, '');
+        return /^\\d{16}$/.test(candidate) ? candidate : '';
+      };
+      // Prefilled Google Forms values can be edited by respondents, so do not
+      // cross-link a response if its ID matches but its supplied identity
+      // contradicts a valid stage-one NIK or name.
+      const matched = followUpImport.records.filter((record) => {
+        const source = stageOneById.get(record.id);
+        if (!source) return false;
+        const sourceNIK = resolveNIK(source);
+        const followUpNIK = resolveNIK(record);
+        if (sourceNIK && followUpNIK && sourceNIK !== followUpNIK) return false;
+        const sourceName = normalizePersonName(source.namaLengkap);
+        const followUpName = normalizePersonName(record.namaLengkap);
+        if (sourceName && followUpName && sourceName !== followUpName) return false;
+        return true;
+      });
+      const unmatchedCount = Math.max(0, followUpImport.records.length - matched.length);
+      return {
+        records: mergePPKSRecords(stageOneRecords, matched),
+        matchedResponses: matched.length,
+        warning: unmatchedCount > 0
+          ? `${unmatchedCount} respons lanjutan belum dipadankan. Periksa kolom “ID PPKS” dan pastikan nama/NIK yang dijawab tidak bertentangan dengan data tahap awal.`
+          : '',
+      };
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      return {
+        records: stageOneRecords,
+        matchedResponses: 0,
+        warning: `Sinkronisasi Form lanjutan belum aktif: ${detail}`,
+      };
+    }
+  };
+
   const handleSyncGoogleSpreadsheet = async (): Promise<{ records: number; sourceDataRows: number; sourceRowsWithName: number; sampleRecordsFiltered: number; duplicateRowsCollapsed: number; photosRecoveredFromForm: number; photoRecoveryStatus: string; photoRecoveryDetail: string; photoRecoveryDiagnostics: { responseCount: number; responsesWithUploads: number; recordsMatched: number }; photoCounts: { diri: number; ktp: number; kk: number; rumah: number } }> => {
     const sourceUrl = settings.googleSpreadsheetSourceUrl?.trim() || '';
     if (!sourceUrl) throw new Error('Spreadsheet sumber belum dipilih. Buka Google Workspace & Cloud Hub → Google Sheets → Cari Spreadsheet Saya, lalu pilih file Anda.');
@@ -432,8 +517,10 @@ export default function App() {
         `Spreadsheet “${imported.spreadsheetTitle}”, tab “${imported.selectedTab}” berhasil dibaca (${imported.rowsRead} baris), tetapi tidak ditemukan baris responden yang memiliki kolom nama dikenali. Periksa judul kolom. Header: ${headers || '(kosong)'}`
       );
     }
-    const firestoreDocumentsRemoved = await runFirestoreRosterReconciliation(imported.records, true);
-    setPpksList((localRecords) => reconcileSpreadsheetPPKSRecords(localRecords, imported.records));
+    const continuation = await mergeContinuationResponses(imported.records);
+    const recordsForSync = continuation.records;
+    const firestoreDocumentsRemoved = await runFirestoreRosterReconciliation(recordsForSync, true);
+    setPpksList((localRecords) => reconcileSpreadsheetPPKSRecords(localRecords, recordsForSync));
     setSettings((current) => ({
       ...current,
       googleSpreadsheetSourceUrl: sourceUrl,
@@ -441,19 +528,19 @@ export default function App() {
       googleSpreadsheetSourceTab: imported.selectedTab,
     }));
     const updatedAt = new Date().toLocaleString('id-ID');
-    const hasExpectedRoster = imported.records.length === EXPECTED_REAL_PPKS_COUNT;
+    const hasExpectedRoster = recordsForSync.length === EXPECTED_REAL_PPKS_COUNT;
     const firestoreMessage = !hasExpectedRoster
-      ? `Firestore TIDAK diubah: spreadsheet memuat ${imported.records.length} PPKS unik, sedangkan roster terverifikasi harus ${EXPECTED_REAL_PPKS_COUNT}. Periksa tab/hasil impor; tidak ada dokumen yang dihapus.`
+      ? `Firestore penyelarasan penuh dilewati: ${recordsForSync.length} PPKS unik terbaca, sedangkan roster yang dipakai untuk pembersihan harus ${EXPECTED_REAL_PPKS_COUNT}. Data sumber tetap dimuat; tidak ada dokumen yang dihapus.`
       : firestoreDocumentsRemoved === null
-        ? 'Firestore belum diselaraskan; periksa izin akun owner/supervisor atau koneksi Firebase. Data Firestore tidak dihapus oleh proses yang gagal.'
+        ? 'Data Sheets berhasil dimuat, tetapi Firestore belum diselaraskan; periksa izin owner/supervisor atau koneksi Firebase.'
         : `Firestore diselaraskan ke ${EXPECTED_REAL_PPKS_COUNT} PPKS; ${firestoreDocumentsRemoved} dokumen lama/duplikat di luar roster dibersihkan.`;
     setLiveSyncState({
-      type: hasExpectedRoster && firestoreDocumentsRemoved !== null ? 'success' : 'error',
-      message: `Sumber “${imported.spreadsheetTitle}” → “${imported.selectedTab}”: ${imported.sourceDataRows} baris data, ${imported.records.length} PPKS unik dimuat, ${imported.duplicateRowsCollapsed} duplikat spreadsheet digabung, ${imported.sampleRecordsFiltered} contoh disaring. Foto sumber: diri ${imported.photoCounts.diri}/${imported.records.length}, KTP ${imported.photoCounts.ktp}/${imported.records.length}, KK ${imported.photoCounts.kk}/${imported.records.length}, rumah ${imported.photoCounts.rumah}/${imported.records.length}; tautan dipulihkan dari Forms: ${imported.photosRecoveredFromForm}; status pemulihan: ${imported.photoRecoveryStatus} — ${imported.photoRecoveryDetail} ${firestoreMessage} NIK terpetakan ${imported.recordsWithNIK}/${imported.records.length}. Sinkronisasi otomatis setiap 5 menit saat dashboard terbuka dan izin Google masih berlaku.`,
+      type: 'success',
+      message: `Sumber “${imported.spreadsheetTitle}” → “${imported.selectedTab}”: ${imported.sourceDataRows} baris data, ${recordsForSync.length} PPKS unik dimuat, ${imported.duplicateRowsCollapsed} duplikat spreadsheet digabung, ${imported.sampleRecordsFiltered} contoh disaring. Respons Form lanjutan dipadankan: ${continuation.matchedResponses}. ${continuation.warning ? continuation.warning + ' ' : ''}Foto sumber: diri ${imported.photoCounts.diri}/${imported.records.length}, KTP ${imported.photoCounts.ktp}/${imported.records.length}, KK ${imported.photoCounts.kk}/${imported.records.length}, rumah ${imported.photoCounts.rumah}/${imported.records.length}; tautan dipulihkan dari Forms: ${imported.photosRecoveredFromForm}; status pemulihan: ${imported.photoRecoveryStatus} — ${imported.photoRecoveryDetail} ${firestoreMessage} NIK terpetakan ${imported.recordsWithNIK}/${imported.records.length}. Sinkronisasi otomatis setiap 5 menit saat dashboard terbuka dan izin Google masih berlaku.`,
       lastUpdatedAt: updatedAt,
     });
     return {
-      records: imported.records.length,
+      records: recordsForSync.length,
       sourceDataRows: imported.sourceDataRows,
       sourceRowsWithName: imported.sourceRowsWithName,
       sampleRecordsFiltered: imported.sampleRecordsFiltered,
@@ -504,12 +591,15 @@ export default function App() {
           });
           return;
         }
+        const continuation = await mergeContinuationResponses(imported.records);
+        if (!active) return;
+        const recordsForSync = continuation.records;
         let firestoreDocumentsRemoved: number | null = null;
-        if (!firestoreRosterReconciliationAttemptedRef.current && imported.records.length === EXPECTED_REAL_PPKS_COUNT) {
-          firestoreDocumentsRemoved = await runFirestoreRosterReconciliation(imported.records, false);
+        if (!firestoreRosterReconciliationAttemptedRef.current && recordsForSync.length === EXPECTED_REAL_PPKS_COUNT) {
+          firestoreDocumentsRemoved = await runFirestoreRosterReconciliation(recordsForSync, false);
           if (!active) return;
         }
-        setPpksList((current) => reconcileSpreadsheetPPKSRecords(current, imported.records));
+        setPpksList((current) => reconcileSpreadsheetPPKSRecords(current, recordsForSync));
         setSettings((current) => {
           if (
             current.googleSpreadsheetSourceName === imported.spreadsheetTitle &&
@@ -522,17 +612,17 @@ export default function App() {
             googleSpreadsheetSourceTab: imported.selectedTab,
           };
         });
-        const hasExpectedRoster = imported.records.length === EXPECTED_REAL_PPKS_COUNT;
+        const hasExpectedRoster = recordsForSync.length === EXPECTED_REAL_PPKS_COUNT;
         const firestoreMessage = !hasExpectedRoster
-          ? `Firestore tidak diubah: ${imported.records.length} PPKS unik terbaca, seharusnya ${EXPECTED_REAL_PPKS_COUNT}. Periksa tab spreadsheet; tidak ada dokumen yang dihapus.`
+          ? `Penyelarasan penuh Firestore dilewati karena roster berisi ${recordsForSync.length} PPKS unik (ambang aman saat ini ${EXPECTED_REAL_PPKS_COUNT}); data respons tetap dimuat dan tidak ada dokumen yang dihapus.`
           : firestoreDocumentsRemoved === null && !firestoreRosterReconciliationAttemptedRef.current
-            ? 'Firestore belum berhasil diselaraskan; pastikan akun owner/supervisor aktif dan Firebase dapat diakses.'
+            ? 'Data Sheets berhasil dimuat, tetapi Firestore belum diselaraskan; periksa izin owner/supervisor dan Firebase.'
             : firestoreRosterReconciliationAttemptedRef.current
               ? 'Roster Firestore telah diselaraskan pada sesi ini.'
               : 'Penyelarasan Firestore belum dijalankan pada sesi ini.';
         setLiveSyncState({
-          type: hasExpectedRoster && (firestoreRosterReconciliationAttemptedRef.current || firestoreDocumentsRemoved !== null) ? 'success' : 'error',
-          message: `LIVE SYNC — “${imported.spreadsheetTitle}” → “${imported.selectedTab}”: ${imported.records.length} PPKS unik dimuat dari ${imported.sourceDataRows} baris; ${imported.duplicateRowsCollapsed} duplikat digabung; ${imported.sampleRecordsFiltered} contoh disaring; foto diri ${imported.photoCounts.diri}/${imported.records.length}, KTP ${imported.photoCounts.ktp}/${imported.records.length}, KK ${imported.photoCounts.kk}/${imported.records.length}, rumah ${imported.photoCounts.rumah}/${imported.records.length}; tautan Forms dipulihkan: ${imported.photosRecoveredFromForm} (${imported.photoRecoveryStatus}); diagnosis: ${imported.photoRecoveryDetail}; ${firestoreMessage} NIK ${imported.recordsWithNIK}/${imported.records.length}.`,
+          type: 'success',
+          message: `LIVE SYNC — “${imported.spreadsheetTitle}” → “${imported.selectedTab}”: ${recordsForSync.length} PPKS unik dimuat dari ${imported.sourceDataRows} baris tahap awal; ${imported.duplicateRowsCollapsed} duplikat digabung; ${imported.sampleRecordsFiltered} contoh disaring; respons Google Form lanjutan yang dipadankan: ${continuation.matchedResponses}. ${continuation.warning ? continuation.warning + ' ' : ''}Foto diri ${imported.photoCounts.diri}/${imported.records.length}, KTP ${imported.photoCounts.ktp}/${imported.records.length}, KK ${imported.photoCounts.kk}/${imported.records.length}, rumah ${imported.photoCounts.rumah}/${imported.records.length}; tautan Forms dipulihkan: ${imported.photosRecoveredFromForm} (${imported.photoRecoveryStatus}); diagnosis: ${imported.photoRecoveryDetail}; ${firestoreMessage} NIK ${imported.recordsWithNIK}/${imported.records.length}.`,
           lastUpdatedAt: new Date().toLocaleString('id-ID'),
         });
       } catch (error) {
@@ -560,7 +650,7 @@ export default function App() {
       document.removeEventListener('visibilitychange', onVisibilityChange);
       window.removeEventListener('sipandu-workspace-token-updated', onWorkspaceTokenUpdated);
     };
-  }, [isAuthenticated, settings.googleSpreadsheetSourceUrl, settings.googleSpreadsheetSourceTab, currentUserRole]);
+  }, [isAuthenticated, settings.googleSpreadsheetSourceUrl, settings.googleSpreadsheetSourceTab, settings.googleFormTahapLanjutanUrl, currentUserRole]);
 
   // Automatically remove clearly marked legacy demo rows/files after a Google API
   // token is already available. This never opens an OAuth popup by itself.

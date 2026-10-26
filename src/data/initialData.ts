@@ -12,9 +12,12 @@ export const initialProfileUser: ProfileUser = {
 
 export const initialAppSettings: AppSettings = {
   googleFormTahapAwalUrl: GOOGLE_SIPANDU_RESOURCES.formEditorUrl,
+  googleFormTahapLanjutanUrl: '',
+  googleFormTahapLanjutanIdEntry: '',
   googleFormKesehatanMentalUrl: '',
   googleSpreadsheetUrl: '', // Writable database target stays separate from the Google Forms response spreadsheet.
-  googleSpreadsheetSourceUrl: '', // Deliberately blank until the user chooses the real source spreadsheet.
+  // Read-only Google Forms response sheet; live sync runs every five minutes after Google authorization.
+  googleSpreadsheetSourceUrl: GOOGLE_SIPANDU_RESOURCES.responseSpreadsheetUrl,
   googleSpreadsheetSourceName: '',
   googleSpreadsheetSourceTab: '',
   googleDriveFolderUrl: GOOGLE_SIPANDU_RESOURCES.driveFolderUrl,
