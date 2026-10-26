@@ -4,6 +4,7 @@ import {
   doc,
   collection,
   getDocs,
+  getDoc,
   setDoc,
   deleteDoc,
   writeBatch,
@@ -25,7 +26,7 @@ import {
   getIdTokenResult,
 } from 'firebase/auth';
 import firebaseConfig from '../../firebase-applet-config.json';
-import { PPKSRecord } from '../types';
+import { PPKSRecord, ProfileUser } from '../types';
 import { deduplicatePPKSRecords, EXPECTED_REAL_PPKS_COUNT, parsePPKSTimestamp } from './ppksData';
 import { isLegacySamplePPKS } from '../data/initialData';
 import { GOOGLE_WORKSPACE_EMAIL } from './googleSIPANDUResources';
@@ -517,6 +518,38 @@ function stripUndefinedForFirestore(value: unknown): unknown {
 /**
  * Firestore PPKS Sync Helpers
  */
+
+/** Read the signed-in staff member's own profile from Firestore. */
+export async function fetchStaffProfile(uid?: string): Promise<Partial<ProfileUser> | null> {
+  const user = auth.currentUser;
+  if (!user) throw new Error('Belum masuk ke Firebase Auth sebagai akun SIPANDU.');
+  const targetUid = uid || user.uid;
+  if (targetUid !== user.uid) throw new Error('Akun hanya boleh membaca profilnya sendiri.');
+  try {
+    const snapshot = await getDoc(doc(db, 'staffProfiles', targetUid));
+    return snapshot.exists() ? snapshot.data() as Partial<ProfileUser> : null;
+  } catch (error) {
+    throw new Error(describeConnectionError(error));
+  }
+}
+
+/** Save a staff member's own profile; Firestore Rules must allow owner-only staffProfiles writes. */
+export async function saveStaffProfile(profile: ProfileUser): Promise<void> {
+  const user = auth.currentUser;
+  if (!user) throw new Error('Belum masuk ke Firebase Auth sebagai akun SIPANDU.');
+  const payload = stripUndefinedForFirestore({
+    ...profile,
+    uid: user.uid,
+    email: user.email || '',
+    updatedAt: new Date().toISOString(),
+  });
+  try {
+    await setDoc(doc(db, 'staffProfiles', user.uid), payload, { merge: true });
+  } catch (error) {
+    throw new Error(describeConnectionError(error));
+  }
+}
+
 export async function savePPKSToFirestore(ppks: PPKSRecord): Promise<true> {
   const user = auth.currentUser;
   if (!user) throw new Error('Belum masuk ke Firebase Auth sebagai akun SIPANDU.');
