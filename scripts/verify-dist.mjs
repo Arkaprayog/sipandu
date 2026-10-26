@@ -38,6 +38,12 @@ for (const reference of [...scriptRefs, ...cssRefs]) {
 // Verify code-split JavaScript and CSS modules from Vite's preload map.
 // Vite can emit dynamic imports using quote characters or a template literal.
 const assetDirectory = path.join(dist, 'assets');
+if (fs.existsSync(assetDirectory)) {
+  const splitAppModules = fs.readdirSync(assetDirectory).filter((name) => /^App-[^.]+\\.js$/i.test(name));
+  if (splitAppModules.length) {
+    fail('Aplikasi utama terpisah menjadi chunk App-[hash].js; bundel aplikasi harus ikut entry agar tidak gagal dimuat pada domain khusus.');
+  }
+}
 const checkChunkReference = (ownerFile, reference) => {
   if (/^(?:https?:)?\/\//i.test(reference)) return;
   if (reference.startsWith('/')) {
