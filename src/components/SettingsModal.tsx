@@ -119,7 +119,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 setFormData({ ...formData, googleFormKesehatanMentalUrl: e.target.value })
               }
               className="w-full p-2.5 rounded bg-black/60 border border-rose-500/30 font-mono text-white"
-              required
             />
           </div>
 
