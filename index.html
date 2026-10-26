@@ -42,19 +42,61 @@
         var detail = document.getElementById('sipandu-boot-error-detail');
         var root = document.getElementById('root');
         var hasSpecificError = false;
+        var BOOT_RETRY_PREFIX = 'sipandu:boot-asset-retry:';
+        var BOOT_RETRY_QUERY = '__sipandu_boot_retry';
+        var clearBootRetryMarkers = function () {
+          try {
+            for (var i = window.sessionStorage.length - 1; i >= 0; i--) {
+              var key = window.sessionStorage.key(i);
+              if (key && key.indexOf(BOOT_RETRY_PREFIX) === 0) window.sessionStorage.removeItem(key);
+            }
+          } catch (_) { /* Storage may be unavailable in private/restricted contexts. */ }
+        };
+        // Remove the one-time cache-busting query after the fresh document arrives.
+        try {
+          var initialUrl = new URL(window.location.href);
+          if (initialUrl.searchParams.has(BOOT_RETRY_QUERY)) {
+            initialUrl.searchParams.delete(BOOT_RETRY_QUERY);
+            window.history.replaceState(window.history.state, '', initialUrl.pathname + initialUrl.search + initialUrl.hash);
+          }
+        } catch (_) { /* URL cleanup is optional and never blocks startup. */ }
         var showError = function (message, isSpecific) {
           if (root && root.childElementCount > 0) return;
           // Keep a concrete asset/runtime error instead of replacing it with the
-          // generic boot timeout after eight seconds.
+          // generic boot timeout after twenty seconds.
           if (hasSpecificError && !isSpecific) return;
           if (isSpecific) hasSpecificError = true;
           panel.style.display = 'block';
           detail.textContent = String(message || 'Kesalahan tidak diketahui').slice(0, 3000);
         };
+        var retryWithFreshDocument = function (assetUrl) {
+          // Only retry failed application scripts/styles, not images, APIs, or fonts.
+          if (!/\\.(?:m?js|css)(?:[?#]|$)/i.test(assetUrl)) return false;
+          var assetPath = String(assetUrl).split(/[?#]/)[0];
+          var retryKey = BOOT_RETRY_PREFIX + window.location.pathname + ':' + assetPath;
+          try {
+            // One automatic reload per failed asset per tab session prevents loops.
+            if (window.sessionStorage.getItem(retryKey) === '1') return false;
+            window.sessionStorage.setItem(retryKey, '1');
+          } catch (_) {
+            // If the guard cannot be saved, do not risk an infinite reload loop.
+            return false;
+          }
+          try {
+            var freshUrl = new URL(window.location.href);
+            freshUrl.searchParams.set(BOOT_RETRY_QUERY, String(Date.now()));
+            window.location.replace(freshUrl.toString());
+            return true;
+          } catch (_) {
+            return false;
+          }
+        };
         window.addEventListener('error', function (event) {
           var target = event.target;
           if (target && target !== window && (target.src || target.href)) {
-            showError('Aset gagal dimuat: ' + (target.src || target.href), true);
+            var assetUrl = target.src || target.href;
+            if (retryWithFreshDocument(assetUrl)) return;
+            showError('Aset gagal dimuat: ' + assetUrl + '. SIPANDU sudah mencoba memuat ulang satu kali; periksa koneksi atau ulangi beberapa saat lagi.', true);
           } else {
             showError((event.message || 'JavaScript gagal dijalankan') + (event.filename ? '\\n' + event.filename + ':' + event.lineno : ''), true);
           }
@@ -69,6 +111,14 @@
           }
         });
         observer.observe(root, { childList: true });
+        // Clear only our retry flags after the app successfully mounts. No app/user data is touched.
+        var mountObserver = new MutationObserver(function () {
+          if (root && root.childElementCount > 0) {
+            clearBootRetryMarkers();
+            mountObserver.disconnect();
+          }
+        });
+        mountObserver.observe(root, { childList: true });
         window.setTimeout(function () {
           if (!root || root.childElementCount === 0) {
             showError('Aplikasi belum menampilkan antarmuka setelah 20 detik. Periksa koneksi, pemuatan berkas JavaScript, dan URL dasar GitHub Pages.');
