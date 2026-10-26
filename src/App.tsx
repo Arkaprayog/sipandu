@@ -64,7 +64,7 @@ function mergePPKSRecords(localRecords: PPKSRecord[], cloudRecords: PPKSRecord[]
         : previous.officialAssessment,
       statusAsesmen: next.statusAsesmen === 'Lanjutan'
         ? 'Lanjutan'
-        : next.integratedForm
+        : (next.statusAsesmen === 'Terintegrasi' || next.integratedForm)
           ? 'Terintegrasi'
           : (previous.statusAsesmen || next.statusAsesmen),
     };
@@ -462,14 +462,37 @@ export default function App() {
       }
 
       const followUpImport = await importPPKSFromSpreadsheet(spreadsheetUrl);
-      const stageOneIds = new Set(stageOneRecords.map((record) => record.id));
-      const matched = followUpImport.records.filter((record) => stageOneIds.has(record.id));
-      const unmatchedCount = followUpImport.records.length - matched.length;
+      const stageOneById = new Map(stageOneRecords.map((record) => [record.id, record]));
+      const normalizePersonName = (value: unknown) => String(value ?? '')
+        .normalize('NFD')
+        .replace(/[\\u0300-\\u036f]/g, '')
+        .toLocaleLowerCase('id-ID')
+        .replace(/[^a-z0-9]/g, '');
+      const resolveNIK = (record: PPKSRecord) => {
+        const candidate = String(record.nik || record.officialAssessment?.q23 || '').replace(/\\D/g, '');
+        return /^\\d{16}$/.test(candidate) ? candidate : '';
+      };
+      // Prefilled Google Forms values can be edited by respondents, so do not
+      // cross-link a response if its ID matches but its supplied identity
+      // contradicts a valid stage-one NIK or name.
+      const matched = followUpImport.records.filter((record) => {
+        const source = stageOneById.get(record.id);
+        if (!source) return false;
+        const sourceNIK = resolveNIK(source);
+        const followUpNIK = resolveNIK(record);
+        if (sourceNIK && followUpNIK && sourceNIK !== followUpNIK) return false;
+        const sourceName = normalizePersonName(source.namaLengkap);
+        const followUpName = normalizePersonName(record.namaLengkap);
+        if (sourceName && followUpName && sourceName !== followUpName) return false;
+        return true;
+      });
+      const matchedIds = new Set(matched.map((record) => record.id));
+      const unmatchedCount = followUpImport.records.filter((record) => !matchedIds.has(record.id)).length;
       return {
         records: mergePPKSRecords(stageOneRecords, matched),
         matchedResponses: matched.length,
         warning: unmatchedCount > 0
-          ? `${unmatchedCount} respons lanjutan belum dipadankan. Pastikan formulir lanjutan memiliki pertanyaan “ID PPKS” dengan entry praisi yang sesuai.`
+          ? `${unmatchedCount} respons lanjutan belum dipadankan. Periksa kolom “ID PPKS” dan pastikan nama/NIK yang dijawab tidak bertentangan dengan data tahap awal.`
           : '',
       };
     } catch (error) {
