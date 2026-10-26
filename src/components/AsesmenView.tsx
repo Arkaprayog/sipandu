@@ -295,6 +295,7 @@ export const AsesmenView: React.FC<AsesmenViewProps> = ({
                   value={settings.googleFormTahapAwalUrl}
                   size={190}
                   label="Scan Barcode Asesmen Tahap Awal"
+                  downloadFileName="barcode-asesmen-tahap-awal.png"
                 />
               </div>
             </div>
@@ -631,6 +632,7 @@ export const AsesmenView: React.FC<AsesmenViewProps> = ({
                 value={settings.googleFormTahapAwalUrl}
                 size={220}
                 label="Barcode Kuisioner Google Form (Logo Kemensos)"
+                downloadFileName="barcode-asesmen-google-form.png"
               />
             </div>
           </div>
@@ -692,6 +694,7 @@ export const AsesmenView: React.FC<AsesmenViewProps> = ({
                 value={settings.googleFormKesehatanMentalUrl}
                 size={220}
                 label="Barcode Asesmen Kesehatan Mental (Logo Kemensos)"
+                downloadFileName="barcode-asesmen-kesehatan-mental.png"
               />
             </div>
           </div>
