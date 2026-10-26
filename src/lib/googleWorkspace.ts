@@ -859,7 +859,7 @@ async function resolveFormLinkedToSpreadsheet(
     if (!formId || inspected.has(formId)) return inspected.get(formId) || null;
     try {
       const form = await googleJson<GoogleFormPhotoMetadata>(
-        \`https://forms.googleapis.com/v1/forms/\${extractFormId(formId)}\`
+        `https://forms.googleapis.com/v1/forms/${extractFormId(formId)}`
       );
       if (form.linkedSheetId === spreadsheetId) {
         inspected.set(formId, form);
@@ -897,7 +897,7 @@ async function resolveFormLinkedToSpreadsheet(
   for (const word of probes) {
     const escapedWord = word.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
     const params = new URLSearchParams({
-      q: \`mimeType = 'application/vnd.google-apps.form' and trashed = false and name contains '\${escapedWord}'\`,
+      q: `mimeType = 'application/vnd.google-apps.form' and trashed = false and name contains '${escapedWord}'`,
       pageSize: '100',
       orderBy: 'name',
       fields: 'nextPageToken,files(id,name,mimeType)',
@@ -909,7 +909,7 @@ async function resolveFormLinkedToSpreadsheet(
       const response = await googleJson<{
         files?: Array<{ id?: string; name?: string; mimeType?: string }>;
         nextPageToken?: string;
-      }>(\`https://www.googleapis.com/drive/v3/files?\${params.toString()}\`);
+      }>(`https://www.googleapis.com/drive/v3/files?${params.toString()}`);
       for (const file of response.files || []) {
         if (file.id && file.mimeType === 'application/vnd.google-apps.form') {
           driveForms.set(file.id, { id: file.id, name: String(file.name || '') });
@@ -1108,7 +1108,7 @@ async function recoverPhotosFromGoogleForms(
     responsesWithUploads: responseData.candidates.length,
     recordsMatched,
     linksRecovered,
-    detail: \`\${responseData.formTitle}: \${responseData.totalResponses} respons, \${responseData.candidates.length} respons dengan unggahan foto, \${recordsMatched} PPKS cocok, \${linksRecovered} tautan foto dipulihkan.\`,
+    detail: `${responseData.formTitle}: ${responseData.totalResponses} respons, ${responseData.candidates.length} respons dengan unggahan foto, ${recordsMatched} PPKS cocok, ${linksRecovered} tautan foto dipulihkan.`,
   };
   return { records: enriched, diagnostics };
 }
