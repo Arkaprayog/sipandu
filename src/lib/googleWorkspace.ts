@@ -2,7 +2,7 @@ import { getAccessToken, invalidateAccessToken, refreshWorkspaceAccessToken } fr
 import { IntegratedFormData, PPKSRecord } from '../types';
 import { normalizeExactNumericNIK } from './nikNumeric';
 import { deduplicatePPKSRecords, sortPPKSRecordsByTimestamp } from './ppksData';
-import { classifyPPKSPhotoHeader, readPPKSPhotoSourceByKind } from './photoSources';
+import { classifyPPKSPhotoHeader, normalizePPKSPhotoSource, readPPKSPhotoSourceByKind } from './photoSources';
 import { googleDriveViewUrl, matchFormPhotoResponseForPPKS, FormPhotoResponseCandidate } from './formPhotoRecovery';
 import { GOOGLE_SIPANDU_RESOURCES } from './googleSIPANDUResources';
 import { isLegacySamplePPKS, isObviousDemoMarker, LEGACY_SAMPLE_PPKS_IDS, LEGACY_SAMPLE_PPKS_NAMES } from '../data/initialData';
@@ -735,14 +735,22 @@ function mapRowsToPPKSRecords(rows: string[][]): PPKSRecord[] {
     // Prefer category-aware upload-column detection so a longer Google Forms
     // question title still maps correctly, while never treating KTP/KK/house
     // attachments as the respondent portrait.
-    const fotoDiri = readPPKSPhotoSourceByKind(headers, row, 'diri') ||
-      readCellByAliases(headers, row, ['fotoDiri', 'fotoDiriPPKS', 'fotoResponden', 'uploadFotoDiri', 'tautanFotoDiri', 'linkFotoDiri', 'fotoDiriCloseUp', 'fotoDiriResponden']);
-    const fotoKtp = readPPKSPhotoSourceByKind(headers, row, 'ktp') ||
-      readCellByAliases(headers, row, ['fotoKtp', 'fotoKTP', 'uploadFotoKTP', 'dokumenKTP', 'tautanFotoKTP', 'linkFotoKTP', 'fotoKartuIdentitas', 'scanKTP']);
-    const fotoKk = readPPKSPhotoSourceByKind(headers, row, 'kk') ||
-      readCellByAliases(headers, row, ['fotoKk', 'fotoKK', 'uploadFotoKK', 'dokumenKK', 'tautanFotoKK', 'linkFotoKK', 'scanKK']);
-    const fotoRumah = readPPKSPhotoSourceByKind(headers, row, 'rumah') ||
-      readCellByAliases(headers, row, ['fotoRumah', 'fotoRumahTampakDepan', 'uploadFotoRumah', 'tautanFotoRumah', 'linkFotoRumah', 'fotoDepanRumah', 'fotoTampakDepanRumah']);
+    const fotoDiri = normalizePPKSPhotoSource(
+      readPPKSPhotoSourceByKind(headers, row, 'diri') ||
+      readCellByAliases(headers, row, ['fotoDiri', 'fotoDiriPPKS', 'fotoResponden', 'uploadFotoDiri', 'tautanFotoDiri', 'linkFotoDiri', 'fotoDiriCloseUp', 'fotoDiriResponden'])
+    );
+    const fotoKtp = normalizePPKSPhotoSource(
+      readPPKSPhotoSourceByKind(headers, row, 'ktp') ||
+      readCellByAliases(headers, row, ['fotoKtp', 'fotoKTP', 'uploadFotoKTP', 'dokumenKTP', 'tautanFotoKTP', 'linkFotoKTP', 'fotoKartuIdentitas', 'scanKTP'])
+    );
+    const fotoKk = normalizePPKSPhotoSource(
+      readPPKSPhotoSourceByKind(headers, row, 'kk') ||
+      readCellByAliases(headers, row, ['fotoKk', 'fotoKK', 'uploadFotoKK', 'dokumenKK', 'tautanFotoKK', 'linkFotoKK', 'scanKK'])
+    );
+    const fotoRumah = normalizePPKSPhotoSource(
+      readPPKSPhotoSourceByKind(headers, row, 'rumah') ||
+      readCellByAliases(headers, row, ['fotoRumah', 'fotoRumahTampakDepan', 'uploadFotoRumah', 'tautanFotoRumah', 'linkFotoRumah', 'fotoDepanRumah', 'fotoTampakDepanRumah'])
+    );
     const sourceRecord: PPKSRecord = {
       id: recordId || `SHEET-ROW-${rowIndex + 2}`,
       timestamp,
@@ -794,7 +802,10 @@ async function recoverPhotosFromGoogleForms(
   formId: string,
 ): Promise<{ records: PPKSRecord[]; linksRecovered: number }> {
   const missingPhotos = records.some((record) =>
-    !record.fotoDiri || !record.fotoKtp || !record.fotoKk || !record.fotoRumah
+    !normalizePPKSPhotoSource(record.fotoDiri) ||
+    !normalizePPKSPhotoSource(record.fotoKtp) ||
+    !normalizePPKSPhotoSource(record.fotoKk) ||
+    !normalizePPKSPhotoSource(record.fotoRumah)
   );
   if (!missingPhotos || !records.length) return { records, linksRecovered: 0 };
 
@@ -854,20 +865,27 @@ async function recoverPhotosFromGoogleForms(
   if (!candidates.length) return { records, linksRecovered: 0 };
   let linksRecovered = 0;
   const enriched = records.map((record) => {
-    if (record.fotoDiri && record.fotoKtp && record.fotoKk && record.fotoRumah) return record;
+    const currentDiri = normalizePPKSPhotoSource(record.fotoDiri);
+    const currentKtp = normalizePPKSPhotoSource(record.fotoKtp);
+    const currentKk = normalizePPKSPhotoSource(record.fotoKk);
+    const currentRumah = normalizePPKSPhotoSource(record.fotoRumah);
+    if (currentDiri && currentKtp && currentKk && currentRumah) return {
+      ...record, fotoDiri: currentDiri, fotoKtp: currentKtp, fotoKk: currentKk, fotoRumah: currentRumah,
+    };
     const match = matchFormPhotoResponseForPPKS(record.namaLengkap, record.timestamp, candidates);
-    if (!match) return record;
     const updated: PPKSRecord = {
       ...record,
-      fotoDiri: record.fotoDiri || match.photos.diri || '',
-      fotoKtp: record.fotoKtp || match.photos.ktp || '',
-      fotoKk: record.fotoKk || match.photos.kk || '',
-      fotoRumah: record.fotoRumah || match.photos.rumah || '',
+      // Replace a bare uploaded filename with a real Drive URL when Forms API
+      // returned the file ID; preserve already valid sources.
+      fotoDiri: currentDiri || match?.photos.diri || '',
+      fotoKtp: currentKtp || match?.photos.ktp || '',
+      fotoKk: currentKk || match?.photos.kk || '',
+      fotoRumah: currentRumah || match?.photos.rumah || '',
     };
-    if (!record.fotoDiri && updated.fotoDiri) linksRecovered++;
-    if (!record.fotoKtp && updated.fotoKtp) linksRecovered++;
-    if (!record.fotoKk && updated.fotoKk) linksRecovered++;
-    if (!record.fotoRumah && updated.fotoRumah) linksRecovered++;
+    if (!currentDiri && updated.fotoDiri) linksRecovered++;
+    if (!currentKtp && updated.fotoKtp) linksRecovered++;
+    if (!currentKk && updated.fotoKk) linksRecovered++;
+    if (!currentRumah && updated.fotoRumah) linksRecovered++;
     return updated;
   });
   return { records: enriched, linksRecovered };
@@ -983,10 +1001,10 @@ export async function importPPKSFromSpreadsheet(
     photosRecoveredFromForm,
     photoRecoveryStatus,
     photoCounts: {
-      diri: records.filter((record) => Boolean(String(record.fotoDiri || '').trim())).length,
-      ktp: records.filter((record) => Boolean(String(record.fotoKtp || '').trim())).length,
-      kk: records.filter((record) => Boolean(String(record.fotoKk || '').trim())).length,
-      rumah: records.filter((record) => Boolean(String(record.fotoRumah || '').trim())).length,
+      diri: records.filter((record) => Boolean(normalizePPKSPhotoSource(record.fotoDiri))).length,
+      ktp: records.filter((record) => Boolean(normalizePPKSPhotoSource(record.fotoKtp))).length,
+      kk: records.filter((record) => Boolean(normalizePPKSPhotoSource(record.fotoKk))).length,
+      rumah: records.filter((record) => Boolean(normalizePPKSPhotoSource(record.fotoRumah))).length,
     },
     nikHeadersFound,
     nikColumnDiagnostics,
