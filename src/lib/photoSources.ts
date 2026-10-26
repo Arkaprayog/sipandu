@@ -46,6 +46,27 @@ function scorePhotoHeader(normalized: string, kind: PPKSPhotoKind): number {
   return 0;
 }
 
+/**
+ * Accept only a URL, data image, or plausible raw Google Drive file ID as a
+ * photo source. Bare upload filenames must not masquerade as working image links.
+ */
+export function normalizePPKSPhotoSource(value: unknown): string {
+  const raw = String(value ?? '').trim();
+  if (!raw) return '';
+  const markdown = raw.match(/\]\((https?:\/\/[^)]+)\)/i);
+  const candidate = (markdown?.[1] || raw.match(/https?:\/\/[^\s,;]+/i)?.[0] || raw)
+    .replace(/[)\]}>.,]+$/, '');
+  if (/^data:image\//i.test(candidate)) return candidate;
+  if (/^https?:\/\//i.test(candidate)) return candidate;
+  if (/^drive\.google\.com\//i.test(candidate) || /^docs\.google\.com\/file\//i.test(candidate)) {
+    return `https://${candidate}`;
+  }
+  if (/^[a-zA-Z0-9_-]{20,}$/.test(candidate)) {
+    return `https://drive.google.com/file/d/${candidate}/view`;
+  }
+  return '';
+}
+
 /** Classify a Google Forms item title only when the category is explicit enough to avoid attaching the wrong document. */
 export function classifyPPKSPhotoHeader(header: string): PPKSPhotoKind | null {
   const normalized = normalizePhotoHeader(header);
