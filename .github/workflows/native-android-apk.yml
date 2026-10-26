@@ -57,6 +57,18 @@ jobs:
       - name: Copy web assets into Android app
         run: npx cap sync android
 
+      - name: Apply package version to Android APK
+        shell: bash
+        run: |
+          APP_VERSION="$(node -p "require('./package.json').version")"
+          APP_VERSION_CODE="$(node -e "const p=require('./package.json').version.split('.').map(Number); console.log(p[0]*10000+p[1]*100+p[2])")"
+          echo "APP_VERSION=$APP_VERSION" >> "$GITHUB_ENV"
+          GRADLE_FILE="android/app/build.gradle"
+          test -f "$GRADLE_FILE"
+          sed -i -E "s/versionCode [0-9]+/versionCode $APP_VERSION_CODE/" "$GRADLE_FILE"
+          sed -i -E "s/versionName \"[^\"]+\"/versionName \"$APP_VERSION\"/" "$GRADLE_FILE"
+          grep -E 'versionCode|versionName' "$GRADLE_FILE"
+
       - name: Build APK
         working-directory: android
         run: ./gradlew --no-daemon assembleDebug
@@ -64,7 +76,7 @@ jobs:
       - name: Upload installable APK
         uses: actions/upload-artifact@v4
         with:
-          name: SIPANDU-ODHIV-debug-APK
+          name: SIPANDU-ODHIV-debug-APK-v${{ env.APP_VERSION }}
           path: android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 14
