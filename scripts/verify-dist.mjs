@@ -33,6 +33,13 @@ if (!fs.existsSync(vercelConfigPath)) {
   try {
     const config = JSON.parse(fs.readFileSync(vercelConfigPath, 'utf8'));
     const rules = Array.isArray(config.headers) ? config.headers : [];
+    const ignoreCommand = String(config.ignoreCommand || '');
+    if (!ignoreCommand.includes('git diff --quiet HEAD^ HEAD') ||
+        !ignoreCommand.includes('src') ||
+        !ignoreCommand.includes('public') ||
+        !ignoreCommand.includes('vercel.json')) {
+      fail('Vercel ignoreCommand harus membangun ulang ketika sumber aplikasi, aset publik, atau konfigurasi deployment berubah.');
+    }
     const headerValue = (source, headerName) => {
       const rule = rules.find((entry) => entry.source === source);
       const header = rule && Array.isArray(rule.headers)

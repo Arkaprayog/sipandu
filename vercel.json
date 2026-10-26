@@ -69,5 +69,6 @@
         }
       ]
     }
-  ]
+  ],
+  "ignoreCommand": "git diff --quiet HEAD^ HEAD -- src public index.html package.json bun.lock vite.config.ts tsconfig.json vercel.json scripts/optimize-login-background.mjs"
 }
