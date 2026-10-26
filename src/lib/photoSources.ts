@@ -70,12 +70,12 @@ export function normalizePPKSPhotoSource(value: unknown): string {
 /** Classify a Google Forms item title only when the category is explicit enough to avoid attaching the wrong document. */
 export function classifyPPKSPhotoHeader(header: string): PPKSPhotoKind | null {
   const normalized = normalizePhotoHeader(header);
-  const scores: Array<{ kind: PPKSPhotoKind; score: number }> = [
+  const scores: Array<{ kind: PPKSPhotoKind; score: number }> = ([
     { kind: 'diri', score: scorePhotoHeader(normalized, 'diri') },
     { kind: 'ktp', score: scorePhotoHeader(normalized, 'ktp') },
     { kind: 'kk', score: scorePhotoHeader(normalized, 'kk') },
     { kind: 'rumah', score: scorePhotoHeader(normalized, 'rumah') },
-  ].sort((a, b) => b.score - a.score);
+  ] as Array<{ kind: PPKSPhotoKind; score: number }>).sort((a, b) => b.score - a.score);
   return scores[0].score >= 70 ? scores[0].kind : null;
 }
 
