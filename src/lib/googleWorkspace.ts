@@ -1,4 +1,4 @@
-import { getAccessToken, invalidateAccessToken } from './firebase';
+import { getAccessToken, invalidateAccessToken, refreshWorkspaceAccessToken } from './firebase';
 import { IntegratedFormData, PPKSRecord } from '../types';
 import { normalizeExactNumericNIK } from './nikNumeric';
 import { deduplicatePPKSRecords, sortPPKSRecordsByTimestamp } from './ppksData';
@@ -27,23 +27,37 @@ function requireToken(token: string | null): string {
 }
 
 async function googleJson<T>(url: string, init: RequestInit = {}): Promise<T> {
-  const token = requireToken(await getAccessToken());
-  const res = await fetch(url, {
-    ...init,
-    headers: {
-      Authorization: `Bearer ${token}`,
-      ...(init.body ? { 'Content-Type': 'application/json' } : {}),
-      ...init.headers,
-    },
-  });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) {
+  let token = requireToken(await getAccessToken());
+
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const res = await fetch(url, {
+      ...init,
+      headers: {
+        Authorization: `Bearer ${token}`,
+        ...(init.body ? { 'Content-Type': 'application/json' } : {}),
+        ...init.headers,
+      },
+    });
+    if (res.ok) return await res.json() as T;
+
+    const data = await res.json().catch(() => ({}));
     const apiError = (data as { error?: { message?: string; status?: string; errors?: { reason?: string }[] } }).error;
     const message = apiError?.message || `HTTP ${res.status}`;
     const reason = apiError?.errors?.[0]?.reason || apiError?.status || '';
+
+    if (res.status === 401 && attempt === 0) {
+      invalidateAccessToken();
+      // Retry once using a newly issued token from the existing Workspace session.
+      const refreshed = await refreshWorkspaceAccessToken(true);
+      if (refreshed) {
+        token = refreshed;
+        continue;
+      }
+      throw new Error('Token Google API telah kedaluwarsa. SIPANDU sudah mencoba memperbaruinya otomatis, tetapi browser tidak menyelesaikan refresh tersembunyi. Jika sinkronisasi tetap berhenti, gunakan “Pulihkan Izin Google API” satu kali untuk memulihkan sesi.');
+    }
     if (res.status === 401) {
       invalidateAccessToken();
-      throw new Error('Token Google API telah kedaluwarsa atau dicabut. Sesi akun tetap tersimpan, tetapi izin API perlu dipulihkan sekali lagi melalui Koneksi Akun. Muat ulang tidak akan menghapus token yang masih berlaku.');
+      throw new Error('Token Google API ditolak setelah percobaan refresh otomatis. Periksa izin Google Workspace dan ulangi sinkronisasi.');
     }
     if (res.status === 403 && /insufficient|scope/i.test(`${reason} ${message}`)) {
       throw new Error(`Izin OAuth Google kurang (HTTP 403): ${message}. Otorisasi ulang dan pastikan scope Drive/Sheets/Forms disetujui akun.`);
@@ -56,7 +70,8 @@ async function googleJson<T>(url: string, init: RequestInit = {}): Promise<T> {
     }
     throw new Error(`Google API gagal (HTTP ${res.status}): ${message}`);
   }
-  return data as T;
+
+  throw new Error('Google API gagal setelah percobaan refresh token otomatis.');
 }
 
 
