@@ -22,7 +22,7 @@
   box-shadow: 0 0 12px -4px rgba(225, 29, 72, 0.10);
 }
 
-/* Print styling for 12-page integrated assessment export */
+/* Shared print styling; the official assessment has six form pages plus four photo appendices. */
 @media print {
   @page { size: A4 portrait; margin: 12mm; }
 
