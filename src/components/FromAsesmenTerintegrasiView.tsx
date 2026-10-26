@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { CheckCircle2, FileText, Printer, RotateCcw, Save, Search } from 'lucide-react';
 import { PPKSRecord } from '../types';
-import { getAccessToken } from '../lib/firebase';
+import { getAccessToken, invalidateAccessToken, refreshWorkspaceAccessToken } from '../lib/firebase';
 import { formatPPKSTimestamp } from '../lib/ppksData';
 import '../officialAssessment.css';
 
@@ -298,13 +298,31 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
   const getDriveFileId = (value: string): string | null => {
     const trimmed = value.trim();
     const markdownLink = trimmed.match(/\]\((https?:\/\/[^)]+)\)/);
-    const source = markdownLink?.[1] || trimmed.match(/https?:\/\/[^\s,;]+/i)?.[0] || trimmed;
-    const pathId = source.match(/\/file\/d\/([a-zA-Z0-9_-]+)/);
+    const source = (markdownLink?.[1] || trimmed.match(/https?:\/\/[^\s,;]+/i)?.[0] || trimmed)
+      .replace(/[)\]}>.,]+$/, '');
+    const pathId = source.match(/\/(?:file\/)?d\/([a-zA-Z0-9_-]{15,})/);
     if (pathId) return pathId[1];
-    const queryId = source.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+    const filesPath = source.match(/\/drive\/u\/\d+\/files\/([a-zA-Z0-9_-]{15,})/);
+    if (filesPath) return filesPath[1];
+    const queryId = source.match(/[?&](?:id|fileId)=([a-zA-Z0-9_-]{15,})/);
     if (queryId && /drive\.google\.com|docs\.google\.com/i.test(source)) return queryId[1];
     if (/^[a-zA-Z0-9_-]{20,}$/.test(source)) return source;
     return null;
+  };
+
+  const inferPrintImageMime = (buffer: ArrayBuffer): string => {
+    const bytes = new Uint8Array(buffer);
+    if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return 'image/jpeg';
+    if (bytes.length >= 8 && bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47) return 'image/png';
+    if (bytes.length >= 6 && String.fromCharCode(...bytes.slice(0, 6)).startsWith('GIF8')) return 'image/gif';
+    if (bytes.length >= 12 && String.fromCharCode(...bytes.slice(0, 4)) === 'RIFF' && String.fromCharCode(...bytes.slice(8, 12)) === 'WEBP') return 'image/webp';
+    if (bytes.length >= 2 && String.fromCharCode(...bytes.slice(0, 2)) === 'BM') return 'image/bmp';
+    if (bytes.length >= 12 && String.fromCharCode(...bytes.slice(4, 8)) === 'ftyp') {
+      const brand = String.fromCharCode(...bytes.slice(8, 12)).toLowerCase();
+      if (/(heic|heix|hevc|hevx|mif1|msf1)/.test(brand)) return 'image/heic';
+      if (/(avif|avis)/.test(brand)) return 'image/avif';
+    }
+    return '';
   };
 
   const resolvePhotoForPrint = async (source: string): Promise<{ url: string; error: string; temporary: boolean }> => {
@@ -319,22 +337,44 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
       return { url: '', error: 'Kolom sumber tidak berisi URL gambar atau ID file Google Drive yang dikenali.', temporary: false };
     }
 
-    const token = await getAccessToken();
+    let token = await getAccessToken();
+    if (!token) token = await refreshWorkspaceAccessToken();
     if (!token) {
-      return { url: '', error: 'Foto tersimpan di Google Drive privat. Izin Google Workspace perlu dipulihkan sebelum foto dapat dicetak.', temporary: false };
+      return { url: '', error: 'SIPANDU telah mencoba menyegarkan token otomatis. Hubungkan akun Google Workspace jika foto privat masih tidak dapat dibaca.', temporary: false };
     }
-    const response = await fetch(
-      `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?alt=media`,
-      { headers: { Authorization: `Bearer ${token}` } }
-    );
+
+    const mediaUrl = \`https://www.googleapis.com/drive/v3/files/\${encodeURIComponent(fileId)}?alt=media\`;
+    let response = await fetch(mediaUrl, { headers: { Authorization: \`Bearer \${token}\` } });
+    if (response.status === 401) {
+      invalidateAccessToken();
+      const refreshedToken = await refreshWorkspaceAccessToken();
+      if (refreshedToken) {
+        token = refreshedToken;
+        response = await fetch(mediaUrl, { headers: { Authorization: \`Bearer \${token}\` } });
+      }
+    }
     if (!response.ok) {
       const payload = await response.json().catch(() => ({}));
       const message = (payload as { error?: { message?: string } }).error?.message;
-      return { url: '', error: message || `Google Drive tidak dapat membaca foto (HTTP ${response.status}).`, temporary: false };
+      return {
+        url: '',
+        error: response.status === 401
+          ? 'Token Google ditolak setelah percobaan refresh otomatis. Coba cetak kembali setelah sinkronisasi token selesai.'
+          : response.status === 403
+            ? \`Akun Google tidak memiliki izin untuk membuka foto ini. Periksa akses file di Drive. \${message || ''}\`.trim()
+            : message || \`Google Drive tidak dapat membaca foto (HTTP \${response.status}).\`,
+        temporary: false,
+      };
     }
-    const blob = await response.blob();
+    const downloadedBlob = await response.blob();
+    let blob = downloadedBlob;
     if (!blob.type.startsWith('image/')) {
-      return { url: '', error: 'File yang ditautkan dari Drive bukan format gambar yang dapat dicetak.', temporary: false };
+      const bytes = await downloadedBlob.arrayBuffer();
+      const inferredMime = inferPrintImageMime(bytes);
+      if (!inferredMime) {
+        return { url: '', error: 'File Drive bukan gambar yang dapat dicetak.', temporary: false };
+      }
+      blob = new Blob([bytes], { type: inferredMime });
     }
     const url = URL.createObjectURL(blob);
     printObjectUrlsRef.current.push(url);
