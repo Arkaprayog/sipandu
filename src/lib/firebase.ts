@@ -6,6 +6,7 @@ import {
   getDocs,
   setDoc,
   deleteDoc,
+  writeBatch,
   query,
   limit,
 } from 'firebase/firestore';
@@ -25,7 +26,7 @@ import {
 } from 'firebase/auth';
 import firebaseConfig from '../../firebase-applet-config.json';
 import { PPKSRecord } from '../types';
-import { deduplicatePPKSRecords, parsePPKSTimestamp } from './ppksData';
+import { deduplicatePPKSRecords, EXPECTED_REAL_PPKS_COUNT, parsePPKSTimestamp } from './ppksData';
 import { isLegacySamplePPKS } from '../data/initialData';
 import { GOOGLE_WORKSPACE_EMAIL } from './googleSIPANDUResources';
 
@@ -496,22 +497,41 @@ export async function removeLegacyDemoPPKSFromFirestore(): Promise<number> {
 
 
 /**
- * Physically removes only high-confidence duplicate respondent documents from Firestore.
- * Two records are considered duplicates when they share the same valid 16-digit NIK,
- * or when normalized full name AND a non-empty phone number match. If both NIKs are
- * present but differ, they are never merged. Ambiguous name-only records are kept.
+ * Reconcile the Firestore PPKS collection with the verified Google Sheets roster.
+ * The current roster is expected to have 44 unique real respondents. A mismatched
+ * or partial import is rejected before any write/delete so a wrong tab cannot
+ * accidentally erase the database.
  *
- * A complete merged record is written to one canonical document before duplicates
- * are deleted, so non-empty photos and assessment fields are retained.
+ * All canonical documents are written first, merging non-empty stored details
+ * (photos, assessments and interventions) into the matching source record. Only
+ * after all canonical writes succeed are old documents outside the 44-item roster
+ * deleted. Access is restricted to the trusted owner/supervisor Firebase role.
  */
-export async function collapseDuplicatePPKSRecordsInFirestore(): Promise<number> {
+export async function reconcilePPKSFirestoreWithSpreadsheet(sourceRecords: PPKSRecord[]): Promise<number> {
   const user = auth.currentUser;
-  if (!user) throw new Error('Sesi SIPANDU belum aktif; masuk kembali sebelum membersihkan duplikasi Firestore.');
+  if (!user) throw new Error('Sesi SIPANDU belum aktif; masuk kembali sebelum menyelaraskan database PPKS.');
 
   const token = await getIdTokenResult(user);
   const role = token.claims.role;
   if (role !== 'owner' && role !== 'supervisor') {
-    throw new Error('Pembersihan duplikasi Firestore memerlukan peran owner atau supervisor.');
+    throw new Error('Penyelarasan database Firestore dengan spreadsheet memerlukan peran owner atau supervisor.');
+  }
+
+  const uniqueSource = deduplicatePPKSRecords(sourceRecords);
+  if (sourceRecords.length !== EXPECTED_REAL_PPKS_COUNT || uniqueSource.length !== EXPECTED_REAL_PPKS_COUNT) {
+    throw new Error(
+      'Pembersihan Firestore dibatalkan demi keamanan: roster spreadsheet yang terbaca berisi ' +
+      uniqueSource.length + ' PPKS unik, sedangkan jumlah terverifikasi saat ini ' +
+      EXPECTED_REAL_PPKS_COUNT +
+      '. Tidak ada dokumen Firestore yang dihapus. Pastikan tab dan impor spreadsheet benar sebelum menyelaraskan database.'
+    );
+  }
+  if (uniqueSource.some((record) => !String(record.id || '').trim() || String(record.id).includes('/'))) {
+    throw new Error('Pembersihan Firestore dibatalkan: ada ID PPKS kosong atau tidak valid pada hasil impor spreadsheet.');
+  }
+  const sourceIds = uniqueSource.map((record) => record.id);
+  if (new Set(sourceIds).size !== sourceIds.length) {
+    throw new Error('Pembersihan Firestore dibatalkan: ID PPKS pada spreadsheet tidak unik.');
   }
 
   const snapshot = await getDocs(collection(db, 'ppks'));
@@ -533,59 +553,138 @@ export async function collapseDuplicatePPKSRecordsInFirestore(): Promise<number>
     const candidate = String(record.nik || record.officialAssessment?.q23 || '').replace(/\D/g, '');
     return /^\d{16}$/.test(candidate) ? candidate : '';
   };
-  const isClearDuplicate = (a: PPKSRecord, b: PPKSRecord) => {
-    const aNik = validNIK(a);
-    const bNik = validNIK(b);
-    if (aNik && bNik) return aNik === bNik;
-    const aName = normalizedName(a.namaLengkap);
-    const bName = normalizedName(b.namaLengkap);
-    const aPhone = normalizedPhone(a.noHpWa);
-    const bPhone = normalizedPhone(b.noHpWa);
-    return Boolean(aName && aName === bName && aPhone && aPhone === bPhone);
+  const sourceNameCounts = new Map<string, number>();
+  for (const record of uniqueSource) {
+    const name = normalizedName(record.namaLengkap);
+    if (name) sourceNameCounts.set(name, (sourceNameCounts.get(name) || 0) + 1);
+  }
+
+  const isMatchingRosterPerson = (stored: typeof documents[number], source: PPKSRecord): boolean => {
+    const storedNik = validNIK(stored.record);
+    const sourceNik = validNIK(source);
+    // Conflicting verified NIKs are never treated as one person, even if a path
+    // or name happens to be equal.
+    if (storedNik && sourceNik) return storedNik === sourceNik;
+    if (stored.documentId === source.id) return true;
+
+    const storedName = normalizedName(stored.record.namaLengkap);
+    const sourceName = normalizedName(source.namaLengkap);
+    if (!storedName || storedName !== sourceName) return false;
+    const storedPhone = normalizedPhone(stored.record.noHpWa);
+    const sourcePhone = normalizedPhone(source.noHpWa);
+    if (storedPhone && sourcePhone) return storedPhone === sourcePhone;
+
+    // Name-only fallback is allowed only when this name occurs once in the
+    // verified source roster. Ambiguous repeated names are not cross-matched.
+    return sourceNameCounts.get(sourceName) === 1;
   };
 
-  // Build conservative groups. Each new row must match every member, so a
-  // nameless/missing-NIK row cannot bridge two respondents whose NIKs conflict.
-  const groups: typeof documents[] = [];
-  for (const item of documents) {
-    const group = groups.find((candidate) =>
-      candidate.every((member) => isClearDuplicate(member.record, item.record))
-    );
-    if (group) group.push(item);
-    else groups.push([item]);
-  }
-
-  let deletedCount = 0;
-  for (const group of groups) {
-    if (group.length < 2) continue;
-
-    const merged = deduplicatePPKSRecords(group.map((item) => item.record))[0];
-    if (!merged) continue;
-
-    // Prefer an existing document whose actual path already matches its record ID.
-    // This avoids moving/re-keying documents unnecessarily and keeps references stable.
-    const canonical = group.find((item) => item.documentId === item.record.id)
-      || [...group].sort((a, b) => {
-        const aTime = parsePPKSTimestamp(a.record.timestamp);
-        const bTime = parsePPKSTimestamp(b.record.timestamp);
-        if (aTime === null && bTime === null) return 0;
-        if (aTime === null) return 1;
-        if (bTime === null) return -1;
-        return bTime - aTime;
-      })[0];
-
-    const payload = stripUndefinedForFirestore({
-      ...merged,
-      id: canonical.documentId,
-    }) as PPKSRecord;
-
-    // Save the full merged data before deleting any duplicate document.
-    await setDoc(doc(db, 'ppks', canonical.documentId), payload);
-    for (const duplicate of group) {
-      if (duplicate.documentId === canonical.documentId) continue;
-      await deleteDoc(doc(db, 'ppks', duplicate.documentId));
-      deletedCount++;
+  const hasValue = (value: unknown): boolean => {
+    if (value === null || value === undefined) return false;
+    if (typeof value === 'string') return value.trim() !== '';
+    if (Array.isArray(value)) return value.length > 0;
+    if (typeof value === 'object') return Object.keys(value as Record<string, unknown>).length > 0;
+    return true;
+  };
+  const mergeObject = (
+    previous: Record<string, unknown> | undefined,
+    next: Record<string, unknown> | undefined
+  ): Record<string, unknown> | undefined => {
+    const result: Record<string, unknown> = { ...(previous || {}) };
+    for (const [key, value] of Object.entries(next || {})) {
+      if (hasValue(value)) result[key] = value;
     }
+    return Object.keys(result).length ? result : undefined;
+  };
+  const mergeSourceWithStored = (source: PPKSRecord, storedRecords: PPKSRecord[]): PPKSRecord => {
+    const orderedStored = [...storedRecords].sort((a, b) => {
+      const aTime = parsePPKSTimestamp(a.timestamp);
+      const bTime = parsePPKSTimestamp(b.timestamp);
+      if (aTime === null && bTime === null) return 0;
+      if (aTime === null) return -1;
+      if (bTime === null) return 1;
+      return aTime - bTime;
+    });
+
+    const preserved: Record<string, unknown> = {};
+    for (const stored of orderedStored) {
+      for (const [key, value] of Object.entries(stored)) {
+        if (key === 'id' || key === 'timestamp' || key === 'officialAssessment' || key === 'integratedForm') continue;
+        if (hasValue(value)) preserved[key] = value;
+      }
+      preserved.officialAssessment = mergeObject(
+        preserved.officialAssessment as Record<string, unknown> | undefined,
+        stored.officialAssessment as Record<string, unknown> | undefined
+      );
+      preserved.integratedForm = mergeObject(
+        preserved.integratedForm as Record<string, unknown> | undefined,
+        stored.integratedForm as Record<string, unknown> | undefined
+      );
+    }
+
+    const merged: Record<string, unknown> = { ...preserved };
+    for (const [key, value] of Object.entries(source)) {
+      const hasUsefulSourceValue = (key === 'usia' || key === 'desil')
+        ? Number(value) > 0
+        : hasValue(value);
+      if (hasUsefulSourceValue) merged[key] = value;
+      else if (!(key in merged)) merged[key] = value;
+    }
+
+    merged.id = source.id;
+    // Timestamp stays exactly as formatted in Google Sheets, even if an older
+    // stored record had a different timestamp representation.
+    merged.timestamp = source.timestamp;
+    merged.officialAssessment = mergeObject(
+      preserved.officialAssessment as Record<string, unknown> | undefined,
+      source.officialAssessment as Record<string, unknown> | undefined
+    );
+    merged.integratedForm = mergeObject(
+      preserved.integratedForm as Record<string, unknown> | undefined,
+      source.integratedForm as Record<string, unknown> | undefined
+    );
+    if (hasValue(merged.officialAssessment) || hasValue(merged.integratedForm)) {
+      merged.statusAsesmen = 'Terintegrasi';
+    }
+    return stripUndefinedForFirestore(merged) as PPKSRecord;
+  };
+
+  const assignedDocumentIds = new Set<string>();
+  const canonicalRecords: PPKSRecord[] = [];
+  for (const source of uniqueSource) {
+    const pathCollision = documents.find((item) => item.documentId === source.id);
+    if (pathCollision && !isMatchingRosterPerson(pathCollision, source)) {
+      throw new Error(
+        'Pembersihan Firestore dibatalkan: ID ' + source.id +
+        ' sudah dipakai dokumen dengan identitas berbeda. Tidak ada dokumen yang dihapus.'
+      );
+    }
+    const matches = documents.filter((item) =>
+      !assignedDocumentIds.has(item.documentId) && isMatchingRosterPerson(item, source)
+    );
+    matches.forEach((item) => assignedDocumentIds.add(item.documentId));
+    canonicalRecords.push(mergeSourceWithStored(source, matches.map((item) => item.record)));
   }
-  return deletedCount;
+
+  // Never delete existing documents until all 44 canonical records can be written.
+  const upsertBatch = writeBatch(db);
+  for (const record of canonicalRecords) {
+    upsertBatch.set(doc(db, 'ppks', record.id), stripUndefinedForFirestore(record) as PPKSRecord);
+  }
+  await upsertBatch.commit();
+
+  const canonicalIds = new Set(canonicalRecords.map((record) => record.id));
+  const obsoleteDocumentIds = documents
+    .map((item) => item.documentId)
+    .filter((documentId) => !canonicalIds.has(documentId));
+  // Firestore batches accept at most 500 writes; use a conservative 400 per batch.
+  for (let offset = 0; offset < obsoleteDocumentIds.length; offset += 400) {
+    const deleteBatch = writeBatch(db);
+    for (const documentId of obsoleteDocumentIds.slice(offset, offset + 400)) {
+      deleteBatch.delete(doc(db, 'ppks', documentId));
+    }
+    await deleteBatch.commit();
+  }
+
+  return obsoleteDocumentIds.length;
 }
