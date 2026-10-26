@@ -164,7 +164,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 value={formData.senderName}
                 onChange={(e) => setFormData({ ...formData, senderName: e.target.value })}
                 className="w-full p-2 rounded bg-black/60 border border-rose-500/30 text-white"
-                required
               />
             </div>
             <div>
@@ -176,7 +175,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 value={formData.senderRole}
                 onChange={(e) => setFormData({ ...formData, senderRole: e.target.value })}
                 className="w-full p-2 rounded bg-black/60 border border-rose-500/30 text-white"
-                required
               />
             </div>
           </div>
