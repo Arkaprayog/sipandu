@@ -94,12 +94,12 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
               <ArrowRight className="w-4 h-4" />
             </button>
           </form>
-          <p className="mt-5 text-center text-[11px] leading-relaxed text-neutral-400">Akun dibuat dan dikelola oleh administrator SIPANDU. Tidak tersedia pendaftaran akun publik.</p>
         </div>
       </main>
 
       <footer className="relative z-10 w-full max-w-5xl text-center py-3 border-t border-rose-500/20">
-        <p className="text-xs font-semibold text-neutral-200 tracking-wide">Hak Cipta Kementerian Sosial RI</p>
+        <p className="text-xs font-semibold text-neutral-200 tracking-wide">© 2026 - Kementerian Sosial RI - DRSKPNO</p>
+        <p className="text-xs font-semibold text-neutral-200 tracking-wide mt-1">Hak Cipta Kementerian Sosial RI</p>
         <p className="text-[11px] text-neutral-400 mt-0.5">Direktorat Rehabilitasi Sosial Korban Penyalahgunaan Narkoba &amp; ODHIV</p>
       </footer>
     </div>
