@@ -29,10 +29,12 @@ export const Header: React.FC<HeaderProps> = ({
 }) => {
   const [currentTimeStr, setCurrentTimeStr] = useState<string>('');
   const [greeting, setGreeting] = useState<string>('Pagi');
-  const [profilePhotoFailed, setProfilePhotoFailed] = useState(false);
+  const [failedProfilePhotoUrls, setFailedProfilePhotoUrls] = useState<string[]>([]);
+  const headerPhotoUrl = [profile.photoUrl, accountPhotoUrl]
+    .find((url) => Boolean(url) && !failedProfilePhotoUrls.includes(url as string)) || '';
 
   useEffect(() => {
-    setProfilePhotoFailed(false);
+    setFailedProfilePhotoUrls([]);
   }, [profile.photoUrl, accountPhotoUrl]);
 
   useEffect(() => {
@@ -70,12 +72,14 @@ export const Header: React.FC<HeaderProps> = ({
             {/* Foto profil + Menu Edit Profil di bawahnya */}
             <div className="flex flex-col items-center">
               <div className="relative w-14 h-14 md:w-16 md:h-16 rounded-full p-0.5 border-2 border-rose-500/50 shadow-[0_0_12px_rgba(244,63,94,0.3)] bg-black/40 overflow-hidden">
-                {(profile.photoUrl || accountPhotoUrl) && !profilePhotoFailed ? (
+                {headerPhotoUrl ? (
                   <img
-                    src={profile.photoUrl || accountPhotoUrl || ''}
+                    src={headerPhotoUrl}
                     alt={profile.nama || 'Foto profil petugas'}
                     className="w-full h-full object-cover rounded-full"
-                    onError={() => setProfilePhotoFailed(true)}
+                    onError={() => setFailedProfilePhotoUrls((failed) =>
+                      failed.includes(headerPhotoUrl) ? failed : [...failed, headerPhotoUrl]
+                    )}
                   />
                 ) : (
                   <div className="w-full h-full rounded-full flex items-center justify-center bg-emerald-950/80" aria-label="Foto profil belum tersedia">
