@@ -17,5 +17,10 @@
       "type": "image/png",
       "purpose": "any"
     }
+  ],
+  "badge": "./uploads/App%20Icon%20Picture.png",
+  "display_override": [
+    "standalone",
+    "minimal-ui"
   ]
 }
