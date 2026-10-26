@@ -70,8 +70,8 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
   };
 
   return (
-    <div className="relative flex min-h-screen w-full items-center justify-center overflow-x-hidden px-3 py-5 text-black">
-      {/* Gunakan foto gedung yang sudah tersedia; tanpa overlay, gradient, blur, atau efek glossy. */}
+    <div className="relative flex min-h-screen w-full items-center justify-center overflow-x-hidden px-3 py-5 text-slate-800">
+      {/* Pertahankan wallpaper SIPANDU yang sudah ada; efek kaca hanya diterapkan pada panel login. */}
       <img
         aria-hidden="true"
         alt=""
@@ -92,9 +92,9 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
         className="absolute inset-0 z-0 h-full w-full object-cover object-center"
       />
 
-      {/* Satu-satunya card di halaman login; lebar 300 px dan latar sangat transparan. */}
-      <main className="relative z-10 w-[300px] max-w-[calc(100vw-24px)]">
-        <section className="w-full rounded-xl border border-black/25 bg-white/[0.10] p-4 shadow-none backdrop-blur-[1px]">
+      {/* Panel glassmorphism responsif; wallpaper asli tetap terlihat di belakangnya. */}
+      <main className="relative z-10 w-[340px] max-w-[calc(100vw-24px)]">
+        <section className="w-full rounded-2xl border border-white/80 bg-white/[0.24] p-5 shadow-[0_12px_40px_rgba(20,40,35,0.18),inset_0_1px_0_rgba(255,255,255,0.65)] backdrop-blur-[14px]">
           <div className="mb-4 flex flex-col items-center text-center">
             {logoFailed ? (
               <p className="mb-2 text-sm font-semibold text-black">Kementerian Sosial RI</p>
@@ -134,12 +134,12 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
             <div>
               <label
                 htmlFor="sipandu-email"
-                className="mb-1 block text-[11px] font-semibold text-black"
+                className="mb-1 block text-xs font-semibold text-slate-800"
               >
                 Email akun resmi
               </label>
               <div className="relative">
-                <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-black">
+                <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-slate-600">
                   <User className="h-4 w-4" />
                 </div>
                 <input
@@ -149,7 +149,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="nama@instansi.go.id"
-                  className="w-full rounded-md border border-black/45 bg-white/35 py-2.5 pl-9 pr-3 text-xs text-black placeholder-black/65 transition focus:border-black focus:outline-none"
+                  className="w-full rounded-lg border border-white/90 bg-white/55 py-3 pl-9 pr-3 text-sm text-slate-800 placeholder-slate-600/80 shadow-sm outline-none transition focus:border-teal-700 focus:bg-white/75 focus:ring-2 focus:ring-teal-700/25"
                   required
                 />
               </div>
@@ -173,14 +173,14 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="Masukkan kata sandi"
-                  className="w-full rounded-md border border-black/45 bg-white/35 py-2.5 pl-9 pr-9 text-xs text-black placeholder-black/65 transition focus:border-black focus:outline-none"
+                  className="w-full rounded-lg border border-white/90 bg-white/55 py-3 pl-9 pr-9 text-sm text-slate-800 placeholder-slate-600/80 shadow-sm outline-none transition focus:border-teal-700 focus:bg-white/75 focus:ring-2 focus:ring-teal-700/25"
                   required
                 />
                 <button
                   type="button"
                   aria-label={showPassword ? 'Sembunyikan kata sandi' : 'Tampilkan kata sandi'}
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute inset-y-0 right-0 flex items-center pr-3 text-black"
+                  className="absolute inset-y-0 right-0 flex items-center pr-3 text-slate-600 transition hover:text-teal-800"
                 >
                   {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
@@ -190,7 +190,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
             <button
               type="submit"
               disabled={isSubmitting}
-              className="mt-1 flex w-full items-center justify-center gap-2 rounded-lg border border-black/45 bg-white/45 px-3 py-2.5 text-xs font-bold uppercase tracking-wide text-black transition hover:bg-white/65 disabled:opacity-60"
+              className="mt-1 flex w-full items-center justify-center gap-2 rounded-xl border border-teal-700/70 bg-teal-700 px-3 py-3 text-sm font-bold uppercase tracking-wide text-white shadow-[0_6px_18px_rgba(15,118,110,0.28)] transition hover:bg-teal-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
             >
               <span>{isSubmitting ? 'Memeriksa akun…' : 'Masuk Aplikasi'}</span>
               <ArrowRight className="h-4 w-4" />
