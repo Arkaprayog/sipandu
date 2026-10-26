@@ -3,6 +3,7 @@ import { PPKSRecord, AppSettings } from '../types';
 import { KemensosQRCode } from './KemensosQRCode';
 import { CameraCaptureModal } from './CameraCaptureModal';
 import { PrivateDriveImage } from './PrivateDriveImage';
+import { compressImageForLocalStorage } from '../lib/imageCompression';
 import {
   buildWhatsAppMessage,
   createWhatsAppLink,
@@ -58,17 +59,23 @@ export const AsesmenView: React.FC<AsesmenViewProps> = ({
   // Submission feedback
   const [formSubmitted, setFormSubmitted] = useState<boolean>(false);
   const [copyFeedback, setCopyFeedback] = useState<string>('');
+  const [photoUploadError, setPhotoUploadError] = useState('');
+  const [isCompressingPhoto, setIsCompressingPhoto] = useState(false);
 
-  const handleFileUpload = (
+  const handleFileUpload = async (
     e: React.ChangeEvent<HTMLInputElement>,
     type: 'fotoDiri' | 'fotoKtp'
   ) => {
     const file = e.target.files?.[0];
+    e.target.value = '';
     if (!file) return;
 
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const result = event.target?.result as string;
+    setPhotoUploadError('');
+    setIsCompressingPhoto(true);
+    try {
+      // Keeps KTP legible while keeping data URLs below Firestore's document-size
+      // limit and preventing mobile localStorage quota failures.
+      const result = await compressImageForLocalStorage(file, 1200, 320 * 1024);
       if (type === 'fotoDiri') {
         setFotoDiri(result);
         setFotoDiriName(file.name);
@@ -76,8 +83,11 @@ export const AsesmenView: React.FC<AsesmenViewProps> = ({
         setFotoKtp(result);
         setFotoKtpName(file.name);
       }
-    };
-    reader.readAsDataURL(file);
+    } catch (error) {
+      setPhotoUploadError(error instanceof Error ? error.message : 'Foto tidak dapat diproses.');
+    } finally {
+      setIsCompressingPhoto(false);
+    }
   };
 
   const openCameraFor = (type: 'fotoDiri' | 'fotoKtp') => {
@@ -85,13 +95,23 @@ export const AsesmenView: React.FC<AsesmenViewProps> = ({
     setIsCameraOpen(true);
   };
 
-  const handleCameraCapture = (dataUrl: string) => {
-    if (cameraTarget === 'fotoDiri') {
-      setFotoDiri(dataUrl);
-      setFotoDiriName(`Live_Foto_Diri_${Date.now()}.jpg`);
-    } else {
-      setFotoKtp(dataUrl);
-      setFotoKtpName(`Live_Foto_KTP_${Date.now()}.jpg`);
+  const handleCameraCapture = async (dataUrl: string) => {
+    setPhotoUploadError('');
+    setIsCompressingPhoto(true);
+    try {
+      const captured = await fetch(dataUrl).then((response) => response.blob());
+      const compressed = await compressImageForLocalStorage(captured, 1200, 320 * 1024);
+      if (cameraTarget === 'fotoDiri') {
+        setFotoDiri(compressed);
+        setFotoDiriName(`Live_Foto_Diri_${Date.now()}.jpg`);
+      } else {
+        setFotoKtp(compressed);
+        setFotoKtpName(`Live_Foto_KTP_${Date.now()}.jpg`);
+      }
+    } catch (error) {
+      setPhotoUploadError(error instanceof Error ? error.message : 'Foto kamera tidak dapat diproses.');
+    } finally {
+      setIsCompressingPhoto(false);
     }
   };
 
@@ -236,6 +256,16 @@ export const AsesmenView: React.FC<AsesmenViewProps> = ({
         {/* 1. KONTEN: ASESMEN TAHAP AWAL */}
         {activeSubMenu === 'tahap-awal' && (
           <div className="space-y-6">
+            {isCompressingPhoto && (
+              <div role="status" className="rounded-lg border border-sky-400/30 bg-sky-950/40 p-3 text-xs text-sky-100">
+                Memproses dan mengompres foto agar dapat disimpan dengan aman…
+              </div>
+            )}
+            {photoUploadError && (
+              <div role="alert" className="rounded-lg border border-rose-400/40 bg-rose-950/40 p-3 text-xs text-rose-100">
+                {photoUploadError}
+              </div>
+            )}
             {/* Link & Barcode dengan Logo Kemensos di dalamnya */}
             <div className="p-5 rounded-2xl bg-[#112415]/70 border border-rose-500/35 flex flex-col md:flex-row items-center justify-between gap-6">
               <div className="flex-1 space-y-3">
