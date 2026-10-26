@@ -35,23 +35,35 @@ for (const reference of [...scriptRefs, ...cssRefs]) {
   }
 }
 
-// Verify code-split JavaScript modules too; these are fetched after the initial
-// entry chunk and can cause a blank page when a base path is wrong.
+// Verify code-split JavaScript and CSS modules from Vite's preload map.
+// Vite can emit dynamic imports using quote characters or a template literal.
 const assetDirectory = path.join(dist, 'assets');
+const checkChunkReference = (ownerFile, reference) => {
+  if (/^(?:https?:)?\/\//i.test(reference)) return;
+  if (reference.startsWith('/')) {
+    fail('URL modul hasil build harus relatif: ' + ownerFile + ' → ' + reference);
+    return;
+  }
+  const pathname = decodeURIComponent(reference.split(/[?#]/, 1)[0]);
+  const filePath = path.resolve(assetDirectory, pathname);
+  if (!filePath.startsWith(dist + path.sep) || !fs.existsSync(filePath)) {
+    fail('Chunk hasil build tidak ditemukan: ' + ownerFile + ' → ' + reference);
+  } else if (fs.statSync(filePath).size === 0) {
+    fail('Chunk hasil build kosong: ' + ownerFile + ' → ' + reference);
+  }
+};
+
 if (fs.existsSync(assetDirectory)) {
   for (const fileName of fs.readdirSync(assetDirectory).filter((name) => name.endsWith('.js'))) {
     const code = fs.readFileSync(path.join(assetDirectory, fileName), 'utf8');
-    for (const match of code.matchAll(/import\(["']([^"']+\.js(?:\?[^"']*)?)["']\)/g)) {
-      const reference = match[1];
-      if (/^(?:https?:)?\/\//i.test(reference)) continue;
-      if (reference.startsWith('/')) {
-        fail('URL modul dinamis harus relatif: ' + fileName + ' → ' + reference);
-        continue;
-      }
-      const pathname = decodeURIComponent(reference.split(/[?#]/, 1)[0]);
-      const resolvedPath = path.resolve(assetDirectory, pathname);
-      if (!resolvedPath.startsWith(assetDirectory + path.sep) || !fs.existsSync(resolvedPath)) {
-        fail('Chunk dinamis tidak ditemukan: ' + fileName + ' → ' + reference);
+    // Match import("chunk.js"), import('chunk.js'), and template-literal imports.
+    for (const match of code.matchAll(/import\((["'\x60])([^"'\x60]+\.js(?:\?[^"'\x60]*)?)\1\)/g)) {
+      checkChunkReference(fileName, match[2]);
+    }
+    // CSS dependencies are stored in Vite's __vite__mapDeps preload array.
+    for (const map of code.matchAll(/m\.f=\[([^\]]*)\]/g)) {
+      for (const reference of map[1].matchAll(/["']([^"']+\.(?:js|css)(?:\?[^"']*)?)["']/g)) {
+        checkChunkReference(fileName, reference[1]);
       }
     }
   }
