@@ -22,7 +22,7 @@ export interface GoogleFormResponse {
 }
 
 function requireToken(token: string | null): string {
-  if (!token) throw new Error('Token akses Google belum tersedia atau telah hilang setelah halaman dimuat ulang. Buka Koneksi Akun dan tekan “Pulihkan Izin Google API”, lalu ulangi operasi.');
+  if (!token) throw new Error('Token Google belum tersedia setelah upaya penyegaran otomatis. Pastikan sesi akun Google Workspace masih aktif; jika browser memblokir refresh tanpa dialog, pulihkan izin satu kali melalui Koneksi Akun.');
   return token;
 }
 
@@ -48,7 +48,7 @@ async function googleJson<T>(url: string, init: RequestInit = {}): Promise<T> {
     if (res.status === 401 && attempt === 0) {
       invalidateAccessToken();
       // Retry once using a newly issued token from the existing Workspace session.
-      const refreshed = await refreshWorkspaceAccessToken(true);
+      const refreshed = await refreshWorkspaceAccessToken();
       if (refreshed) {
         token = refreshed;
         continue;
