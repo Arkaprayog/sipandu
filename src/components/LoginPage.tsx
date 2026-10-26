@@ -81,10 +81,9 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
         decoding="async"
         onError={(event) => {
           const image = event.currentTarget;
-          // The compressed WebP is the normal path; keep the original JPEG as a
-          // safe fallback for development servers or hosts that lack the asset.
-          if (image.currentSrc.toLowerCase().endsWith('.webp')) {
-            image.onerror = () => { image.style.display = 'none'; };
+          // Fall back to the source JPEG if the optimized asset is unavailable.
+          if (image.dataset.fallback !== '1') {
+            image.dataset.fallback = '1';
             image.src = publicAssetUrl('Wallpaper Background Landingpage.jpg');
           } else {
             image.style.display = 'none';
