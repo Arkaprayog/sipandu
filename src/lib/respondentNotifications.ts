@@ -125,7 +125,8 @@ async function showSystemNotification(item: RespondentNotification, uid: string)
 
   try {
     if ('serviceWorker' in navigator) {
-      const registration = await navigator.serviceWorker.ready;
+      const serviceWorkerUrl = new URL(`${import.meta.env.BASE_URL}sw.js`, window.location.href);
+      const registration = await navigator.serviceWorker.register(serviceWorkerUrl, { scope: import.meta.env.BASE_URL });
       await registration.showNotification(item.title, options);
     } else {
       new Notification(item.title, options);
