@@ -125,7 +125,7 @@ export function buildWhatsAppMessage(
       settings.googleFormTahapLanjutanIdEntry,
       ppks.id
     );
-    continuationText = `Silakan lanjutkan asesmen melalui tautan khusus untuk data Anda berikut. ID referensi PPKS: ${ppks.id}\n${continuationUrl}`;
+    continuationText = `Silakan lanjutkan asesmen melalui tautan khusus untuk data Anda berikut. ID referensi PPKS: ${ppks.id}. ID ini sudah diisi otomatis pada formulir; mohon jangan mengubahnya.\n${continuationUrl}`;
   } catch {
     continuationText =
       'Tautan asesmen lanjutan belum dapat dibuat karena pengaturan formulir lanjutan SIPANDU belum lengkap. Petugas akan mengirimkan tautan yang benar setelah konfigurasi selesai.';
