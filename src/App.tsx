@@ -613,7 +613,9 @@ export default function App() {
     let active = true;
     let running = false;
     const syncOnce = async () => {
-      if (!active || running || document.visibilityState === 'hidden') return;
+      // Keep trying to detect new respondent submissions while the tab/app is in the background.
+      // Mobile browsers may throttle background timers; a closed app still needs server-side push.
+      if (!active || running) return;
       running = true;
       try {
         const token = await getAccessToken();
