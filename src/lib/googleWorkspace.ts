@@ -1113,7 +1113,7 @@ async function recoverPhotosFromGoogleForms(
 
   let linksRecovered = 0;
   let recordsMatchedByIdentity = 0;
-  const enriched = records.map((record) => {
+  const enriched = records.map((record, recordIndex) => {
     const currentDiri = normalizePPKSPhotoSource(record.fotoDiri);
     const currentKtp = normalizePPKSPhotoSource(record.fotoKtp);
     const currentKk = normalizePPKSPhotoSource(record.fotoKk);
@@ -1122,12 +1122,16 @@ async function recoverPhotosFromGoogleForms(
       return { ...record, fotoDiri: currentDiri, fotoKtp: currentKtp, fotoKk: currentKk, fotoRumah: currentRumah };
     }
 
-    // Do not attach a Form response already anchored to a different record.
+    // Reuse this row's own unique file-ID anchor first (important when a row
+    // already has three photos but one category is missing). Otherwise match only
+    // against Form responses not already assigned to a different PPKS.
+    const anchoredIndex = anchoredCandidateByRecord.get(recordIndex);
+    const anchoredCandidate = anchoredIndex === undefined ? null : responseData.candidates[anchoredIndex];
     const sourceNIK = String(record.officialAssessment?.q23 || record.nik || '');
     const availableCandidates = responseData.candidates.filter(
       (candidate) => !usedCandidateResponseIds.has(candidate.responseId)
     );
-    const match = matchFormPhotoResponseForPPKS(
+    const match = anchoredCandidate || matchFormPhotoResponseForPPKS(
       record.namaLengkap,
       record.timestamp,
       availableCandidates,
@@ -1141,8 +1145,10 @@ async function recoverPhotosFromGoogleForms(
         fotoDiri: currentDiri, fotoKtp: currentKtp, fotoKk: currentKk, fotoRumah: currentRumah,
       };
     }
-    recordsMatchedByIdentity++;
-    usedCandidateResponseIds.add(match.responseId);
+    if (!anchoredCandidate) {
+      recordsMatchedByIdentity++;
+      usedCandidateResponseIds.add(match.responseId);
+    }
     const updated: PPKSRecord = {
       ...record,
       fotoDiri: currentDiri || match.photos.diri || '',
