@@ -14,7 +14,7 @@ import { SettingsModal } from './components/SettingsModal';
 import { NotificationsModal } from './components/NotificationsModal';
 import { GoogleWorkspaceModal } from './components/GoogleWorkspaceModal';
 import { onAuthStateChanged, signOut, getIdTokenResult } from 'firebase/auth';
-import { auth, getAccessToken, savePPKSToFirestore, googleLogout, removeLegacyDemoPPKSFromFirestore, reconcilePPKSFirestoreWithSpreadsheet } from './lib/firebase';
+import { auth, getAccessToken, savePPKSToFirestore, googleLogout, removeLegacyDemoPPKSFromFirestore, reconcilePPKSFirestoreWithSpreadsheet, fetchStaffProfile, saveStaffProfile } from './lib/firebase';
 import { ensureSIPANDUDatabaseSheet, extractSpreadsheetId, getLinkedSpreadsheetUrlForForm, importPPKSFromSpreadsheet, removeLegacyDemoRowsFromSpreadsheet, removeObviousDemoFilesFromDrive, upsertPPKSInSpreadsheet } from './lib/googleWorkspace';
 import { GOOGLE_SIPANDU_RESOURCES } from './lib/googleSIPANDUResources';
 import { deduplicatePPKSRecords, EXPECTED_REAL_PPKS_COUNT, parsePPKSTimestamp, samePPKSIdentity, sortPPKSRecordsByName, sortPPKSRecordsByTimestamp } from './lib/ppksData';
@@ -219,6 +219,24 @@ export default function App() {
           setIsAuthenticated(true);
           setCurrentUserRole(role);
           setCurrentUserName(user.displayName || user.email || '');
+          // Hydrate the profile from the authenticated user's cloud record before
+          // allowing the local cache to be rewritten. Never replace saved fields
+          // with blank defaults when cloud access is temporarily unavailable.
+          try {
+            const cloudProfile = await fetchStaffProfile(user.uid);
+            if (auth.currentUser?.uid === user.uid && cloudProfile) {
+              setProfile((cachedProfile) => ({
+                ...cachedProfile,
+                ...Object.fromEntries(
+                  Object.entries(cloudProfile).filter(([, value]) => value !== undefined && value !== null && value !== '')
+                ),
+              }) as ProfileUser);
+            }
+          } catch (profileError) {
+            console.warn('Profil cloud SIPANDU belum dapat dipulihkan; cache lokal dipertahankan:', profileError);
+          } finally {
+            if (auth.currentUser?.uid === user.uid) profileHydratedRef.current = true;
+          }
         }
       } catch (error) {
         console.error('Gagal memverifikasi peran SIPANDU:', error);
@@ -263,11 +281,12 @@ export default function App() {
     if (cached) {
       try {
         const parsed = JSON.parse(cached);
-        if (parsed?.nama === 'Deny Arifin Martyon S.' && parsed?.nip === '19920315 202012 1 002') {
-          localStorage.removeItem('sipandu_profile');
-          return initialProfileUser;
+        // Do not purge a real staff profile based on name/NIP: those fields are
+        // user-editable and may legitimately match an older sample profile.
+        if (parsed && typeof parsed === 'object') {
+          return { ...initialProfileUser, ...parsed };
         }
-        return parsed;
+        return initialProfileUser;
       } catch (e) {
         console.error('Failed to parse cached profile', e);
       }
@@ -287,6 +306,8 @@ export default function App() {
     return initialAppSettings;
   });
 
+  const profileHydratedRef = useRef(false);
+  const profileSaveQueueRef = useRef<Promise<void>>(Promise.resolve());
   const demoCleanupAttemptedRef = useRef('');
   const demoCleanupRunningRef = useRef(false);
   const firestoreRosterReconciliationAttemptedRef = useRef(false);
@@ -319,13 +340,16 @@ export default function App() {
   }, [ppksList]);
 
   useEffect(() => {
+    // Do not write initial placeholder state over an existing cache while Firebase
+    // is still restoring the session and fetching its cloud profile.
+    if (!profileHydratedRef.current) return;
     try {
       localStorage.setItem('sipandu_profile', JSON.stringify(profile));
     } catch (error) {
       console.error('SIPANDU profile could not be persisted in browser storage:', error);
       setCloudSyncNotice({
         type: 'error',
-        text: 'Foto/profil berubah pada sesi ini, tetapi browser menolak penyimpanan lokal. Foto profil dioptimalkan; jika pesan ini tetap muncul, tutup tab lama SIPANDU dan muat ulang agar ruang penyimpanan tersedia.',
+        text: 'Profil tampil pada sesi ini, tetapi cache browser gagal disimpan. Periksa kapasitas penyimpanan perangkat.',
       });
     }
   }, [profile]);
@@ -333,6 +357,30 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('sipandu_settings', JSON.stringify(settings));
   }, [settings]);
+
+  // Save locally first for responsiveness, then persist to the authenticated staff profile.
+  const handleSaveProfile = (updated: ProfileUser) => {
+    profileHydratedRef.current = true;
+    setProfile(updated);
+    try {
+      localStorage.setItem('sipandu_profile', JSON.stringify(updated));
+    } catch (error) {
+      console.warn('Profil SIPANDU tidak dapat disimpan ke cache browser:', error);
+    }
+    const saveOperation = profileSaveQueueRef.current
+      .catch(() => undefined)
+      .then(() => saveStaffProfile(updated));
+    profileSaveQueueRef.current = saveOperation;
+    void saveOperation.then(() => {
+      setCloudSyncNotice({ type: 'success', text: 'Profil petugas berhasil disimpan ke Firebase dan cache perangkat.' });
+    }).catch((error: any) => {
+      console.error('Gagal menyimpan profil petugas ke Firebase:', error);
+      setCloudSyncNotice({
+        type: 'error',
+        text: `Profil tersimpan di cache perangkat, tetapi cloud gagal: ${error?.message || String(error)}. Periksa Firestore Rules untuk koleksi staffProfiles.`,
+      });
+    });
+  };
 
   // Auth Handlers
   const handleLogin = (user: string) => {
@@ -871,7 +919,7 @@ export default function App() {
         isOpen={isEditProfileOpen}
         onClose={() => setIsEditProfileOpen(false)}
         profile={profile}
-        onSave={(updated) => setProfile(updated)}
+        onSave={handleSaveProfile}
       />
 
       <SettingsModal
