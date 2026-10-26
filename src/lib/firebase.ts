@@ -313,9 +313,15 @@ export const googleSignIn = async (): Promise<{
   // Start a top-level redirect directly from the user's tap on those clients.
   // The result is consumed by completeGoogleRedirectSignIn during app startup.
   const userAgent = typeof navigator !== 'undefined' ? navigator.userAgent : '';
-  const isMobileOrEmbedded = /Android|iPhone|iPad|iPod/i.test(userAgent) ||
-    /wv|webview|capacitor/i.test(userAgent);
-  if (isMobileOrEmbedded) {
+  // Do not force every Android/iOS browser through redirect OAuth. On Chrome
+  // mobile, popup sign-in is often the reliable path; redirect can appear to do
+  // nothing when the host uses a different authDomain and blocks third-party
+  // redirect storage. Reserve redirect-first for an actual embedded WebView.
+  const isEmbeddedWebView =
+    /;\\s*wv\\)|\\bwv\\b|webview|capacitor/i.test(userAgent) ||
+    ((/iPhone|iPad|iPod/i.test(userAgent)) &&
+      /AppleWebKit/i.test(userAgent) && !/Safari/i.test(userAgent));
+  if (isEmbeddedWebView) {
     const provider = buildWorkspaceProvider('select_account');
     try {
       await signInWithRedirect(workspaceAuth, provider);
