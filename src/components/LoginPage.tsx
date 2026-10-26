@@ -3,6 +3,16 @@ import { signInWithEmailAndPassword } from 'firebase/auth';
 import { auth } from '../lib/firebase';
 import { Lock, User, Eye, EyeOff, ArrowRight } from 'lucide-react';
 
+// Public assets are served from the repository subpath on GitHub Pages and from
+// the site root on the custom domain. Avoid relative URLs: they can resolve
+// against the current route and silently break images.
+const ASSET_BASE = typeof window !== 'undefined' && window.location.hostname === 'arkaprayog.github.io'
+  ? '/sipandu/'
+  : '/';
+const publicAssetUrl = (filename: string) =>
+  `${ASSET_BASE}uploads/${filename.split('/').map((part) => encodeURIComponent(part)).join('/')}`;
+const LOGIN_TIMEOUT_MS = 18_000;
+
 interface LoginPageProps {
   onLogin: (userName: string) => void;
 }
@@ -13,26 +23,48 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
   const [showPassword, setShowPassword] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [logoIndex, setLogoIndex] = useState(0);
+  const [logoFailed, setLogoFailed] = useState(false);
+  const logoSources = [
+    publicAssetUrl('Logo Kemensos Hadir.png'),
+    publicAssetUrl('Logo Kemensos.png'),
+  ];
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg('');
     setIsSubmitting(true);
+    let timeoutId: ReturnType<typeof window.setTimeout> | undefined;
     try {
-      const credential = await signInWithEmailAndPassword(auth, email.trim(), password);
+      // A stalled mobile request must not leave the submit button disabled forever.
+      const credential = await Promise.race([
+        signInWithEmailAndPassword(auth, email.trim(), password),
+        new Promise<never>((_, reject) => {
+          timeoutId = window.setTimeout(() => {
+            reject({ code: 'sipandu/login-timeout' });
+          }, LOGIN_TIMEOUT_MS);
+        }),
+      ]);
       onLogin(credential.user.displayName || credential.user.email || 'Pengguna SIPANDU');
     } catch (error) {
       const code = (error as { code?: string })?.code;
-      if (code === 'auth/invalid-credential' || code === 'auth/wrong-password' || code === 'auth/user-not-found') {
+      if (code === 'sipandu/login-timeout') {
+        setErrorMsg('Permintaan login belum mendapat jawaban selama 18 detik. Periksa koneksi internet, lalu coba masuk kembali. Jika login sebenarnya sudah diterima server, aplikasi dapat tetap melanjutkan ke dashboard.');
+      } else if (code === 'auth/invalid-credential' || code === 'auth/wrong-password' || code === 'auth/user-not-found') {
         setErrorMsg('Email atau kata sandi tidak sesuai.');
       } else if (code === 'auth/too-many-requests') {
-        setErrorMsg('Terlalu banyak percobaan. Coba lagi nanti.');
+        setErrorMsg('Terlalu banyak percobaan. Tunggu sebentar sebelum mencoba lagi.');
       } else if (code === 'auth/operation-not-allowed') {
         setErrorMsg('Login email/kata sandi belum diaktifkan di Firebase Authentication.');
+      } else if (code === 'auth/network-request-failed') {
+        setErrorMsg('Firebase tidak dapat dijangkau. Periksa koneksi internet atau pemblokiran jaringan, lalu coba lagi.');
+      } else if (code === 'auth/invalid-api-key' || code === 'auth/configuration-not-found') {
+        setErrorMsg('Konfigurasi Firebase Authentication tidak valid. Administrator perlu memeriksa konfigurasi proyek Firebase SIPANDU.');
       } else {
-        setErrorMsg('Login belum berhasil. Pastikan akun sudah dibuat dan konfigurasi Firebase benar.');
+        setErrorMsg('Login belum berhasil. Pastikan akun aktif, konfigurasi Firebase benar, dan koneksi internet tersedia.');
       }
     } finally {
+      if (timeoutId !== undefined) window.clearTimeout(timeoutId);
       setIsSubmitting(false);
     }
   };
@@ -40,24 +72,34 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
   return (
     <div className="relative flex min-h-screen w-full items-center justify-center overflow-x-hidden px-3 py-5 text-black">
       {/* Gunakan foto gedung yang sudah tersedia; tanpa overlay, gradient, blur, atau efek glossy. */}
-      <div
+      <img
         aria-hidden="true"
-        className="absolute inset-0 z-0 bg-cover bg-center bg-no-repeat"
-        style={{
-          backgroundImage: `url("${import.meta.env.BASE_URL}uploads/Wallpaper%20Background%20Landingpage.jpg")`,
-        }}
+        alt=""
+        src={publicAssetUrl('Wallpaper Background Landingpage.jpg')}
+        loading="eager"
+        fetchPriority="high"
+        onError={(event) => { event.currentTarget.style.display = 'none'; }}
+        className="absolute inset-0 z-0 h-full w-full object-cover object-center"
       />
 
       {/* Satu-satunya card di halaman login; lebar 300 px dan latar sangat transparan. */}
       <main className="relative z-10 w-[300px] max-w-[calc(100vw-24px)]">
         <section className="w-full rounded-xl border border-black/25 bg-white/[0.10] p-4 shadow-none backdrop-blur-[1px]">
           <div className="mb-4 flex flex-col items-center text-center">
-            <img
-              src={`${import.meta.env.BASE_URL}uploads/Logo%20Kemensos%20Hadir.png`}
-              alt="Logo resmi Kementerian Sosial RI"
-              className="mb-2 h-auto w-[96px] max-w-full object-contain"
-              loading="eager"
-            />
+            {logoFailed ? (
+              <p className="mb-2 text-sm font-semibold text-black">Kementerian Sosial RI</p>
+            ) : (
+              <img
+                src={logoSources[logoIndex]}
+                alt="Logo resmi Kementerian Sosial RI"
+                className="mb-2 h-auto w-[135px] max-w-full object-contain"
+                loading="eager"
+                onError={() => {
+                  if (logoIndex < logoSources.length - 1) setLogoIndex(logoIndex + 1);
+                  else setLogoFailed(true);
+                }}
+              />
+            )}>
             <h1 className="text-xl font-extrabold leading-tight tracking-wide text-black">
               SIPANDU ODHIV
             </h1>
