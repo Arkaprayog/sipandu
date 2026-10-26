@@ -71,7 +71,7 @@
         };
         var retryWithFreshDocument = function (assetUrl) {
           // Only retry failed application scripts/styles, not images, APIs, or fonts.
-          if (!/\\.(?:m?js|css)(?:[?#]|$)/i.test(assetUrl)) return false;
+          if (!/\.(?:m?js|css)(?:[?#]|$)/i.test(assetUrl)) return false;
           var assetPath = String(assetUrl).split(/[?#]/)[0];
           var retryKey = BOOT_RETRY_PREFIX + window.location.pathname + ':' + assetPath;
           try {
