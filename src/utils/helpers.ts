@@ -29,7 +29,74 @@ export function validatePassword(password: string): { valid: boolean; error?: st
 }
 
 /**
- * Builds the official WhatsApp text requested by Kemensos for SIPANDU ODHIV
+ * Convert a Google Forms editor URL into the respondent-facing URL.
+ * Published short links (forms.gle) are left intact; editor URLs must never be
+ * shown to respondents because they can require owner/editor access.
+ */
+export function toGoogleFormsRespondentUrl(formUrl: string | undefined): string {
+  const value = String(formUrl || '').trim();
+  if (!value) return '';
+  if (/^https:\/\/forms\.gle\//i.test(value)) return value;
+
+  try {
+    const url = new URL(value);
+    if (url.hostname !== 'docs.google.com') return value;
+    const match = url.pathname.match(/^(\/forms\/d\/(?:e\/)?[^/]+)\/(edit|viewform)\/?$/);
+    if (!match) return '';
+    url.pathname = `${match[1]}/viewform`;
+    return url.toString();
+  } catch {
+    return '';
+  }
+}
+
+/**
+ * Build a Google Forms prefilled URL that carries this respondent's stable
+ * SIPANDU PPKS ID in the configured "ID PPKS" question.
+ *
+ * Google Forms exposes the field as an entry.<number> query parameter. The
+ * numeric entry identifier must be copied from Google's own "Get pre-filled
+ * link" flow; it must not be guessed.
+ */
+export function buildGoogleFormsPrefilledUrl(
+  formUrl: string | undefined,
+  entryId: string | undefined,
+  ppksId: string
+): string {
+  const rawFormUrl = String(formUrl || '').trim();
+  const rawEntryId = String(entryId || '').trim().replace(/^entry\./i, '');
+  const respondentId = String(ppksId || '').trim();
+
+  if (!rawFormUrl) throw new Error('URL Google Form lanjutan belum diatur.');
+  if (!rawEntryId || !/^\d+$/.test(rawEntryId)) {
+    throw new Error('ID entry pertanyaan “ID PPKS” belum valid. Ambil nomor entry dari tautan praisi Google Forms.');
+  }
+  if (!respondentId) throw new Error('ID PPKS kosong; tautan unik tidak dapat dibuat.');
+
+  let url: URL;
+  try {
+    url = new URL(rawFormUrl);
+  } catch {
+    throw new Error('URL Google Form lanjutan tidak valid.');
+  }
+  if (url.hostname !== 'docs.google.com') {
+    throw new Error('Untuk tautan unik, gunakan URL Google Forms lengkap dari docs.google.com, bukan tautan pendek forms.gle.');
+  }
+  const match = url.pathname.match(/^(\/forms\/d\/(?:e\/)?[^/]+)\/(edit|viewform)\/?$/);
+  if (!match) {
+    throw new Error('URL harus berupa halaman Google Forms editor (/edit) atau responden (/viewform).');
+  }
+
+  url.pathname = `${match[1]}/viewform`;
+  url.searchParams.set('usp', 'pp_url');
+  url.searchParams.set(`entry.${rawEntryId}`, respondentId);
+  return url.toString();
+}
+
+/**
+ * Builds the official WhatsApp message for follow-up assessment.
+ * It deliberately does not reuse the stage-one form URL: stage two must have
+ * its own configured form URL and prefill field so each link is tied to one PPKS.
  */
 export function buildWhatsAppMessage(
   ppks: PPKSRecord,
@@ -37,27 +104,34 @@ export function buildWhatsAppMessage(
     senderName?: string;
     senderRole?: string;
     senderUnit?: string;
-    googleFormTahapAwalUrl?: string;
+    googleFormTahapLanjutanUrl?: string;
+    googleFormTahapLanjutanIdEntry?: string;
     googleFormKesehatanMentalUrl?: string;
   } = {}
 ): string {
   const waktu = getWaktuGreeting().toLowerCase();
   const namaResponden = ppks.namaLengkap || 'Bapak/Ibu';
-  const senderName = settings.senderName || 'Deny Arifin Martyon S.';
+  const senderName = settings.senderName || 'Tim Pendamping SIPANDU ODHIV';
   const senderShortName = senderName.endsWith(' S.') ? senderName.slice(0, -3) : senderName;
   const senderRole = settings.senderRole || 'Pendamping ODHIV';
   const senderUnit =
     settings.senderUnit ||
     'Direktorat Rehabilitasi Sosial Korban Penyalahgunaan Narkoba & ODHIV';
 
-  // Never invent a Forms URL. Convert the configured editor URL to its public
-  // respondent URL; leave the link out if no real URL has been configured.
-  const configuredStageUrl = settings.googleFormTahapAwalUrl?.trim() || '';
-  const stageUrl = configuredStageUrl.replace(/\/edit(?:\?.*)?$/, '/viewform');
-  const mentalHealthUrl = settings.googleFormKesehatanMentalUrl?.trim() || '';
-  const continuationText = stageUrl
-    ? `Silakan gunakan tautan asesmen lanjutan berikut untuk melengkapi data:\n${stageUrl}`
-    : 'Tautan asesmen lanjutan belum dikonfigurasi. Silakan hubungi petugas pendamping untuk mendapatkan tautan yang benar.';
+  let continuationText = '';
+  try {
+    const continuationUrl = buildGoogleFormsPrefilledUrl(
+      settings.googleFormTahapLanjutanUrl,
+      settings.googleFormTahapLanjutanIdEntry,
+      ppks.id
+    );
+    continuationText = `Silakan lanjutkan asesmen melalui tautan khusus untuk data Anda berikut. ID referensi PPKS: ${ppks.id}\n${continuationUrl}`;
+  } catch {
+    continuationText =
+      'Tautan asesmen lanjutan belum dapat dibuat karena pengaturan formulir lanjutan SIPANDU belum lengkap. Petugas akan mengirimkan tautan yang benar setelah konfigurasi selesai.';
+  }
+
+  const mentalHealthUrl = toGoogleFormsRespondentUrl(settings.googleFormKesehatanMentalUrl);
   const mentalHealthText = mentalHealthUrl
     ? `\n\nKuesioner Asesmen Kesehatan Mental (sukarela):\n${mentalHealthUrl}`
     : '';
@@ -67,11 +141,9 @@ Selamat ${waktu}
 
 Saya ${senderShortName} dari Tim Administrasi.
 
-Terima kasih telah mengisi formulir Asesmen Program Atensi Kementerian Sosial Tahap Awal. Pesan ini membantu proses tindak lanjut; status verifikasi data akan diinformasikan setelah diperiksa petugas.
+Terima kasih telah mengisi formulir Asesmen Program Atensi Kementerian Sosial Tahap Awal. Data akan ditinjau petugas sebelum tindak lanjut diberikan.
 
 ${continuationText}${mentalHealthText}
-
-Tim kami akan melakukan proses verifikasi lebih lanjut. Jika diperlukan asesmen lanjutan atau Anda membutuhkan pendampingan sosial, silakan menghubungi petugas pendamping.
 
 Jika Anda memiliki pertanyaan terkait Program Bantuan Atensi ini, silakan membalas pesan ini.
 
