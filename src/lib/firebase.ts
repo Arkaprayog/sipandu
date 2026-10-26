@@ -525,13 +525,13 @@ export async function collapseDuplicatePPKSRecordsInFirestore(): Promise<number>
 
   const normalizedName = (value: unknown) => String(value ?? '')
     .normalize('NFD')
-    .replace(/[\\u0300-\\u036f]/g, '')
+    .replace(/[\u0300-\u036f]/g, '')
     .toLocaleLowerCase('id-ID')
     .replace(/[^a-z0-9]/g, '');
-  const normalizedPhone = (value: unknown) => String(value ?? '').replace(/\\D/g, '');
+  const normalizedPhone = (value: unknown) => String(value ?? '').replace(/\D/g, '');
   const validNIK = (record: PPKSRecord) => {
-    const candidate = String(record.nik || record.officialAssessment?.q23 || '').replace(/\\D/g, '');
-    return /^\\d{16}$/.test(candidate) ? candidate : '';
+    const candidate = String(record.nik || record.officialAssessment?.q23 || '').replace(/\D/g, '');
+    return /^\d{16}$/.test(candidate) ? candidate : '';
   };
   const isClearDuplicate = (a: PPKSRecord, b: PPKSRecord) => {
     const aNik = validNIK(a);
