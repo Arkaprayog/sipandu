@@ -69,7 +69,7 @@
         observer.observe(root, { childList: true });
         window.setTimeout(function () {
           if (!root || root.childElementCount === 0) {
-            showError('Aplikasi tidak menampilkan antarmuka setelah 8 detik. Periksa koneksi, pemuatan berkas JavaScript, dan URL dasar GitHub Pages.');
+            showError('Aplikasi belum menampilkan antarmuka setelah 20 detik. Periksa koneksi, pemuatan berkas JavaScript, dan URL dasar GitHub Pages.');
           }
         }, 20000);
       })();
