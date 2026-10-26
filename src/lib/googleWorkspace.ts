@@ -3,7 +3,7 @@ import { IntegratedFormData, PPKSRecord } from '../types';
 import { normalizeExactNumericNIK } from './nikNumeric';
 import { deduplicatePPKSRecords, getPPKSNIKCandidates, sortPPKSRecordsByTimestamp } from './ppksData';
 import { classifyPPKSPhotoHeader, normalizePPKSPhotoSource, readPPKSPhotoSourceByKind } from './photoSources';
-import { googleDriveViewUrl, matchFormPhotoResponseForPPKS, isGoogleFormLinkedToSpreadsheet, type FormPhotoResponseCandidate } from './formPhotoRecovery';
+import { countSharedPhotoFileIds, googleDriveViewUrl, matchFormPhotoResponseForPPKS, isGoogleFormLinkedToSpreadsheet, type FormPhotoResponseCandidate } from './formPhotoRecovery';
 import { GOOGLE_SIPANDU_RESOURCES } from './googleSIPANDUResources';
 import { isLegacySamplePPKS, isObviousDemoMarker, LEGACY_SAMPLE_PPKS_IDS, LEGACY_SAMPLE_PPKS_NAMES } from '../data/initialData';
 
@@ -950,7 +950,9 @@ async function loadGoogleFormPhotoResponseCandidates(
   const operation = (async (): Promise<CachedGoogleFormPhotoResponses> => {
     const kindByQuestionId = new Map<string, ReturnType<typeof classifyPPKSPhotoHeader>>();
     const nameQuestionIds = new Set<string>();
+    const nameQuestionScores = new Map<string, number>();
     const nikQuestionIds = new Set<string>();
+    const phoneQuestionIds = new Set<string>();
     for (const item of form.items || []) {
       const question = item.questionItem?.question;
       const questionId = String(question?.questionId || '').trim();
@@ -961,28 +963,50 @@ async function loadGoogleFormPhotoResponseCandidates(
         if (kind) kindByQuestionId.set(questionId, kind);
       }
       const normalizedTitle = normalizeSheetHeader(title);
-      if (
-        /nama/.test(normalizedTitle) &&
-        !/(asesor|asessor|petugas|pendamping|supervisor|ayah|ibu|wali|pasangan|suami|istri|kontakdarurat|penanggungjawab)/.test(normalizedTitle)
-      ) nameQuestionIds.add(questionId);
+      const excludedNameOwner = /(asesor|asessor|petugas|pendamping|supervisor|ayah|ibu|wali|suami|istri|pasangan|kontakdarurat|penanggungjawab|pengisi|pemohon|administrator|admin|petugasform)/.test(normalizedTitle);
+      if (/nama/.test(normalizedTitle) && !excludedNameOwner) {
+        nameQuestionIds.add(questionId);
+        const nameScore =
+          (/^(namalengkap|namaresponden|namacalonresponden|namacalonppks|namappks|namaodhiv)/.test(normalizedTitle) ? 100 : 0) +
+          (/(responden|calonppks|calonresponden|ppks|odhiv)/.test(normalizedTitle) ? 65 : 0) +
+          (/(sesuaiktp|sesuaikartuidentitas)/.test(normalizedTitle) ? 25 : 0) -
+          (normalizedTitle.length > 120 ? 10 : 0);
+        nameQuestionScores.set(questionId, Math.max(1, nameScore));
+      }
       if (isLikelyRespondentNIKHeader(title)) nikQuestionIds.add(questionId);
+      const excludedPhoneOwner = /(ayah|ibu|orangtua|wali|suami|istri|pasangan|keluarga|pendamping|petugas|asesor|asessor|supervisor|penanggungjawab|kontakdarurat|pengisi|pemohon)/.test(normalizedTitle);
+      const isRespondentPhone =
+        /(nohp|nomorhp|nohandphone|nomorhandphone|handphone|nomorponsel|nomortelepon|notelpon|notelepon|nomorwa|nowa|whatsapp|nomorwhatsapp|kontakresponden)/.test(normalizedTitle);
+      if (isRespondentPhone && !excludedPhoneOwner) phoneQuestionIds.add(questionId);
     }
 
     const responses = await fetchFormResponses(formId);
     const candidates: FormPhotoResponseCandidate[] = responses.map((response) => {
       const photos: FormPhotoResponseCandidate['photos'] = {};
       let respondentName = '';
+      let respondentNameScore = -1;
       let respondentNIK = '';
+      let respondentPhone = '';
       for (const [questionId, answer] of Object.entries(response.answers || {})) {
-        if (nameQuestionIds.has(questionId) && !respondentName) {
-          respondentName = (answer.textAnswers?.answers || [])
+        if (nameQuestionIds.has(questionId)) {
+          const nameValue = (answer.textAnswers?.answers || [])
             .map((entry) => String(entry.value || '').trim())
             .find(Boolean) || '';
+          const nameScore = nameQuestionScores.get(questionId) || 0;
+          if (nameValue && nameScore > respondentNameScore) {
+            respondentName = nameValue;
+            respondentNameScore = nameScore;
+          }
         }
         if (nikQuestionIds.has(questionId) && !respondentNIK) {
           respondentNIK = (answer.textAnswers?.answers || [])
             .map((entry) => normalizeNIKCellValue(String(entry.value || '')))
             .find(Boolean) || '';
+        }
+        if (phoneQuestionIds.has(questionId) && !respondentPhone) {
+          respondentPhone = (answer.textAnswers?.answers || [])
+            .map((entry) => String(entry.value || '').trim())
+            .find((value) => value.replace(/\D/g, '').length >= 8) || '';
         }
         const kind = kindByQuestionId.get(questionId);
         if (!kind || photos[kind]) continue;
@@ -994,6 +1018,7 @@ async function loadGoogleFormPhotoResponseCandidates(
         timestamp: response.createTime || response.lastSubmittedTime || '',
         respondentName,
         respondentNIK,
+        respondentPhone,
         photos,
       };
     }).filter((candidate) => Object.values(candidate.photos).some(Boolean));
@@ -1064,29 +1089,79 @@ async function recoverPhotosFromGoogleForms(
     };
   }
 
+  const photoLinks = (record: PPKSRecord): FormPhotoResponseCandidate['photos'] => ({
+    diri: normalizePPKSPhotoSource(record.fotoDiri),
+    ktp: normalizePPKSPhotoSource(record.fotoKtp),
+    kk: normalizePPKSPhotoSource(record.fotoKk),
+    rumah: normalizePPKSPhotoSource(record.fotoRumah),
+  });
+
+  // Existing Drive file IDs are strong anchors for records whose photos already load.
+  const scoreMatrix = records.map((record) =>
+    responseData.candidates.map((candidate) => countSharedPhotoFileIds(photoLinks(record), candidate.photos))
+  );
+  const recordTopCandidates = scoreMatrix.map((scores) => {
+    const highest = Math.max(0, ...scores);
+    if (highest === 0) return -1;
+    const topIndices = scores.map((score, index) => ({ score, index }))
+      .filter((entry) => entry.score === highest)
+      .map((entry) => entry.index);
+    return topIndices.length === 1 ? topIndices[0] : -1;
+  });
+  const topCandidateUsage = new Map<number, number>();
+  recordTopCandidates.forEach((index) => {
+    if (index >= 0) topCandidateUsage.set(index, (topCandidateUsage.get(index) || 0) + 1);
+  });
+  const anchoredCandidateByRecord = new Map<number, number>();
+  recordTopCandidates.forEach((candidateIndex, recordIndex) => {
+    if (candidateIndex >= 0 && topCandidateUsage.get(candidateIndex) === 1) {
+      anchoredCandidateByRecord.set(recordIndex, candidateIndex);
+    }
+  });
+  const claimedCandidates = new Set(anchoredCandidateByRecord.values());
+  const usedCandidateResponseIds = new Set<string>(
+    [...claimedCandidates].map((index) => responseData.candidates[index]?.responseId).filter(Boolean)
+  );
+  const recordsMatchedByExistingPhoto = anchoredCandidateByRecord.size;
+
   let linksRecovered = 0;
-  let recordsMatched = 0;
-  const enriched = records.map((record) => {
+  let recordsMatchedByIdentity = 0;
+  const enriched = records.map((record, recordIndex) => {
     const currentDiri = normalizePPKSPhotoSource(record.fotoDiri);
     const currentKtp = normalizePPKSPhotoSource(record.fotoKtp);
     const currentKk = normalizePPKSPhotoSource(record.fotoKk);
     const currentRumah = normalizePPKSPhotoSource(record.fotoRumah);
-    if (currentDiri && currentKtp && currentKk && currentRumah) return {
-      ...record, fotoDiri: currentDiri, fotoKtp: currentKtp, fotoKk: currentKk, fotoRumah: currentRumah,
-    };
-    const sourceNIK = getPPKSNIKCandidates(record)[0] || '';
-    const match = matchFormPhotoResponseForPPKS(
+    if (currentDiri && currentKtp && currentKk && currentRumah) {
+      return { ...record, fotoDiri: currentDiri, fotoKtp: currentKtp, fotoKk: currentKk, fotoRumah: currentRumah };
+    }
+
+    // Reuse this row's own unique file-ID anchor first (important when a row
+    // already has three photos but one category is missing). Otherwise match only
+    // against Form responses not already assigned to a different PPKS.
+    const anchoredIndex = anchoredCandidateByRecord.get(recordIndex);
+    const anchoredCandidate = anchoredIndex === undefined ? null : responseData.candidates[anchoredIndex];
+    const sourceNIK = String(record.officialAssessment?.q23 || record.nik || '');
+    const availableCandidates = responseData.candidates.filter(
+      (candidate) => !usedCandidateResponseIds.has(candidate.responseId)
+    );
+    const match = anchoredCandidate || matchFormPhotoResponseForPPKS(
       record.namaLengkap,
       record.timestamp,
-      responseData.candidates,
+      availableCandidates,
       3 * 60 * 1000,
       sourceNIK,
+      record.noHpWa || '',
     );
-    if (!match) return {
-      ...record,
-      fotoDiri: currentDiri, fotoKtp: currentKtp, fotoKk: currentKk, fotoRumah: currentRumah,
-    };
-    recordsMatched++;
+    if (!match) {
+      return {
+        ...record,
+        fotoDiri: currentDiri, fotoKtp: currentKtp, fotoKk: currentKk, fotoRumah: currentRumah,
+      };
+    }
+    if (!anchoredCandidate) {
+      recordsMatchedByIdentity++;
+      usedCandidateResponseIds.add(match.responseId);
+    }
     const updated: PPKSRecord = {
       ...record,
       fotoDiri: currentDiri || match.photos.diri || '',
@@ -1101,6 +1176,14 @@ async function recoverPhotosFromGoogleForms(
     return updated;
   });
 
+  const sourceNIKCount = records.filter((record) => getPPKSNIKCandidates(record).length > 0).length;
+  const sourcePhoneCount = records.filter((record) => String(record.noHpWa || '').replace(/\D/g, '').length >= 8).length;
+  const sourceWithAnyPhoto = records.filter((record) => Object.values(photoLinks(record)).some(Boolean)).length;
+  const sourceWithNoPhotos = records.length - sourceWithAnyPhoto;
+  const responseNIKCount = responseData.candidates.filter((candidate) => Boolean(candidate.respondentNIK)).length;
+  const responsePhoneCount = responseData.candidates.filter((candidate) => String(candidate.respondentPhone || '').replace(/\D/g, '').length >= 8).length;
+  const responseNameCount = responseData.candidates.filter((candidate) => Boolean(String(candidate.respondentName || '').trim())).length;
+  const recordsMatched = recordsMatchedByExistingPhoto + recordsMatchedByIdentity;
   const diagnostics: PhotoRecoveryDiagnostics = {
     status: linksRecovered > 0 ? 'recovered' : 'no-match',
     formTitle: responseData.formTitle,
@@ -1108,7 +1191,15 @@ async function recoverPhotosFromGoogleForms(
     responsesWithUploads: responseData.candidates.length,
     recordsMatched,
     linksRecovered,
-    detail: `${responseData.formTitle}: ${responseData.totalResponses} respons, ${responseData.candidates.length} respons dengan unggahan foto, ${recordsMatched} PPKS cocok, ${linksRecovered} tautan foto dipulihkan.`,
+    detail:
+      responseData.formTitle + ': ' + responseData.totalResponses + ' respons; ' +
+      responseData.candidates.length + ' respons punya foto; identitas Forms—nama ' +
+      responseNameCount + ', NIK ' + responseNIKCount + ', HP/WA ' + responsePhoneCount +
+      '; spreadsheet—NIK ' + sourceNIKCount + '/' + records.length + ', HP/WA ' +
+      sourcePhoneCount + '/' + records.length + '; ' + recordsMatchedByExistingPhoto +
+      ' respons dicocokkan dari ID foto yang sudah ada, ' + recordsMatchedByIdentity +
+      ' dari identitas, ' + sourceWithAnyPhoto + ' PPKS punya foto dan ' + sourceWithNoPhotos +
+      ' tanpa tautan foto; ' + linksRecovered + ' tautan foto dipulihkan.',
   };
   return { records: enriched, diagnostics };
 }
