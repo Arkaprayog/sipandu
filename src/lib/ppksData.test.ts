@@ -75,6 +75,24 @@ test('deduplicates on NIK stored only in official assessment q23 and preserves b
   assert.equal(result[0].officialAssessment?.q25, 'jawaban baru');
 });
 
+test('does not merge same-name rows without a matching identity signal', () => {
+  const first = record({
+    nik: '',
+    noHpWa: '',
+    namaLengkap: 'Responden A',
+    timestamp: '2026-10-25T09:00:00',
+  });
+  const second = record({
+    id: 'record-anon-2',
+    nik: '',
+    noHpWa: '',
+    namaLengkap: 'Responden A',
+    timestamp: '2026-10-26T09:00:00',
+  });
+  assert.equal(samePPKSIdentity(first, second), false);
+  assert.equal(deduplicatePPKSRecords([first, second]).length, 2);
+});
+
 test('sorts PPKS names alphabetically from Lesmana to Tukinem', () => {
   const sorted = sortPPKSRecordsByName([
     record({ namaLengkap: 'Tukinem' }),
