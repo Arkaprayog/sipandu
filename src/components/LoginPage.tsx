@@ -99,7 +99,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
                   else setLogoFailed(true);
                 }}
               />
-            )}>
+            )}
             <h1 className="text-xl font-extrabold leading-tight tracking-wide text-black">
               SIPANDU ODHIV
             </h1>
