@@ -3,7 +3,7 @@ import { IntegratedFormData, PPKSRecord } from '../types';
 import { normalizeExactNumericNIK } from './nikNumeric';
 import { deduplicatePPKSRecords, getPPKSNIKCandidates, sortPPKSRecordsByTimestamp } from './ppksData';
 import { classifyPPKSPhotoHeader, normalizePPKSPhotoSource, readPPKSPhotoSourceByKind } from './photoSources';
-import { googleDriveViewUrl, matchFormPhotoResponseForPPKS, isGoogleFormLinkedToSpreadsheet, type FormPhotoResponseCandidate } from './formPhotoRecovery';
+import { countSharedPhotoFileIds, googleDriveViewUrl, matchFormPhotoResponseForPPKS, isGoogleFormLinkedToSpreadsheet, type FormPhotoResponseCandidate } from './formPhotoRecovery';
 import { GOOGLE_SIPANDU_RESOURCES } from './googleSIPANDUResources';
 import { isLegacySamplePPKS, isObviousDemoMarker, LEGACY_SAMPLE_PPKS_IDS, LEGACY_SAMPLE_PPKS_NAMES } from '../data/initialData';
 
@@ -951,6 +951,7 @@ async function loadGoogleFormPhotoResponseCandidates(
     const kindByQuestionId = new Map<string, ReturnType<typeof classifyPPKSPhotoHeader>>();
     const nameQuestionIds = new Set<string>();
     const nikQuestionIds = new Set<string>();
+    const phoneQuestionIds = new Set<string>();
     for (const item of form.items || []) {
       const question = item.questionItem?.question;
       const questionId = String(question?.questionId || '').trim();
@@ -966,6 +967,10 @@ async function loadGoogleFormPhotoResponseCandidates(
         !/(asesor|asessor|petugas|pendamping|supervisor|ayah|ibu|wali|pasangan|suami|istri|kontakdarurat|penanggungjawab)/.test(normalizedTitle)
       ) nameQuestionIds.add(questionId);
       if (isLikelyRespondentNIKHeader(title)) nikQuestionIds.add(questionId);
+      const excludedPhoneOwner = /(ayah|ibu|orangtua|wali|suami|istri|pasangan|keluarga|pendamping|petugas|asesor|asessor|supervisor|penanggungjawab|kontakdarurat)/.test(normalizedTitle);
+      const isRespondentPhone =
+        /(nohp|nomorhp|nohandphone|nomorhandphone|handphone|nomorponsel|nomortelepon|notelpon|notelepon|nomorwa|nowa|whatsapp|nomorwhatsapp|kontakresponden)/.test(normalizedTitle);
+      if (isRespondentPhone && !excludedPhoneOwner) phoneQuestionIds.add(questionId);
     }
 
     const responses = await fetchFormResponses(formId);
@@ -973,6 +978,7 @@ async function loadGoogleFormPhotoResponseCandidates(
       const photos: FormPhotoResponseCandidate['photos'] = {};
       let respondentName = '';
       let respondentNIK = '';
+      let respondentPhone = '';
       for (const [questionId, answer] of Object.entries(response.answers || {})) {
         if (nameQuestionIds.has(questionId) && !respondentName) {
           respondentName = (answer.textAnswers?.answers || [])
@@ -984,6 +990,11 @@ async function loadGoogleFormPhotoResponseCandidates(
             .map((entry) => normalizeNIKCellValue(String(entry.value || '')))
             .find(Boolean) || '';
         }
+        if (phoneQuestionIds.has(questionId) && !respondentPhone) {
+          respondentPhone = (answer.textAnswers?.answers || [])
+            .map((entry) => String(entry.value || '').trim())
+            .find((value) => value.replace(/\D/g, '').length >= 8) || '';
+        }
         const kind = kindByQuestionId.get(questionId);
         if (!kind || photos[kind]) continue;
         const file = (answer.fileUploadAnswers?.answers || []).find((entry) => entry.fileId);
@@ -994,6 +1005,7 @@ async function loadGoogleFormPhotoResponseCandidates(
         timestamp: response.createTime || response.lastSubmittedTime || '',
         respondentName,
         respondentNIK,
+        respondentPhone,
         photos,
       };
     }).filter((candidate) => Object.values(candidate.photos).some(Boolean));
