@@ -3,9 +3,9 @@ export type PPKSPhotoKind = 'diri' | 'ktp' | 'kk' | 'rumah';
 function normalizePhotoHeader(value: string): string {
   return String(value ?? '')
     .normalize('NFD')
-    .replace(/[\\u0300-\\u036f]/g, '')
+    .replace(/[\u0300-\u036f]/g, '')
     .toLocaleLowerCase('id-ID')
-    .replace(/^\\s*\\d{1,2}[\\s.)\\-:]+/, '')
+    .replace(/^\s*\d{1,2}[\s.)\-:]+/, '')
     .replace(/[^a-z0-9]/g, '');
 }
 
