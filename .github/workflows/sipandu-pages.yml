@@ -37,6 +37,8 @@ jobs:
         run: bun install --frozen-lockfile
       - name: Test cleanup marker detection
         run: bun run test
+      - name: Type-check TypeScript
+        run: bun run lint
       - name: Build SIPANDU
         run: bun run build
       - name: Configure Pages
