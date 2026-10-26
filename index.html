@@ -34,7 +34,7 @@
       <h1>SIPANDU gagal dimuat</h1>
       <p>Aplikasi belum berhasil dijalankan. Informasi di bawah membantu menemukan penyebabnya; data browser tidak dihapus.</p>
       <code id="sipandu-boot-error-detail">Menunggu aplikasi dimulai…</code>
-      <button type="button" onclick="window.location.reload()">Muat ulang</button>
+      <button type="button" onclick="(function(){var u=new URL(window.location.href);u.searchParams.set('__sipandu_chunk_retry','boot-'+Date.now());window.location.replace(u.toString());})()">Muat ulang</button>
     </section>
     <script>
       (function () {
