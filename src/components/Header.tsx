@@ -7,6 +7,7 @@ import { KemensosLogo } from './KemensosLogo';
 interface HeaderProps {
   currentUser: string;
   profile: ProfileUser;
+  accountPhotoUrl?: string | null;
   unreadNotificationsCount?: number;
   onOpenEditProfile: () => void;
   onOpenSettings: () => void;
@@ -18,6 +19,7 @@ interface HeaderProps {
 export const Header: React.FC<HeaderProps> = ({
   currentUser,
   profile,
+  accountPhotoUrl,
   unreadNotificationsCount = 3,
   onOpenEditProfile,
   onOpenSettings,
@@ -31,7 +33,7 @@ export const Header: React.FC<HeaderProps> = ({
 
   useEffect(() => {
     setProfilePhotoFailed(false);
-  }, [profile.photoUrl]);
+  }, [profile.photoUrl, accountPhotoUrl]);
 
   useEffect(() => {
     const updateTime = () => {
@@ -68,9 +70,9 @@ export const Header: React.FC<HeaderProps> = ({
             {/* Foto profil + Menu Edit Profil di bawahnya */}
             <div className="flex flex-col items-center">
               <div className="relative w-14 h-14 md:w-16 md:h-16 rounded-full p-0.5 border-2 border-rose-500/50 shadow-[0_0_12px_rgba(244,63,94,0.3)] bg-black/40 overflow-hidden">
-                {profile.photoUrl && !profilePhotoFailed ? (
+                {(profile.photoUrl || accountPhotoUrl) && !profilePhotoFailed ? (
                   <img
-                    src={profile.photoUrl}
+                    src={profile.photoUrl || accountPhotoUrl || ''}
                     alt={profile.nama || 'Foto profil petugas'}
                     className="w-full h-full object-cover rounded-full"
                     onError={() => setProfilePhotoFailed(true)}

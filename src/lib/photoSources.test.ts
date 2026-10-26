@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { classifyPPKSPhotoHeader, normalizePPKSPhotoSource, readPPKSPhotoSourceByKind } from './photoSources';
-import { googleDriveViewUrl, matchFormPhotoResponseForPPKS } from './formPhotoRecovery';
+import { googleDriveViewUrl, isGoogleFormLinkedToSpreadsheet, matchFormPhotoResponseForPPKS } from './formPhotoRecovery';
 
 test('maps each uploaded image to its own photo category from long Google Forms headers', () => {
   const headers = [
@@ -106,3 +106,62 @@ test('normalizes real photo URLs and file IDs while rejecting bare filenames', (
   assert.equal(normalizePPKSPhotoSource('IMG_20261026.jpg'), '');
   assert.equal(normalizePPKSPhotoSource(''), '');
 });
+
+test('matches the correct Google Forms upload by NIK even when timestamps use different zones', () => {
+  const candidates = [
+    {
+      responseId: 'response-correct',
+      timestamp: '2026-10-26T01:00:20Z',
+      respondentName: 'Nama pada Form berbeda format',
+      respondentNIK: '1271011505920003',
+      photos: { diri: 'https://drive.google.com/file/d/AAAAAAAAAAAAAAA111/view' },
+    },
+    {
+      responseId: 'response-other',
+      timestamp: '2026-10-26T08:00:20',
+      respondentName: 'Abdul Rasid Mendrofa',
+      respondentNIK: '1271011505920004',
+      photos: { diri: 'https://drive.google.com/file/d/BBBBBBBBBBBBBBB222/view' },
+    },
+  ];
+
+  assert.equal(
+    matchFormPhotoResponseForPPKS(
+      'Abdul Rasid Mendrofa',
+      '26/10/2026 08:00:00',
+      candidates,
+      3 * 60 * 1000,
+      '1271011505920003',
+    )?.responseId,
+    'response-correct'
+  );
+});
+
+test('never uses a conflicting NIK as a name/timestamp fallback', () => {
+  const candidates = [{
+    responseId: 'wrong-nik',
+    timestamp: '2026-10-26T08:00:00',
+    respondentName: 'Lesmana',
+    respondentNIK: '1271011505920004',
+    photos: { diri: 'https://drive.google.com/file/d/AAAAAAAAAAAAAAA111/view' },
+  }];
+
+  assert.equal(
+    matchFormPhotoResponseForPPKS(
+      'Lesmana',
+      '2026-10-26T08:00:00',
+      candidates,
+      3 * 60 * 1000,
+      '1271011505920003',
+    ),
+    null
+  );
+});
+
+test('links the Form only when linkedSheetId exactly matches the source spreadsheet', () => {
+  assert.equal(isGoogleFormLinkedToSpreadsheet('sheet-response-123', 'sheet-response-123'), true);
+  assert.equal(isGoogleFormLinkedToSpreadsheet('another-sheet-456', 'sheet-response-123'), false);
+  assert.equal(isGoogleFormLinkedToSpreadsheet('', 'sheet-response-123'), false);
+  assert.equal(isGoogleFormLinkedToSpreadsheet(undefined, 'sheet-response-123'), false);
+});
+
