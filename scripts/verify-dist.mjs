@@ -35,6 +35,28 @@ for (const reference of [...scriptRefs, ...cssRefs]) {
   }
 }
 
+// Verify code-split JavaScript modules too; these are fetched after the initial
+// entry chunk and can cause a blank page when a base path is wrong.
+const assetDirectory = path.join(dist, 'assets');
+if (fs.existsSync(assetDirectory)) {
+  for (const fileName of fs.readdirSync(assetDirectory).filter((name) => name.endsWith('.js'))) {
+    const code = fs.readFileSync(path.join(assetDirectory, fileName), 'utf8');
+    for (const match of code.matchAll(/import\(["']([^"']+\.js(?:\?[^"']*)?)["']\)/g)) {
+      const reference = match[1];
+      if (/^(?:https?:)?\/\//i.test(reference)) continue;
+      if (reference.startsWith('/')) {
+        fail(\`URL modul dinamis harus relatif: \${fileName} → \${reference}\`);
+        continue;
+      }
+      const pathname = decodeURIComponent(reference.split(/[?#]/, 1)[0]);
+      const resolvedPath = path.resolve(assetDirectory, pathname);
+      if (!resolvedPath.startsWith(assetDirectory + path.sep) || !fs.existsSync(resolvedPath)) {
+        fail(\`Chunk dinamis tidak ditemukan: \${fileName} → \${reference}\`);
+      }
+    }
+  }
+}
+
 for (const required of ['manifest.webmanifest', 'sw.js']) {
   const file = path.join(dist, required);
   if (!fs.existsSync(file) || fs.statSync(file).size === 0) {
