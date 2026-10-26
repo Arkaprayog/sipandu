@@ -59,7 +59,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({ activeTab, onSelectTab }) 
                 key={tab.key}
                 type="button"
                 onClick={() => onSelectTab(tab.key)}
-                className={`flex-1 md:flex-initial min-w-[70px] md:min-w-[150px] py-2 px-2 md:px-4 rounded-xl flex flex-col md:flex-row items-center justify-center gap-1 md:gap-2 text-[10px] md:text-xs font-bold tracking-wider transition-all cursor-pointer ${
+                className={`flex-1 md:flex-initial min-w-[58px] md:min-w-[140px] py-2 px-1.5 md:px-3 rounded-xl flex flex-col md:flex-row items-center justify-center gap-1 md:gap-2 text-[8px] leading-[1.1] md:text-[10px] lg:text-[11px] font-bold tracking-normal md:tracking-wide transition-all cursor-pointer ${
                   isActive
                     ? 'bg-gradient-to-r from-emerald-900/90 to-[#193d1d] text-white border border-rose-500/60 shadow-[0_0_15px_rgba(244,63,94,0.3)] scale-[1.02]'
                     : 'text-neutral-300 hover:text-white hover:bg-emerald-950/40 border border-transparent'
@@ -68,7 +68,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({ activeTab, onSelectTab }) 
                 <span className={isActive ? 'text-sky-300' : 'text-neutral-400'}>
                   {tab.icon}
                 </span>
-                <span className="text-center truncate leading-tight">{tab.label}</span>
+                <span className="w-full text-center leading-tight whitespace-normal break-words [overflow-wrap:anywhere]">{tab.label}</span>
               </button>
             );
           })}
