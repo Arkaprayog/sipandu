@@ -1,7 +1,7 @@
 import { getAccessToken, invalidateAccessToken, refreshWorkspaceAccessToken } from './firebase';
 import { IntegratedFormData, PPKSRecord } from '../types';
 import { normalizeExactNumericNIK } from './nikNumeric';
-import { deduplicatePPKSRecords, sortPPKSRecordsByTimestamp } from './ppksData';
+import { deduplicatePPKSRecords, getPPKSNIKCandidates, sortPPKSRecordsByTimestamp } from './ppksData';
 import { classifyPPKSPhotoHeader, normalizePPKSPhotoSource, readPPKSPhotoSourceByKind } from './photoSources';
 import { googleDriveViewUrl, matchFormPhotoResponseForPPKS, isGoogleFormLinkedToSpreadsheet, type FormPhotoResponseCandidate } from './formPhotoRecovery';
 import { GOOGLE_SIPANDU_RESOURCES } from './googleSIPANDUResources';
@@ -1074,7 +1074,7 @@ async function recoverPhotosFromGoogleForms(
     if (currentDiri && currentKtp && currentKk && currentRumah) return {
       ...record, fotoDiri: currentDiri, fotoKtp: currentKtp, fotoKk: currentKk, fotoRumah: currentRumah,
     };
-    const sourceNIK = String(record.officialAssessment?.q23 || record.nik || '');
+    const sourceNIK = getPPKSNIKCandidates(record)[0] || '';
     const match = matchFormPhotoResponseForPPKS(
       record.namaLengkap,
       record.timestamp,
