@@ -40,7 +40,9 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
 
   return (
     <div className="relative min-h-screen w-full flex flex-col justify-between items-center bg-[#0d170e] text-white p-4 md:p-6 overflow-hidden">
-      <div className="absolute inset-0 bg-radial-[at_top_right] from-[#1f3a22]/70 via-[#0d170e] to-[#080d09] pointer-events-none" />
+      <div aria-hidden="true" className="absolute inset-0 bg-cover bg-center bg-no-repeat" style={{ backgroundImage: `url("${import.meta.env.BASE_URL}uploads/Wallpaper%20Background%20Landingpage.jpg")` }} />
+      <div aria-hidden="true" className="absolute inset-0 bg-[#07110b]/55 pointer-events-none" />
+      <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-[#0d170e]/30 to-[#080d09]/75 pointer-events-none" />
       <div className="absolute -top-32 -left-32 w-96 h-96 rounded-full bg-rose-600/10 blur-3xl pointer-events-none" />
       <div className="absolute -bottom-32 -right-32 w-96 h-96 rounded-full bg-emerald-600/10 blur-3xl pointer-events-none" />
 
