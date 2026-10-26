@@ -82,13 +82,107 @@ function createLocalDate(
   return date.getTime();
 }
 
-/** Display a respondent's source timestamp in the requested dd/MM/yyyy HH:mm:ss format. */
+/**
+ * Match records belonging to the same person. A confirmed 16-digit NIK is
+ * strongest; otherwise use the normalized full name while rejecting conflicting
+ * NIKs or phone numbers. This intentionally does not delete cloud documents.
+ */
+export function samePPKSIdentity(
+  a: Pick<PPKSRecord, 'id' | 'namaLengkap' | 'nik' | 'noHpWa'>,
+  b: Pick<PPKSRecord, 'id' | 'namaLengkap' | 'nik' | 'noHpWa'>
+): boolean {
+  const normalizeText = (value: unknown) => String(value ?? '')
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .toLocaleLowerCase('id-ID').replace(/[^a-z0-9]/g, '');
+  const normalizeNIK = (value: unknown) => {
+    const digits = String(value ?? '').replace(/\D/g, '');
+    return /^\d{16}$/.test(digits) ? digits : '';
+  };
+  const normalizePhone = (value: unknown) => String(value ?? '').replace(/\D/g, '');
+  const aNik = normalizeNIK(a.nik);
+  const bNik = normalizeNIK(b.nik);
+  if (aNik && bNik) return aNik === bNik;
+
+  const aName = normalizeText(a.namaLengkap);
+  const bName = normalizeText(b.namaLengkap);
+  if (!aName || !bName) return a.id === b.id;
+  if (aName !== bName) return false;
+
+  const aPhone = normalizePhone(a.noHpWa);
+  const bPhone = normalizePhone(b.noHpWa);
+  if (aPhone && bPhone && aPhone !== bPhone) return false;
+  return true;
+}
+
+/** Collapse duplicate person rows while retaining the newest timestamp and any non-empty details. */
+export function deduplicatePPKSRecords<T extends PPKSRecord>(records: T[]): T[] {
+  const oldestFirst = [...records].sort((a, b) => {
+    const aTime = parsePPKSTimestamp(a.timestamp);
+    const bTime = parsePPKSTimestamp(b.timestamp);
+    if (aTime === null && bTime === null) return 0;
+    if (aTime === null) return -1;
+    if (bTime === null) return 1;
+    return aTime - bTime;
+  });
+  const unique: T[] = [];
+
+  for (const next of oldestFirst) {
+    const duplicateIndex = unique.findIndex((candidate) => samePPKSIdentity(candidate, next));
+    if (duplicateIndex < 0) {
+      unique.push(next);
+      continue;
+    }
+    const previous = unique[duplicateIndex];
+    const nonEmpty = (value: unknown) => Array.isArray(value) ? value.length > 0 : String(value ?? '').trim() !== '';
+    const nextOfficial = Object.fromEntries(
+      Object.entries(next.officialAssessment || {}).filter(([, value]) => nonEmpty(value))
+    );
+    const nextIntegrated = Object.fromEntries(
+      Object.entries(next.integratedForm || {}).filter(([, value]) => nonEmpty(value))
+    );
+    unique[duplicateIndex] = {
+      ...previous,
+      ...next,
+      nik: next.nik || previous.nik,
+      usia: next.usia || previous.usia,
+      kotaDomisili: next.kotaDomisili || previous.kotaDomisili,
+      alamatLengkap: next.alamatLengkap || previous.alamatLengkap,
+      noHpWa: next.noHpWa || previous.noHpWa,
+      jenisBantuan: next.jenisBantuan || previous.jenisBantuan,
+      intervensiMental: next.intervensiMental || previous.intervensiMental,
+      fotoDiri: next.fotoDiri || previous.fotoDiri,
+      fotoKtp: next.fotoKtp || previous.fotoKtp,
+      fotoKk: next.fotoKk || previous.fotoKk,
+      fotoRumah: next.fotoRumah || previous.fotoRumah,
+      integratedForm: Object.keys(nextIntegrated).length
+        ? ({ ...(previous.integratedForm || {}), ...nextIntegrated } as T['integratedForm'])
+        : previous.integratedForm,
+      officialAssessment: Object.keys(nextOfficial).length
+        ? ({ ...(previous.officialAssessment || {}), ...nextOfficial } as T['officialAssessment'])
+        : previous.officialAssessment,
+      statusAsesmen: next.officialAssessment || next.integratedForm
+        ? 'Terintegrasi'
+        : (previous.statusAsesmen || next.statusAsesmen),
+    } as T;
+  }
+  return unique;
+}
+
+/** Sort the master respondent list alphabetically by full name (Indonesian locale). */
+export function sortPPKSRecordsByName<T extends Pick<PPKSRecord, 'namaLengkap'>>(records: T[]): T[] {
+  return [...records].sort((a, b) =>
+    String(a.namaLengkap || '').localeCompare(String(b.namaLengkap || ''), 'id-ID', {
+      sensitivity: 'base',
+      numeric: true,
+    })
+  );
+}
+
+/** Display the timestamp exactly as received from Google Sheets/Forms to avoid changing its visible format. */
 export function formatPPKSTimestamp(value: unknown): string {
-  const epoch = parsePPKSTimestamp(value);
-  if (epoch === null) return String(value ?? '').trim() || 'Waktu tidak tersedia';
-  const date = new Date(epoch);
-  const pad = (number: number) => String(number).padStart(2, '0');
-  return `${pad(date.getDate())}/${pad(date.getMonth() + 1)}/${date.getFullYear()} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+  // Imported spreadsheet values are already formatted by Google Sheets. Keep that
+  // exact string instead of converting US/day-first formats or shifting wall time.
+  return String(value ?? '').trim() || 'Waktu tidak tersedia';
 }
 
 /** Newest respondent/submission first; records without a parseable time are kept last. */

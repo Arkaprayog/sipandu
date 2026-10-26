@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { PPKSRecord, AppSettings } from '../types';
 import { PrivateDriveImage } from './PrivateDriveImage';
-import { formatPPKSTimestamp } from '../lib/ppksData';
+import { deduplicatePPKSRecords, formatPPKSTimestamp, sortPPKSRecordsByName } from '../lib/ppksData';
 import {
   buildWhatsAppMessage,
   createWhatsAppLink,
@@ -54,15 +54,21 @@ export const DatabasePpksView: React.FC<DatabasePpksViewProps> = ({
   const [saveSuccess, setSaveSuccess] = useState<boolean>(false);
   const [showWaPreview, setShowWaPreview] = useState<boolean>(false);
 
+  // Keep the database chooser in the same alphabetical order as the source roster.
+  const displayPPKSList = useMemo(
+    () => sortPPKSRecordsByName(deduplicatePPKSRecords(ppksList)),
+    [ppksList]
+  );
+
   // Currently selected PPKS
-  const currentPPKS = ppksList.find((p) => p.id === selectedPPKSId);
+  const currentPPKS = displayPPKSList.find((p) => p.id === selectedPPKSId);
   const currentNIK = currentPPKS ? resolveProfileNIK(currentPPKS) : '';
 
   // Sync internal edit state when a PPKS is selected
   const handleSelectPPKS = (id: string) => {
     setSelectedPPKSId(id);
     setSaveSuccess(false);
-    const target = ppksList.find((p) => p.id === id);
+    const target = displayPPKSList.find((p) => p.id === id);
     if (target) {
       setEditingDesil(target.desil);
       setEditingIntervensi(target.intervensiMental);
@@ -71,14 +77,14 @@ export const DatabasePpksView: React.FC<DatabasePpksViewProps> = ({
 
   // Auto-select the first respondent after a live spreadsheet import populates an empty view.
   useEffect(() => {
-    if (ppksList.length === 0) {
+    if (displayPPKSList.length === 0) {
       setSelectedPPKSId('');
       return;
     }
-    if (!ppksList.some((record) => record.id === selectedPPKSId)) {
-      handleSelectPPKS(ppksList[0].id);
+    if (!displayPPKSList.some((record) => record.id === selectedPPKSId)) {
+      handleSelectPPKS(displayPPKSList[0].id);
     }
-  }, [ppksList, selectedPPKSId]);
+  }, [displayPPKSList, selectedPPKSId]);
 
   const handleSave = () => {
     if (!currentPPKS) return;
@@ -136,13 +142,13 @@ export const DatabasePpksView: React.FC<DatabasePpksViewProps> = ({
             <select
               value={selectedPPKSId}
               onChange={(e) => handleSelectPPKS(e.target.value)}
-              disabled={ppksList.length === 0}
+              disabled={displayPPKSList.length === 0}
               className="w-full py-3.5 px-4 rounded-xl bg-[#142618] border border-rose-500/45 text-white font-medium text-sm focus:outline-none focus:border-sky-400 focus:ring-1 focus:ring-sky-400 shadow-md cursor-pointer transition disabled:opacity-60"
             >
               <option value="" className="bg-[#0f1d12] text-neutral-400">
-                {ppksList.length === 0 ? 'Belum ada data PPKS dimuat — gunakan Google Workspace & Cloud Hub' : '-- Silakan Klik Untuk Memilih Data PPKS --'}
+                {displayPPKSList.length === 0 ? 'Belum ada data PPKS dimuat — gunakan Google Workspace & Cloud Hub' : '-- Silakan Klik Untuk Memilih Data PPKS --'}
               </option>
-              {ppksList.map((p) => (
+              {displayPPKSList.map((p) => (
                 <option key={p.id} value={p.id} className="bg-[#0f1d12] text-white py-1">
                   {formatPPKSTimestamp(p.timestamp)} • {p.namaLengkap} • NIK: {resolveProfileNIK(p) || 'belum terpetakan'} • {p.kotaDomisili} (Desil {p.desil})
                 </option>
@@ -157,9 +163,9 @@ export const DatabasePpksView: React.FC<DatabasePpksViewProps> = ({
             <div className="p-4 rounded-full bg-emerald-950/60 border border-emerald-500/30 text-emerald-300">
               <UserCheck className="w-10 h-10 text-sky-300" />
             </div>
-            <h4 className="text-base font-bold text-white">{ppksList.length === 0 ? 'Data PPKS belum dimuat' : 'Database Belum Dipilih'}</h4>
+            <h4 className="text-base font-bold text-white">{displayPPKSList.length === 0 ? 'Data PPKS belum dimuat' : 'Database Belum Dipilih'}</h4>
             <p className="text-xs text-neutral-300 max-w-md">
-              {ppksList.length === 0
+              {displayPPKSList.length === 0
                 ? 'Buka Google Workspace & Cloud Hub → Google Sheets, pilih spreadsheet sumber yang benar, lalu tekan “Muat Data PPKS + Asesmen”. Data yang berhasil diimpor akan muncul di sini.'
                 : 'Silakan pilih responden PPKS untuk melihat profil lengkap, status desil, dan tindak lanjutnya.'}
             </p>

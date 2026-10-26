@@ -17,7 +17,7 @@ import { onAuthStateChanged, signOut, getIdTokenResult } from 'firebase/auth';
 import { auth, getAccessToken, savePPKSToFirestore, googleLogout, removeLegacyDemoPPKSFromFirestore } from './lib/firebase';
 import { ensureSIPANDUDatabaseSheet, extractSpreadsheetId, importPPKSFromSpreadsheet, removeLegacyDemoRowsFromSpreadsheet, removeObviousDemoFilesFromDrive, upsertPPKSInSpreadsheet } from './lib/googleWorkspace';
 import { GOOGLE_SIPANDU_RESOURCES } from './lib/googleSIPANDUResources';
-import { parsePPKSTimestamp, sortPPKSRecordsByTimestamp } from './lib/ppksData';
+import { deduplicatePPKSRecords, parsePPKSTimestamp, samePPKSIdentity, sortPPKSRecordsByName, sortPPKSRecordsByTimestamp } from './lib/ppksData';
 
 function isSixteenDigitNIK(value: string): boolean {
   return /^\d{16}$/.test(String(value || '').replace(/\D/g, ''));
@@ -123,7 +123,18 @@ function mergePPKSRecords(localRecords: PPKSRecord[], cloudRecords: PPKSRecord[]
     if (existingKey !== key) merged.delete(existingKey);
     merged.set(key, combined);
   }
-  return sortPPKSRecordsByTimestamp(Array.from(merged.values()));
+  return sortPPKSRecordsByTimestamp(deduplicatePPKSRecords(Array.from(merged.values())));
+}
+
+function reconcileSpreadsheetPPKSRecords(localRecords: PPKSRecord[], sourceRecords: PPKSRecord[]): PPKSRecord[] {
+  // The selected spreadsheet is the master roster. Reuse local/cloud details only
+  // for people still present in that source; do not keep obsolete cache-only rows.
+  const uniqueSource = deduplicatePPKSRecords(sourceRecords);
+  const merged = mergePPKSRecords(localRecords, uniqueSource);
+  const sourceMatched = merged.filter((record) =>
+    uniqueSource.some((sourceRecord) => samePPKSIdentity(record, sourceRecord))
+  );
+  return sortPPKSRecordsByName(deduplicatePPKSRecords(sourceMatched));
 }
 
 function normalizeAppSettings(value: unknown): AppSettings {
@@ -219,9 +230,9 @@ export default function App() {
         const parsed: unknown = JSON.parse(cached);
         if (Array.isArray(parsed)) {
           // Remove the exact legacy demo IDs and persist the clean cache.
-          const clean = (parsed as PPKSRecord[]).filter(
+          const clean = deduplicatePPKSRecords((parsed as PPKSRecord[]).filter(
             (record) => record && !isLegacySamplePPKS(record)
-          );
+          ));
           if (clean.length !== parsed.length) localStorage.setItem('sipandu_ppks', JSON.stringify(clean));
           return sortPPKSRecordsByTimestamp(clean);
         }
@@ -347,13 +358,13 @@ export default function App() {
   // Data update handlers
   const handleUpdatePPKS = (updated: PPKSRecord) => {
     setPpksList((prev) =>
-      sortPPKSRecordsByTimestamp(prev.map((item) => (item.id === updated.id ? updated : item)))
+      sortPPKSRecordsByTimestamp(deduplicatePPKSRecords(prev.map((item) => (item.id === updated.id ? updated : item))))
     );
     void persistRecordToCloud(updated);
   };
 
   const handleAddNewPPKS = (newPPKS: PPKSRecord) => {
-    setPpksList((prev) => sortPPKSRecordsByTimestamp([newPPKS, ...prev]));
+    setPpksList((prev) => sortPPKSRecordsByTimestamp(deduplicatePPKSRecords([newPPKS, ...prev])));
     void persistRecordToCloud(newPPKS);
   };
 
@@ -361,7 +372,7 @@ export default function App() {
     setPpksList((localRecords) => mergePPKSRecords(localRecords, cloudRecords));
   };
 
-  const handleSyncGoogleSpreadsheet = async (): Promise<{ records: number; sourceDataRows: number; sourceRowsWithName: number; sampleRecordsFiltered: number }> => {
+  const handleSyncGoogleSpreadsheet = async (): Promise<{ records: number; sourceDataRows: number; sourceRowsWithName: number; sampleRecordsFiltered: number; duplicateRowsCollapsed: number }> => {
     const sourceUrl = settings.googleSpreadsheetSourceUrl?.trim() || '';
     if (!sourceUrl) throw new Error('Spreadsheet sumber belum dipilih. Buka Google Workspace & Cloud Hub → Google Sheets → Cari Spreadsheet Saya, lalu pilih file Anda.');
     const imported = await importPPKSFromSpreadsheet(
@@ -374,7 +385,7 @@ export default function App() {
         `Spreadsheet “${imported.spreadsheetTitle}”, tab “${imported.selectedTab}” berhasil dibaca (${imported.rowsRead} baris), tetapi tidak ditemukan baris responden yang memiliki kolom nama dikenali. Periksa judul kolom. Header: ${headers || '(kosong)'}`
       );
     }
-    handleLoadPPKSFromCloud(imported.records);
+    setPpksList((localRecords) => reconcileSpreadsheetPPKSRecords(localRecords, imported.records));
     setSettings((current) => ({
       ...current,
       googleSpreadsheetSourceUrl: sourceUrl,
@@ -384,7 +395,7 @@ export default function App() {
     const updatedAt = new Date().toLocaleString('id-ID');
     setLiveSyncState({
       type: 'success',
-      message: `Sumber “${imported.spreadsheetTitle}” → “${imported.selectedTab}”: ${imported.sourceDataRows} baris data (header tidak dihitung), ${imported.sourceRowsWithName} baris bernama, ${imported.records.length} PPKS dimuat; ${imported.sampleRecordsFiltered} contoh disaring; NIK terpetakan ${imported.recordsWithNIK}/${imported.records.length}. Sinkronisasi otomatis setiap 2 menit selama izin Google masih berlaku.`,
+      message: `Sumber “${imported.spreadsheetTitle}” → “${imported.selectedTab}”: ${imported.sourceDataRows} baris data, ${imported.records.length} PPKS unik dimuat, ${imported.duplicateRowsCollapsed} baris duplikat digabung, ${imported.sampleRecordsFiltered} contoh disaring; NIK terpetakan ${imported.recordsWithNIK}/${imported.records.length}. Sinkronisasi otomatis setiap 2 menit selama izin Google masih berlaku.`,
       lastUpdatedAt: updatedAt,
     });
     return {
@@ -392,6 +403,7 @@ export default function App() {
       sourceDataRows: imported.sourceDataRows,
       sourceRowsWithName: imported.sourceRowsWithName,
       sampleRecordsFiltered: imported.sampleRecordsFiltered,
+      duplicateRowsCollapsed: imported.duplicateRowsCollapsed,
     };
   };
 
@@ -433,7 +445,7 @@ export default function App() {
           });
           return;
         }
-        setPpksList((current) => mergePPKSRecords(current, imported.records));
+        setPpksList((current) => reconcileSpreadsheetPPKSRecords(current, imported.records));
         setSettings((current) => {
           if (
             current.googleSpreadsheetSourceName === imported.spreadsheetTitle &&
@@ -448,7 +460,7 @@ export default function App() {
         });
         setLiveSyncState({
           type: 'success',
-          message: `LIVE SYNC — “${imported.spreadsheetTitle}” → “${imported.selectedTab}”: ${imported.sourceDataRows} baris data, ${imported.sourceRowsWithName} baris bernama, ${imported.records.length} PPKS dimuat; ${imported.sampleRecordsFiltered} contoh disaring; NIK ${imported.recordsWithNIK}/${imported.records.length}.`,
+          message: `LIVE SYNC — “${imported.spreadsheetTitle}” → “${imported.selectedTab}”: ${imported.records.length} PPKS unik dimuat dari ${imported.sourceDataRows} baris; ${imported.duplicateRowsCollapsed} duplikat digabung; ${imported.sampleRecordsFiltered} contoh disaring; NIK ${imported.recordsWithNIK}/${imported.records.length}.`,
           lastUpdatedAt: new Date().toLocaleString('id-ID'),
         });
       } catch (error) {

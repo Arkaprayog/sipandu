@@ -1,7 +1,7 @@
 import { getAccessToken, invalidateAccessToken } from './firebase';
 import { IntegratedFormData, PPKSRecord } from '../types';
 import { normalizeExactNumericNIK } from './nikNumeric';
-import { sortPPKSRecordsByTimestamp } from './ppksData';
+import { deduplicatePPKSRecords, sortPPKSRecordsByTimestamp } from './ppksData';
 import { isLegacySamplePPKS, isObviousDemoMarker, LEGACY_SAMPLE_PPKS_IDS, LEGACY_SAMPLE_PPKS_NAMES } from '../data/initialData';
 
 export interface GoogleDriveFile {
@@ -269,11 +269,13 @@ export async function readSpreadsheetRichData(
       cell.formattedValue ||
       ''
     );
-    // Sheets stores true dates as day serial numbers. Return the exact sheet
-    // wall-clock as ISO without a timezone so sort order is independent of the
-    // formatted display locale (US mm/dd vs Indonesian dd/mm).
+    // Preserve Google Sheets' displayed timestamp format when the underlying
+    // date is numeric. Use an ISO wall-clock only as a fallback if Sheets gives
+    // no formatted value, so the application matches the visible source cell.
     const timestampNumber = cell.effectiveValue?.numberValue ?? cell.userEnteredValue?.numberValue;
     if (timestampColumns.has(index) && typeof timestampNumber === 'number' && timestampNumber >= 20000 && timestampNumber <= 80000) {
+      const formattedTimestamp = String(cell.formattedValue || '').trim();
+      if (formattedTimestamp) return formattedTimestamp;
       const date = new Date(Date.UTC(1899, 11, 30) + Math.round(timestampNumber * 86400000));
       const pad = (number: number) => String(number).padStart(2, '0');
       return `${date.getUTCFullYear()}-${pad(date.getUTCMonth() + 1)}-${pad(date.getUTCDate())}T${pad(date.getUTCHours())}:${pad(date.getUTCMinutes())}:${pad(date.getUTCSeconds())}`;
@@ -746,6 +748,7 @@ export async function importPPKSFromSpreadsheet(
   rowsWithoutRecognizedName: number;
   recordsBeforeDemoFilter: number;
   sampleRecordsFiltered: number;
+  duplicateRowsCollapsed: number;
   records: PPKSRecord[];
   recordsWithNIK: number;
   recordsMissingNIK: number;
@@ -775,8 +778,10 @@ export async function importPPKSFromSpreadsheet(
   const dataRows = rows.slice(1);
   const sourceRowsWithName = dataRows.filter((row) => Boolean(readRespondentName(headers, row))).length;
   const allMappedRecords = mapRowsToPPKSRecords(rows);
-  const records = allMappedRecords.filter((record) => !isLegacySamplePPKS(record));
-  const sampleRecordsFiltered = allMappedRecords.length - records.length;
+  const recordsAfterSampleFilter = allMappedRecords.filter((record) => !isLegacySamplePPKS(record));
+  const records = sortPPKSRecordsByTimestamp(deduplicatePPKSRecords(recordsAfterSampleFilter));
+  const sampleRecordsFiltered = allMappedRecords.length - recordsAfterSampleFilter.length;
+  const duplicateRowsCollapsed = recordsAfterSampleFilter.length - records.length;
   const nikHeadersFound = headers.filter((header) => isLikelyRespondentNIKHeader(header)).map((header) => header.trim());
   const recordsWithNIK = records.filter((record) => Boolean(String(record.nik || '').trim())).length;
   // Diagnose the source headers and value quality without returning any actual NIK values.
@@ -804,6 +809,7 @@ export async function importPPKSFromSpreadsheet(
     rowsWithoutRecognizedName: Math.max(0, dataRows.length - sourceRowsWithName),
     recordsBeforeDemoFilter: allMappedRecords.length,
     sampleRecordsFiltered,
+    duplicateRowsCollapsed,
     records,
     recordsWithNIK,
     recordsMissingNIK: records.length - recordsWithNIK,

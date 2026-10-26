@@ -1,0 +1,65 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { deduplicatePPKSRecords, formatPPKSTimestamp, samePPKSIdentity, sortPPKSRecordsByName } from './ppksData';
+import type { PPKSRecord } from '../types';
+
+function record(overrides: Partial<PPKSRecord> = {}): PPKSRecord {
+  return {
+    id: 'record-1',
+    timestamp: '10/25/2026 10:00:00 AM',
+    namaLengkap: 'Lesmana',
+    nik: '1271011505920003',
+    usia: 34,
+    jenisKelamin: 'Laki-laki',
+    kotaDomisili: 'Medan',
+    alamatLengkap: 'Jalan Contoh',
+    noHpWa: '081234567890',
+    jenisBantuan: '',
+    intervensiMental: '',
+    desil: 0,
+    fotoDiri: '',
+    fotoKtp: '',
+    statusAsesmen: 'Tahap Awal',
+    ...overrides,
+  };
+}
+
+test('deduplicates multiple records for the same person and keeps the newest timestamp/details', () => {
+  const older = record({ fotoDiri: 'https://example.test/foto.jpg' });
+  const newer = record({
+    id: 'record-2',
+    timestamp: '10/26/2026 11:29:19 AM',
+    namaLengkap: 'LES MANA',
+    fotoDiri: '',
+    fotoKtp: 'https://example.test/ktp.jpg',
+  });
+  const result = deduplicatePPKSRecords([older, newer]);
+  assert.equal(result.length, 1);
+  assert.equal(result[0].id, 'record-2');
+  assert.equal(result[0].timestamp, '10/26/2026 11:29:19 AM');
+  assert.equal(result[0].fotoDiri, 'https://example.test/foto.jpg');
+  assert.equal(result[0].fotoKtp, 'https://example.test/ktp.jpg');
+});
+
+test('does not combine people with a different confirmed NIK or conflicting phone number', () => {
+  const first = record();
+  const differentNik = record({ id: 'record-2', nik: '1271011505920004' });
+  const differentPhone = record({ id: 'record-3', nik: '', noHpWa: '089999999999' });
+  assert.equal(samePPKSIdentity(first, differentNik), false);
+  assert.equal(samePPKSIdentity(first, differentPhone), false);
+  assert.equal(deduplicatePPKSRecords([first, differentNik, differentPhone]).length, 3);
+});
+
+test('sorts PPKS names alphabetically from Lesmana to Tukinem', () => {
+  const sorted = sortPPKSRecordsByName([
+    record({ namaLengkap: 'Tukinem' }),
+    record({ namaLengkap: 'Lesmana' }),
+    record({ namaLengkap: 'Sulastri' }),
+  ]);
+  assert.deepEqual(sorted.map((item) => item.namaLengkap), ['Lesmana', 'Sulastri', 'Tukinem']);
+});
+
+test('preserves the original timestamp string received from Google Sheets', () => {
+  const sourceValue = '10/26/2026 11:29:19 AM';
+  assert.equal(formatPPKSTimestamp(sourceValue), sourceValue);
+});
