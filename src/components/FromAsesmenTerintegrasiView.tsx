@@ -196,8 +196,25 @@ const emptyAnswers = (): Record<string, AnswerValue> => {
 
 function answersForRecord(record?: PPKSRecord): Record<string, AnswerValue> {
   const values = emptyAnswers();
-  if (record?.officialAssessment) {
-    Object.entries(record.officialAssessment).forEach(([key, value]) => { values[key] = value; });
+
+  // The standalone Form Asesmen Terintegrasi must never hydrate from imported
+  // Google Form (including continuation-form) answers stored on officialAssessment.
+  // Old manually saved forms wrote all q1..q91 keys; migrate those only when the
+  // record is still marked Terintegrasi. New saves always use the dedicated field.
+  const legacyKeys = Array.from({ length: 91 }, (_, index) => 'q' + (index + 1));
+  const legacyManualAssessment = record?.statusAsesmen === 'Terintegrasi' &&
+    record.officialAssessment &&
+    legacyKeys.every((key) => Object.prototype.hasOwnProperty.call(record.officialAssessment, key))
+    ? record.officialAssessment
+    : undefined;
+  const savedAssessment = record?.formAsesmenTerintegrasi || legacyManualAssessment;
+
+  if (savedAssessment) {
+    Object.entries(savedAssessment).forEach(([key, value]) => {
+      // Whitelist keys that belong to this independent form. Ignore arbitrary
+      // imported field names even if they exist in an older cached record.
+      if (Object.prototype.hasOwnProperty.call(values, key)) values[key] = value;
+    });
   }
   if (record) {
     if (!String(values.q16 || '').trim()) values.q16 = record.namaLengkap || '';
@@ -286,7 +303,7 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
       ...currentPPKS,
       namaLengkap: (typeof clean.q16 === 'string' && clean.q16.trim()) ? clean.q16.trim() : currentPPKS.namaLengkap,
       nik: nikFromForm || currentPPKS.nik || '',
-      officialAssessment: clean,
+      formAsesmenTerintegrasi: clean,
       statusAsesmen: 'Terintegrasi',
     };
     onUpdatePPKS(updated);
