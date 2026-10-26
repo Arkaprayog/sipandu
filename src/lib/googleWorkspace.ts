@@ -1106,7 +1106,9 @@ async function recoverPhotosFromGoogleForms(
     }
   });
   const claimedCandidates = new Set(anchoredCandidateByRecord.values());
-  const remainingCandidates = responseData.candidates.filter((_, index) => !claimedCandidates.has(index));
+  const usedCandidateResponseIds = new Set<string>(
+    [...claimedCandidates].map((index) => responseData.candidates[index]?.responseId).filter(Boolean)
+  );
   const recordsMatchedByExistingPhoto = anchoredCandidateByRecord.size;
 
   let linksRecovered = 0;
@@ -1122,10 +1124,13 @@ async function recoverPhotosFromGoogleForms(
 
     // Do not attach a Form response already anchored to a different record.
     const sourceNIK = String(record.officialAssessment?.q23 || record.nik || '');
+    const availableCandidates = responseData.candidates.filter(
+      (candidate) => !usedCandidateResponseIds.has(candidate.responseId)
+    );
     const match = matchFormPhotoResponseForPPKS(
       record.namaLengkap,
       record.timestamp,
-      remainingCandidates,
+      availableCandidates,
       3 * 60 * 1000,
       sourceNIK,
       record.noHpWa || '',
@@ -1137,6 +1142,7 @@ async function recoverPhotosFromGoogleForms(
       };
     }
     recordsMatchedByIdentity++;
+    usedCandidateResponseIds.add(match.responseId);
     const updated: PPKSRecord = {
       ...record,
       fotoDiri: currentDiri || match.photos.diri || '',
