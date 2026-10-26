@@ -116,6 +116,10 @@ export interface SuratRecord {
 
 export interface AppSettings {
   googleFormTahapAwalUrl: string;
+  /** Separate follow-up form used by per-PPKS WhatsApp links. */
+  googleFormTahapLanjutanUrl?: string;
+  /** Google Forms entry number of the prefilled "ID PPKS" question. */
+  googleFormTahapLanjutanIdEntry?: string;
   googleFormKesehatanMentalUrl: string;
   /** Writable SIPANDU database spreadsheet (must not be the Google Forms response sheet). */
   googleSpreadsheetUrl: string;
