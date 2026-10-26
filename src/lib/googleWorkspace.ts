@@ -861,15 +861,21 @@ async function resolveFormLinkedToSpreadsheet(
       const form = await googleJson<GoogleFormPhotoMetadata>(
         \`https://forms.googleapis.com/v1/forms/\${extractFormId(formId)}\`
       );
-      inspected.set(formId, form);
-      if (form.linkedSheetId === spreadsheetId) return form;
+      if (form.linkedSheetId === spreadsheetId) {
+        inspected.set(formId, form);
+        return form;
+      }
       // Trust this configured ID pair only if legacy metadata omits linkedSheetId;
       // never do this for a different custom spreadsheet.
       if (
         !form.linkedSheetId &&
         spreadsheetId === GOOGLE_SIPANDU_RESOURCES.responseSpreadsheetId &&
         formId === GOOGLE_SIPANDU_RESOURCES.formId
-      ) return form;
+      ) {
+        inspected.set(formId, form);
+        return form;
+      }
+      inspected.set(formId, null);
     } catch (error) {
       console.warn('SIPANDU could not inspect Google Form metadata:', error);
       inspected.set(formId, null);
