@@ -1,4 +1,5 @@
 import React from 'react';
+import App from './App';
 import { createRoot } from 'react-dom/client';
 import './index.css';
 
@@ -123,29 +124,11 @@ const loadingTimer = window.setTimeout(() => {
   );
 }, 20000);
 
-import('./App')
-  .then(({ default: App }) => {
-    appLoaded = true;
-    window.clearTimeout(loadingTimer);
-    root.render(<StartupErrorBoundary><App /></StartupErrorBoundary>);
-  })
-  .catch((error: unknown) => {
-    appLoaded = true;
-    window.clearTimeout(loadingTimer);
-    const details = error instanceof Error
-      ? [`${error.name}: ${error.message}`, error.stack || ''].filter(Boolean).join('\n')
-      : String(error);
-    console.error('SIPANDU failed to import the main application module:', error);
-    root.render(
-      <main style={{ minHeight: '70vh', display: 'grid', placeItems: 'center', padding: 20, color: '#1f2937', background: '#fff7f7', fontFamily: 'system-ui,sans-serif' }}>
-        <section role="alert" aria-live="assertive" style={{ boxSizing: 'border-box', width: '100%', maxWidth: 680, padding: 20, border: '1px solid #b91c1c', borderRadius: 14, background: '#fff', overflowWrap: 'anywhere' }}>
-          <h1 style={{ margin: '0 0 8px', color: '#991b1b', fontSize: 20 }}>SIPANDU gagal memuat modul aplikasi</h1>
-          <p style={{ margin: '8px 0', fontSize: 14, lineHeight: 1.5 }}>
-            Halaman dan berkas bootstrap berhasil dimuat, tetapi modul aplikasi gagal dijalankan. Data browser tidak dihapus.
-          </p>
-          <code style={{ display: 'block', whiteSpace: 'pre-wrap', padding: 10, background: '#fee2e2', borderRadius: 8, fontSize: 12 }}>{details.slice(0, 3000)}</code>
-          {retryButton()}
-        </section>
-      </main>
-    );
-  });
+// The main application is bundled into the entry module. This deliberately avoids
+// a second network request for App-[hash].js, which can fail when a custom domain
+// serves a stale/mismatched deployment artifact.
+window.setTimeout(() => {
+  appLoaded = true;
+  window.clearTimeout(loadingTimer);
+  root.render(<StartupErrorBoundary><App /></StartupErrorBoundary>);
+}, 40);
