@@ -35,7 +35,7 @@ const komponenLayanan = [
   'Bantuan dan Asistensi Sosial', 'Dukungan Aksesibilitas',
 ];
 
-const pages: OfficialPage[] = [
+const sourcePages: OfficialPage[] = [
   {
     hasLetterhead: true,
     groups: [
@@ -186,6 +186,19 @@ const pages: OfficialPage[] = [
   },
 ];
 
+// Keep the assessment itself on eight intentional pages before four photo appendices.
+// Reuse the official question groups so no question, answer option, or official wording is lost.
+const pages: OfficialPage[] = [
+  { hasLetterhead: true, groups: sourcePages[0].groups.slice(0, 4) }, // Page 1: assessment header and addresses (1–15)
+  { groups: [sourcePages[0].groups[4], sourcePages[1].groups[0]] }, // Page 2: identity and basic status (16–29)
+  { groups: [sourcePages[1].groups[1]] }, // Page 3: PPKS caregiver (30–43)
+  { groups: sourcePages[2].groups }, // Page 4: rapid PPKS conditions (44–51)
+  { groups: [sourcePages[3].groups[0]] }, // Page 5: condition categories and physical profile (52–59)
+  { groups: sourcePages[3].groups.slice(1) }, // Page 6: social economy and housing (60–71)
+  { groups: sourcePages[4].groups.slice(0, 2) }, // Page 7: housing conditions and case plan (72–85)
+  { groups: [...sourcePages[4].groups.slice(2), ...sourcePages[5].groups] }, // Page 8: interventions and recommendations (86–91)
+];
+
 const emptyAnswers = (): Record<string, AnswerValue> => {
   const values: Record<string, AnswerValue> = { metaSatker: '', metaYear: '', metaSequence: '', q25: '-' };
   for (let n = 1; n <= 91; n++) values['q' + n] = '';
@@ -241,18 +254,29 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
   const [statusMessage, setStatusMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [printPhotoUrls, setPrintPhotoUrls] = useState<Record<string, string>>({});
   const [printPhotoErrors, setPrintPhotoErrors] = useState<Record<string, string>>({});
+  const [previewPhotoUrls, setPreviewPhotoUrls] = useState<Record<string, string>>({});
+  const [previewPhotoErrors, setPreviewPhotoErrors] = useState<Record<string, string>>({});
+  const [previewPhotoLoading, setPreviewPhotoLoading] = useState(false);
   const [preparingPrint, setPreparingPrint] = useState(false);
   const printObjectUrlsRef = useRef<string[]>([]);
+  const previewObjectUrlsRef = useRef<string[]>([]);
 
   const releasePrintPhotoUrls = () => {
     printObjectUrlsRef.current.forEach((url) => URL.revokeObjectURL(url));
     printObjectUrlsRef.current = [];
   };
 
+  const releasePreviewPhotoUrls = () => {
+    previewObjectUrlsRef.current.forEach((url) => URL.revokeObjectURL(url));
+    previewObjectUrlsRef.current = [];
+  };
+
   useEffect(() => () => {
     // Revoke private Drive photo blobs when navigating away from the assessment menu.
     printObjectUrlsRef.current.forEach((url) => URL.revokeObjectURL(url));
     printObjectUrlsRef.current = [];
+    previewObjectUrlsRef.current.forEach((url) => URL.revokeObjectURL(url));
+    previewObjectUrlsRef.current = [];
   }, []);
 
   useEffect(() => {
@@ -355,7 +379,7 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
     return '';
   };
 
-  const resolvePhotoForPrint = async (source: string): Promise<{ url: string; error: string; temporary: boolean }> => {
+  const resolvePhotoForPrint = async (source: string, purpose: 'print' | 'preview' = 'print'): Promise<{ url: string; error: string; temporary: boolean }> => {
     const trimmed = source.trim();
     if (!trimmed) return { url: '', error: 'Foto belum tersedia di sumber data responden.', temporary: false };
 
@@ -407,9 +431,55 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
       blob = new Blob([bytes], { type: inferredMime });
     }
     const url = URL.createObjectURL(blob);
-    printObjectUrlsRef.current.push(url);
+    if (purpose === 'preview') previewObjectUrlsRef.current.push(url);
+    else printObjectUrlsRef.current.push(url);
     return { url, error: '', temporary: true };
   };
+
+  useEffect(() => {
+    let active = true;
+    releasePreviewPhotoUrls();
+    setPreviewPhotoUrls({});
+    setPreviewPhotoErrors({});
+    if (!currentPPKS) {
+      setPreviewPhotoLoading(false);
+      return () => { active = false; releasePreviewPhotoUrls(); };
+    }
+
+    setPreviewPhotoLoading(true);
+    const loadPreviewPhotos = async () => {
+      const urls: Record<string, string> = {};
+      const errors: Record<string, string> = {};
+      await Promise.all(printablePhotos.map(async (photo) => {
+        try {
+          const resolved = await resolvePhotoForPrint(photo.source, 'preview');
+          if (resolved.url) urls[photo.key] = resolved.url;
+          if (resolved.error) errors[photo.key] = resolved.error;
+        } catch (error) {
+          errors[photo.key] = error instanceof Error ? error.message : String(error);
+        }
+      }));
+      if (!active) {
+        releasePreviewPhotoUrls();
+        return;
+      }
+      setPreviewPhotoUrls(urls);
+      setPreviewPhotoErrors(errors);
+      setPreviewPhotoLoading(false);
+    };
+    void loadPreviewPhotos();
+
+    return () => {
+      active = false;
+      releasePreviewPhotoUrls();
+    };
+  }, [
+    currentPPKS?.id,
+    currentPPKS?.fotoDiri,
+    currentPPKS?.fotoKtp,
+    currentPPKS?.fotoKk,
+    currentPPKS?.fotoRumah,
+  ]);
 
   const handlePrint = async () => {
     if (!currentPPKS) {
@@ -640,7 +710,7 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
             <Save className="h-4 w-4" /> Simpan Form
           </button>
           <button type="button" onClick={() => { void handlePrint(); }} disabled={preparingPrint || !currentPPKS} className="inline-flex items-center gap-2 rounded-lg border border-sky-400/40 bg-sky-950/50 px-4 py-2 text-xs font-bold text-white disabled:opacity-60">
-            <Printer className="h-4 w-4" /> {preparingPrint ? 'Menyiapkan 10 halaman…' : 'Cetak / Simpan PDF'}
+            <Printer className="h-4 w-4" /> {preparingPrint ? 'Menyiapkan 12 halaman…' : 'Cetak / Simpan PDF'}
           </button>
           <button type="button" onClick={handleReset} className="inline-flex items-center gap-2 rounded-lg border border-rose-400/40 bg-rose-950/40 px-4 py-2 text-xs font-bold text-white">
             <RotateCcw className="h-4 w-4" /> Kosongkan Form
@@ -653,6 +723,33 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
           {statusMessage.type === 'success' && <CheckCircle2 className="mr-1 inline h-4 w-4 align-middle" />}
           {statusMessage.text}
         </div>
+      )}
+
+      {currentPPKS && (
+        <section className="official-photo-gallery" aria-label="Foto PPKS dari data responden">
+          <div className="official-photo-gallery-heading">
+            <h3>Foto PPKS</h3>
+            <p>Foto diambil dari data PPKS yang dipilih dan ikut disertakan pada halaman 9–12 saat dicetak atau disimpan sebagai PDF.</p>
+          </div>
+          <div className="official-photo-gallery-grid">
+            {printablePhotos.map((photo) => (
+              <figure className="official-photo-preview-card" key={photo.key}>
+                <figcaption>{photo.title}</figcaption>
+                <div className="official-photo-preview-frame">
+                  {previewPhotoUrls[photo.key] && !previewPhotoErrors[photo.key] ? (
+                    <img src={previewPhotoUrls[photo.key]} alt={`${photo.title} — ${currentPPKS.namaLengkap || 'PPKS'}`} loading="lazy" />
+                  ) : (
+                    <div className="official-photo-preview-message">
+                      {previewPhotoLoading
+                        ? 'Memuat foto dari data PPKS…'
+                        : previewPhotoErrors[photo.key] || 'Foto belum tersedia pada data PPKS ini.'}
+                    </div>
+                  )}
+                </div>
+              </figure>
+            ))}
+          </div>
+        </section>
       )}
 
       {pages.map((page, pageIndex) => (
@@ -720,7 +817,7 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
             </tbody>
           </table>
 
-          {pageIndex === 5 && (
+          {pageIndex === 7 && (
             <>
               <p className="official-footer-note">** Perlu melampirkan foto/dokumen. Foto PPKS dapat dilakukan dengan closeup.</p>
               <div className="official-signature"><div>Petugas</div><div className="official-signature-line">( ........................................ )</div></div>
@@ -733,7 +830,7 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
         <section className="official-page official-photo-appendix" key={photo.key} aria-label={photo.title}>
           <div className="official-photo-appendix-heading">
             <h2>{photo.title}</h2>
-            <p>Form Asesmen Terintegrasi · Lampiran {index + 7} dari 10</p>
+            <p>Form Asesmen Terintegrasi · Halaman {index + 9} dari 12</p>
             <div className="official-photo-respondent">
               <span>Nama PPKS: <strong>{currentPPKS.namaLengkap || '-'}</strong></span>
               <span>NIK: <strong>{currentPPKS.nik || 'Belum terpetakan'}</strong></span>
