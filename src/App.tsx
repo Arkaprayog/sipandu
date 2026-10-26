@@ -36,8 +36,13 @@ function mergePPKSRecords(localRecords: PPKSRecord[], cloudRecords: PPKSRecord[]
     return {
       ...previous,
       ...next,
+      // A continuation Form may ask only for the PPKS ID and assessment answers.
+      // Blank identity fields from that sheet must not erase the stage-one profile.
+      namaLengkap: next.namaLengkap || previous.namaLengkap,
+      jenisKelamin: next.namaLengkap ? next.jenisKelamin : previous.jenisKelamin,
       nik: next.nik || previous.nik,
       usia: next.usia || previous.usia,
+      desil: next.desil || previous.desil,
       alamatLengkap: next.alamatLengkap || previous.alamatLengkap,
       kotaDomisili: next.kotaDomisili || previous.kotaDomisili,
       noHpWa: next.noHpWa || previous.noHpWa,
@@ -57,9 +62,11 @@ function mergePPKSRecords(localRecords: PPKSRecord[], cloudRecords: PPKSRecord[]
             )
           ) } as NonNullable<PPKSRecord['officialAssessment']>)
         : previous.officialAssessment,
-      statusAsesmen: next.officialAssessment || next.integratedForm
-        ? 'Terintegrasi'
-        : (previous.statusAsesmen || next.statusAsesmen),
+      statusAsesmen: next.statusAsesmen === 'Lanjutan'
+        ? 'Lanjutan'
+        : next.integratedForm
+          ? 'Terintegrasi'
+          : (previous.statusAsesmen || next.statusAsesmen),
     };
   };
 
