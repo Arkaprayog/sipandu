@@ -36,6 +36,13 @@ export function isLikelyRespondentNIKHeader(header: string): boolean {
     'nik', 'nomornik', 'nonik', 'nikresponden', 'nikppks', 'nomornikresponden', 'noidentitasnik', 'nomorindukkependudukanppks', 'nomoridentitasresponden', 'nomorindukkependudukanppks', 'nomorindukkependudukanresponden', 'nomorindukkependudukancalonresponden', 'nomorindukkependudukansesuaiktp', 'nomorindukkependudukansesuaikartutandapenduduk', 'niksesuaikartutandapenduduk', 'nomoridentitassesuaiktp', 'nomoridentitaspenduduk', 'nomorindukkependudukandiri', 'nikcalonresponden', 'nomoridentitasppks', 'niksesuaikartuidentitasresponden',
     'nomorindukkependudukan', 'noindukkependudukan', 'indukkependudukan',
     'noinduk', 'nokependudukan', 'nomorkependudukan',
+    'nomorindukkependudukansesuaikartu', 'nomorindukkependudukankartu',
+    'nomorindukkependudukansesuaiidentitas', 'nomorindukkependudukancalonppks',
+    'nomorindukkependudukancalonodhiv', 'noindukkependudukansesuaiktp',
+    'nomoridentitaskependudukan', 'nomoridentitassesuaikartutandapenduduk',
+    'nomoridentitassesuaikartukeluarga', 'niksesuaidenganktp',
+    'niksesuaidengankartutandapenduduk', 'nikrespondenppks',
+    'nomorindukkependudukan16digit', 'nomoridentitasnasionalresponden',
     'nomorktp', 'noktp', 'ktpnik', 'nikktp', 'nomornikktp', 'nomorindukktp', 'noindukktp', 'nomorindukkependudukanktp', 'niksesuaiktp', 'nomorindukkependudukanrespondenppks',
     'kartutandapenduduk', 'ektp', 'kependudukan',
     'nomoridentitas', 'noidentitas', 'identitasresponden', 'nomorindukpenduduk', 'noindukkependudukanresponden', 'niksesuaikartuidentitas', 'niksesuaiktpresponden',
@@ -95,6 +102,9 @@ export function readNIKFromSheetRow(headers: string[], row: string[]): string {
       'nik', 'nikresponden', 'nikppks', 'nomorindukkependudukan',
       'nomorindukkependudukanresponden', 'nomorindukkependudukancalonresponden', 'nomorindukkependudukansesuaiktp', 'nomorindukkependudukanktp', 'nomoridentitasresponden', 'nomoridentitasppks', 'nikcalonresponden', 'nomorktp', 'nomorktpresponden',
       'noktp', 'noktpresponden', 'niksesuaiktp', 'ktpnik', 'nikktp',
+      'nomorindukkependudukansesuaikartutandapenduduk',
+      'nomoridentitassesuaikartutandapenduduk',
+      'nomorindukkependudukan16digit', 'nikrespondenppks',
     ].includes(normalized)) points += 100;
     if (normalized.includes('responden') || normalized.includes('ppks') || normalized.includes('calonresponden')) points += 60;
     if (normalized.includes('nik')) points += 35;
