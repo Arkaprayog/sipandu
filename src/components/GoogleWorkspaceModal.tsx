@@ -216,6 +216,21 @@ export const GoogleWorkspaceModal: React.FC<GoogleWorkspaceModalProps> = ({
     return () => unsubscribe();
   }, []);
 
+  // Keep the connection status in sync when an automatic token refresh completes.
+  useEffect(() => {
+    let active = true;
+    const syncTokenState = async () => {
+      const currentToken = await getAccessToken();
+      if (active) setToken(currentToken);
+    };
+    window.addEventListener('sipandu-workspace-token-updated', syncTokenState);
+    void syncTokenState();
+    return () => {
+      active = false;
+      window.removeEventListener('sipandu-workspace-token-updated', syncTokenState);
+    };
+  }, []);
+
   // A redirect-based OAuth flow reloads this page after Google consent.
   // Consume the redirect result once during startup and restore the API token.
   useEffect(() => {
@@ -774,7 +789,7 @@ export const GoogleWorkspaceModal: React.FC<GoogleWorkspaceModalProps> = ({
                       {googleUser ? (getWorkspaceGoogleEmail(googleUser) || 'Profil Google tidak membagikan alamat email') : 'Hubungkan akun Google untuk sinkronisasi Drive, Sheets, dan Forms.'}
                     </p>
                     <span className="text-[10px] text-sky-300 font-mono">
-                      Status Token: {token ? 'Tersedia di sesi ini; validitas diuji saat API dipanggil' : (googleUser ? 'Perlu otorisasi ulang' : 'Belum diotorisasi')}
+                      Status Token: {token ? 'Aktif; SIPANDU mencoba memperbaruinya otomatis' : (googleUser ? 'Penyegaran otomatis sedang dicoba' : 'Hubungkan akun Google sekali')}
                     </span>
                   </div>
                 </div>
