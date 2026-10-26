@@ -37,7 +37,7 @@ jobs:
         with:
           # The legacy "tools" SDK package is no longer published; requesting it
           # makes sdkmanager exit with "Failed to find package 'tools'".
-          packages: platform-tools, platforms;android-35, build-tools;35.0.0
+          packages: platform-tools platforms;android-35 build-tools;35.0.0
 
       - name: Install web dependencies
         run: bun install --frozen-lockfile
