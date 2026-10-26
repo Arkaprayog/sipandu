@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { ProfileUser } from '../types';
 import { getWaktuGreeting } from '../utils/helpers';
-import { Bell, Settings, LogOut, Edit3, ShieldAlert, Cloud } from 'lucide-react';
+import { Bell, Settings, LogOut, Edit3, ShieldAlert, Cloud, User } from 'lucide-react';
 import { KemensosLogo } from './KemensosLogo';
 
 interface HeaderProps {
@@ -27,6 +27,11 @@ export const Header: React.FC<HeaderProps> = ({
 }) => {
   const [currentTimeStr, setCurrentTimeStr] = useState<string>('');
   const [greeting, setGreeting] = useState<string>('Pagi');
+  const [profilePhotoFailed, setProfilePhotoFailed] = useState(false);
+
+  useEffect(() => {
+    setProfilePhotoFailed(false);
+  }, [profile.photoUrl]);
 
   useEffect(() => {
     const updateTime = () => {
@@ -63,16 +68,18 @@ export const Header: React.FC<HeaderProps> = ({
             {/* Foto profil + Menu Edit Profil di bawahnya */}
             <div className="flex flex-col items-center">
               <div className="relative w-14 h-14 md:w-16 md:h-16 rounded-full p-0.5 border-2 border-rose-500/50 shadow-[0_0_12px_rgba(244,63,94,0.3)] bg-black/40 overflow-hidden">
-                <img
-                  src={profile.photoUrl}
-                  alt={profile.nama}
-                  className="w-full h-full object-cover rounded-full"
-                  onError={(e) => {
-                    // Fallback avatar
-                    (e.target as HTMLImageElement).src =
-                      'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80';
-                  }}
-                />
+                {profile.photoUrl && !profilePhotoFailed ? (
+                  <img
+                    src={profile.photoUrl}
+                    alt={profile.nama || 'Foto profil petugas'}
+                    className="w-full h-full object-cover rounded-full"
+                    onError={() => setProfilePhotoFailed(true)}
+                  />
+                ) : (
+                  <div className="w-full h-full rounded-full flex items-center justify-center bg-emerald-950/80" aria-label="Foto profil belum tersedia">
+                    <User className="h-7 w-7 text-sky-200" />
+                  </div>
+                )}
               </div>
               <button
                 type="button"
