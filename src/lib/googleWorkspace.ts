@@ -3,7 +3,7 @@ import { IntegratedFormData, PPKSRecord } from '../types';
 import { normalizeExactNumericNIK } from './nikNumeric';
 import { deduplicatePPKSRecords, sortPPKSRecordsByTimestamp } from './ppksData';
 import { classifyPPKSPhotoHeader, normalizePPKSPhotoSource, readPPKSPhotoSourceByKind } from './photoSources';
-import { googleDriveViewUrl, matchFormPhotoResponseForPPKS, FormPhotoResponseCandidate } from './formPhotoRecovery';
+import { googleDriveViewUrl, matchFormPhotoResponseForPPKS, type FormPhotoResponseCandidate } from './formPhotoRecovery';
 import { GOOGLE_SIPANDU_RESOURCES } from './googleSIPANDUResources';
 import { isLegacySamplePPKS, isObviousDemoMarker, LEGACY_SAMPLE_PPKS_IDS, LEGACY_SAMPLE_PPKS_NAMES } from '../data/initialData';
 
@@ -974,7 +974,16 @@ export async function importPPKSFromSpreadsheet(
   let photosRecoveredFromForm = 0;
   let photoRecoveryStatus: 'not-needed' | 'recovered' | 'no-match' | 'failed' | 'not-applicable' = 'not-applicable';
 
-  if (metadata.spreadsheetId === GOOGLE_SIPANDU_RESOURCES.responseSpreadsheetId) {
+  const normalizedSpreadsheetTitle = normalizeSheetHeader(metadata.title);
+  const normalizedSelectedTab = normalizeSheetHeader(selectedTab);
+  const isKnownATENSIResponseSheet =
+    metadata.spreadsheetId === GOOGLE_SIPANDU_RESOURCES.responseSpreadsheetId ||
+    (
+      normalizedSpreadsheetTitle.includes('asesmenprogramasistensirehabilitasisosial') &&
+      normalizedSpreadsheetTitle.includes('responses') &&
+      normalizedSelectedTab.includes('formresponses')
+    );
+  if (isKnownATENSIResponseSheet) {
     const hasMissingPhoto = records.some((record) =>
       !record.fotoDiri || !record.fotoKtp || !record.fotoKk || !record.fotoRumah
     );
