@@ -29,6 +29,7 @@ import { PPKSRecord } from '../types';
 import { deduplicatePPKSRecords, EXPECTED_REAL_PPKS_COUNT, parsePPKSTimestamp } from './ppksData';
 import { isLegacySamplePPKS } from '../data/initialData';
 import { GOOGLE_WORKSPACE_EMAIL } from './googleSIPANDUResources';
+import { normalizePPKSPhotoSource } from './photoSources';
 
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
@@ -700,6 +701,16 @@ export async function reconcilePPKSFirestoreWithSpreadsheet(sourceRecords: PPKSR
     }
 
     merged.id = source.id;
+    // Keep only actual image URLs/data; old cache values sometimes held a bare
+    // Drive filename, which looked non-empty but could never be rendered.
+    merged.fotoDiri = normalizePPKSPhotoSource(source.fotoDiri) ||
+      normalizePPKSPhotoSource(preserved.fotoDiri) || '';
+    merged.fotoKtp = normalizePPKSPhotoSource(source.fotoKtp) ||
+      normalizePPKSPhotoSource(preserved.fotoKtp) || '';
+    merged.fotoKk = normalizePPKSPhotoSource(source.fotoKk) ||
+      normalizePPKSPhotoSource(preserved.fotoKk) || '';
+    merged.fotoRumah = normalizePPKSPhotoSource(source.fotoRumah) ||
+      normalizePPKSPhotoSource(preserved.fotoRumah) || '';
     // Timestamp stays exactly as formatted in Google Sheets, even if an older
     // stored record had a different timestamp representation.
     merged.timestamp = source.timestamp;
