@@ -647,13 +647,22 @@ function mapRowsToPPKSRecords(rows: string[][]): PPKSRecord[] {
         officialAssessment.q16 = value;
       }
     });
-    // Numbered official-PDF headings such as "23. NIK **" are first stored in
-    // officialAssessment.q23. Recover the validated 16-digit NIK from that
-    // canonical answer when the general column detector did not recognize it.
-    if (!nik && typeof officialAssessment.q23 === 'string') {
+    // Official question 23 is the canonical respondent NIK field in the
+    // integrated assessment. Prefer it over generic NIK/KTP header scoring,
+    // which may otherwise select a secondary identity-number column.
+    const officialQ23NIK = typeof officialAssessment.q23 === 'string'
+      ? normalizeNIKCellValue(officialAssessment.q23)
+      : '';
+    if (officialQ23NIK) {
+      nik = officialQ23NIK;
+      officialAssessment.q23 = officialQ23NIK;
+    } else if (!nik && typeof officialAssessment.q23 === 'string') {
       nik = normalizeNIKCellValue(officialAssessment.q23);
+      if (nik) officialAssessment.q23 = nik;
+    } else if (nik && !String(officialAssessment.q23 ?? '').trim()) {
+      // Preserve the recognized respondent NIK for forms without numbered Q23.
+      officialAssessment.q23 = nik;
     }
-    if (nik) officialAssessment.q23 = nik;
     // Use only fields that identify a specific submission, not a generic "ID"
     // or NIK that may be repeated across multiple submitted rows.
     const externalId = readCellByAliases(headers, row, [
