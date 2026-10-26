@@ -495,8 +495,10 @@ export default function App() {
         `Spreadsheet “${imported.spreadsheetTitle}”, tab “${imported.selectedTab}” berhasil dibaca (${imported.rowsRead} baris), tetapi tidak ditemukan baris responden yang memiliki kolom nama dikenali. Periksa judul kolom. Header: ${headers || '(kosong)'}`
       );
     }
-    const firestoreDocumentsRemoved = await runFirestoreRosterReconciliation(imported.records, true);
-    setPpksList((localRecords) => reconcileSpreadsheetPPKSRecords(localRecords, imported.records));
+    const continuation = await mergeContinuationResponses(imported.records);
+    const recordsForSync = continuation.records;
+    const firestoreDocumentsRemoved = await runFirestoreRosterReconciliation(recordsForSync, true);
+    setPpksList((localRecords) => reconcileSpreadsheetPPKSRecords(localRecords, recordsForSync));
     setSettings((current) => ({
       ...current,
       googleSpreadsheetSourceUrl: sourceUrl,
@@ -504,19 +506,19 @@ export default function App() {
       googleSpreadsheetSourceTab: imported.selectedTab,
     }));
     const updatedAt = new Date().toLocaleString('id-ID');
-    const hasExpectedRoster = imported.records.length === EXPECTED_REAL_PPKS_COUNT;
+    const hasExpectedRoster = recordsForSync.length === EXPECTED_REAL_PPKS_COUNT;
     const firestoreMessage = !hasExpectedRoster
-      ? `Firestore TIDAK diubah: spreadsheet memuat ${imported.records.length} PPKS unik, sedangkan roster terverifikasi harus ${EXPECTED_REAL_PPKS_COUNT}. Periksa tab/hasil impor; tidak ada dokumen yang dihapus.`
+      ? `Firestore penyelarasan penuh dilewati: ${recordsForSync.length} PPKS unik terbaca, sedangkan roster yang dipakai untuk pembersihan harus ${EXPECTED_REAL_PPKS_COUNT}. Data sumber tetap dimuat; tidak ada dokumen yang dihapus.`
       : firestoreDocumentsRemoved === null
-        ? 'Firestore belum diselaraskan; periksa izin akun owner/supervisor atau koneksi Firebase. Data Firestore tidak dihapus oleh proses yang gagal.'
+        ? 'Data Sheets berhasil dimuat, tetapi Firestore belum diselaraskan; periksa izin owner/supervisor atau koneksi Firebase.'
         : `Firestore diselaraskan ke ${EXPECTED_REAL_PPKS_COUNT} PPKS; ${firestoreDocumentsRemoved} dokumen lama/duplikat di luar roster dibersihkan.`;
     setLiveSyncState({
-      type: hasExpectedRoster && firestoreDocumentsRemoved !== null ? 'success' : 'error',
-      message: `Sumber “${imported.spreadsheetTitle}” → “${imported.selectedTab}”: ${imported.sourceDataRows} baris data, ${imported.records.length} PPKS unik dimuat, ${imported.duplicateRowsCollapsed} duplikat spreadsheet digabung, ${imported.sampleRecordsFiltered} contoh disaring. Foto sumber: diri ${imported.photoCounts.diri}/${imported.records.length}, KTP ${imported.photoCounts.ktp}/${imported.records.length}, KK ${imported.photoCounts.kk}/${imported.records.length}, rumah ${imported.photoCounts.rumah}/${imported.records.length}; tautan dipulihkan dari Forms: ${imported.photosRecoveredFromForm}; status pemulihan: ${imported.photoRecoveryStatus} — ${imported.photoRecoveryDetail} ${firestoreMessage} NIK terpetakan ${imported.recordsWithNIK}/${imported.records.length}. Sinkronisasi otomatis setiap 5 menit saat dashboard terbuka dan izin Google masih berlaku.`,
+      type: 'success',
+      message: `Sumber “${imported.spreadsheetTitle}” → “${imported.selectedTab}”: ${imported.sourceDataRows} baris data, ${recordsForSync.length} PPKS unik dimuat, ${imported.duplicateRowsCollapsed} duplikat spreadsheet digabung, ${imported.sampleRecordsFiltered} contoh disaring. Respons Form lanjutan dipadankan: ${continuation.matchedResponses}. ${continuation.warning ? continuation.warning + ' ' : ''}Foto sumber: diri ${imported.photoCounts.diri}/${imported.records.length}, KTP ${imported.photoCounts.ktp}/${imported.records.length}, KK ${imported.photoCounts.kk}/${imported.records.length}, rumah ${imported.photoCounts.rumah}/${imported.records.length}; tautan dipulihkan dari Forms: ${imported.photosRecoveredFromForm}; status pemulihan: ${imported.photoRecoveryStatus} — ${imported.photoRecoveryDetail} ${firestoreMessage} NIK terpetakan ${imported.recordsWithNIK}/${imported.records.length}. Sinkronisasi otomatis setiap 5 menit saat dashboard terbuka dan izin Google masih berlaku.`,
       lastUpdatedAt: updatedAt,
     });
     return {
-      records: imported.records.length,
+      records: recordsForSync.length,
       sourceDataRows: imported.sourceDataRows,
       sourceRowsWithName: imported.sourceRowsWithName,
       sampleRecordsFiltered: imported.sampleRecordsFiltered,
