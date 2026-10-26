@@ -797,6 +797,88 @@ interface GoogleFormPhotoMetadata {
  * one photo field is missing; a conservative name/timestamp match prevents
  * assigning another respondent's attachment.
  */
+interface CachedGoogleFormPhotoResponses {
+  formId: string;
+  loadedAt: number;
+  candidates: FormPhotoResponseCandidate[];
+}
+let cachedGoogleFormPhotoResponses: CachedGoogleFormPhotoResponses | null = null;
+let googleFormPhotoResponsesInFlight: Promise<FormPhotoResponseCandidate[]> | null = null;
+
+async function loadGoogleFormPhotoResponseCandidates(formId: string): Promise<FormPhotoResponseCandidate[]> {
+  if (
+    cachedGoogleFormPhotoResponses &&
+    cachedGoogleFormPhotoResponses.formId === formId &&
+    Date.now() - cachedGoogleFormPhotoResponses.loadedAt < 5 * 60 * 1000
+  ) return cachedGoogleFormPhotoResponses.candidates;
+  if (googleFormPhotoResponsesInFlight) return googleFormPhotoResponsesInFlight;
+
+  const operation = (async (): Promise<FormPhotoResponseCandidate[]> => {
+    const [form, responses] = await Promise.all([
+      googleJson<GoogleFormPhotoMetadata>(`https://forms.googleapis.com/v1/forms/${extractFormId(formId)}`),
+      fetchFormResponses(formId),
+    ]);
+    const kindByQuestionId = new Map<string, ReturnType<typeof classifyPPKSPhotoHeader>>();
+    const nameQuestionIds = new Set<string>();
+    const questionTitles = new Map<string, string>();
+    for (const item of form.items || []) {
+      const question = item.questionItem?.question;
+      const questionId = String(question?.questionId || '').trim();
+      const title = String(item.title || '').trim();
+      if (!questionId || !title) continue;
+      questionTitles.set(questionId, title);
+      if (question?.fileUploadQuestion) {
+        const kind = classifyPPKSPhotoHeader(title);
+        if (kind) kindByQuestionId.set(questionId, kind);
+      }
+      const normalizedTitle = normalizeSheetHeader(title);
+      if (
+        /nama/.test(normalizedTitle) &&
+        !/(asesor|asessor|petugas|pendamping|supervisor|ayah|ibu|wali|pasangan|suami|istri|kontakdarurat|penanggungjawab)/.test(normalizedTitle)
+      ) {
+        nameQuestionIds.add(questionId);
+      }
+    }
+
+    return responses.map((response) => {
+      const photos: FormPhotoResponseCandidate['photos'] = {};
+      let respondentName = '';
+      for (const [questionId, answer] of Object.entries(response.answers || {})) {
+        if (nameQuestionIds.has(questionId) && !respondentName) {
+          respondentName = (answer.textAnswers?.answers || [])
+            .map((entry) => String(entry.value || '').trim())
+            .find(Boolean) || '';
+        }
+        const kind = kindByQuestionId.get(questionId);
+        if (!kind || photos[kind]) continue;
+        const file = (answer.fileUploadAnswers?.answers || []).find((entry) => entry.fileId);
+        if (file?.fileId) photos[kind] = googleDriveViewUrl(file.fileId);
+      }
+      return {
+        responseId: response.responseId,
+        timestamp: response.createTime || response.lastSubmittedTime || '',
+        respondentName,
+        photos,
+      };
+    }).filter((candidate) => Object.values(candidate.photos).some(Boolean));
+  })();
+  googleFormPhotoResponsesInFlight = operation;
+  try {
+    const candidates = await operation;
+    cachedGoogleFormPhotoResponses = { formId, loadedAt: Date.now(), candidates };
+    return candidates;
+  } finally {
+    googleFormPhotoResponsesInFlight = null;
+  }
+}
+
+/**
+ * If the linked response Sheet did not expose Drive hyperlinks in photo cells,
+ * recover file IDs straight from Google Forms' fileUploadAnswers. This fallback
+ * runs only for SIPANDU's verified response spreadsheet and only when at least
+ * one photo field is missing; a conservative name/timestamp match prevents
+ * assigning another respondent's attachment.
+ */
 async function recoverPhotosFromGoogleForms(
   records: PPKSRecord[],
   formId: string,
@@ -809,59 +891,7 @@ async function recoverPhotosFromGoogleForms(
   );
   if (!missingPhotos || !records.length) return { records, linksRecovered: 0 };
 
-  const [form, responses] = await Promise.all([
-    googleJson<GoogleFormPhotoMetadata>(`https://forms.googleapis.com/v1/forms/${extractFormId(formId)}`),
-    fetchFormResponses(formId),
-  ]);
-
-  const kindByQuestionId = new Map<string, ReturnType<typeof classifyPPKSPhotoHeader>>();
-  const nameQuestionIds = new Set<string>();
-  const questionTitles = new Map<string, string>();
-  for (const item of form.items || []) {
-    const question = item.questionItem?.question;
-    const questionId = String(question?.questionId || '').trim();
-    const title = String(item.title || '').trim();
-    if (!questionId || !title) continue;
-    questionTitles.set(questionId, title);
-    if (question?.fileUploadQuestion) {
-      const kind = classifyPPKSPhotoHeader(title);
-      if (kind) kindByQuestionId.set(questionId, kind);
-    }
-    const normalizedTitle = normalizeSheetHeader(title);
-    if (
-      /nama/.test(normalizedTitle) &&
-      !/(asesor|asessor|petugas|pendamping|supervisor|ayah|ibu|wali|pasangan|suami|istri|kontakdarurat|penanggungjawab)/.test(normalizedTitle)
-    ) {
-      nameQuestionIds.add(questionId);
-    }
-  }
-
-  const candidates: FormPhotoResponseCandidate[] = responses.map((response) => {
-    const photos: FormPhotoResponseCandidate['photos'] = {};
-    let respondentName = '';
-    for (const [questionId, answer] of Object.entries(response.answers || {})) {
-      const title = questionTitles.get(questionId) || '';
-      if (nameQuestionIds.has(questionId) && !respondentName) {
-        respondentName = (answer.textAnswers?.answers || [])
-          .map((entry) => String(entry.value || '').trim())
-          .find(Boolean) || '';
-      }
-      const kind = kindByQuestionId.get(questionId);
-      if (!kind || photos[kind]) continue;
-      const file = (answer.fileUploadAnswers?.answers || []).find((entry) => entry.fileId);
-      if (file?.fileId) photos[kind] = googleDriveViewUrl(file.fileId);
-      // Keep title referenced here to make it explicit that only classified upload
-      // question IDs (not arbitrary file answers) can map into a photo field.
-      void title;
-    }
-    return {
-      responseId: response.responseId,
-      timestamp: response.createTime || response.lastSubmittedTime || '',
-      respondentName,
-      photos,
-    };
-  }).filter((candidate) => Object.values(candidate.photos).some(Boolean));
-
+  const candidates = await loadGoogleFormPhotoResponseCandidates(formId);
   if (!candidates.length) return { records, linksRecovered: 0 };
   let linksRecovered = 0;
   const enriched = records.map((record) => {
@@ -875,8 +905,6 @@ async function recoverPhotosFromGoogleForms(
     const match = matchFormPhotoResponseForPPKS(record.namaLengkap, record.timestamp, candidates);
     const updated: PPKSRecord = {
       ...record,
-      // Replace a bare uploaded filename with a real Drive URL when Forms API
-      // returned the file ID; preserve already valid sources.
       fotoDiri: currentDiri || match?.photos.diri || '',
       fotoKtp: currentKtp || match?.photos.ktp || '',
       fotoKk: currentKk || match?.photos.kk || '',
