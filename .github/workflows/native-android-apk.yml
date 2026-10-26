@@ -34,6 +34,10 @@ jobs:
 
       - name: Install Android SDK
         uses: android-actions/setup-android@v3
+        with:
+          # The legacy "tools" SDK package is no longer published; requesting it
+          # makes sdkmanager exit with "Failed to find package 'tools'".
+          packages: platform-tools
 
       - name: Install web dependencies
         run: bun install --frozen-lockfile
