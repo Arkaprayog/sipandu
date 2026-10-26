@@ -34,7 +34,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
     e.preventDefault();
     setErrorMsg('');
     setIsSubmitting(true);
-    let timeoutId: ReturnType<typeof window.setTimeout> | undefined;
+    let timeoutId: number | undefined;
     try {
       // A stalled mobile request must not leave the submit button disabled forever.
       const credential = await Promise.race([
