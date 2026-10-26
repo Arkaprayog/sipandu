@@ -164,12 +164,18 @@ function normalizeAppSettings(value: unknown): AppSettings {
   }
 
   const sourceName = wasAutoDefaultSource ? '' : (saved.googleSpreadsheetSourceName || '');
+  // Default the read-only source to the actual ATENSI Google Forms response
+  // spreadsheet already defined in the project resources. This enables live
+  // dashboard sync after OAuth is authorized, without selecting a write target.
+  const resolvedSourceUrl = sourceUrl || GOOGLE_SIPANDU_RESOURCES.responseSpreadsheetUrl;
 
   return {
     ...initialAppSettings,
     ...saved,
+    googleFormTahapLanjutanUrl: saved.googleFormTahapLanjutanUrl || '',
+    googleFormTahapLanjutanIdEntry: saved.googleFormTahapLanjutanIdEntry || '',
     googleSpreadsheetUrl: databaseUrl,
-    googleSpreadsheetSourceUrl: sourceUrl,
+    googleSpreadsheetSourceUrl: resolvedSourceUrl,
     googleSpreadsheetSourceName: sourceName,
     googleSpreadsheetSourceTab: saved.googleSpreadsheetSourceTab || '',
   };
