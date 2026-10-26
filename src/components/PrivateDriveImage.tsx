@@ -17,10 +17,27 @@ function firstLink(value: string): string {
   return (url?.[0] || trimmed).replace(/[)\]}]+$/, '');
 }
 
+function inferImageMimeType(buffer: ArrayBuffer): string {
+  const bytes = new Uint8Array(buffer);
+  if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return 'image/jpeg';
+  if (bytes.length >= 8 && bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47) return 'image/png';
+  if (bytes.length >= 6 && String.fromCharCode(...bytes.slice(0, 6)).startsWith('GIF8')) return 'image/gif';
+  if (bytes.length >= 12 && String.fromCharCode(...bytes.slice(0, 4)) === 'RIFF' && String.fromCharCode(...bytes.slice(8, 12)) === 'WEBP') return 'image/webp';
+  if (bytes.length >= 2 && String.fromCharCode(...bytes.slice(0, 2)) === 'BM') return 'image/bmp';
+  if (bytes.length >= 12 && String.fromCharCode(...bytes.slice(4, 8)) === 'ftyp') {
+    const brand = String.fromCharCode(...bytes.slice(8, 12)).toLowerCase();
+    if (/(heic|heix|hevc|hevx|mif1|msf1)/.test(brand)) return 'image/heic';
+    if (/(avif|avis)/.test(brand)) return 'image/avif';
+  }
+  return '';
+}
+
 function driveFileId(value: string): string | null {
   const source = firstLink(value);
-  const pathMatch = source.match(/\/file\/d\/([a-zA-Z0-9_-]+)/);
+  const pathMatch = source.match(/\/(?:file\/)?d\/([a-zA-Z0-9_-]{15,})/);
   if (pathMatch) return pathMatch[1];
+  const driveFilesPath = source.match(/\/drive\/u\/\d+\/files\/([a-zA-Z0-9_-]{15,})/);
+  if (driveFilesPath) return driveFilesPath[1];
   const queryMatch = source.match(/[?&]id=([a-zA-Z0-9_-]+)/);
   if (queryMatch && /drive\.google\.com|docs\.google\.com/i.test(source)) return queryMatch[1];
   if (/^[a-zA-Z0-9_-]{20,}$/.test(source)) return source;
@@ -125,9 +142,17 @@ export const PrivateDriveImage: React.FC<PrivateDriveImageProps> = ({
           }
           throw new Error(message || `Google Drive menolak akses foto (HTTP ${response.status}).`);
         }
-        const blob = await response.blob();
+        const downloadedBlob = await response.blob();
+        let blob = downloadedBlob;
         if (!blob.type.startsWith('image/')) {
-          throw new Error('File Drive yang ditautkan bukan file gambar yang bisa ditampilkan.');
+          // Some Drive uploads return application/octet-stream despite containing
+          // an actual image. Detect common image signatures before rejecting them.
+          const bytes = await downloadedBlob.arrayBuffer();
+          const inferredMime = inferImageMimeType(bytes);
+          if (!inferredMime) {
+            throw new Error('File Drive yang ditautkan bukan file gambar yang bisa ditampilkan.');
+          }
+          blob = new Blob([bytes], { type: inferredMime });
         }
         objectUrl = URL.createObjectURL(blob);
         if (!active) {
