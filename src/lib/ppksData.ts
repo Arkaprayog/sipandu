@@ -92,13 +92,13 @@ export function samePPKSIdentity(
   b: Pick<PPKSRecord, 'id' | 'namaLengkap' | 'nik' | 'noHpWa'>
 ): boolean {
   const normalizeText = (value: unknown) => String(value ?? '')
-    .normalize('NFD').replace(/[\\u0300-\\u036f]/g, '')
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
     .toLocaleLowerCase('id-ID').replace(/[^a-z0-9]/g, '');
   const normalizeNIK = (value: unknown) => {
-    const digits = String(value ?? '').replace(/\\D/g, '');
-    return /^\\d{16}$/.test(digits) ? digits : '';
+    const digits = String(value ?? '').replace(/\D/g, '');
+    return /^\d{16}$/.test(digits) ? digits : '';
   };
-  const normalizePhone = (value: unknown) => String(value ?? '').replace(/\\D/g, '');
+  const normalizePhone = (value: unknown) => String(value ?? '').replace(/\D/g, '');
   const aNik = normalizeNIK(a.nik);
   const bNik = normalizeNIK(b.nik);
   if (aNik && bNik) return aNik === bNik;
