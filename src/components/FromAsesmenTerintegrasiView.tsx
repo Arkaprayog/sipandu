@@ -392,13 +392,77 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
         });
       }));
       if (document.fonts?.ready) await document.fonts.ready;
-      // The print stylesheet uses this flag to remove dashboard siblings from
-      // layout and let the ten official sections paginate in normal document flow.
+
+      if (!shell) throw new Error('Area Form Asesmen Terintegrasi tidak ditemukan untuk dicetak.');
+
+      // Print a dedicated clone directly under <body>. The old approach hid
+      // every element outside <main> and assumed a particular React DOM tree;
+      // on mobile Chrome this could leave the print renderer with blank pages.
+      // A self-contained root makes the PDF independent of dashboard wrappers.
+      const printRootId = 'sipandu-official-print-root';
+      document.getElementById(printRootId)?.remove();
+      const printRoot = document.createElement('div');
+      printRoot.id = printRootId;
+      const printClone = shell.cloneNode(true) as HTMLElement;
+
+      // React-controlled form values are DOM properties; copy them explicitly
+      // because cloneNode alone does not preserve every live input/checked value.
+      const sourceControls = Array.from(shell.querySelectorAll('input, textarea, select'));
+      const targetControls = Array.from(printClone.querySelectorAll('input, textarea, select'));
+      sourceControls.forEach((sourceControl, index) => {
+        const targetControl = targetControls[index];
+        if (!targetControl) return;
+        if (sourceControl instanceof HTMLInputElement && targetControl instanceof HTMLInputElement) {
+          targetControl.value = sourceControl.value;
+          targetControl.checked = sourceControl.checked;
+          if (sourceControl.checked) targetControl.setAttribute('checked', '');
+          else targetControl.removeAttribute('checked');
+          if (sourceControl.value) targetControl.setAttribute('value', sourceControl.value);
+          else targetControl.removeAttribute('value');
+        } else if (sourceControl instanceof HTMLTextAreaElement && targetControl instanceof HTMLTextAreaElement) {
+          targetControl.value = sourceControl.value;
+          targetControl.textContent = sourceControl.value;
+        } else if (sourceControl instanceof HTMLSelectElement && targetControl instanceof HTMLSelectElement) {
+          targetControl.selectedIndex = sourceControl.selectedIndex;
+          Array.from(targetControl.options).forEach((option, optionIndex) => {
+            option.selected = optionIndex === sourceControl.selectedIndex;
+            if (option.selected) option.setAttribute('selected', '');
+            else option.removeAttribute('selected');
+          });
+        }
+      });
+
+      printRoot.appendChild(printClone);
+      document.body.appendChild(printRoot);
       document.body.classList.add('official-assessment-printing');
-      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+      await new Promise<void>((resolve) => requestAnimationFrame(() =>
+        requestAnimationFrame(() => resolve())
+      ));
+
+      const cloneImages = Array.from(printClone.querySelectorAll('img'));
+      await Promise.all(cloneImages.map((image) => {
+        if (image.complete && image.naturalWidth > 0) return Promise.resolve();
+        return new Promise<void>((resolve) => {
+          let finished = false;
+          const finish = () => {
+            if (finished) return;
+            finished = true;
+            window.clearTimeout(timer);
+            image.removeEventListener('load', finish);
+            image.removeEventListener('error', finish);
+            resolve();
+          };
+          const timer = window.setTimeout(finish, 2500);
+          image.addEventListener('load', finish, { once: true });
+          image.addEventListener('error', finish, { once: true });
+        });
+      }));
+
       setPreparingPrint(false);
       window.print();
     } catch (error) {
+      document.body.classList.remove('official-assessment-printing');
+      document.getElementById('sipandu-official-print-root')?.remove();
       setPreparingPrint(false);
       setStatusMessage({
         type: 'error',
@@ -410,6 +474,7 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
   useEffect(() => {
     const cleanup = () => {
       document.body.classList.remove('official-assessment-printing');
+      document.getElementById('sipandu-official-print-root')?.remove();
       releasePrintPhotoUrls();
       setPrintPhotoUrls({});
       setPrintPhotoErrors({});
