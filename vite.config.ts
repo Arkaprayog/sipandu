@@ -5,7 +5,7 @@ import {defineConfig} from 'vite';
 
 export default defineConfig(() => {
   return {
-    base: '/sipandu/',
+    base: process.env.GITHUB_ACTIONS === 'true' ? '/sipandu/' : '/',
     plugins: [react(), tailwindcss()],
     resolve: {
       alias: {
