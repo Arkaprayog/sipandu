@@ -664,7 +664,7 @@ export const AsesmenView: React.FC<AsesmenViewProps> = ({
                   <span>Salin Link</span>
                 </button>
                 <a
-                  href={settings.googleFormTahapAwalUrl}
+                  href={stageOneRespondentUrl}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="px-3 py-1.5 rounded-lg bg-sky-900 hover:bg-sky-800 text-white text-xs font-semibold flex items-center gap-1"
@@ -678,7 +678,7 @@ export const AsesmenView: React.FC<AsesmenViewProps> = ({
             {/* Barcode untuk asesmen tahap awal dengan logo Kemensos tepat di dalamnya */}
             <div className="pt-2">
               <KemensosQRCode
-                value={settings.googleFormTahapAwalUrl}
+                value={stageOneRespondentUrl}
                 size={220}
                 label="Barcode Kuisioner Google Form (Logo Kemensos)"
                 downloadFileName="barcode-asesmen-google-form.png"
