@@ -282,8 +282,12 @@ export const GoogleWorkspaceModal: React.FC<GoogleWorkspaceModalProps> = ({
   if (!isOpen) return null;
 
   const handleSignIn = async () => {
+    if (loading) return;
     setLoading(true);
-    setStatusMessage(null);
+    setStatusMessage({
+      type: 'success',
+      text: 'Menghubungkan ke Google… Jendela login akan dibuka. Jangan tutup halaman sebelum proses selesai.',
+    });
     try {
       const res = await googleSignIn();
       if (res) {
@@ -800,7 +804,8 @@ export const GoogleWorkspaceModal: React.FC<GoogleWorkspaceModalProps> = ({
                       type="button"
                       onClick={handleSignIn}
                       disabled={loading}
-                      className="px-4 py-2.5 rounded-xl bg-white text-neutral-800 hover:bg-neutral-100 font-semibold text-xs flex items-center gap-2 shadow-md cursor-pointer"
+                      aria-busy={loading}
+                      className="px-4 py-2.5 rounded-xl bg-white text-neutral-800 hover:bg-neutral-100 font-semibold text-xs flex items-center gap-2 shadow-md cursor-pointer disabled:opacity-60 disabled:cursor-wait"
                     >
                       <svg className="w-4 h-4" viewBox="0 0 24 24">
                         <path
@@ -820,7 +825,7 @@ export const GoogleWorkspaceModal: React.FC<GoogleWorkspaceModalProps> = ({
                           d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
                         />
                       </svg>
-                      <span>{googleUser ? 'Pulihkan Izin Google API' : 'Masuk dengan Google'}</span>
+                      <span>{loading ? 'Menghubungkan ke Google…' : googleUser ? 'Pulihkan Izin Google API' : 'Masuk dengan Google'}</span>
                     </button>
                   ) : (
                     <button
