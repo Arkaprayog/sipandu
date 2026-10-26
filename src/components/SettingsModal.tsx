@@ -102,6 +102,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             <p className="mt-1 text-[10px] text-neutral-400">
               Ambil nomor asli dari Google Forms → menu tiga titik → Dapatkan link yang telah diisi sebelumnya. Buat pertanyaan “ID PPKS” di formulir lanjutan.
             </p>
+            <p className="mt-1 text-[10px] text-emerald-200">
+              Agar jawaban lanjutan otomatis masuk ke record PPKS yang sama, buka tab Respons pada Form lanjutan, tautkan ke Google Spreadsheet, dan pastikan kolom pertanyaan prefill berjudul “ID PPKS”. SIPANDU akan menemukan sheet tertaut dan memadankan respons setiap 5 menit saat dashboard aktif.
+            </p>
           </div>
 
           <div>
