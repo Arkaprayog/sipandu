@@ -1,19 +1,27 @@
 import React, { lazy, Suspense, useState, useEffect, useRef } from 'react';
 import { PPKSRecord, ProfileUser, AppSettings } from './types';
+import { importLazyModuleWithRecovery } from './lib/lazyImportRecovery';
 import { initialPPKSList, initialProfileUser, initialAppSettings, isLegacySamplePPKS } from './data/initialData';
 import { LoginPage } from './components/LoginPage';
 import { Header } from './components/Header';
 import { BottomNav } from './components/BottomNav';
 import type { TabKey } from './components/BottomNav';
-const BerandaView = lazy(() => import('./components/BerandaView').then((module) => ({ default: module.BerandaView })));
-const DatabasePpksView = lazy(() => import('./components/DatabasePpksView').then((module) => ({ default: module.DatabasePpksView })));
-const AsesmenView = lazy(() => import('./components/AsesmenView').then((module) => ({ default: module.AsesmenView })));
-const FromAsesmenTerintegrasiView = lazy(() => import('./components/FromAsesmenTerintegrasiView').then((module) => ({ default: module.FromAsesmenTerintegrasiView })));
-const DokumenView = lazy(() => import('./components/DokumenView').then((module) => ({ default: module.DokumenView })));
-const EditProfileModal = lazy(() => import('./components/EditProfileModal').then((module) => ({ default: module.EditProfileModal })));
-const SettingsModal = lazy(() => import('./components/SettingsModal').then((module) => ({ default: module.SettingsModal })));
-const NotificationsModal = lazy(() => import('./components/NotificationsModal').then((module) => ({ default: module.NotificationsModal })));
-const GoogleWorkspaceModal = lazy(() => import('./components/GoogleWorkspaceModal').then((module) => ({ default: module.GoogleWorkspaceModal })));
+
+function lazyWithRecovery<T extends React.ComponentType<any>>(
+  moduleKey: string,
+  importer: () => Promise<{ default: T }>,
+) {
+  return lazy(() => importLazyModuleWithRecovery(moduleKey, importer));
+}
+const BerandaView = lazyWithRecovery('BerandaView', () => import('./components/BerandaView').then((module) => ({ default: module.BerandaView })));
+const DatabasePpksView = lazyWithRecovery('DatabasePpksView', () => import('./components/DatabasePpksView').then((module) => ({ default: module.DatabasePpksView })));
+const AsesmenView = lazyWithRecovery('AsesmenView', () => import('./components/AsesmenView').then((module) => ({ default: module.AsesmenView })));
+const FromAsesmenTerintegrasiView = lazyWithRecovery('FromAsesmenTerintegrasiView', () => import('./components/FromAsesmenTerintegrasiView').then((module) => ({ default: module.FromAsesmenTerintegrasiView })));
+const DokumenView = lazyWithRecovery('DokumenView', () => import('./components/DokumenView').then((module) => ({ default: module.DokumenView })));
+const EditProfileModal = lazyWithRecovery('EditProfileModal', () => import('./components/EditProfileModal').then((module) => ({ default: module.EditProfileModal })));
+const SettingsModal = lazyWithRecovery('SettingsModal', () => import('./components/SettingsModal').then((module) => ({ default: module.SettingsModal })));
+const NotificationsModal = lazyWithRecovery('NotificationsModal', () => import('./components/NotificationsModal').then((module) => ({ default: module.NotificationsModal })));
+const GoogleWorkspaceModal = lazyWithRecovery('GoogleWorkspaceModal', () => import('./components/GoogleWorkspaceModal').then((module) => ({ default: module.GoogleWorkspaceModal })));
 import { onAuthStateChanged, signOut, getIdTokenResult } from 'firebase/auth';
 import { auth, getAccessToken, savePPKSToFirestore, googleLogout } from './lib/firebase';
 import { ensureSIPANDUDatabaseSheet, extractSpreadsheetId, getLinkedSpreadsheetUrlForForm, importPPKSFromSpreadsheet, upsertPPKSInSpreadsheet } from './lib/googleWorkspace';
