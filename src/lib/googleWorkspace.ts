@@ -950,6 +950,7 @@ async function loadGoogleFormPhotoResponseCandidates(
   const operation = (async (): Promise<CachedGoogleFormPhotoResponses> => {
     const kindByQuestionId = new Map<string, ReturnType<typeof classifyPPKSPhotoHeader>>();
     const nameQuestionIds = new Set<string>();
+    const nameQuestionScores = new Map<string, number>();
     const nikQuestionIds = new Set<string>();
     const phoneQuestionIds = new Set<string>();
     for (const item of form.items || []) {
@@ -962,12 +963,18 @@ async function loadGoogleFormPhotoResponseCandidates(
         if (kind) kindByQuestionId.set(questionId, kind);
       }
       const normalizedTitle = normalizeSheetHeader(title);
-      if (
-        /nama/.test(normalizedTitle) &&
-        !/(asesor|asessor|petugas|pendamping|supervisor|ayah|ibu|wali|pasangan|suami|istri|kontakdarurat|penanggungjawab)/.test(normalizedTitle)
-      ) nameQuestionIds.add(questionId);
+      const excludedNameOwner = /(asesor|asessor|petugas|pendamping|supervisor|ayah|ibu|wali|suami|istri|pasangan|kontakdarurat|penanggungjawab|pengisi|pemohon|administrator|admin|petugasform)/.test(normalizedTitle);
+      if (/nama/.test(normalizedTitle) && !excludedNameOwner) {
+        nameQuestionIds.add(questionId);
+        const nameScore =
+          (/^(namalengkap|namaresponden|namacalonresponden|namacalonppks|namappks|namaodhiv)/.test(normalizedTitle) ? 100 : 0) +
+          (/(responden|calonppks|calonresponden|ppks|odhiv)/.test(normalizedTitle) ? 65 : 0) +
+          (/(sesuaiktp|sesuaikartuidentitas)/.test(normalizedTitle) ? 25 : 0) -
+          (normalizedTitle.length > 120 ? 10 : 0);
+        nameQuestionScores.set(questionId, Math.max(1, nameScore));
+      }
       if (isLikelyRespondentNIKHeader(title)) nikQuestionIds.add(questionId);
-      const excludedPhoneOwner = /(ayah|ibu|orangtua|wali|suami|istri|pasangan|keluarga|pendamping|petugas|asesor|asessor|supervisor|penanggungjawab|kontakdarurat)/.test(normalizedTitle);
+      const excludedPhoneOwner = /(ayah|ibu|orangtua|wali|suami|istri|pasangan|keluarga|pendamping|petugas|asesor|asessor|supervisor|penanggungjawab|kontakdarurat|pengisi|pemohon)/.test(normalizedTitle);
       const isRespondentPhone =
         /(nohp|nomorhp|nohandphone|nomorhandphone|handphone|nomorponsel|nomortelepon|notelpon|notelepon|nomorwa|nowa|whatsapp|nomorwhatsapp|kontakresponden)/.test(normalizedTitle);
       if (isRespondentPhone && !excludedPhoneOwner) phoneQuestionIds.add(questionId);
@@ -977,13 +984,19 @@ async function loadGoogleFormPhotoResponseCandidates(
     const candidates: FormPhotoResponseCandidate[] = responses.map((response) => {
       const photos: FormPhotoResponseCandidate['photos'] = {};
       let respondentName = '';
+      let respondentNameScore = -1;
       let respondentNIK = '';
       let respondentPhone = '';
       for (const [questionId, answer] of Object.entries(response.answers || {})) {
-        if (nameQuestionIds.has(questionId) && !respondentName) {
-          respondentName = (answer.textAnswers?.answers || [])
+        if (nameQuestionIds.has(questionId)) {
+          const nameValue = (answer.textAnswers?.answers || [])
             .map((entry) => String(entry.value || '').trim())
             .find(Boolean) || '';
+          const nameScore = nameQuestionScores.get(questionId) || 0;
+          if (nameValue && nameScore > respondentNameScore) {
+            respondentName = nameValue;
+            respondentNameScore = nameScore;
+          }
         }
         if (nikQuestionIds.has(questionId) && !respondentNIK) {
           respondentNIK = (answer.textAnswers?.answers || [])
