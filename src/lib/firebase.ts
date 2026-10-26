@@ -314,7 +314,7 @@ export const googleSignIn = async (): Promise<{
   // The result is consumed by completeGoogleRedirectSignIn during app startup.
   const userAgent = typeof navigator !== 'undefined' ? navigator.userAgent : '';
   const isMobileOrEmbedded = /Android|iPhone|iPad|iPod/i.test(userAgent) ||
-    /; wv\\)|\\bWebView\\b|Capacitor/i.test(userAgent);
+    /wv|webview|capacitor/i.test(userAgent);
   if (isMobileOrEmbedded) {
     const provider = buildWorkspaceProvider('select_account');
     try {
