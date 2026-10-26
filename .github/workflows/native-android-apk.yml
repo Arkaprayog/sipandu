@@ -1,0 +1,66 @@
+name: SIPANDU Native Android APK
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sipandu-native-apk
+  cancel-in-progress: false
+
+jobs:
+  build-apk:
+    name: Build Android debug APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Setup Java for Android
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Install Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install web dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Run application tests
+        run: bun run test
+
+      - name: Build web application
+        run: bun run build
+
+      - name: Install Capacitor Android tooling
+        run: npm install --no-save --package-lock=false --legacy-peer-deps @capacitor/core@7 @capacitor/cli@7 @capacitor/android@7
+
+      - name: Generate native Android project
+        run: npx cap add android
+
+      - name: Copy web assets into Android app
+        run: npx cap sync android
+
+      - name: Build APK
+        working-directory: android
+        run: ./gradlew --no-daemon assembleDebug
+
+      - name: Upload installable APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: SIPANDU-ODHIV-debug-APK
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 14
