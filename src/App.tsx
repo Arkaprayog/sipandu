@@ -296,7 +296,15 @@ export default function App() {
   }, [ppksList]);
 
   useEffect(() => {
-    localStorage.setItem('sipandu_profile', JSON.stringify(profile));
+    try {
+      localStorage.setItem('sipandu_profile', JSON.stringify(profile));
+    } catch (error) {
+      console.error('SIPANDU profile could not be persisted in browser storage:', error);
+      setCloudSyncNotice({
+        type: 'error',
+        text: 'Foto/profil berubah pada sesi ini, tetapi browser menolak penyimpanan lokal. Foto profil dioptimalkan; jika pesan ini tetap muncul, tutup tab lama SIPANDU dan muat ulang agar ruang penyimpanan tersedia.',
+      });
+    }
   }, [profile]);
 
   useEffect(() => {
