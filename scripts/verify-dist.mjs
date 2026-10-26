@@ -14,6 +14,51 @@ if (!fs.existsSync(indexPath)) {
 }
 
 const html = fs.readFileSync(indexPath, 'utf8');
+
+// Guard against regressions in the two fixes for stale entrypoint assets:
+// automatic one-shot recovery is inlined in HTML, and Vercel must not cache HTML.
+for (const marker of [
+  "sipandu:boot-asset-retry:",
+  "__sipandu_boot_retry",
+  "retryWithFreshDocument",
+  "if (!/\\.(?:m?js|css)"
+]) {
+  if (!html.includes(marker)) fail('Pemulihan aset awal tidak lengkap pada dist/index.html: ' + marker);
+}
+
+const vercelConfigPath = path.resolve('vercel.json');
+if (!fs.existsSync(vercelConfigPath)) {
+  fail('vercel.json wajib mengatur kebijakan cache agar HTML tidak tertinggal dari aset build.');
+} else {
+  try {
+    const config = JSON.parse(fs.readFileSync(vercelConfigPath, 'utf8'));
+    const rules = Array.isArray(config.headers) ? config.headers : [];
+    const headerValue = (source, headerName) => {
+      const rule = rules.find((entry) => entry.source === source);
+      const header = rule && Array.isArray(rule.headers)
+        ? rule.headers.find((entry) => String(entry.key).toLowerCase() === headerName.toLowerCase())
+        : null;
+      return header ? String(header.value) : '';
+    };
+    for (const source of ['/', '/index.html']) {
+      const cache = headerValue(source, 'Cache-Control');
+      if (!/no-store/i.test(cache) || !/no-cache/i.test(cache) || !/must-revalidate/i.test(cache)) {
+        fail('Cache-Control untuk ' + source + ' harus mencegah HTML lama dipakai: ' + (cache || '(tidak ada)'));
+      }
+    }
+    const assetCache = headerValue('/assets/(.*)', 'Cache-Control');
+    if (!/immutable/i.test(assetCache) || !/max-age=31536000/i.test(assetCache)) {
+      fail('Aset ber-hash harus memiliki cache immutable satu tahun: ' + (assetCache || '(tidak ada)'));
+    }
+    const swCache = headerValue('/sw.js', 'Cache-Control');
+    if (!/no-store/i.test(swCache) || !/must-revalidate/i.test(swCache)) {
+      fail('Service worker harus diambil ulang dan tidak boleh tertinggal di cache.');
+    }
+  } catch (error) {
+    fail('vercel.json tidak valid: ' + (error instanceof Error ? error.message : String(error)));
+  }
+}
+
 const scriptRefs = [...html.matchAll(/<script[^>]+src=["']([^"']+)["'][^>]*>/gi)].map((match) => match[1]);
 const cssRefs = [...html.matchAll(/<link[^>]+href=["']([^"']+\.css(?:\?[^"']*)?)["'][^>]*>/gi)].map((match) => match[1]);
 
