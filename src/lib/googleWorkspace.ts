@@ -463,7 +463,7 @@ export function isLikelyRespondentNIKHeader(header: string): boolean {
   ];
   return positivePatterns.some((pattern) =>
     pattern === 'nik'
-      ? normalized === 'nik' || normalized.startsWith('nik') || normalized.includes('nikresponden') || normalized.includes('nikppks')
+      ? normalized === 'nik' || normalized.startsWith('nik') || normalized.includes('nomornik') || normalized.includes('nikresponden') || normalized.includes('nikppks') || normalized.includes('nikcalonresponden')
       : normalized.includes(pattern)
   );
 }
