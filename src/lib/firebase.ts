@@ -383,7 +383,7 @@ export const completeGoogleRedirectSignIn = async (): Promise<{
  * "none"; no account selection or consent screen is requested during refresh.
  * A single in-flight refresh is shared by polling and image requests.
  */
-export const refreshWorkspaceAccessToken = async (force = false): Promise<string | null> => {
+export const refreshWorkspaceAccessToken = async (): Promise<string | null> => {
   if (workspaceTokenRefreshInFlight) return workspaceTokenRefreshInFlight;
 
   const user = workspaceAuth.currentUser;
@@ -394,7 +394,7 @@ export const refreshWorkspaceAccessToken = async (force = false): Promise<string
   }
 
   const now = Date.now();
-  if (!force && now - lastWorkspaceAutoRefreshAttemptAt < WORKSPACE_TOKEN_REFRESH_RETRY_MS) {
+  if (now - lastWorkspaceAutoRefreshAttemptAt < WORKSPACE_TOKEN_REFRESH_RETRY_MS) {
     const age = cachedAccessToken ? now - cachedAccessTokenSavedAt : WORKSPACE_TOKEN_TTL_MS;
     return age < WORKSPACE_TOKEN_TTL_MS ? cachedAccessToken : null;
   }
