@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readPPKSPhotoSourceByKind } from './photoSources';
+import { classifyPPKSPhotoHeader, normalizePPKSPhotoSource, readPPKSPhotoSourceByKind } from './photoSources';
+import { googleDriveViewUrl, matchFormPhotoResponseForPPKS } from './formPhotoRecovery';
 
 test('maps each uploaded image to its own photo category from long Google Forms headers', () => {
   const headers = [
@@ -42,4 +43,66 @@ test('returns empty when no matching category upload is available instead of usi
   const headers = ['Unggah foto KK', 'Unggah foto rumah tampak depan'];
   const row = ['kk-link', 'house-link'];
   assert.equal(readPPKSPhotoSourceByKind(headers, row, 'diri'), '');
+});
+
+test('classifies only explicit Google Forms upload questions into photo categories', () => {
+  assert.equal(classifyPPKSPhotoHeader('Unggah foto diri responden close-up'), 'diri');
+  assert.equal(classifyPPKSPhotoHeader('Unggah foto KTP responden'), 'ktp');
+  assert.equal(classifyPPKSPhotoHeader('Unggah foto KK'), 'kk');
+  assert.equal(classifyPPKSPhotoHeader('Unggah foto rumah tampak depan'), 'rumah');
+  assert.equal(classifyPPKSPhotoHeader('Unggah berkas'), null);
+});
+
+test('recovers only a response matching PPKS name and close timestamp', () => {
+  const candidates = [
+    {
+      responseId: 'response-a',
+      timestamp: '2026-10-26T08:00:20',
+      respondentName: 'Lesmana',
+      photos: { diri: 'https://drive.google.com/file/d/AAAAAAAAAAAAAAA111/view' },
+    },
+    {
+      responseId: 'response-b',
+      timestamp: '2026-10-26T08:00:25',
+      respondentName: 'Tukinem',
+      photos: { diri: 'https://drive.google.com/file/d/BBBBBBBBBBBBBBB222/view' },
+    },
+  ];
+  assert.equal(
+    matchFormPhotoResponseForPPKS('LES MANA', '2026-10-26T08:00:00', candidates)?.responseId,
+    'response-a'
+  );
+  assert.equal(
+    matchFormPhotoResponseForPPKS('Nama berbeda', '2026-10-26T08:00:00', candidates),
+    null
+  );
+});
+
+test('does not assign ambiguous timestamp ties to a respondent', () => {
+  const candidates = [
+    { responseId: 'a', timestamp: '2026-10-26T08:00:00', photos: { ktp: 'ktp-a' } },
+    { responseId: 'b', timestamp: '2026-10-26T08:00:00', photos: { ktp: 'ktp-b' } },
+  ];
+  assert.equal(
+    matchFormPhotoResponseForPPKS('Lesmana', '2026-10-26T08:00:00', candidates),
+    null
+  );
+});
+
+test('builds a valid Drive view URL only for plausible file IDs', () => {
+  assert.equal(googleDriveViewUrl('Abcdefghijklmnop12345'), 'https://drive.google.com/file/d/Abcdefghijklmnop12345/view');
+  assert.equal(googleDriveViewUrl('bad id'), '');
+});
+
+test('normalizes real photo URLs and file IDs while rejecting bare filenames', () => {
+  assert.equal(
+    normalizePPKSPhotoSource('https://drive.google.com/open?id=Abcdefghijklmnop12345'),
+    'https://drive.google.com/open?id=Abcdefghijklmnop12345'
+  );
+  assert.equal(
+    normalizePPKSPhotoSource('Abcdefghijklmnop12345'),
+    'https://drive.google.com/file/d/Abcdefghijklmnop12345/view'
+  );
+  assert.equal(normalizePPKSPhotoSource('IMG_20261026.jpg'), '');
+  assert.equal(normalizePPKSPhotoSource(''), '');
 });

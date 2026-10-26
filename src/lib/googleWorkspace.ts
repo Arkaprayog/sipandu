@@ -2,7 +2,9 @@ import { getAccessToken, invalidateAccessToken, refreshWorkspaceAccessToken } fr
 import { IntegratedFormData, PPKSRecord } from '../types';
 import { normalizeExactNumericNIK } from './nikNumeric';
 import { deduplicatePPKSRecords, sortPPKSRecordsByTimestamp } from './ppksData';
-import { readPPKSPhotoSourceByKind } from './photoSources';
+import { classifyPPKSPhotoHeader, normalizePPKSPhotoSource, readPPKSPhotoSourceByKind } from './photoSources';
+import { googleDriveViewUrl, matchFormPhotoResponseForPPKS, type FormPhotoResponseCandidate } from './formPhotoRecovery';
+import { GOOGLE_SIPANDU_RESOURCES } from './googleSIPANDUResources';
 import { isLegacySamplePPKS, isObviousDemoMarker, LEGACY_SAMPLE_PPKS_IDS, LEGACY_SAMPLE_PPKS_NAMES } from '../data/initialData';
 
 export interface GoogleDriveFile {
@@ -18,7 +20,10 @@ export interface GoogleFormResponse {
   responseId: string;
   createTime: string;
   lastSubmittedTime?: string;
-  answers: Record<string, { textAnswers?: { answers: { value: string }[] } }>;
+  answers: Record<string, {
+    textAnswers?: { answers: { value: string }[] };
+    fileUploadAnswers?: { answers: { fileId: string; fileName?: string; mimeType?: string }[] };
+  }>;
 }
 
 function requireToken(token: string | null): string {
@@ -730,14 +735,22 @@ function mapRowsToPPKSRecords(rows: string[][]): PPKSRecord[] {
     // Prefer category-aware upload-column detection so a longer Google Forms
     // question title still maps correctly, while never treating KTP/KK/house
     // attachments as the respondent portrait.
-    const fotoDiri = readPPKSPhotoSourceByKind(headers, row, 'diri') ||
-      readCellByAliases(headers, row, ['fotoDiri', 'fotoDiriPPKS', 'fotoResponden', 'uploadFotoDiri', 'tautanFotoDiri', 'linkFotoDiri', 'fotoDiriCloseUp', 'fotoDiriResponden']);
-    const fotoKtp = readPPKSPhotoSourceByKind(headers, row, 'ktp') ||
-      readCellByAliases(headers, row, ['fotoKtp', 'fotoKTP', 'uploadFotoKTP', 'dokumenKTP', 'tautanFotoKTP', 'linkFotoKTP', 'fotoKartuIdentitas', 'scanKTP']);
-    const fotoKk = readPPKSPhotoSourceByKind(headers, row, 'kk') ||
-      readCellByAliases(headers, row, ['fotoKk', 'fotoKK', 'uploadFotoKK', 'dokumenKK', 'tautanFotoKK', 'linkFotoKK', 'scanKK']);
-    const fotoRumah = readPPKSPhotoSourceByKind(headers, row, 'rumah') ||
-      readCellByAliases(headers, row, ['fotoRumah', 'fotoRumahTampakDepan', 'uploadFotoRumah', 'tautanFotoRumah', 'linkFotoRumah', 'fotoDepanRumah', 'fotoTampakDepanRumah']);
+    const fotoDiri = normalizePPKSPhotoSource(
+      readPPKSPhotoSourceByKind(headers, row, 'diri') ||
+      readCellByAliases(headers, row, ['fotoDiri', 'fotoDiriPPKS', 'fotoResponden', 'uploadFotoDiri', 'tautanFotoDiri', 'linkFotoDiri', 'fotoDiriCloseUp', 'fotoDiriResponden'])
+    );
+    const fotoKtp = normalizePPKSPhotoSource(
+      readPPKSPhotoSourceByKind(headers, row, 'ktp') ||
+      readCellByAliases(headers, row, ['fotoKtp', 'fotoKTP', 'uploadFotoKTP', 'dokumenKTP', 'tautanFotoKTP', 'linkFotoKTP', 'fotoKartuIdentitas', 'scanKTP'])
+    );
+    const fotoKk = normalizePPKSPhotoSource(
+      readPPKSPhotoSourceByKind(headers, row, 'kk') ||
+      readCellByAliases(headers, row, ['fotoKk', 'fotoKK', 'uploadFotoKK', 'dokumenKK', 'tautanFotoKK', 'linkFotoKK', 'scanKK'])
+    );
+    const fotoRumah = normalizePPKSPhotoSource(
+      readPPKSPhotoSourceByKind(headers, row, 'rumah') ||
+      readCellByAliases(headers, row, ['fotoRumah', 'fotoRumahTampakDepan', 'uploadFotoRumah', 'tautanFotoRumah', 'linkFotoRumah', 'fotoDepanRumah', 'fotoTampakDepanRumah'])
+    );
     const sourceRecord: PPKSRecord = {
       id: recordId || `SHEET-ROW-${rowIndex + 2}`,
       timestamp,
@@ -765,6 +778,147 @@ function mapRowsToPPKSRecords(rows: string[][]): PPKSRecord[] {
   return sortPPKSRecordsByTimestamp(records);
 }
 
+interface GoogleFormPhotoMetadata {
+  items?: Array<{
+    title?: string;
+    questionItem?: {
+      question?: {
+        questionId?: string;
+        fileUploadQuestion?: Record<string, unknown>;
+      };
+    };
+  }>;
+}
+
+/**
+ * If the linked response Sheet did not expose Drive hyperlinks in photo cells,
+ * recover file IDs straight from Google Forms' fileUploadAnswers. This fallback
+ * runs only for SIPANDU's verified response spreadsheet and only when at least
+ * one photo field is missing; a conservative name/timestamp match prevents
+ * assigning another respondent's attachment.
+ */
+interface CachedGoogleFormPhotoResponses {
+  formId: string;
+  loadedAt: number;
+  candidates: FormPhotoResponseCandidate[];
+}
+let cachedGoogleFormPhotoResponses: CachedGoogleFormPhotoResponses | null = null;
+let googleFormPhotoResponsesInFlight: Promise<FormPhotoResponseCandidate[]> | null = null;
+
+async function loadGoogleFormPhotoResponseCandidates(formId: string): Promise<FormPhotoResponseCandidate[]> {
+  if (
+    cachedGoogleFormPhotoResponses &&
+    cachedGoogleFormPhotoResponses.formId === formId &&
+    Date.now() - cachedGoogleFormPhotoResponses.loadedAt < 5 * 60 * 1000
+  ) return cachedGoogleFormPhotoResponses.candidates;
+  if (googleFormPhotoResponsesInFlight) return googleFormPhotoResponsesInFlight;
+
+  const operation = (async (): Promise<FormPhotoResponseCandidate[]> => {
+    const [form, responses] = await Promise.all([
+      googleJson<GoogleFormPhotoMetadata>(`https://forms.googleapis.com/v1/forms/${extractFormId(formId)}`),
+      fetchFormResponses(formId),
+    ]);
+    const kindByQuestionId = new Map<string, ReturnType<typeof classifyPPKSPhotoHeader>>();
+    const nameQuestionIds = new Set<string>();
+    const questionTitles = new Map<string, string>();
+    for (const item of form.items || []) {
+      const question = item.questionItem?.question;
+      const questionId = String(question?.questionId || '').trim();
+      const title = String(item.title || '').trim();
+      if (!questionId || !title) continue;
+      questionTitles.set(questionId, title);
+      if (question?.fileUploadQuestion) {
+        const kind = classifyPPKSPhotoHeader(title);
+        if (kind) kindByQuestionId.set(questionId, kind);
+      }
+      const normalizedTitle = normalizeSheetHeader(title);
+      if (
+        /nama/.test(normalizedTitle) &&
+        !/(asesor|asessor|petugas|pendamping|supervisor|ayah|ibu|wali|pasangan|suami|istri|kontakdarurat|penanggungjawab)/.test(normalizedTitle)
+      ) {
+        nameQuestionIds.add(questionId);
+      }
+    }
+
+    return responses.map((response) => {
+      const photos: FormPhotoResponseCandidate['photos'] = {};
+      let respondentName = '';
+      for (const [questionId, answer] of Object.entries(response.answers || {})) {
+        if (nameQuestionIds.has(questionId) && !respondentName) {
+          respondentName = (answer.textAnswers?.answers || [])
+            .map((entry) => String(entry.value || '').trim())
+            .find(Boolean) || '';
+        }
+        const kind = kindByQuestionId.get(questionId);
+        if (!kind || photos[kind]) continue;
+        const file = (answer.fileUploadAnswers?.answers || []).find((entry) => entry.fileId);
+        if (file?.fileId) photos[kind] = googleDriveViewUrl(file.fileId);
+      }
+      return {
+        responseId: response.responseId,
+        timestamp: response.createTime || response.lastSubmittedTime || '',
+        respondentName,
+        photos,
+      };
+    }).filter((candidate) => Object.values(candidate.photos).some(Boolean));
+  })();
+  googleFormPhotoResponsesInFlight = operation;
+  try {
+    const candidates = await operation;
+    cachedGoogleFormPhotoResponses = { formId, loadedAt: Date.now(), candidates };
+    return candidates;
+  } finally {
+    googleFormPhotoResponsesInFlight = null;
+  }
+}
+
+/**
+ * If the linked response Sheet did not expose Drive hyperlinks in photo cells,
+ * recover file IDs straight from Google Forms' fileUploadAnswers. This fallback
+ * runs only for SIPANDU's verified response spreadsheet and only when at least
+ * one photo field is missing; a conservative name/timestamp match prevents
+ * assigning another respondent's attachment.
+ */
+async function recoverPhotosFromGoogleForms(
+  records: PPKSRecord[],
+  formId: string,
+): Promise<{ records: PPKSRecord[]; linksRecovered: number }> {
+  const missingPhotos = records.some((record) =>
+    !normalizePPKSPhotoSource(record.fotoDiri) ||
+    !normalizePPKSPhotoSource(record.fotoKtp) ||
+    !normalizePPKSPhotoSource(record.fotoKk) ||
+    !normalizePPKSPhotoSource(record.fotoRumah)
+  );
+  if (!missingPhotos || !records.length) return { records, linksRecovered: 0 };
+
+  const candidates = await loadGoogleFormPhotoResponseCandidates(formId);
+  if (!candidates.length) return { records, linksRecovered: 0 };
+  let linksRecovered = 0;
+  const enriched = records.map((record) => {
+    const currentDiri = normalizePPKSPhotoSource(record.fotoDiri);
+    const currentKtp = normalizePPKSPhotoSource(record.fotoKtp);
+    const currentKk = normalizePPKSPhotoSource(record.fotoKk);
+    const currentRumah = normalizePPKSPhotoSource(record.fotoRumah);
+    if (currentDiri && currentKtp && currentKk && currentRumah) return {
+      ...record, fotoDiri: currentDiri, fotoKtp: currentKtp, fotoKk: currentKk, fotoRumah: currentRumah,
+    };
+    const match = matchFormPhotoResponseForPPKS(record.namaLengkap, record.timestamp, candidates);
+    const updated: PPKSRecord = {
+      ...record,
+      fotoDiri: currentDiri || match?.photos.diri || '',
+      fotoKtp: currentKtp || match?.photos.ktp || '',
+      fotoKk: currentKk || match?.photos.kk || '',
+      fotoRumah: currentRumah || match?.photos.rumah || '',
+    };
+    if (!currentDiri && updated.fotoDiri) linksRecovered++;
+    if (!currentKtp && updated.fotoKtp) linksRecovered++;
+    if (!currentKk && updated.fotoKk) linksRecovered++;
+    if (!currentRumah && updated.fotoRumah) linksRecovered++;
+    return updated;
+  });
+  return { records: enriched, linksRecovered };
+}
+
 /** Imports respondent records from an authorized spreadsheet without writing to the source. */
 export async function importPPKSFromSpreadsheet(
   spreadsheetUrlOrId: string,
@@ -781,6 +935,9 @@ export async function importPPKSFromSpreadsheet(
   recordsBeforeDemoFilter: number;
   sampleRecordsFiltered: number;
   duplicateRowsCollapsed: number;
+  photosRecoveredFromForm: number;
+  photoRecoveryStatus: 'not-needed' | 'recovered' | 'no-match' | 'failed' | 'not-applicable';
+  photoCounts: { diri: number; ktp: number; kk: number; rumah: number };
   records: PPKSRecord[];
   recordsWithNIK: number;
   recordsMissingNIK: number;
@@ -811,9 +968,42 @@ export async function importPPKSFromSpreadsheet(
   const sourceRowsWithName = dataRows.filter((row) => Boolean(readRespondentName(headers, row))).length;
   const allMappedRecords = mapRowsToPPKSRecords(rows);
   const recordsAfterSampleFilter = allMappedRecords.filter((record) => !isLegacySamplePPKS(record));
-  const records = sortPPKSRecordsByTimestamp(deduplicatePPKSRecords(recordsAfterSampleFilter));
+  let records = sortPPKSRecordsByTimestamp(deduplicatePPKSRecords(recordsAfterSampleFilter));
   const sampleRecordsFiltered = allMappedRecords.length - recordsAfterSampleFilter.length;
   const duplicateRowsCollapsed = recordsAfterSampleFilter.length - records.length;
+  let photosRecoveredFromForm = 0;
+  let photoRecoveryStatus: 'not-needed' | 'recovered' | 'no-match' | 'failed' | 'not-applicable' = 'not-applicable';
+
+  const normalizedSpreadsheetTitle = normalizeSheetHeader(metadata.title);
+  const normalizedSelectedTab = normalizeSheetHeader(selectedTab);
+  const isKnownATENSIResponseSheet =
+    metadata.spreadsheetId === GOOGLE_SIPANDU_RESOURCES.responseSpreadsheetId ||
+    (
+      normalizedSpreadsheetTitle.includes('asesmenprogramasistensirehabilitasisosial') &&
+      normalizedSpreadsheetTitle.includes('responses') &&
+      normalizedSelectedTab.includes('formresponses')
+    );
+  if (isKnownATENSIResponseSheet) {
+    const hasMissingPhoto = records.some((record) =>
+      !record.fotoDiri || !record.fotoKtp || !record.fotoKk || !record.fotoRumah
+    );
+    if (hasMissingPhoto) {
+      photoRecoveryStatus = 'no-match';
+      try {
+        const recovery = await recoverPhotosFromGoogleForms(records, GOOGLE_SIPANDU_RESOURCES.formId);
+        records = recovery.records;
+        photosRecoveredFromForm = recovery.linksRecovered;
+        photoRecoveryStatus = photosRecoveredFromForm > 0 ? 'recovered' : 'no-match';
+      } catch (error) {
+        photoRecoveryStatus = 'failed';
+        // Never fail importing the spreadsheet because the optional Forms fallback
+        // is unavailable; the visible diagnostics report its status separately.
+        console.warn('SIPANDU photo recovery via Google Forms was unavailable:', error);
+      }
+    } else {
+      photoRecoveryStatus = 'not-needed';
+    }
+  }
   const nikHeadersFound = headers.filter((header) => isLikelyRespondentNIKHeader(header)).map((header) => header.trim());
   const recordsWithNIK = records.filter((record) => Boolean(String(record.nik || '').trim())).length;
   // Diagnose the source headers and value quality without returning any actual NIK values.
@@ -845,6 +1035,14 @@ export async function importPPKSFromSpreadsheet(
     records,
     recordsWithNIK,
     recordsMissingNIK: records.length - recordsWithNIK,
+    photosRecoveredFromForm,
+    photoRecoveryStatus,
+    photoCounts: {
+      diri: records.filter((record) => Boolean(normalizePPKSPhotoSource(record.fotoDiri))).length,
+      ktp: records.filter((record) => Boolean(normalizePPKSPhotoSource(record.fotoKtp))).length,
+      kk: records.filter((record) => Boolean(normalizePPKSPhotoSource(record.fotoKk))).length,
+      rumah: records.filter((record) => Boolean(normalizePPKSPhotoSource(record.fotoRumah))).length,
+    },
     nikHeadersFound,
     nikColumnDiagnostics,
     previewRows: rows.slice(0, 8),

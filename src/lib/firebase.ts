@@ -29,6 +29,7 @@ import { PPKSRecord } from '../types';
 import { deduplicatePPKSRecords, EXPECTED_REAL_PPKS_COUNT, parsePPKSTimestamp } from './ppksData';
 import { isLegacySamplePPKS } from '../data/initialData';
 import { GOOGLE_WORKSPACE_EMAIL } from './googleSIPANDUResources';
+import { normalizePPKSPhotoSource } from './photoSources';
 
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
@@ -100,7 +101,7 @@ function readStoredWorkspaceToken(): string | null {
   }
 }
 
-function cacheWorkspaceToken(token: string | null): void {
+function cacheWorkspaceToken(token: string | null, notify = true): void {
   cachedAccessToken = token;
   cachedAccessTokenSavedAt = token ? Date.now() : 0;
   if (typeof window === 'undefined') return;
@@ -117,7 +118,7 @@ function cacheWorkspaceToken(token: string | null): void {
     // Keep the current-page session working even when browser storage is blocked.
   }
   // Wake the in-page live-sync worker immediately after authorization is restored.
-  window.dispatchEvent(new Event('sipandu-workspace-token-updated'));
+  if (notify) window.dispatchEvent(new Event('sipandu-workspace-token-updated'));
 }
 
 let cachedAccessToken: string | null = readStoredWorkspaceToken();
@@ -383,7 +384,7 @@ export const completeGoogleRedirectSignIn = async (): Promise<{
  * "none"; no account selection or consent screen is requested during refresh.
  * A single in-flight refresh is shared by polling and image requests.
  */
-export const refreshWorkspaceAccessToken = async (): Promise<string | null> => {
+export const refreshWorkspaceAccessToken = async (force = false): Promise<string | null> => {
   if (workspaceTokenRefreshInFlight) return workspaceTokenRefreshInFlight;
 
   const user = workspaceAuth.currentUser;
@@ -394,7 +395,7 @@ export const refreshWorkspaceAccessToken = async (): Promise<string | null> => {
   }
 
   const now = Date.now();
-  if (now - lastWorkspaceAutoRefreshAttemptAt < WORKSPACE_TOKEN_REFRESH_RETRY_MS) {
+  if (!force && now - lastWorkspaceAutoRefreshAttemptAt < WORKSPACE_TOKEN_REFRESH_RETRY_MS) {
     const age = cachedAccessToken ? now - cachedAccessTokenSavedAt : WORKSPACE_TOKEN_TTL_MS;
     return age < WORKSPACE_TOKEN_TTL_MS ? cachedAccessToken : null;
   }
@@ -440,7 +441,9 @@ export const getAccessToken = async (): Promise<string | null> => {
 
 /** Clears an expired/rejected token without signing the Google user out of SIPANDU. */
 export const invalidateAccessToken = (): void => {
-  cacheWorkspaceToken(null);
+  // Do not broadcast invalidation: image components would immediately re-fetch
+  // and trigger a cascade of concurrent retries before the token is refreshed.
+  cacheWorkspaceToken(null, false);
 };
 
 export const googleLogout = async () => {
@@ -698,6 +701,16 @@ export async function reconcilePPKSFirestoreWithSpreadsheet(sourceRecords: PPKSR
     }
 
     merged.id = source.id;
+    // Keep only actual image URLs/data; old cache values sometimes held a bare
+    // Drive filename, which looked non-empty but could never be rendered.
+    merged.fotoDiri = normalizePPKSPhotoSource(source.fotoDiri) ||
+      normalizePPKSPhotoSource(preserved.fotoDiri) || '';
+    merged.fotoKtp = normalizePPKSPhotoSource(source.fotoKtp) ||
+      normalizePPKSPhotoSource(preserved.fotoKtp) || '';
+    merged.fotoKk = normalizePPKSPhotoSource(source.fotoKk) ||
+      normalizePPKSPhotoSource(preserved.fotoKk) || '';
+    merged.fotoRumah = normalizePPKSPhotoSource(source.fotoRumah) ||
+      normalizePPKSPhotoSource(preserved.fotoRumah) || '';
     // Timestamp stays exactly as formatted in Google Sheets, even if an older
     // stored record had a different timestamp representation.
     merged.timestamp = source.timestamp;

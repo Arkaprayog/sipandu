@@ -1,4 +1,5 @@
 import { PPKSRecord } from '../types';
+import { normalizePPKSPhotoSource } from './photoSources';
 
 /** Guardrail: the verified source roster currently contains 44 real PPKS. Update only when the official roster changes. */
 export const EXPECTED_REAL_PPKS_COUNT = 44;
@@ -184,10 +185,10 @@ export function deduplicatePPKSRecords<T extends PPKSRecord>(records: T[]): T[] 
       noHpWa: next.noHpWa || previous.noHpWa,
       jenisBantuan: next.jenisBantuan || previous.jenisBantuan,
       intervensiMental: next.intervensiMental || previous.intervensiMental,
-      fotoDiri: next.fotoDiri || previous.fotoDiri,
-      fotoKtp: next.fotoKtp || previous.fotoKtp,
-      fotoKk: next.fotoKk || previous.fotoKk,
-      fotoRumah: next.fotoRumah || previous.fotoRumah,
+      fotoDiri: normalizePPKSPhotoSource(next.fotoDiri) || normalizePPKSPhotoSource(previous.fotoDiri),
+      fotoKtp: normalizePPKSPhotoSource(next.fotoKtp) || normalizePPKSPhotoSource(previous.fotoKtp),
+      fotoKk: normalizePPKSPhotoSource(next.fotoKk) || normalizePPKSPhotoSource(previous.fotoKk),
+      fotoRumah: normalizePPKSPhotoSource(next.fotoRumah) || normalizePPKSPhotoSource(previous.fotoRumah),
       integratedForm: Object.keys(nextIntegrated).length
         ? ({ ...(previous.integratedForm || {}), ...nextIntegrated } as T['integratedForm'])
         : previous.integratedForm,

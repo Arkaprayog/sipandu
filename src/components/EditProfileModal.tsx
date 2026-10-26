@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { ProfileUser } from '../types';
-import { X, User, Save, Upload, Check } from 'lucide-react';
+import { X, User, Save, Upload, Check, AlertCircle } from 'lucide-react';
+import { compressImageForLocalStorage } from '../lib/imageCompression';
 
 interface EditProfileModalProps {
   isOpen: boolean;
@@ -20,8 +21,23 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
   const [unitKerja, setUnitKerja] = useState(profile.unitKerja);
   const [jabatan, setJabatan] = useState(profile.jabatan);
   const [noHp, setNoHp] = useState(profile.noHp);
-  const [photoUrl, setPhotoUrl] = useState(profile.photoUrl);
+  const [photoUrl, setPhotoUrl] = useState(profile.photoUrl || '');
+  const [photoError, setPhotoError] = useState('');
+  const [photoPreviewFailed, setPhotoPreviewFailed] = useState(false);
   const [saved, setSaved] = useState(false);
+  
+  useEffect(() => {
+    if (!isOpen) return;
+    setNama(profile.nama);
+    setNip(profile.nip);
+    setUnitKerja(profile.unitKerja);
+    setJabatan(profile.jabatan);
+    setNoHp(profile.noHp);
+    setPhotoUrl(profile.photoUrl || '');
+    setPhotoError('');
+    setPhotoPreviewFailed(false);
+    setSaved(false);
+  }, [isOpen, profile]);
 
   if (!isOpen) return null;
 
@@ -42,14 +58,19 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
     }, 700);
   };
 
-  const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
+    e.target.value = '';
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      setPhotoUrl(event.target?.result as string);
-    };
-    reader.readAsDataURL(file);
+    setPhotoError('');
+    setSaved(false);
+    try {
+      const optimized = await compressImageForLocalStorage(file, 640, 260 * 1024);
+      setPhotoUrl(optimized);
+      setPhotoPreviewFailed(false);
+    } catch (error) {
+      setPhotoError(error instanceof Error ? error.message : 'Foto profil tidak dapat diproses.');
+    }
   };
 
   return (
@@ -72,8 +93,17 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
         <form onSubmit={handleSubmit} className="space-y-4 text-xs">
           {/* Foto Profil Preview & Upload */}
           <div className="flex items-center gap-4 p-3 rounded-xl bg-black/50 border border-emerald-500/30">
-            <div className="w-16 h-16 rounded-full overflow-hidden border-2 border-rose-500/50 bg-black shrink-0">
-              <img src={photoUrl} alt="Preview" className="w-full h-full object-cover" />
+            <div className="w-16 h-16 rounded-full overflow-hidden border-2 border-rose-500/50 bg-black shrink-0 flex items-center justify-center">
+              {photoUrl && !photoPreviewFailed ? (
+                <img
+                  src={photoUrl}
+                  alt="Pratinjau foto profil"
+                  className="w-full h-full object-cover"
+                  onError={() => setPhotoPreviewFailed(true)}
+                />
+              ) : (
+                <User className="h-8 w-8 text-sky-200" aria-label="Foto profil belum dipilih" />
+              )}
             </div>
             <div className="space-y-1">
               <span className="font-bold text-sky-200">Foto Profil Petugas</span>
@@ -92,6 +122,15 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
               </label>
             </div>
           </div>
+          {photoError && (
+            <div role="alert" className="flex items-start gap-2 rounded-lg border border-rose-400/40 bg-rose-950/40 p-2 text-[11px] text-rose-100">
+              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+              <span>{photoError}</span>
+            </div>
+          )}
+          {photoUrl.startsWith('data:image/') && (
+            <p className="text-[10px] text-emerald-200">Foto sudah dikompres agar tetap tersimpan di perangkat (maksimal sekitar 320 KB).</p>
+          )}
 
           <div>
             <label className="block text-sky-200 font-semibold mb-1">Nama Owner / Petugas:</label>

@@ -18,6 +18,7 @@ import { auth, getAccessToken, savePPKSToFirestore, googleLogout, removeLegacyDe
 import { ensureSIPANDUDatabaseSheet, extractSpreadsheetId, importPPKSFromSpreadsheet, removeLegacyDemoRowsFromSpreadsheet, removeObviousDemoFilesFromDrive, upsertPPKSInSpreadsheet } from './lib/googleWorkspace';
 import { GOOGLE_SIPANDU_RESOURCES } from './lib/googleSIPANDUResources';
 import { deduplicatePPKSRecords, EXPECTED_REAL_PPKS_COUNT, parsePPKSTimestamp, samePPKSIdentity, sortPPKSRecordsByName, sortPPKSRecordsByTimestamp } from './lib/ppksData';
+import { normalizePPKSPhotoSource } from './lib/photoSources';
 
 function isSixteenDigitNIK(value: string): boolean {
   return /^\d{16}$/.test(String(value || '').replace(/\D/g, ''));
@@ -42,10 +43,10 @@ function mergePPKSRecords(localRecords: PPKSRecord[], cloudRecords: PPKSRecord[]
       noHpWa: next.noHpWa || previous.noHpWa,
       jenisBantuan: next.jenisBantuan || previous.jenisBantuan,
       intervensiMental: next.intervensiMental || previous.intervensiMental,
-      fotoDiri: next.fotoDiri || previous.fotoDiri,
-      fotoKtp: next.fotoKtp || previous.fotoKtp,
-      fotoKk: next.fotoKk || previous.fotoKk,
-      fotoRumah: next.fotoRumah || previous.fotoRumah,
+      fotoDiri: normalizePPKSPhotoSource(next.fotoDiri) || normalizePPKSPhotoSource(previous.fotoDiri),
+      fotoKtp: normalizePPKSPhotoSource(next.fotoKtp) || normalizePPKSPhotoSource(previous.fotoKtp),
+      fotoKk: normalizePPKSPhotoSource(next.fotoKk) || normalizePPKSPhotoSource(previous.fotoKk),
+      fotoRumah: normalizePPKSPhotoSource(next.fotoRumah) || normalizePPKSPhotoSource(previous.fotoRumah),
       integratedForm: next.integratedForm
         ? ({ ...(previous.integratedForm || {}), ...nextIntegrated } as NonNullable<PPKSRecord['integratedForm']>)
         : previous.integratedForm,
@@ -292,11 +293,27 @@ export default function App() {
 
   // Sync to local storage
   useEffect(() => {
-    localStorage.setItem('sipandu_ppks', JSON.stringify(ppksList));
+    try {
+      localStorage.setItem('sipandu_ppks', JSON.stringify(ppksList));
+    } catch (error) {
+      console.error('SIPANDU PPKS cache could not be persisted in browser storage:', error);
+      setCloudSyncNotice({
+        type: 'error',
+        text: 'Browser kehabisan ruang penyimpanan untuk cache lokal. Foto yang diunggah sudah dikompres, tetapi data baru mungkin belum tersimpan di perangkat; pastikan sinkronisasi Firebase berhasil sebelum menutup atau memuat ulang aplikasi.',
+      });
+    }
   }, [ppksList]);
 
   useEffect(() => {
-    localStorage.setItem('sipandu_profile', JSON.stringify(profile));
+    try {
+      localStorage.setItem('sipandu_profile', JSON.stringify(profile));
+    } catch (error) {
+      console.error('SIPANDU profile could not be persisted in browser storage:', error);
+      setCloudSyncNotice({
+        type: 'error',
+        text: 'Foto/profil berubah pada sesi ini, tetapi browser menolak penyimpanan lokal. Foto profil dioptimalkan; jika pesan ini tetap muncul, tutup tab lama SIPANDU dan muat ulang agar ruang penyimpanan tersedia.',
+      });
+    }
   }, [profile]);
 
   useEffect(() => {
@@ -402,7 +419,7 @@ export default function App() {
     }
   };
 
-  const handleSyncGoogleSpreadsheet = async (): Promise<{ records: number; sourceDataRows: number; sourceRowsWithName: number; sampleRecordsFiltered: number; duplicateRowsCollapsed: number }> => {
+  const handleSyncGoogleSpreadsheet = async (): Promise<{ records: number; sourceDataRows: number; sourceRowsWithName: number; sampleRecordsFiltered: number; duplicateRowsCollapsed: number; photosRecoveredFromForm: number; photoRecoveryStatus: string; photoCounts: { diri: number; ktp: number; kk: number; rumah: number } }> => {
     const sourceUrl = settings.googleSpreadsheetSourceUrl?.trim() || '';
     if (!sourceUrl) throw new Error('Spreadsheet sumber belum dipilih. Buka Google Workspace & Cloud Hub → Google Sheets → Cari Spreadsheet Saya, lalu pilih file Anda.');
     const imported = await importPPKSFromSpreadsheet(
@@ -432,7 +449,7 @@ export default function App() {
         : `Firestore diselaraskan ke ${EXPECTED_REAL_PPKS_COUNT} PPKS; ${firestoreDocumentsRemoved} dokumen lama/duplikat di luar roster dibersihkan.`;
     setLiveSyncState({
       type: hasExpectedRoster && firestoreDocumentsRemoved !== null ? 'success' : 'error',
-      message: `Sumber “${imported.spreadsheetTitle}” → “${imported.selectedTab}”: ${imported.sourceDataRows} baris data, ${imported.records.length} PPKS unik dimuat, ${imported.duplicateRowsCollapsed} duplikat spreadsheet digabung, ${imported.sampleRecordsFiltered} contoh disaring; ${firestoreMessage} NIK terpetakan ${imported.recordsWithNIK}/${imported.records.length}. Sinkronisasi otomatis setiap 2 menit selama izin Google masih berlaku.`,
+      message: `Sumber “${imported.spreadsheetTitle}” → “${imported.selectedTab}”: ${imported.sourceDataRows} baris data, ${imported.records.length} PPKS unik dimuat, ${imported.duplicateRowsCollapsed} duplikat spreadsheet digabung, ${imported.sampleRecordsFiltered} contoh disaring. Foto sumber: diri ${imported.photoCounts.diri}/${imported.records.length}, KTP ${imported.photoCounts.ktp}/${imported.records.length}, KK ${imported.photoCounts.kk}/${imported.records.length}, rumah ${imported.photoCounts.rumah}/${imported.records.length}; tautan dipulihkan dari Forms: ${imported.photosRecoveredFromForm}; status pemulihan: ${imported.photoRecoveryStatus}. ${firestoreMessage} NIK terpetakan ${imported.recordsWithNIK}/${imported.records.length}. Sinkronisasi otomatis setiap 2 menit selama izin Google masih berlaku.`,
       lastUpdatedAt: updatedAt,
     });
     return {
@@ -441,6 +458,9 @@ export default function App() {
       sourceRowsWithName: imported.sourceRowsWithName,
       sampleRecordsFiltered: imported.sampleRecordsFiltered,
       duplicateRowsCollapsed: imported.duplicateRowsCollapsed,
+      photosRecoveredFromForm: imported.photosRecoveredFromForm,
+      photoRecoveryStatus: imported.photoRecoveryStatus,
+      photoCounts: imported.photoCounts,
     };
   };
 
@@ -510,7 +530,7 @@ export default function App() {
               : 'Penyelarasan Firestore belum dijalankan pada sesi ini.';
         setLiveSyncState({
           type: hasExpectedRoster && (firestoreRosterReconciliationAttemptedRef.current || firestoreDocumentsRemoved !== null) ? 'success' : 'error',
-          message: `LIVE SYNC — “${imported.spreadsheetTitle}” → “${imported.selectedTab}”: ${imported.records.length} PPKS unik dimuat dari ${imported.sourceDataRows} baris; ${imported.duplicateRowsCollapsed} duplikat digabung; ${imported.sampleRecordsFiltered} contoh disaring; ${firestoreMessage} NIK ${imported.recordsWithNIK}/${imported.records.length}.`,
+          message: `LIVE SYNC — “${imported.spreadsheetTitle}” → “${imported.selectedTab}”: ${imported.records.length} PPKS unik dimuat dari ${imported.sourceDataRows} baris; ${imported.duplicateRowsCollapsed} duplikat digabung; ${imported.sampleRecordsFiltered} contoh disaring; foto diri ${imported.photoCounts.diri}/${imported.records.length}, KTP ${imported.photoCounts.ktp}/${imported.records.length}, KK ${imported.photoCounts.kk}/${imported.records.length}, rumah ${imported.photoCounts.rumah}/${imported.records.length}; tautan Forms dipulihkan: ${imported.photosRecoveredFromForm} (${imported.photoRecoveryStatus}); ${firestoreMessage} NIK ${imported.recordsWithNIK}/${imported.records.length}.`,
           lastUpdatedAt: new Date().toLocaleString('id-ID'),
         });
       } catch (error) {
