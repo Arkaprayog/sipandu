@@ -225,6 +225,12 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
     printObjectUrlsRef.current = [];
   };
 
+  useEffect(() => () => {
+    // Revoke private Drive photo blobs when navigating away from the assessment menu.
+    printObjectUrlsRef.current.forEach((url) => URL.revokeObjectURL(url));
+    printObjectUrlsRef.current = [];
+  }, []);
+
   useEffect(() => {
     if (ppksList.some((record) => record.id === selectedPPKSId)) return;
     const next = ppksList[0];
