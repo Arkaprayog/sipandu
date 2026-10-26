@@ -2,6 +2,7 @@ import { getAccessToken, invalidateAccessToken } from './firebase';
 import { IntegratedFormData, PPKSRecord } from '../types';
 import { normalizeExactNumericNIK } from './nikNumeric';
 import { deduplicatePPKSRecords, sortPPKSRecordsByTimestamp } from './ppksData';
+import { readPPKSPhotoSourceByKind } from './photoSources';
 import { isLegacySamplePPKS, isObviousDemoMarker, LEGACY_SAMPLE_PPKS_IDS, LEGACY_SAMPLE_PPKS_NAMES } from '../data/initialData';
 
 export interface GoogleDriveFile {
@@ -257,7 +258,7 @@ export async function readSpreadsheetRichData(
 
     // Do not classify standalone KTP/NIK headers as photo cells. A header such
     // as "NIK/No. KTP" must preserve the displayed NIK, not substitute its hyperlink.
-    if (/(foto|photo|gambar|image|upload|unggah|lampiran|scan|dokumen|berkas|file|tautan|linkdrive)/i.test(header)) {
+    if (/(foto|photo|gambar|image|upload|unggah|lampiran|scan|dokumen|berkas|file|tautan|linkdrive|bukti|dokumentasi|selfie|pasfoto|portrait)/i.test(header)) {
       photoColumns.add(index);
     }
   });
@@ -711,10 +712,17 @@ function mapRowsToPPKSRecords(rows: string[][]): PPKSRecord[] {
       ? (integratedValues as IntegratedFormData)
       : undefined;
     const desil = parseSheetNumber(readCellByAliases(headers, row, ['desil', 'desilKemiskinan', 'desilDTKS', 'desilEkonomi']), 0);
-    const fotoDiri = readCellByAliases(headers, row, ['fotoDiri', 'fotoDiriPPKS', 'fotoResponden', 'uploadFotoDiri', 'tautanFotoDiri', 'linkFotoDiri', 'fotoDiriCloseUp', 'fotoDiriResponden', 'foto']);
-    const fotoKtp = readCellByAliases(headers, row, ['fotoKtp', 'fotoKTP', 'uploadFotoKTP', 'dokumenKTP', 'tautanFotoKTP', 'linkFotoKTP', 'fotoKartuIdentitas', 'scanKTP']);
-    const fotoKk = readCellByAliases(headers, row, ['fotoKk', 'fotoKK', 'uploadFotoKK', 'dokumenKK', 'tautanFotoKK', 'linkFotoKK', 'scanKK']);
-    const fotoRumah = readCellByAliases(headers, row, ['fotoRumah', 'fotoRumahTampakDepan', 'uploadFotoRumah', 'tautanFotoRumah', 'linkFotoRumah', 'fotoDepanRumah', 'fotoTampakDepanRumah']);
+    // Prefer category-aware upload-column detection so a longer Google Forms
+    // question title still maps correctly, while never treating KTP/KK/house
+    // attachments as the respondent portrait.
+    const fotoDiri = readPPKSPhotoSourceByKind(headers, row, 'diri') ||
+      readCellByAliases(headers, row, ['fotoDiri', 'fotoDiriPPKS', 'fotoResponden', 'uploadFotoDiri', 'tautanFotoDiri', 'linkFotoDiri', 'fotoDiriCloseUp', 'fotoDiriResponden']);
+    const fotoKtp = readPPKSPhotoSourceByKind(headers, row, 'ktp') ||
+      readCellByAliases(headers, row, ['fotoKtp', 'fotoKTP', 'uploadFotoKTP', 'dokumenKTP', 'tautanFotoKTP', 'linkFotoKTP', 'fotoKartuIdentitas', 'scanKTP']);
+    const fotoKk = readPPKSPhotoSourceByKind(headers, row, 'kk') ||
+      readCellByAliases(headers, row, ['fotoKk', 'fotoKK', 'uploadFotoKK', 'dokumenKK', 'tautanFotoKK', 'linkFotoKK', 'scanKK']);
+    const fotoRumah = readPPKSPhotoSourceByKind(headers, row, 'rumah') ||
+      readCellByAliases(headers, row, ['fotoRumah', 'fotoRumahTampakDepan', 'uploadFotoRumah', 'tautanFotoRumah', 'linkFotoRumah', 'fotoDepanRumah', 'fotoTampakDepanRumah']);
     const sourceRecord: PPKSRecord = {
       id: recordId || `SHEET-ROW-${rowIndex + 2}`,
       timestamp,
