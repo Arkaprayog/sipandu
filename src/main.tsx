@@ -13,6 +13,45 @@ if (!rootElement) {
 const root = createRoot(rootElement);
 let appLoaded = false;
 
+class StartupErrorBoundary extends React.Component<
+  { children: React.ReactNode },
+  { error: string | null }
+> {
+  state = { error: null as string | null };
+
+  static getDerivedStateFromError(error: unknown) {
+    return {
+      error: error instanceof Error
+        ? [`${error.name}: ${error.message}`, error.stack || ''].filter(Boolean).join('\\n')
+        : String(error),
+    };
+  }
+
+  componentDidCatch(error: unknown, info: React.ErrorInfo) {
+    console.error('SIPANDU crashed while rendering the application:', error, info.componentStack);
+  }
+
+  render() {
+    if (this.state.error) {
+      return (
+        <main style={{ minHeight: '70vh', display: 'grid', placeItems: 'center', padding: 20, color: '#1f2937', background: '#fff7f7', fontFamily: 'system-ui,sans-serif' }}>
+          <section role="alert" aria-live="assertive" style={{ boxSizing: 'border-box', width: '100%', maxWidth: 680, padding: 20, border: '1px solid #b91c1c', borderRadius: 14, background: '#fff', overflowWrap: 'anywhere' }}>
+            <h1 style={{ margin: '0 0 8px', color: '#991b1b', fontSize: 20 }}>SIPANDU mengalami kesalahan saat dibuka</h1>
+            <p style={{ margin: '8px 0', fontSize: 14, lineHeight: 1.5 }}>
+              Modul utama berhasil diunduh, tetapi antarmuka mengalami kesalahan saat dirender. Data browser tidak dihapus.
+            </p>
+            <code style={{ display: 'block', whiteSpace: 'pre-wrap', padding: 10, background: '#fee2e2', borderRadius: 8, fontSize: 12 }}>{this.state.error.slice(0, 3000)}</code>
+            <button type="button" onClick={() => window.location.reload()} style={{ marginTop: 14, padding: '10px 16px', border: 0, borderRadius: 10, background: '#166534', color: '#fff', fontWeight: 700, cursor: 'pointer' }}>
+              Muat ulang aplikasi
+            </button>
+          </section>
+        </main>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 const retryButton = () => (
   <button
     type="button"
@@ -88,7 +127,7 @@ import('./App')
   .then(({ default: App }) => {
     appLoaded = true;
     window.clearTimeout(loadingTimer);
-    root.render(<App />);
+    root.render(<StartupErrorBoundary><App /></StartupErrorBoundary>);
   })
   .catch((error: unknown) => {
     appLoaded = true;
