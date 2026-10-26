@@ -545,7 +545,6 @@ export default function App() {
     const notificationUid = auth.currentUser?.uid || 'default';
     await processRespondentSubmissionEvents(notificationUid, imported.records, recordsForSync as unknown as Array<Record<string, unknown>>);
     setRespondentNotifications(loadRespondentNotifications(notificationUid));
-    const firestoreDocumentsRemoved = await runFirestoreRosterReconciliation(recordsForSync, true);
     setPpksList((localRecords) => reconcileSpreadsheetPPKSRecords(localRecords, recordsForSync));
     setSettings((current) => ({
       ...current,
@@ -554,12 +553,7 @@ export default function App() {
       googleSpreadsheetSourceTab: imported.selectedTab,
     }));
     const updatedAt = new Date().toLocaleString('id-ID');
-    const hasExpectedRoster = recordsForSync.length === EXPECTED_REAL_PPKS_COUNT;
-    const firestoreMessage = !hasExpectedRoster
-      ? `Firestore penyelarasan penuh dilewati: ${recordsForSync.length} PPKS unik terbaca, sedangkan roster yang dipakai untuk pembersihan harus ${EXPECTED_REAL_PPKS_COUNT}. Data sumber tetap dimuat; tidak ada dokumen yang dihapus.`
-      : firestoreDocumentsRemoved === null
-        ? 'Data Sheets berhasil dimuat, tetapi Firestore belum diselaraskan; periksa izin owner/supervisor atau koneksi Firebase.'
-        : `Firestore diselaraskan ke ${EXPECTED_REAL_PPKS_COUNT} PPKS; ${firestoreDocumentsRemoved} dokumen lama/duplikat di luar roster dibersihkan.`;
+    const firestoreMessage = 'Firestore tidak dihapus atau direkonsiliasi oleh tombol sinkronisasi. Penghapusan data harus menjadi tindakan administrasi terpisah dan disengaja.';
     setLiveSyncState({
       type: 'success',
       message: `Sumber “${imported.spreadsheetTitle}” → “${imported.selectedTab}”: ${imported.sourceDataRows} baris data, ${recordsForSync.length} PPKS unik dimuat, ${imported.duplicateRowsCollapsed} duplikat spreadsheet digabung, ${imported.sampleRecordsFiltered} contoh disaring. Respons Form lanjutan dipadankan: ${continuation.matchedResponses}. ${continuation.warning ? continuation.warning + ' ' : ''}Foto sumber: diri ${imported.photoCounts.diri}/${imported.records.length}, KTP ${imported.photoCounts.ktp}/${imported.records.length}, KK ${imported.photoCounts.kk}/${imported.records.length}, rumah ${imported.photoCounts.rumah}/${imported.records.length}; tautan dipulihkan dari Forms: ${imported.photosRecoveredFromForm}; status pemulihan: ${imported.photoRecoveryStatus} — ${imported.photoRecoveryDetail} ${firestoreMessage} NIK terpetakan ${imported.recordsWithNIK}/${imported.records.length}. Sinkronisasi otomatis setiap 5 menit saat dashboard terbuka dan izin Google masih berlaku.`,
