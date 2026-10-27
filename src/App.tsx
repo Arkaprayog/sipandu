@@ -779,6 +779,13 @@ export default function App() {
     if (!authReady || !localCacheReady) return;
 
     const formUrl = settings.googleFormTahapAwalUrl?.trim() || '';
+    // Clear a previous source immediately when this dedicated Form configuration changes.
+    stageOneRespondentsRef.current = [];
+    setStageOneRespondents([]);
+    setStageOneResponseSyncState({
+      type: 'idle',
+      message: formUrl ? 'Menghubungkan Form khusus Asesmen Tahap Awal…' : 'URL Form khusus Asesmen Tahap Awal belum diatur.',
+    });
     if (isPrimaryGoogleFormUrl(formUrl)) {
       stageOneRespondentsRef.current = [];
       setStageOneRespondents([]);
