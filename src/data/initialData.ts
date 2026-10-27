@@ -11,7 +11,7 @@ export const initialProfileUser: ProfileUser = {
 };
 
 export const initialAppSettings: AppSettings = {
-  googleFormTahapAwalUrl: GOOGLE_SIPANDU_RESOURCES.formEditorUrl,
+  googleFormTahapAwalUrl: GOOGLE_SIPANDU_RESOURCES.formRespondentUrl,
   googleFormTahapLanjutanUrl: '',
   googleFormTahapLanjutanIdEntry: '',
   googleFormKesehatanMentalUrl: '',
