@@ -38,6 +38,8 @@ UPLOADS = ROOT / 'public' / 'uploads'
 SOURCE_PDF = UPLOADS / 'Surat Tugas.pdf'
 OUT = UPLOADS / 'Surat Tugas - Template Editable Terkunci.docx'
 UPLOADS.mkdir(parents=True, exist_ok=True)
+SOURCE_ASSETS = ROOT / 'src' / 'assets'
+SOURCE_ASSETS.mkdir(parents=True, exist_ok=True)
 if not SOURCE_PDF.exists():
     raise FileNotFoundError(f'Surat Tugas source PDF is missing: {SOURCE_PDF}')
 
@@ -50,6 +52,8 @@ with fitz.open(SOURCE_PDF) as _pdf:
     _pix = _page.get_pixmap(matrix=fitz.Matrix(300 / 72, 300 / 72), alpha=False)
     _rendered = Image.frombytes('RGB', (_pix.width, _pix.height), _pix.samples)
 _rendered.save(UPLOADS / 'surat-tugas-original-background.png', optimize=True)
+# Bundle a copy under src/ so Vite fingerprints it and resolves it reliably.
+_rendered.save(SOURCE_ASSETS / 'surat-tugas-original-background.png', optimize=True)
 _header = _rendered.crop((190, 105, 2290, 445)).resize((1600, 259), Image.Resampling.LANCZOS)
 _header = _header.quantize(colors=48, method=Image.Quantize.MEDIANCUT, dither=Image.Dither.NONE)
 HEADER_IMG = str(UPLOADS / 'surat-tugas-header-locked.png')
