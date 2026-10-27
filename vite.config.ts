@@ -12,6 +12,22 @@ function optimizeLoginBackground(): Plugin {
     enforce: 'pre',
     configResolved(config) {
       if (config.command !== 'build') return;
+      // Generate the original Surat Tugas page artwork before Vite resolves modules.
+      // This also supports hosting providers configured with the direct `vite build`
+      // command instead of `npm run build`.
+      const documentScript = path.resolve(config.root, 'scripts/generate_surat_tugas_template.py');
+      const documentResult = spawnSync('python3', [documentScript], {
+        cwd: config.root,
+        stdio: 'inherit',
+        timeout: 180_000,
+      });
+      if (documentResult.error || documentResult.status !== 0) {
+        throw new Error(
+          'SIPANDU build dihentikan karena halaman asli Surat Tugas tidak berhasil dibuat. ' +
+          (documentResult.error?.message || `Status generator: ${documentResult.status}`)
+        );
+      }
+
       const scriptPath = path.resolve(config.root, 'scripts/optimize-login-background.mjs');
       const result = spawnSync('node', [scriptPath], {
         cwd: config.root,
