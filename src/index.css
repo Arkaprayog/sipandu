@@ -102,11 +102,12 @@
   .surat-tugas-original-page { position: absolute !important; inset: 0 !important; display: block !important; width: 210mm !important; height: 297mm !important; max-width: none !important; object-fit: fill !important; margin: 0 !important; }
   .surat-tugas-overlay { position: absolute !important; z-index: 2 !important; display: block !important; box-sizing: border-box !important; overflow: hidden !important; padding: 0 !important; margin: 0 !important; border: 0 !important; background: #fff !important; color: #111 !important; font-family: "Times New Roman", serif !important; font-size: 11pt !important; font-weight: 400 !important; line-height: 1.18 !important; white-space: pre-wrap !important; overflow-wrap: anywhere !important; }
   .surat-tugas-number-overlay { left: 65mm; top: 44.5mm; width: 80mm; height: 5.5mm; text-align: center; font-size: 11.5pt !important; font-weight: 700 !important; white-space: nowrap !important; }
-  .surat-tugas-kegiatan-overlay { left: 45.8mm; top: 60.4mm; width: 147mm; height: 19.4mm; }
-  .surat-tugas-dasar-overlay { left: 45.8mm; top: 85.6mm; width: 147mm; height: 10mm; }
-  .surat-tugas-pegawai-overlay { left: 45.8mm; top: 108.1mm; width: 147mm; height: 6mm; }
-  .surat-tugas-instruksi-overlay { left: 45.8mm; top: 118.5mm; width: 147mm; height: 31.5mm; }
-  .surat-tugas-penutup-overlay { left: 17.8mm; top: 154.7mm; width: 175mm; height: 10mm; }
-  .surat-tugas-date-overlay { left: 113.8mm; top: 188.7mm; width: 77mm; height: 6mm; white-space: nowrap !important; }
+  .surat-tugas-kegiatan-overlay { left: 46.5mm; top: 60.1mm; width: 146.3mm; height: 20.9mm; }
+  .surat-tugas-dasar-overlay { left: 46.5mm; top: 85mm; width: 146.3mm; height: 10.2mm; }
+  .surat-tugas-pegawai-overlay { left: 46.5mm; top: 107.2mm; width: 146.3mm; height: 6mm; }
+  .surat-tugas-instruksi-overlay { left: 46.5mm; top: 117mm; width: 146.3mm; height: 32.3mm; }
+  .surat-tugas-penutup-overlay { left: 18.2mm; top: 153.5mm; width: 173.9mm; height: 10.2mm; }
+  .surat-tugas-date-overlay { left: 113.8mm; top: 187.7mm; width: 77mm; height: 6mm; white-space: nowrap !important; }
+  .surat-tugas-hanging-line { padding-left: 5.3mm; text-indent: -5.3mm; white-space: pre-wrap; }
   .no-print, nav, header, footer, button, .app-nav-bar, .app-header { display: none !important; }
 }
