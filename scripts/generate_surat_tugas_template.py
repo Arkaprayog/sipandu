@@ -4,16 +4,21 @@ import subprocess
 import sys
 import tempfile
 
-# The public build runners do not always include document/PDF libraries. Install
-# only when needed, then generate the DOCX directly into public/uploads before Vite builds.
-_required_modules = {'docx': 'python-docx', 'fitz': 'PyMuPDF', 'PIL': 'Pillow'}
-_missing_packages = [package for module, package in _required_modules.items() if importlib.util.find_spec(module) is None]
-if _missing_packages:
-    subprocess.check_call([sys.executable, '-m', 'pip', 'install', '--disable-pip-version-check', '--quiet', *_missing_packages])
-
-import fitz
-from PIL import Image
-from docx import Document
+# The public build runners do not always include document/PDF libraries. Test
+# the actual imports (a runner may expose an unrelated or broken module named fitz),
+# then install the required distributions before generating the template.
+try:
+    import fitz
+    from PIL import Image
+    from docx import Document
+except ImportError:
+    subprocess.check_call([
+        sys.executable, '-m', 'pip', 'install', '--disable-pip-version-check',
+        '--quiet', '--upgrade', 'PyMuPDF', 'Pillow', 'python-docx'
+    ])
+    import fitz
+    from PIL import Image
+    from docx import Document
 from docx.shared import Cm, Pt
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.enum.table import WD_TABLE_ALIGNMENT, WD_CELL_VERTICAL_ALIGNMENT
