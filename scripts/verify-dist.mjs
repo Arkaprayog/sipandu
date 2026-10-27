@@ -21,6 +21,8 @@ for (const marker of [
   "sipandu:boot-asset-retry:",
   "__sipandu_boot_retry",
   "retryWithFreshDocument",
+  // A failed wallpaper/logo preload must not block the entire application.
+  "isNonCriticalImageAsset",
   "if (!/\\.(?:m?js|css)"
 ]) {
   if (!html.includes(marker)) fail('Pemulihan aset awal tidak lengkap pada dist/index.html: ' + marker);
