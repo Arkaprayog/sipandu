@@ -3,6 +3,8 @@ name: SIPANDU Native Android APK
 on:
   push:
     branches: [main]
+  pull_request:
+    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -52,7 +54,7 @@ jobs:
         run: bun run build
 
       - name: Install Capacitor Android tooling
-        run: npm install --no-save --package-lock=false --legacy-peer-deps @capacitor/core@7 @capacitor/cli@7 @capacitor/android@7 @capacitor/assets
+        run: npm install --no-save --package-lock=false --legacy-peer-deps @capacitor/core@7 @capacitor/cli@7 @capacitor/android@7 @capacitor/assets@3.0.5
 
       - name: Generate native Android project
         run: npx cap add android
