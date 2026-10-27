@@ -3,6 +3,8 @@ name: SIPANDU Native Android APK
 on:
   push:
     branches: [main]
+  pull_request:
+    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -60,6 +62,21 @@ jobs:
       - name: Copy web assets into Android app
         run: npx cap sync android
 
+      - name: Apply official launcher icon from public/uploads
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/generate_android_icons.py
+          ICON="android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png"
+          FOREGROUND="android/app/src/main/res/mipmap-xxxhdpi/ic_launcher_foreground.png"
+          ADAPTIVE="android/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml"
+          test -s "$ICON"
+          test -s "$FOREGROUND"
+          test -s "$ADAPTIVE"
+          grep -q 'ic_launcher_foreground' "$ADAPTIVE"
+          sha256sum "$ICON" "$FOREGROUND"
+          echo "Verified Android launcher icon is generated from public/uploads/App Icon Picture.png."
+
       - name: Apply package version to Android APK
         shell: bash
         run: |
@@ -71,10 +88,37 @@ jobs:
           sed -i -E "s/versionCode [0-9]+/versionCode $APP_VERSION_CODE/" "$GRADLE_FILE"
           sed -i -E "s/versionName \"[^\"]+\"/versionName \"$APP_VERSION\"/" "$GRADLE_FILE"
           grep -E 'versionCode|versionName' "$GRADLE_FILE"
+      
+      - name: Verify native package, name, version, and launcher assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          APP_VERSION="$(node -p "require('./package.json').version")"
+          GRADLE_FILE="android/app/build.gradle"
+          STRINGS_FILE="android/app/src/main/res/values/strings.xml"
+          ICON_FILE="android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png"
+          grep -q 'applicationId "id.my.sipandu.odhiv"' "$GRADLE_FILE"
+          grep -q "versionName \"$APP_VERSION\"" "$GRADLE_FILE"
+          grep -q 'SIPANDU ODHIV' "$STRINGS_FILE"
+          test -s "$ICON_FILE"
+          echo "Native identity verified: id.my.sipandu.odhiv / SIPANDU ODHIV / v$APP_VERSION"
 
       - name: Build APK
         working-directory: android
         run: ./gradlew --no-daemon assembleDebug
+
+      - name: Verify APK metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK="android/app/build/outputs/apk/debug/app-debug.apk"
+          AAPT="$ANDROID_HOME/build-tools/35.0.0/aapt"
+          test -s "$APK"
+          test -x "$AAPT"
+          "$AAPT" dump badging "$APK" | tee /tmp/sipandu-apk-badging.txt
+          grep -q "package: name='id.my.sipandu.odhiv'" /tmp/sipandu-apk-badging.txt
+          grep -q "versionName='$(node -p "require('./package.json').version")'" /tmp/sipandu-apk-badging.txt
+          grep -q "application-label:'SIPANDU ODHIV'" /tmp/sipandu-apk-badging.txt
 
       - name: Upload installable APK
         uses: actions/upload-artifact@v4
