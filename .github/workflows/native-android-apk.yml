@@ -1,4 +1,4 @@
-name: SIPANDU Native Android APK
+name: SIPANDU Native Android APK and Release
 
 on:
   push:
@@ -128,7 +128,7 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-      - name: Create one-time release signing key
+      - name: Create temporary release signing key
         if: github.event_name != 'pull_request'
         shell: bash
         run: |
@@ -136,7 +136,14 @@ jobs:
           KEYSTORE_PATH="$RUNNER_TEMP/sipandu-release-v${APP_VERSION}.jks"
           KEYSTORE_PASSWORD="$(openssl rand -hex 24)"
           KEY_ALIAS="sipandu-release"
-          keytool -genkeypair -v             -keystore "$KEYSTORE_PATH"             -storetype JKS             -storepass "$KEYSTORE_PASSWORD"             -keypass "$KEYSTORE_PASSWORD"             -alias "$KEY_ALIAS"             -keyalg RSA -keysize 4096 -validity 10000             -dname "CN=SIPANDU ODHIV, OU=Release, O=SIPANDU, L=Medan, ST=Sumatera Utara, C=ID"
+          keytool -genkeypair -v \
+            -keystore "$KEYSTORE_PATH" \
+            -storetype JKS \
+            -storepass "$KEYSTORE_PASSWORD" \
+            -keypass "$KEYSTORE_PASSWORD" \
+            -alias "$KEY_ALIAS" \
+            -keyalg RSA -keysize 4096 -validity 10000 \
+            -dname "CN=SIPANDU ODHIV, OU=Release, O=SIPANDU, L=Medan, ST=Sumatera Utara, C=ID"
           echo "SIPANDU_KEYSTORE_PATH=$KEYSTORE_PATH" >> "$GITHUB_ENV"
           echo "SIPANDU_KEYSTORE_PASSWORD=$KEYSTORE_PASSWORD" >> "$GITHUB_ENV"
           echo "SIPANDU_KEY_ALIAS=$KEY_ALIAS" >> "$GITHUB_ENV"
@@ -205,36 +212,5 @@ jobs:
         with:
           name: SIPANDU-ODHIV-RELEASE-APK-v${{ env.APP_VERSION }}
           path: android/app/build/outputs/apk/release/app-release.apk
-          if-no-files-found: error
-          retention-days: 90
-
-      - name: Upload release signing key backup (KEEP PRIVATE)
-        if: github.event_name != 'pull_request'
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p release-key-backup
-          cp "$SIPANDU_KEYSTORE_PATH" release-key-backup/sipandu-release-keystore.jks
-          cat > release-key-backup/KEY-INFO.txt <<EOF
-          SIPANDU ODHIV Android release signing key backup
-          Version created: $APP_VERSION
-          Keystore file: sipandu-release-keystore.jks
-          Keystore type: JKS
-          Alias: $SIPANDU_KEY_ALIAS
-          Keystore password: $SIPANDU_KEYSTORE_PASSWORD
-          Key password: $SIPANDU_KEY_PASSWORD
-
-          IMPORTANT:
-          - Keep this file and the keystore PRIVATE and in secure backup.
-          - Future app updates must be signed with this SAME key.
-          - This CI run creates a one-time key; a future run creates a different key unless the key is migrated to GitHub Actions secrets.
-          EOF
-
-      - name: Upload release signing key backup artifact (KEEP PRIVATE)
-        if: github.event_name != 'pull_request'
-        uses: actions/upload-artifact@v4
-        with:
-          name: SIPANDU-ODHIV-RELEASE-KEY-BACKUP-v${{ env.APP_VERSION }}
-          path: release-key-backup/
           if-no-files-found: error
           retention-days: 90
