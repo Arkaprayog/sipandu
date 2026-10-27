@@ -13,7 +13,7 @@ import tempfile
 
 _PILLOW_TMP = tempfile.TemporaryDirectory(prefix="sipandu-icon-deps-")
 try:
-    from PIL import Image, ImageOps
+    from PIL import Image, ImageDraw, ImageOps
 except ImportError:
     subprocess.check_call([
         sys.executable, "-m", "pip", "install", "--disable-pip-version-check",
@@ -79,7 +79,11 @@ def main() -> None:
         bucket = RES / f"mipmap-{density}"
         classic = compose_icon(classic_size, 0.92, BACKGROUND)
         save_icon(classic, bucket / "ic_launcher.png")
-        save_icon(classic.copy(), bucket / "ic_launcher_round.png")
+        round_icon = classic.copy()
+        round_mask = Image.new("L", (classic_size, classic_size), 0)
+        ImageDraw.Draw(round_mask).ellipse((0, 0, classic_size - 1, classic_size - 1), fill=255)
+        round_icon.putalpha(round_mask)
+        save_icon(round_icon, bucket / "ic_launcher_round.png")
         foreground = compose_icon(adaptive_size, 0.67, (0, 0, 0, 0))
         save_icon(foreground, bucket / "ic_launcher_foreground.png")
 
@@ -105,9 +109,20 @@ def main() -> None:
         encoding="utf-8",
     )
 
+    expected = [
+        *(RES / f"mipmap-{density}" / "ic_launcher.png" for density, _ in DENSITIES),
+        *(RES / f"mipmap-{density}" / "ic_launcher_round.png" for density, _ in DENSITIES),
+        *(RES / f"mipmap-{density}" / "ic_launcher_foreground.png" for density, _ in DENSITIES),
+        RES / "mipmap-anydpi-v26" / "ic_launcher.xml",
+        RES / "mipmap-anydpi-v26" / "ic_launcher_round.xml",
+        RES / "values" / "ic_launcher_background.xml",
+    ]
+    missing = [str(path.relative_to(ROOT)) for path in expected if not path.is_file() or path.stat().st_size == 0]
+    if missing:
+        raise SystemExit("Launcher resource generation incomplete: " + ", ".join(missing))
     print(
         f"Android launcher icons generated from {SOURCE.relative_to(ROOT)} "
-        f"({width}x{height}); classic + adaptive resources installed."
+        f"({width}x{height}); classic, round, and adaptive resources verified."
     )
 
 
