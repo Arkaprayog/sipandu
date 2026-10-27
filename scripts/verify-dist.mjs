@@ -132,6 +132,13 @@ if (fs.existsSync(assetDirectory)) {
 }
 
 
+const editableSuratTugas = path.join(dist, 'uploads', 'Surat Tugas - Template Editable Terkunci.docx');
+if (!fs.existsSync(editableSuratTugas) || fs.statSync(editableSuratTugas).size < 50000) {
+  fail('Template Surat Tugas editable tidak ada atau kosong di dist/uploads. Periksa generator locked DOCX.');
+} else {
+  console.log(`Locked editable Surat Tugas template present: ${fs.statSync(editableSuratTugas).size} bytes.`);
+}
+
 const loginBackground = path.join(dist, 'uploads', 'Wallpaper Background Landingpage.webp');
 const originalLoginBackground = path.join(dist, 'uploads', 'Wallpaper Background Landingpage.jpg');
 if (!fs.existsSync(loginBackground) || fs.statSync(loginBackground).size === 0) {
