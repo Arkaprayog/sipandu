@@ -559,8 +559,7 @@ export function subscribeToPPKSChanges(
   onError: (error: Error) => void,
 ): () => void {
   if (!auth.currentUser) {
-    onError(new Error('Sesi SIPANDU belum aktif untuk realtime Firestore.'));
-    return () => undefined;
+    throw new Error('Sesi SIPANDU belum aktif untuk realtime Firestore.');
   }
 
   try {
@@ -575,8 +574,9 @@ export function subscribeToPPKSChanges(
       (error) => onError(new Error(describeConnectionError(error))),
     );
   } catch (error) {
-    onError(new Error(describeConnectionError(error)));
-    return () => undefined;
+    // Fail synchronously so the caller can schedule reconnection after connect()
+    // finishes assigning its unsubscribe function (avoids a dead retry loop).
+    throw new Error(describeConnectionError(error));
   }
 }
 
