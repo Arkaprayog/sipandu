@@ -139,6 +139,13 @@ if (!fs.existsSync(editableSuratTugas) || fs.statSync(editableSuratTugas).size <
   console.log(`Locked editable Surat Tugas template present: ${fs.statSync(editableSuratTugas).size} bytes.`);
 }
 
+const suratTugasOriginalPage = path.join(dist, 'uploads', 'surat-tugas-original-background.png');
+if (!fs.existsSync(suratTugasOriginalPage) || fs.statSync(suratTugasOriginalPage).size < 100000) {
+  fail('Gambar dasar halaman asli Surat Tugas tidak ada atau terlalu kecil pada hasil build.');
+} else {
+  console.log(`Original Surat Tugas page artwork present: ${fs.statSync(suratTugasOriginalPage).size} bytes.`);
+}
+
 const loginBackground = path.join(dist, 'uploads', 'Wallpaper Background Landingpage.webp');
 const originalLoginBackground = path.join(dist, 'uploads', 'Wallpaper Background Landingpage.jpg');
 if (!fs.existsSync(loginBackground) || fs.statSync(loginBackground).size === 0) {
