@@ -313,10 +313,14 @@ export const AsesmenView: React.FC<AsesmenViewProps> = ({
                     <span>Salin</span>
                   </button>
                   <a
-                    href={stageOneRespondentUrl}
+                    href={stageOneRespondentUrl || undefined}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="p-1.5 rounded-lg bg-black/40 hover:bg-black/60 text-sky-300"
+                    aria-disabled={!stageOneRespondentUrl}
+                    onClick={(event) => {
+                      if (!stageOneRespondentUrl) event.preventDefault();
+                    }}
+                    className={`p-1.5 rounded-lg bg-black/40 hover:bg-black/60 text-sky-300 ${stageOneRespondentUrl ? '' : 'pointer-events-none opacity-50'}`}
                     title="Buka Formulir"
                   >
                     <ExternalLink className="w-4 h-4" />
