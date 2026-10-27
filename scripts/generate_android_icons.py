@@ -20,7 +20,7 @@ except ImportError:
         "--upgrade", "--target", _PILLOW_TMP.name, "Pillow",
     ])
     sys.path.insert(0, _PILLOW_TMP.name)
-    from PIL import Image, ImageOps
+    from PIL import Image, ImageDraw, ImageOps
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "public" / "uploads" / "App Icon Picture.png"
