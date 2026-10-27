@@ -5,6 +5,7 @@ import { deduplicatePPKSRecords, getPPKSNIKCandidates, sortPPKSRecordsByTimestam
 import { classifyPPKSPhotoHeader, normalizePPKSPhotoSource, readPPKSPhotoSourceByKind } from './photoSources';
 import { countSharedPhotoFileIds, googleDriveViewUrl, matchFormPhotoResponseForPPKS, isGoogleFormLinkedToSpreadsheet, type FormPhotoResponseCandidate } from './formPhotoRecovery';
 import { GOOGLE_SIPANDU_RESOURCES } from './googleSIPANDUResources';
+import { readInterventionRecommendationFromRow } from './interventionMapping';
 import { isLegacySamplePPKS, isObviousDemoMarker, LEGACY_SAMPLE_PPKS_IDS, LEGACY_SAMPLE_PPKS_NAMES } from '../data/initialData';
 
 export interface GoogleDriveFile {
@@ -828,7 +829,10 @@ function mapRowsToPPKSRecords(rows: string[][]): PPKSRecord[] {
       alamatLengkap: alamat,
       noHpWa: readCellByAliases(headers, row, ['noHPWA', 'nomorHPWA', 'noWhatsApp', 'nomorTelepon', 'telepon', 'hp']),
       jenisBantuan,
-      intervensiMental: readCellByAliases(headers, row, ['intervensiMental', 'kebutuhanIntervensiMental', 'catatanPendamping']),
+      // Pull the result from Google Sheets column BE for both historical rows
+      // and future Form submissions. Blank BE cells may fall back to the column title.
+      intervensiMental: readInterventionRecommendationFromRow(headers, row)
+        || readCellByAliases(headers, row, ['intervensiMental', 'kebutuhanIntervensiMental', 'catatanPendamping']),
       desil,
       fotoDiri,
       fotoKtp,
@@ -1292,6 +1296,8 @@ export async function importPPKSFromSpreadsheet(
   photoRecoveryDiagnostics: { responseCount: number; responsesWithUploads: number; recordsMatched: number };
   photoCounts: { diri: number; ktp: number; kk: number; rumah: number };
   records: PPKSRecord[];
+  /** Imported respondent rows with a non-empty intervention/recommendation sourced from column BE. */
+  recordsWithInterventionRecommendation: number;
   recordsWithNIK: number;
   recordsMissingNIK: number;
   nikHeadersFound: string[];
@@ -1307,13 +1313,17 @@ export async function importPPKSFromSpreadsheet(
   const metadata = await getSpreadsheetMetadata(spreadsheetUrlOrId);
   if (!metadata.sheetTitles.length) throw new Error('Spreadsheet tidak memiliki tab yang dapat dibaca.');
   const preferred = preferredTab?.trim();
+  const requestedFromResponsesTab = metadata.sheetTitles.find(
+    (title) => normalizeSheetHeader(title) === normalizeSheetHeader('From Responses 1')
+  );
   const responseTab = metadata.sheetTitles.find((title) => {
     const normalized = normalizeSheetHeader(title);
     return normalized.includes('formresponses') || normalized.includes('fromresponse') || normalized.includes('respon');
   });
-  const selectedTab = preferred && metadata.sheetTitles.includes(preferred)
-    ? preferred
-    : (responseTab || metadata.sheetTitles[0]);
+  // The owner's specified source tab is authoritative when present. This avoids
+  // silently selecting a different response tab due to spreadsheet tab ordering.
+  const selectedTab = requestedFromResponsesTab
+    || (preferred && metadata.sheetTitles.includes(preferred) ? preferred : (responseTab || metadata.sheetTitles[0]));
   const escapedTitle = selectedTab.replace(/'/g, "''");
   const rows = await readSpreadsheetRichData(metadata.spreadsheetId, `'${escapedTitle}'!A1:ZZ2000`);
   const headers = rows[0] || [];
@@ -1405,6 +1415,7 @@ export async function importPPKSFromSpreadsheet(
     sampleRecordsFiltered,
     duplicateRowsCollapsed,
     records,
+    recordsWithInterventionRecommendation: records.filter((record) => Boolean(String(record.intervensiMental || '').trim())).length,
     recordsWithNIK,
     recordsMissingNIK: records.length - recordsWithNIK,
     photosRecoveredFromForm,
