@@ -28,6 +28,21 @@ function optimizeLoginBackground(): Plugin {
         );
       }
 
+      // Generate the favicon, PWA install icons, and iOS home-screen icon from
+      // the uploaded official SIPANDU logo on every build (including hosted builds).
+      const pwaIconScript = path.resolve(config.root, 'scripts/generate_pwa_icons.py');
+      const pwaIconResult = spawnSync('python3', [pwaIconScript], {
+        cwd: config.root,
+        stdio: 'inherit',
+        timeout: 120_000,
+      });
+      if (pwaIconResult.error || pwaIconResult.status !== 0) {
+        throw new Error(
+          'SIPANDU build dihentikan karena ikon PWA/iOS tidak berhasil dibuat. ' +
+          (pwaIconResult.error?.message || `Status generator: ${pwaIconResult.status}`)
+        );
+      }
+
       const scriptPath = path.resolve(config.root, 'scripts/optimize-login-background.mjs');
       const result = spawnSync('node', [scriptPath], {
         cwd: config.root,
