@@ -88,3 +88,29 @@
     color: #111827 !important;
   }
 }
+
+
+/* Print only the in-app Surat Tugas template as A4 PDF. */
+.surat-tugas-print-root { display: none; }
+@page { size: A4 portrait; margin: 14mm 16mm 16mm; }
+@media print {
+  body * { visibility: hidden !important; }
+  .surat-tugas-print-root, .surat-tugas-print-root * { visibility: visible !important; }
+  .surat-tugas-print-root { display: block !important; position: absolute !important; inset: 0 auto auto 0 !important; width: 100% !important; color: #111 !important; background: #fff !important; font-family: "Times New Roman", serif !important; }
+  .surat-tugas-paper { width: 100%; min-height: 265mm; font-size: 11pt; line-height: 1.22; color: #111; }
+  .surat-tugas-letterhead { display: block; width: 100%; max-height: 31mm; object-fit: contain; margin: 0 auto 4mm; }
+  .surat-tugas-title { margin: 0; text-align: center; font-size: 14pt; font-weight: 700; text-decoration: underline; }
+  .surat-tugas-number { margin: 1mm 0 7mm; text-align: center; font-size: 11pt; font-weight: 700; }
+  .surat-tugas-table { width: 100%; border-collapse: collapse; table-layout: fixed; margin: 0 0 3mm; }
+  .surat-tugas-table td { vertical-align: top; padding: 1mm 0; overflow-wrap: anywhere; }
+  .surat-tugas-table td:first-child { width: 24mm; }
+  .surat-tugas-table td:nth-child(2) { width: 5mm; }
+  .surat-tugas-assignment { text-align: center; font-size: 11.5pt; margin: 4mm 0; font-weight: 700; }
+  .surat-tugas-instruction { margin-bottom: 1.5mm; white-space: pre-wrap; }
+  .surat-tugas-closing { margin: 5mm 0 12mm; }
+  .surat-tugas-signature { width: 72mm; margin-left: auto; break-inside: avoid; }
+  .surat-tugas-sign-title { font-size: 10.5pt; line-height: 1.15; }
+  .surat-tugas-barcode { display: block; width: 19mm; height: 21mm; object-fit: contain; margin-left: 12mm; }
+  .surat-tugas-sign-name { width: 43mm; text-align: center; font-weight: 700; text-decoration: underline; }
+  .surat-tugas-cert { position: fixed; bottom: -9mm; left: 0; right: 0; text-align: center; font-size: 7.5pt; }
+}

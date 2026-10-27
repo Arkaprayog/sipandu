@@ -51,9 +51,9 @@ with fitz.open(SOURCE_PDF) as _pdf:
     _rendered = Image.frombytes('RGB', (_pix.width, _pix.height), _pix.samples)
 _header = _rendered.crop((190, 105, 2290, 445)).resize((1600, 259), Image.Resampling.LANCZOS)
 _header = _header.quantize(colors=48, method=Image.Quantize.MEDIANCUT, dither=Image.Dither.NONE)
-HEADER_IMG = str(_asset_dir / 'surat_tugas_header_locked.png')
+HEADER_IMG = str(UPLOADS / 'surat-tugas-header-locked.png')
 _header.save(HEADER_IMG, optimize=True)
-QR_IMG = str(_asset_dir / 'surat_tugas_barcode_locked.png')
+QR_IMG = str(UPLOADS / 'surat-tugas-barcode-locked.png')
 _rendered.crop((1375, 2518, 1630, 2795)).save(QR_IMG, optimize=True)
 
 doc = Document()
