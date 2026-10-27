@@ -26,7 +26,9 @@ import {
 } from 'lucide-react';
 
 interface AsesmenViewProps {
-  ppksList: PPKSRecord[];
+  /** Records imported only from the Google Form linked to the stage-one link/barcode. */
+  stageOneRespondents: PPKSRecord[];
+  stageOneSyncMessage: string;
   onAddNewPPKS: (newPPKS: PPKSRecord) => void;
   settings: AppSettings;
 }
@@ -36,7 +38,8 @@ interface AsesmenViewProps {
 type AsesmenSubMenu = 'tahap-awal' | 'google-form';
 
 export const AsesmenView: React.FC<AsesmenViewProps> = ({
-  ppksList,
+  stageOneRespondents,
+  stageOneSyncMessage,
   onAddNewPPKS,
   settings,
 }) => {
@@ -696,7 +699,10 @@ export const AsesmenView: React.FC<AsesmenViewProps> = ({
             DATABASE PPKS ASESMEN TAHAP AWAL
           </h3>
           <p className="text-xs text-sky-200 mt-1">
-            Daftar data hasil asesmen tahap awal responden ODHIV yang siap ditindaklanjuti
+            Hanya responden yang mengirim formulir melalui link/barcode Asesmen Tahap Awal. Data dari spreadsheet Google Form utama tidak ditampilkan di daftar ini.
+          </p>
+          <p role="status" className={`mt-2 text-[10px] leading-relaxed ${stageOneSyncMessage.includes('belum dapat') || stageOneSyncMessage.includes('belum diatur') ? 'text-amber-200' : 'text-neutral-400'}`}>
+            {stageOneSyncMessage}
           </p>
         </div>
 
@@ -717,7 +723,7 @@ export const AsesmenView: React.FC<AsesmenViewProps> = ({
               </tr>
             </thead>
             <tbody className="divide-y divide-rose-500/20">
-              {ppksList.map((ppks) => (
+              {stageOneRespondents.map((ppks) => (
                 <tr
                   key={ppks.id}
                   className="hover:bg-emerald-950/30 transition text-center items-center"
@@ -785,6 +791,13 @@ export const AsesmenView: React.FC<AsesmenViewProps> = ({
                   </td>
                 </tr>
               ))}
+              {stageOneRespondents.length === 0 && (
+                <tr>
+                  <td colSpan={9} className="px-4 py-8 text-center text-xs leading-relaxed text-neutral-400">
+                    Belum ada respons baru dari link/barcode Asesmen Tahap Awal sejak pemisahan sumber pada 27 Oktober 2026. Responden lama dari spreadsheet utama sengaja tidak ditampilkan di bagian ini.
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
