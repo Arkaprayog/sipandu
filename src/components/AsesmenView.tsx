@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { PPKSRecord, AppSettings } from '../types';
 import { KemensosQRCode } from './KemensosQRCode';
+import { isPrimaryGoogleFormUrl } from '../lib/googleSIPANDUResources';
 import { CameraCaptureModal } from './CameraCaptureModal';
 import { PrivateDriveImage } from './PrivateDriveImage';
 import { compressImageForLocalStorage } from '../lib/imageCompression';
@@ -69,7 +70,9 @@ export const AsesmenView: React.FC<AsesmenViewProps> = ({
   const [isCompressingPhoto, setIsCompressingPhoto] = useState(false);
 
   // Always show respondents the public fill-in URL, never the editor URL.
-  const stageOneRespondentUrl = toGoogleFormsRespondentUrl(settings.googleFormTahapAwalUrl);
+  const configuredStageOneUrl = toGoogleFormsRespondentUrl(settings.googleFormTahapAwalUrl);
+  // Do not publish a barcode for the known primary/main Form.
+  const stageOneRespondentUrl = isPrimaryGoogleFormUrl(configuredStageOneUrl) ? '' : configuredStageOneUrl;
 
   const handleFileUpload = async (
     e: React.ChangeEvent<HTMLInputElement>,
