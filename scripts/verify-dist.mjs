@@ -176,8 +176,8 @@ for (const required of ['manifest.webmanifest', 'sw.js']) {
 
 // Verify the logo source and all generated icon variants that are linked to the
 // PWA install prompt, iOS home screen, and browser tab.
-const appLogoSource = path.join(dist, 'uploads', 'sipandu-odhiv-logo.jpg');
-if (!fs.existsSync(appLogoSource) || fs.statSync(appLogoSource).size < 100000) {
+const appLogoSource = path.join(dist, 'uploads', 'sipandu-odhiv-logo.webp);
+if (!fs.existsSync(appLogoSource) || fs.statSync(appLogoSource).size < 10000) {
   fail('Logo sumber resmi SIPANDU tidak ada/kosong di dist/uploads.');
 }
 const pwaIconFiles = [
