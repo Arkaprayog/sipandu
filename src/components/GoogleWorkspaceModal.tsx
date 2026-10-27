@@ -28,7 +28,8 @@ import {
   removeObviousDemoFilesFromDrive,
   GoogleDriveFile,
 } from '../lib/googleWorkspace';
-import { GOOGLE_SIPANDU_RESOURCES, GOOGLE_WORKSPACE_EMAIL } from '../lib/googleSIPANDUResources';
+import { GOOGLE_SIPANDU_RESOURCES, GOOGLE_WORKSPACE_EMAIL, getGoogleFormIdFromUrl, isPrimaryGoogleFormUrl } from '../lib/googleSIPANDUResources';
+import { toGoogleFormsRespondentUrl } from '../utils/helpers';
 import { PPKSRecord, AppSettings } from '../types';
 import {
   X,
@@ -46,6 +47,8 @@ import {
   LogOut,
   ShieldCheck,
   FolderPlus,
+  Lock,
+  Unlock,
 } from 'lucide-react';
 
 interface GoogleWorkspaceModalProps {
@@ -76,6 +79,9 @@ export const GoogleWorkspaceModal: React.FC<GoogleWorkspaceModalProps> = ({
   const [newFolderName, setNewFolderName] = useState<string>('SIPANDU ODHIV - Berkas Kemensos Sumut 2026');
 
   // Sheets state
+  const [editingTargetUrl, setEditingTargetUrl] = useState<boolean>(() => !settings.googleSpreadsheetUrl?.trim());
+  const [editingSourceUrl, setEditingSourceUrl] = useState<boolean>(() => !settings.googleSpreadsheetSourceUrl?.trim());
+  const [editingFormUrl, setEditingFormUrl] = useState<boolean>(() => !settings.googleFormTahapAwalUrl?.trim());
   const [spreadsheetIdInput, setSpreadsheetIdInput] = useState<string>(() => {
     const configured = settings.googleSpreadsheetUrl?.trim() || '';
     // The previous default was a placeholder and the fallback silently selected
@@ -259,25 +265,36 @@ export const GoogleWorkspaceModal: React.FC<GoogleWorkspaceModalProps> = ({
     const configuredSource = settings.googleSpreadsheetSourceUrl?.trim() || '';
     setSourceSpreadsheetUrl(configuredSource);
     setSourceSpreadsheetTab(settings.googleSpreadsheetSourceTab?.trim() || '');
+    setEditingSourceUrl(!configuredSource);
   }, [settings.googleSpreadsheetSourceUrl, settings.googleSpreadsheetSourceTab]);
 
   useEffect(() => {
     const configured = settings.googleSpreadsheetUrl?.trim() || '';
     if (!configured || configured.includes('1yA8KemensosODHIVSumut2026_LiveSync')) {
       setSpreadsheetIdInput('');
+      setEditingTargetUrl(true);
       return;
     }
     try {
       if (extractSpreadsheetId(configured) === GOOGLE_SIPANDU_RESOURCES.responseSpreadsheetId) {
         setSpreadsheetIdInput('');
+        setEditingTargetUrl(true);
         return;
       }
     } catch {
       setSpreadsheetIdInput('');
+      setEditingTargetUrl(true);
       return;
     }
     setSpreadsheetIdInput(configured);
+    setEditingTargetUrl(false);
   }, [settings.googleSpreadsheetUrl]);
+
+  useEffect(() => {
+    const configured = settings.googleFormTahapAwalUrl?.trim() || '';
+    setFormIdInput(configured || GOOGLE_SIPANDU_RESOURCES.formEditorUrl);
+    setEditingFormUrl(!configured);
+  }, [settings.googleFormTahapAwalUrl]);
 
   if (!isOpen) return null;
 
@@ -400,6 +417,7 @@ export const GoogleWorkspaceModal: React.FC<GoogleWorkspaceModalProps> = ({
         googleSpreadsheetSourceName: imported.spreadsheetTitle,
         googleSpreadsheetSourceTab: imported.selectedTab,
       });
+      setEditingSourceUrl(false);
       if (!imported.records.length) {
         const headerPreview = (imported.previewRows[0] || []).slice(0, 12).join(' | ');
         throw new Error(
@@ -506,12 +524,69 @@ export const GoogleWorkspaceModal: React.FC<GoogleWorkspaceModalProps> = ({
     }
   };
 
+  // URL settings are explicitly saved and locked, so reopening this modal does not
+  // require retyping long URLs and accidental edits cannot erase them.
+  const saveSourceUrlAndLock = () => {
+    const url = sourceSpreadsheetUrl.trim();
+    try {
+      extractSpreadsheetId(url);
+      if (!url) throw new Error('URL sumber Google Spreadsheet belum diisi.');
+      onUpdateSettings({
+        ...settings,
+        googleSpreadsheetSourceUrl: url,
+        googleSpreadsheetSourceTab: sourceSpreadsheetTab.trim(),
+      });
+      setEditingSourceUrl(false);
+      setStatusMessage({ type: 'success', text: 'URL Spreadsheet sumber tersimpan dan dikunci.' });
+    } catch (error) {
+      setStatusMessage({ type: 'error', text: error instanceof Error ? error.message : 'URL Spreadsheet sumber tidak valid.' });
+    }
+  };
+
+  const saveTargetUrlAndLock = () => {
+    const url = spreadsheetIdInput.trim();
+    try {
+      const id = extractSpreadsheetId(url);
+      if (id === GOOGLE_SIPANDU_RESOURCES.responseSpreadsheetId) {
+        throw new Error('Spreadsheet respons Google Form tidak boleh menjadi target database PPKS.');
+      }
+      onUpdateSettings({ ...settings, googleSpreadsheetUrl: url });
+      setEditingTargetUrl(false);
+      setStatusMessage({ type: 'success', text: 'URL Database PPKS tersimpan dan dikunci.' });
+    } catch (error) {
+      setStatusMessage({ type: 'error', text: error instanceof Error ? error.message : 'URL Database PPKS tidak valid.' });
+    }
+  };
+
+  const saveFormUrlAndLock = () => {
+    const normalized = toGoogleFormsRespondentUrl(formIdInput.trim());
+    if (!normalized || !getGoogleFormIdFromUrl(normalized)) {
+      setStatusMessage({ type: 'error', text: 'URL Google Form tidak valid. Gunakan URL lengkap docs.google.com/forms/d/FORM_ID/edit atau /viewform.' });
+      return;
+    }
+    if (isPrimaryGoogleFormUrl(normalized)) {
+      setStatusMessage({ type: 'error', text: 'Gunakan Google Form khusus Asesmen Tahap Awal, bukan Form utama.' });
+      return;
+    }
+    onUpdateSettings({ ...settings, googleFormTahapAwalUrl: normalized });
+    setFormIdInput(normalized);
+    setEditingFormUrl(false);
+    setStatusMessage({ type: 'success', text: 'URL Google Form tersimpan dan dikunci.' });
+  };
+
   // Google Sheets Actions
   const handleReadSheet = async () => {
     setLoading(true);
     setStatusMessage(null);
     try {
-      const tabs = await getSpreadsheetSheetTitles(spreadsheetIdInput);
+      const targetUrl = spreadsheetIdInput.trim();
+      const targetId = extractSpreadsheetId(targetUrl);
+      if (targetId === GOOGLE_SIPANDU_RESOURCES.responseSpreadsheetId) {
+        throw new Error('Spreadsheet respons Google Form tidak boleh menjadi target database PPKS.');
+      }
+      onUpdateSettings({ ...settings, googleSpreadsheetUrl: targetUrl });
+      setEditingTargetUrl(false);
+      const tabs = await getSpreadsheetSheetTitles(targetUrl);
       if (!tabs.length) throw new Error('Spreadsheet tidak memiliki tab yang dapat dibaca.');
       const rows = await readSpreadsheetData(spreadsheetIdInput, `'${tabs[0].replace(/'/g, "''")}'!A1:Z100`);
       setSheetRows(rows);
@@ -571,6 +646,7 @@ export const GoogleWorkspaceModal: React.FC<GoogleWorkspaceModalProps> = ({
       const newUrl = `https://docs.google.com/spreadsheets/d/${newId}`;
       setSpreadsheetIdInput(newUrl);
       onUpdateSettings({ ...settings, googleSpreadsheetUrl: newUrl });
+      setEditingTargetUrl(false);
       setStatusMessage({ type: 'success', text: `Google Spreadsheet baru berhasil dibuat! (ID: ${newId})` });
     } catch (err: any) {
       setStatusMessage({ type: 'error', text: err.message });
@@ -584,9 +660,19 @@ export const GoogleWorkspaceModal: React.FC<GoogleWorkspaceModalProps> = ({
     setLoading(true);
     setStatusMessage(null);
     try {
-      const responses = await fetchFormResponses(formIdInput);
+      const normalized = toGoogleFormsRespondentUrl(formIdInput.trim());
+      if (!normalized || !getGoogleFormIdFromUrl(normalized)) {
+        throw new Error('URL Google Form tidak valid. Gunakan URL lengkap docs.google.com/forms/d/FORM_ID/edit atau /viewform.');
+      }
+      if (isPrimaryGoogleFormUrl(normalized)) {
+        throw new Error('Gunakan Google Form khusus Asesmen Tahap Awal, bukan Form utama.');
+      }
+      const responses = await fetchFormResponses(normalized);
+      onUpdateSettings({ ...settings, googleFormTahapAwalUrl: normalized });
+      setFormIdInput(normalized);
+      setEditingFormUrl(false);
       setFormResponsesCount(responses.length);
-      setStatusMessage({ type: 'success', text: `Terdeteksi ${responses.length} respon pada Google Form ini.` });
+      setStatusMessage({ type: 'success', text: `Terdeteksi ${responses.length} respon. URL Google Form telah disimpan dan dikunci.` });
     } catch (err: any) {
       setStatusMessage({ type: 'error', text: err.message });
     } finally {
@@ -1019,13 +1105,23 @@ export const GoogleWorkspaceModal: React.FC<GoogleWorkspaceModalProps> = ({
                   ))}
                 </select>
                 <label className="block text-sky-200 font-semibold text-[11px]">Atau tempel URL Spreadsheet sumber:</label>
-                <input
-                  type="url"
-                  value={sourceSpreadsheetUrl}
-                  onChange={(e) => setSourceSpreadsheetUrl(e.target.value)}
-                  placeholder="https://docs.google.com/spreadsheets/d/..."
-                  className="w-full p-2.5 rounded bg-black/70 border border-sky-500/30 text-xs text-white font-mono"
-                />
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <input
+                    type="url"
+                    value={sourceSpreadsheetUrl}
+                    readOnly={!editingSourceUrl && Boolean(sourceSpreadsheetUrl.trim())}
+                    onChange={(e) => setSourceSpreadsheetUrl(e.target.value)}
+                    placeholder="https://docs.google.com/spreadsheets/d/..."
+                    className={`w-full sm:flex-1 p-2.5 rounded bg-black/70 border border-sky-500/30 text-xs text-white font-mono ${!editingSourceUrl && sourceSpreadsheetUrl.trim() ? 'cursor-not-allowed opacity-80' : ''}`}
+                  />
+                  <button
+                    type="button"
+                    onClick={editingSourceUrl ? saveSourceUrlAndLock : () => setEditingSourceUrl(true)}
+                    className="shrink-0 px-3 py-2 rounded-lg border border-sky-500/30 bg-black/50 text-[10px] font-semibold text-sky-100 hover:bg-white/10"
+                  >
+                    {editingSourceUrl ? <><Lock className="inline h-3 w-3 mr-1" />Simpan & Kunci</> : <><Unlock className="inline h-3 w-3 mr-1" />Ubah URL</>}
+                  </button>
+                </div>
                 <div className="flex flex-col sm:flex-row gap-2">
                   <input
                     type="text"
@@ -1057,10 +1153,18 @@ export const GoogleWorkspaceModal: React.FC<GoogleWorkspaceModalProps> = ({
                   <input
                     type="text"
                     value={spreadsheetIdInput}
+                    readOnly={!editingTargetUrl && Boolean(spreadsheetIdInput.trim())}
                     onChange={(e) => setSpreadsheetIdInput(e.target.value)}
                     placeholder="URL Google Spreadsheet"
-                    className="w-full sm:flex-1 p-2 rounded bg-black/70 border border-rose-500/30 text-xs text-white font-mono"
+                    className={`w-full sm:flex-1 p-2 rounded bg-black/70 border border-rose-500/30 text-xs text-white font-mono ${!editingTargetUrl && spreadsheetIdInput.trim() ? 'cursor-not-allowed opacity-80' : ''}`}
                   />
+                  <button
+                    type="button"
+                    onClick={editingTargetUrl ? saveTargetUrlAndLock : () => setEditingTargetUrl(true)}
+                    className="w-full sm:w-auto shrink-0 px-3 py-2 rounded-lg border border-emerald-500/30 bg-black/50 text-[10px] font-semibold text-emerald-100 hover:bg-white/10"
+                  >
+                    {editingTargetUrl ? <><Lock className="inline h-3 w-3 mr-1" />Simpan & Kunci</> : <><Unlock className="inline h-3 w-3 mr-1" />Ubah URL</>}
+                  </button>
                   <button
                     type="button"
                     onClick={handleReadSheet}
@@ -1129,10 +1233,18 @@ export const GoogleWorkspaceModal: React.FC<GoogleWorkspaceModalProps> = ({
                   <input
                     type="text"
                     value={formIdInput}
+                    readOnly={!editingFormUrl && Boolean(settings.googleFormTahapAwalUrl?.trim())}
                     onChange={(e) => setFormIdInput(e.target.value)}
                     placeholder="URL Google Form"
-                    className="w-full sm:flex-1 p-2 rounded bg-black/70 border border-rose-500/30 text-xs text-white font-mono"
+                    className={`w-full sm:flex-1 p-2 rounded bg-black/70 border border-rose-500/30 text-xs text-white font-mono ${!editingFormUrl && settings.googleFormTahapAwalUrl?.trim() ? 'cursor-not-allowed opacity-80' : ''}`}
                   />
+                  <button
+                    type="button"
+                    onClick={editingFormUrl ? saveFormUrlAndLock : () => setEditingFormUrl(true)}
+                    className="w-full sm:w-auto shrink-0 px-3 py-2 rounded-lg border border-emerald-500/30 bg-black/50 text-[10px] font-semibold text-emerald-100 hover:bg-white/10"
+                  >
+                    {editingFormUrl ? <><Lock className="inline h-3 w-3 mr-1" />Simpan & Kunci</> : <><Unlock className="inline h-3 w-3 mr-1" />Ubah URL</>}
+                  </button>
                   <button
                     type="button"
                     onClick={handleCheckFormResponses}
