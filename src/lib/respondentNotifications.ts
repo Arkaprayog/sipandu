@@ -6,6 +6,8 @@ export interface RespondentNotification {
   title: string;
   body: string;
   respondentName: string;
+  /** Stable PPKS record ID used to open the correctly prefilled follow-up Form in WhatsApp. */
+  respondentId?: string;
   createdAt: string;
   read: boolean;
 }
@@ -221,9 +223,10 @@ export async function processRespondentSubmissionEvents(
     events.push({
       id: `kuisioner:${id}:${fingerprint(String(record.timestamp || ''))}`,
       kind: 'kuisioner',
-      title: 'Kuisioner Responden Baru',
-      body: `Responden ${String(record.namaLengkap || 'baru')} telah mengirim kuisioner tahap awal.`,
+      title: 'Asesmen Tahap Awal — Responden Baru',
+      body: `Responden ${String(record.namaLengkap || 'baru')} telah mengirim Google Form asesmen tahap awal. Tinjau data, lalu siapkan formulir lanjutan melalui WhatsApp.`,
       respondentName: String(record.namaLengkap || 'Responden baru'),
+      respondentId: id,
       createdAt: now,
       read: false,
     });

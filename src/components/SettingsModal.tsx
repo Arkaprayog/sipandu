@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { AppSettings } from '../types';
+import { toGoogleFormsRespondentUrl } from '../utils/helpers';
 import { Settings, Save, Check, Link, FileSpreadsheet, FolderGit2, X } from 'lucide-react';
 
 interface SettingsModalProps {
@@ -22,7 +23,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onSave(formData);
+    const respondentUrl = toGoogleFormsRespondentUrl(formData.googleFormTahapAwalUrl);
+    if (!respondentUrl) {
+      window.alert('URL Google Form tahap awal tidak dikenali. Tempel URL Google Form baru (/viewform, /edit, atau forms.gle) lalu simpan kembali.');
+      return;
+    }
+    const normalizedSettings = { ...formData, googleFormTahapAwalUrl: respondentUrl };
+    onSave(normalizedSettings);
+    setFormData(normalizedSettings);
     setSaved(true);
     setTimeout(() => {
       setSaved(false);
@@ -63,7 +71,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               }
               className="w-full p-2.5 rounded bg-black/60 border border-rose-500/30 font-mono text-white"
               required
+              placeholder="Tempel URL Google Form terbaru"
             />
+            <p className="mt-1 text-[10px] leading-relaxed text-neutral-400">
+              Tempel tautan Google Form terbaru. Setelah disimpan, tautan responden dan barcode tahap awal mengikuti URL ini secara otomatis; barcode tetap memakai logo Kemensos di tengah.
+            </p>
           </div>
 
           <div>

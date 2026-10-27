@@ -283,7 +283,7 @@ export const AsesmenView: React.FC<AsesmenViewProps> = ({
                     KEMENSOS RI TAHAP AWAL
                   </span>
                   <span className="text-xs text-sky-300 font-mono">
-                    ID Form: GFORM-ATENSI-01
+                    LINK GOOGLE FORM AKTIF
                   </span>
                 </div>
                 <h4 className="text-base font-bold text-white">
@@ -303,19 +303,24 @@ export const AsesmenView: React.FC<AsesmenViewProps> = ({
                   />
                   <button
                     type="button"
-                    onClick={() =>
-                      handleCopyLink(stageOneRespondentUrl, 'Link Tahap Awal')
-                    }
-                    className="px-3 py-1.5 rounded-lg bg-emerald-800/80 hover:bg-emerald-700 text-white text-xs font-semibold flex items-center gap-1 cursor-pointer"
+                    onClick={() => {
+                      if (stageOneRespondentUrl) handleCopyLink(stageOneRespondentUrl, 'Link Tahap Awal');
+                    }}
+                    disabled={!stageOneRespondentUrl}
+                    className="px-3 py-1.5 rounded-lg bg-emerald-800/80 hover:bg-emerald-700 text-white text-xs font-semibold flex items-center gap-1 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     <Copy className="w-3.5 h-3.5" />
                     <span>Salin</span>
                   </button>
                   <a
-                    href={stageOneRespondentUrl}
+                    href={stageOneRespondentUrl || undefined}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="p-1.5 rounded-lg bg-black/40 hover:bg-black/60 text-sky-300"
+                    aria-disabled={!stageOneRespondentUrl}
+                    onClick={(event) => {
+                      if (!stageOneRespondentUrl) event.preventDefault();
+                    }}
+                    className={`p-1.5 rounded-lg bg-black/40 hover:bg-black/60 text-sky-300 ${stageOneRespondentUrl ? '' : 'pointer-events-none opacity-50'}`}
                     title="Buka Formulir"
                   >
                     <ExternalLink className="w-4 h-4" />

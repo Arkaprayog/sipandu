@@ -3,10 +3,35 @@ import assert from 'node:assert/strict';
 import {
   validatePassword,
   formatPhoneNumberForWhatsApp,
+  buildGoogleFormsPrefilledUrl,
   buildWhatsAppMessage,
   getDesilDescription,
+  toGoogleFormsRespondentUrl,
 } from './helpers';
 import { PPKSRecord } from '../types';
+
+test('stage-one Google Form editor URL is normalized to the respondent-facing viewform URL', () => {
+  assert.equal(
+    toGoogleFormsRespondentUrl('https://docs.google.com/forms/d/FORM-NEW-123/edit'),
+    'https://docs.google.com/forms/d/FORM-NEW-123/viewform'
+  );
+  assert.equal(
+    toGoogleFormsRespondentUrl('https://forms.gle/AbCdEf123'),
+    'https://forms.gle/AbCdEf123'
+  );
+});
+
+test('follow-up WhatsApp Form URL is prefilled with the exact respondent PPKS ID', () => {
+  const url = buildGoogleFormsPrefilledUrl(
+    'https://docs.google.com/forms/d/FOLLOW-UP-123/edit',
+    '987654321',
+    'SIPANDU-RESP-456'
+  );
+  const parsed = new URL(url);
+  assert.equal(parsed.pathname, '/forms/d/FOLLOW-UP-123/viewform');
+  assert.equal(parsed.searchParams.get('entry.987654321'), 'SIPANDU-RESP-456');
+  assert.equal(parsed.searchParams.get('usp'), 'pp_url');
+});
 
 test('validatePassword rejects passwords under 6 characters', () => {
   const result = validatePassword('abc1');

@@ -30,6 +30,7 @@ import { getLiveSyncRetryDelay, LIVE_SYNC_INTERVAL_MS } from './lib/liveSyncPoli
 import { preservePPKSRecordOrder } from './lib/ppksRecordState';
 import { deduplicatePPKSRecords, parsePPKSTimestamp, samePPKSIdentity, sortPPKSRecordsByName, sortPPKSRecordsByTimestamp } from './lib/ppksData';
 import { normalizePPKSPhotoSource } from './lib/photoSources';
+import { buildGoogleFormsPrefilledUrl, buildWhatsAppMessage, createWhatsAppLink } from './utils/helpers';
 import {
   enableRespondentNotifications,
   getRespondentNotificationPermission,
@@ -474,6 +475,53 @@ export default function App() {
 
   const handleLoadPPKSFromCloud = (cloudRecords: PPKSRecord[]) => {
     setPpksList((localRecords) => preservePPKSRecordOrder(localRecords, mergePPKSRecords(localRecords, cloudRecords)));
+  };
+
+  const handleSendFollowUpFromNotification = (notification: RespondentNotification) => {
+    if (notification.kind !== 'kuisioner') return;
+
+    // New notifications carry an explicit stable record ID. Older saved notifications
+    // can still resolve their ID from the original event key, without matching on name.
+    const parts = String(notification.id || '').split(':');
+    const respondentId = notification.respondentId
+      || (parts[0] === 'kuisioner' && parts.length >= 3 ? parts.slice(1, -1).join(':') : '');
+    if (!respondentId) {
+      window.alert('ID responden tidak tersedia pada notifikasi ini. Sinkronkan spreadsheet sumber, lalu buka notifikasi responden terbaru.');
+      return;
+    }
+
+    const respondent = ppksList.find((record) => record.id === respondentId);
+    if (!respondent) {
+      window.alert('Data responden belum ditemukan di Database PPKS. Jalankan sinkronisasi Google Spreadsheet terlebih dahulu, lalu coba kembali.');
+      return;
+    }
+    if (!respondent.noHpWa?.trim()) {
+      window.alert('Nomor HP/WA responden masih kosong. Perbarui data responden sebelum menyiapkan WhatsApp.');
+      return;
+    }
+
+    try {
+      // Validate that a per-respondent continuation link can be generated. Never
+      // silently send the stage-one URL or an unprefilled generic questionnaire.
+      buildGoogleFormsPrefilledUrl(
+        settings.googleFormTahapLanjutanUrl,
+        settings.googleFormTahapLanjutanIdEntry,
+        respondent.id
+      );
+      const message = buildWhatsAppMessage(respondent, {
+        senderName: settings.senderName,
+        senderRole: settings.senderRole,
+        senderUnit: settings.senderUnit,
+        googleFormTahapLanjutanUrl: settings.googleFormTahapLanjutanUrl,
+        googleFormTahapLanjutanIdEntry: settings.googleFormTahapLanjutanIdEntry,
+        googleFormKesehatanMentalUrl: settings.googleFormKesehatanMentalUrl,
+      });
+      const whatsappUrl = createWhatsAppLink(respondent.noHpWa, message);
+      window.open(whatsappUrl, '_blank', 'noopener,noreferrer');
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      window.alert(`Pesan WhatsApp belum dapat disiapkan. ${detail} Buka Pengaturan Integrasi Google & WhatsApp, lalu periksa URL Google Form tahap lanjutan dan nomor entry “ID PPKS”.`);
+    }
   };
 
   /**
@@ -1010,6 +1058,11 @@ export default function App() {
             permission={notificationPermission}
             onEnableNotifications={handleEnableRespondentNotifications}
             onMarkAllRead={() => setRespondentNotifications(markRespondentNotificationsRead(auth.currentUser?.uid || 'default'))}
+            followUpReady={Boolean(
+              settings.googleFormTahapLanjutanUrl?.trim() &&
+              /^\d+$/.test(String(settings.googleFormTahapLanjutanIdEntry || '').replace(/^entry\./i, ''))
+            )}
+            onSendFollowUp={handleSendFollowUpFromNotification}
           />
         )}
 

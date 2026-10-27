@@ -1,5 +1,5 @@
 import React from 'react';
-import { Bell, X, CheckCheck, BellRing, Volume2, Vibrate, Smartphone } from 'lucide-react';
+import { Bell, X, CheckCheck, BellRing, Volume2, Vibrate, Smartphone, MessageCircle } from 'lucide-react';
 import type { RespondentNotification } from '../lib/respondentNotifications';
 
 interface NotificationsModalProps {
@@ -9,6 +9,8 @@ interface NotificationsModalProps {
   permission: NotificationPermission | 'unsupported';
   onEnableNotifications: () => Promise<NotificationPermission | 'unsupported'>;
   onMarkAllRead: () => void;
+  followUpReady: boolean;
+  onSendFollowUp: (notification: RespondentNotification) => void;
 }
 
 export const NotificationsModal: React.FC<NotificationsModalProps> = ({
@@ -18,6 +20,8 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
   permission,
   onEnableNotifications,
   onMarkAllRead,
+  followUpReady,
+  onSendFollowUp,
 }) => {
   const [permissionBusy, setPermissionBusy] = React.useState(false);
   const [permissionMessage, setPermissionMessage] = React.useState('');
@@ -110,6 +114,24 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
               </div>
               <p className="mt-1 text-[11px] leading-relaxed text-neutral-300">{item.body}</p>
               <p className="mt-2 text-[10px] text-sky-300/80">{new Date(item.createdAt).toLocaleString('id-ID')}</p>
+              {item.kind === 'kuisioner' && (
+                <div className="mt-3 border-t border-white/10 pt-3">
+                  <button
+                    type="button"
+                    onClick={() => onSendFollowUp(item)}
+                    disabled={!followUpReady}
+                    className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-emerald-400/50 bg-emerald-700/90 px-3 py-2.5 text-[11px] font-bold text-white hover:bg-emerald-600 disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-neutral-800 disabled:text-neutral-400"
+                  >
+                    <MessageCircle className="h-4 w-4" />
+                    Siapkan WhatsApp Form Lanjutan
+                  </button>
+                  {!followUpReady && (
+                    <p className="mt-1.5 text-[10px] leading-relaxed text-amber-200">
+                      Lengkapi URL Google Form tahap lanjutan dan nomor entry “ID PPKS” di Pengaturan Integrasi Google & WhatsApp untuk mengaktifkan tombol ini.
+                    </p>
+                  )}
+                </div>
+              )}
             </article>
           ))}
         </div>
