@@ -31,11 +31,9 @@ export const SuratTugasEditor: React.FC = () => {
   const update = (key: keyof Fields, value: string) => setF(old => ({ ...old, [key]: value }));
   const reset = () => setF(defaults);
   const base = import.meta.env.BASE_URL;
-  // Resolve the fingerprinted Vite asset against the app root, not the current route.
-  const appRoot = typeof window !== 'undefined' && window.location.hostname === 'arkaprayog.github.io' ? '/sipandu/' : '/';
-  const originalPageSrc = typeof window !== 'undefined'
-    ? new URL(originalPageAsset, new URL(appRoot, window.location.origin)).href
-    : originalPageAsset;
+  // Use Vite's emitted asset URL exactly as generated. Rebuilding it with new URL()
+  // can strip or duplicate the relative base on the custom domain and break the
+  // print background while leaving the editable text visible.
   const handlePrint = async () => {
     setPrintError('');
     const image = originalPageRef.current;
@@ -79,7 +77,7 @@ export const SuratTugasEditor: React.FC = () => {
 
     <div className="surat-tugas-print-root" aria-hidden="true">
       <article className="surat-tugas-paper">
-        <img className="surat-tugas-original-page" src={originalPageSrc} ref={originalPageRef} alt="" />
+        <img className="surat-tugas-original-page" src={originalPageAsset} ref={originalPageRef} alt="" onError={() => setPrintError("Gambar halaman PDF asli gagal dimuat. Muat ulang aplikasi sebelum mencetak.")} />
         <div className="surat-tugas-overlay surat-tugas-number-overlay">{`NOMOR : ${printableText(f.nomor)}`}</div>
         <div className="surat-tugas-overlay surat-tugas-kegiatan-overlay">{printableText(f.kegiatan).split("\n").map((line, index) => <div className="surat-tugas-hanging-line" key={index}>{line}</div>)}</div>
         <div className="surat-tugas-overlay surat-tugas-dasar-overlay">{printableText(f.dasar)}</div>
