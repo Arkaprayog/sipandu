@@ -27,6 +27,7 @@ import { auth, getAccessToken, savePPKSToFirestore, googleLogout, subscribeToPPK
 import { ensureSIPANDUDatabaseSheet, extractSpreadsheetId, getLinkedSpreadsheetUrlForForm, importPPKSFromSpreadsheet, upsertPPKSInSpreadsheet } from './lib/googleWorkspace';
 import { GOOGLE_SIPANDU_RESOURCES } from './lib/googleSIPANDUResources';
 import { getLiveSyncRetryDelay, LIVE_SYNC_INTERVAL_MS } from './lib/liveSyncPolicy';
+import { filterStageOneLinkResponses } from './lib/stageOneRespondents';
 import { preservePPKSRecordOrder } from './lib/ppksRecordState';
 import { deduplicatePPKSRecords, parsePPKSTimestamp, samePPKSIdentity, sortPPKSRecordsByName, sortPPKSRecordsByTimestamp } from './lib/ppksData';
 import { normalizePPKSPhotoSource } from './lib/photoSources';
@@ -279,6 +280,15 @@ export default function App() {
 
   // Defer parsing potentially large PPKS/photo data until Firebase confirms authorization.
   const [ppksList, setPpksList] = useState<PPKSRecord[]>([]);
+  // A separate feed for submissions made through the stage-one Form link/barcode.
+  // This state must never be populated from googleSpreadsheetSourceUrl.
+  const [stageOneRespondents, setStageOneRespondents] = useState<PPKSRecord[]>([]);
+  const stageOneRespondentsRef = useRef<PPKSRecord[]>([]);
+  const [stageOneResponseSyncState, setStageOneResponseSyncState] = useState<{
+    type: 'idle' | 'success' | 'paused' | 'error';
+    message: string;
+    lastUpdatedAt?: string;
+  }>({ type: 'idle', message: 'Menunggu sumber Google Form Asesmen Tahap Awal.' });
   const [profile, setProfile] = useState<ProfileUser>(initialProfileUser);
   const [settings, setSettings] = useState<AppSettings>(initialAppSettings);
 
@@ -490,7 +500,8 @@ export default function App() {
       return;
     }
 
-    const respondent = ppksList.find((record) => record.id === respondentId);
+    const respondent = stageOneRespondentsRef.current.find((record) => record.id === respondentId)
+      || ppksList.find((record) => record.id === respondentId);
     if (!respondent) {
       window.alert('Data responden belum ditemukan di Database PPKS. Jalankan sinkronisasi Google Spreadsheet terlebih dahulu, lalu coba kembali.');
       return;
@@ -553,7 +564,8 @@ export default function App() {
       }
 
       const followUpImport = await importPPKSFromSpreadsheet(spreadsheetUrl);
-      const stageOneById = new Map(stageOneRecords.map((record) => [record.id, record]));
+      const stageOneRoster = mergePPKSRecords(stageOneRecords, stageOneRespondentsRef.current);
+      const stageOneById = new Map(stageOneRoster.map((record) => [record.id, record]));
       const normalizePersonName = (value: unknown) => String(value ?? '')
         .normalize('NFD')
         .replace(/[\\u0300-\\u036f]/g, '')
@@ -579,7 +591,7 @@ export default function App() {
       });
       const unmatchedCount = Math.max(0, followUpImport.records.length - matched.length);
       return {
-        records: mergePPKSRecords(stageOneRecords, matched),
+        records: mergePPKSRecords(stageOneRoster, matched),
         matchedResponses: matched.length,
         warning: unmatchedCount > 0
           ? `${unmatchedCount} respons lanjutan belum dipadankan. Periksa kolom “ID PPKS” dan pastikan nama/NIK yang dijawab tidak bertentangan dengan data tahap awal.`
@@ -610,9 +622,6 @@ export default function App() {
     }
     const continuation = await mergeContinuationResponses(imported.records);
     const recordsForSync = continuation.records;
-    const notificationUid = auth.currentUser?.uid || 'default';
-    await processRespondentSubmissionEvents(notificationUid, imported.records, recordsForSync as unknown as Array<Record<string, unknown>>);
-    setRespondentNotifications(loadRespondentNotifications(notificationUid));
     setPpksList((localRecords) => preservePPKSRecordOrder(localRecords, reconcileSpreadsheetPPKSRecords(localRecords, recordsForSync)));
     setSettings((current) => ({
       ...current,
@@ -759,6 +768,117 @@ export default function App() {
     };
   }, [authReady, isAuthenticated, localCacheReady]);
 
+  // Separate source: only responses submitted through the configured stage-one Form link/barcode
+  // are shown in the Asesmen Tahap Awal table. The primary/master spreadsheet never feeds this list.
+  useEffect(() => {
+    if (!authReady || !localCacheReady) return;
+
+    const formUrl = settings.googleFormTahapAwalUrl?.trim() || '';
+    if (!isAuthenticated || !formUrl) {
+      stageOneRespondentsRef.current = [];
+      setStageOneRespondents([]);
+      setStageOneResponseSyncState({
+        type: !isAuthenticated ? 'idle' : 'error',
+        message: !isAuthenticated
+          ? 'Sumber asesmen tahap awal aktif setelah petugas masuk.'
+          : 'URL Google Form Asesmen Tahap Awal belum diatur; daftar tidak mengambil data dari spreadsheet utama.',
+      });
+      return;
+    }
+
+    let active = true;
+    let running = false;
+    let timer: number | undefined;
+    let failedAttempts = 0;
+    const schedule = (delay: number) => {
+      if (!active) return;
+      if (timer !== undefined) window.clearTimeout(timer);
+      timer = window.setTimeout(() => {
+        timer = undefined;
+        void syncStageOneForm();
+      }, Math.max(0, delay));
+    };
+
+    const syncStageOneForm = async () => {
+      if (!active || running) return;
+      running = true;
+      let nextDelay = LIVE_SYNC_INTERVAL_MS;
+      try {
+        if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+          throw new Error('Koneksi internet terputus; sumber asesmen tahap awal akan dicoba kembali otomatis.');
+        }
+        const token = await getAccessToken();
+        if (!token) {
+          throw new Error('Izin Google belum tersedia. Masuk kembali melalui Google Workspace & Cloud Hub agar respons Form tahap awal dapat dibaca.');
+        }
+
+        // Resolve the sheet linked to the stage-one Form itself, not the primary roster/source sheet.
+        const responseSheetUrl = await getLinkedSpreadsheetUrlForForm(formUrl);
+        const imported = await importPPKSFromSpreadsheet(responseSheetUrl);
+        if (!active) return;
+
+        const freshStageOneRecords = filterStageOneLinkResponses(imported.records);
+        const notificationUid = auth.currentUser?.uid || 'default';
+        await processRespondentSubmissionEvents(
+          notificationUid,
+          freshStageOneRecords.map(({ id, namaLengkap, timestamp }) => ({ id, namaLengkap, timestamp })),
+          freshStageOneRecords as unknown as Array<Record<string, unknown>>,
+          {
+            baselineNamespace: 'stage-one-form-link',
+            notifyNewQuestionnairesOnFirstImport: true,
+          },
+        );
+        if (!active) return;
+        setRespondentNotifications(loadRespondentNotifications(notificationUid));
+        stageOneRespondentsRef.current = freshStageOneRecords;
+        setStageOneRespondents(freshStageOneRecords);
+        failedAttempts = 0;
+        setStageOneResponseSyncState({
+          type: 'success',
+          message: `Sumber khusus Form tahap awal terhubung: tab “${imported.selectedTab}”. ${freshStageOneRecords.length} responden setelah pemisahan sumber ditampilkan; ${Math.max(0, imported.records.length - freshStageOneRecords.length)} baris lama/tidak memenuhi batas pemisahan tidak ditampilkan. Diperbarui ${new Date().toLocaleString('id-ID')}.`,
+          lastUpdatedAt: new Date().toLocaleString('id-ID'),
+        });
+      } catch (error) {
+        if (!active) return;
+        failedAttempts += 1;
+        nextDelay = getLiveSyncRetryDelay(failedAttempts);
+        const detail = error instanceof Error ? error.message : String(error);
+        setStageOneResponseSyncState({
+          type: 'error',
+          message: `Daftar khusus asesmen tahap awal belum dapat disinkronkan dari link/barcode Form: ${detail} Percobaan ulang otomatis dalam ${Math.ceil(nextDelay / 1000)} detik. Data dari spreadsheet utama tidak akan dipakai sebagai pengganti.`,
+        });
+        console.error('SIPANDU stage-one Form response sync failed:', error);
+      } finally {
+        running = false;
+        if (active) schedule(nextDelay);
+      }
+    };
+
+    const wake = () => {
+      if (!active || running || (typeof navigator !== 'undefined' && navigator.onLine === false)) return;
+      schedule(0);
+    };
+    window.addEventListener('online', wake);
+    window.addEventListener('focus', wake);
+    window.addEventListener('pageshow', wake);
+    window.addEventListener('sipandu-workspace-token-updated', wake);
+    schedule(1200);
+
+    return () => {
+      active = false;
+      if (timer !== undefined) window.clearTimeout(timer);
+      window.removeEventListener('online', wake);
+      window.removeEventListener('focus', wake);
+      window.removeEventListener('pageshow', wake);
+      window.removeEventListener('sipandu-workspace-token-updated', wake);
+    };
+  }, [
+    authReady,
+    isAuthenticated,
+    localCacheReady,
+    settings.googleFormTahapAwalUrl,
+  ]);
+
   // Continuously poll Google Forms' linked response Sheet while the app is signed in.
   // Firestore provides instant cross-device updates; Google Sheets does not expose a
   // browser push subscription, so this side uses a quota-conscious retrying poll loop.
@@ -834,14 +954,6 @@ export default function App() {
         const continuation = await mergeContinuationResponses(imported.records);
         if (!active) return;
         const recordsForSync = continuation.records;
-        const notificationUid = auth.currentUser?.uid || 'default';
-        await processRespondentSubmissionEvents(
-          notificationUid,
-          imported.records,
-          recordsForSync as unknown as Array<Record<string, unknown>>
-        );
-        if (!active) return;
-        setRespondentNotifications(loadRespondentNotifications(notificationUid));
         setPpksList((current) => reconcileSpreadsheetPPKSRecords(current, recordsForSync));
         setSettings((current) => {
           if (
@@ -1010,7 +1122,8 @@ export default function App() {
 
           {activeTab === 'asesmen' && (
             <AsesmenView
-              ppksList={ppksList}
+              stageOneRespondents={stageOneRespondents}
+              stageOneSyncMessage={stageOneResponseSyncState.message}
               onAddNewPPKS={handleAddNewPPKS}
               settings={settings}
             />
