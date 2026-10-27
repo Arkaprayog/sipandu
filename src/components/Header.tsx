@@ -17,7 +17,6 @@ interface HeaderProps {
 }
 
 export const Header: React.FC<HeaderProps> = ({
-  currentUser,
   profile,
   accountPhotoUrl,
   unreadNotificationsCount = 3,
@@ -58,18 +57,17 @@ export const Header: React.FC<HeaderProps> = ({
       <div className="max-w-7xl mx-auto flex flex-col md:flex-row md:items-center justify-between gap-4">
         {/* Left Side: Greeting & Profil Owner */}
         <div className="flex flex-col gap-2">
-          {/* Greeting: Selamat (waktu saat ini live), (nama user) sebelah kiri */}
+          {/* Greeting hanya menampilkan salam dan jam live; email akun tidak ditampilkan. */}
           <div className="flex items-center gap-2 text-xs md:text-sm">
             <span className="inline-block w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
             <span className="font-semibold text-sky-200">
-              Selamat {greeting} ({currentTimeStr}),{' '}
-              <span className="text-white font-bold">{currentUser}</span>
+              Selamat {greeting} ({currentTimeStr})
             </span>
           </div>
 
           {/* Profil Owner (di pojok kiri atas) */}
           <div className="flex items-start gap-3.5 pt-1">
-            {/* Foto profil + Menu Edit Profil di bawahnya */}
+            {/* Foto profil + tombol Edit di bawahnya */}
             <div className="flex flex-col items-center">
               <div className="relative w-14 h-14 md:w-16 md:h-16 rounded-full p-0.5 border-2 border-rose-500/50 shadow-[0_0_12px_rgba(244,63,94,0.3)] bg-black/40 overflow-hidden">
                 {headerPhotoUrl ? (
@@ -94,7 +92,7 @@ export const Header: React.FC<HeaderProps> = ({
                 title="Buka Menu Edit Profil"
               >
                 <Edit3 className="w-3 h-3 text-sky-300" />
-                <span>Edit Profil</span>
+                <span>Edit</span>
               </button>
             </div>
 
