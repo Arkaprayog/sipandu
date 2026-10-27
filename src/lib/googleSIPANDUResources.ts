@@ -14,3 +14,17 @@ export const GOOGLE_SIPANDU_RESOURCES = {
   driveFolderUrl: 'https://drive.google.com/drive/u/0/mobile/folders/1TtUYxMv9-f5kcGWqYS_5PK7NwYqUvNgMMV0l1BpzoLdkHJAQ7Ucxg0rbqc9Ue19Wo2w85GV1',
   driveFolderId: '1TtUYxMv9-f5kcGWqYS_5PK7NwYqUvNgMMV0l1BpzoLdkHJAQ7Ucxg0rbqc9Ue19Wo2w85GV1',
 } as const;
+
+
+/** Extract a Form ID only from full Google Forms URLs; short forms.gle links cannot be checked safely. */
+export function getGoogleFormIdFromUrl(value: string | undefined): string {
+  const raw = String(value || '').trim();
+  const match = raw.match(/\/forms\/d\/(?:e\/)?([a-zA-Z0-9_-]+)/i);
+  return match?.[1] || '';
+}
+
+/** The project-level response sheet belongs to this primary Form, not the independent stage-one link/barcode Form. */
+export function isPrimaryGoogleFormUrl(value: string | undefined): boolean {
+  const formId = getGoogleFormIdFromUrl(value);
+  return Boolean(formId && formId === GOOGLE_SIPANDU_RESOURCES.formId);
+}
