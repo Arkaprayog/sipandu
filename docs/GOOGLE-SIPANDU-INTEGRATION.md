@@ -8,6 +8,13 @@
 
 IDs di atas diambil dari URL yang diberikan pengguna, bukan dibuat-buat. Konfigurasi ini tidak membuktikan izin OAuth, kepemilikan, atau akses API.
 
+## Pemisahan sumber Asesmen Tahap Awal
+- Daftar “DATABASE PPKS ASESMEN TAHAP AWAL” hanya membaca spreadsheet respons yang tertaut langsung ke URL Form Tahap Awal khusus yang disimpan di Pengaturan Integrasi Google & WhatsApp.
+- Form Tahap Awal wajib berbeda dari Form utama yang dipakai untuk roster/database. Spreadsheet respons Tahap Awal juga wajib berbeda dari spreadsheet sumber utama; bila Form atau sheet masih sama, SIPANDU menolak memuat data ke daftar Tahap Awal.
+- Baris dengan timestamp sebelum cutover 27 Oktober 2026 pukul 18.40.14 WIB tidak ditampilkan pada daftar ini. Riwayat tersebut tidak dihapus dari spreadsheet, Firestore, maupun Database PPKS utama.
+- Untuk mengaktifkan respons baru, simpan URL lengkap `docs.google.com/forms/d/FORM_ID/edit` milik Form Tahap Awal khusus, lalu tautkan Form tersebut ke spreadsheet responsnya melalui menu Respons → Tautkan ke Spreadsheet.
+- Notifikasi responden baru hanya dipicu dari feed Form Tahap Awal khusus ini. Sinkronisasi spreadsheet utama tetap mengisi Database PPKS utama tetapi tidak memicu notifikasi “responden baru tahap awal”.
+
 ## Alur link, barcode, dan WhatsApp lanjutan
 - Link/barcode tahap awal memakai URL responden dari pengaturan aplikasi. Saat URL disimpan, URL editor `/edit` dinormalisasi menjadi `/viewform`, dan QR dirender kembali dari nilai terbaru.
 - PNG barcode HD berukuran 2400 × 2400 piksel memakai logo Kemensos resmi di tengah; aplikasi tidak mengekspor barcode tanpa logo jika kedua aset logo gagal dimuat.
