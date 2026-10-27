@@ -7,15 +7,20 @@ LANCZOS and kept fully visible; classic and adaptive Android launcher assets
 are produced in all required density buckets.
 """
 from pathlib import Path
+import subprocess
 import sys
+import tempfile
 
+_PILLOW_TMP = tempfile.TemporaryDirectory(prefix="sipandu-icon-deps-")
 try:
     from PIL import Image, ImageOps
-except ImportError as exc:
-    raise SystemExit(
-        "Pillow is required to generate Android launcher icons. "
-        "Run the SIPANDU lint/build setup first."
-    ) from exc
+except ImportError:
+    subprocess.check_call([
+        sys.executable, "-m", "pip", "install", "--disable-pip-version-check",
+        "--upgrade", "--target", _PILLOW_TMP.name, "Pillow",
+    ])
+    sys.path.insert(0, _PILLOW_TMP.name)
+    from PIL import Image, ImageOps
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "public" / "uploads" / "App Icon Picture.png"
