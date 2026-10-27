@@ -145,13 +145,13 @@ if (!fs.existsSync(suratTugasOriginalPage) || fs.statSync(suratTugasOriginalPage
 } else {
   console.log(`Original Surat Tugas page artwork present: ${fs.statSync(suratTugasOriginalPage).size} bytes.`);
 }
-const bundledSuratTugasPages = fs.existsSync(assetDirectory)
-  ? fs.readdirSync(assetDirectory).filter((name) => /^surat-tugas-original-background-[a-z0-9_-]+\.png$/i.test(name))
-  : [];
-if (bundledSuratTugasPages.length === 0) {
-  fail('Aset halaman asli Surat Tugas tidak terbundle dengan fingerprint Vite. Cetak dapat kehilangan kop/barcode.');
+// The current editor opens the original PDF with pdf-lib, so the actual PDF source
+// must be present in dist. A fingerprinted PNG import is no longer required.
+const originalSuratTugasPdf = path.join(dist, 'uploads', 'Surat Tugas.pdf');
+if (!fs.existsSync(originalSuratTugasPdf) || fs.statSync(originalSuratTugasPdf).size < 100000) {
+  fail('PDF sumber Surat Tugas tidak ada atau terlalu kecil pada hasil build.');
 } else {
-  console.log(`Original Surat Tugas bundled assets present: ${bundledSuratTugasPages.join(', ')}.`);
+  console.log(`Original Surat Tugas PDF source present: ${fs.statSync(originalSuratTugasPdf).size} bytes.`);
 }
 
 const loginBackground = path.join(dist, 'uploads', 'Wallpaper Background Landingpage.webp');

@@ -88,3 +88,10 @@
     color: #111827 !important;
   }
 }
+
+
+/* On the Beranda dashboard, hide the wide Kemensos brand block in landscape
+   so the workspace actions and dashboard content have more horizontal room. */
+@media (orientation: landscape) {
+  .app-header-kemensos-brand-home { display: none !important; }
+}

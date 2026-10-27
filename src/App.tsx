@@ -1113,6 +1113,7 @@ export default function App() {
       <div className="relative z-20 app-header">
         <Header
           currentUser={currentUserName}
+          activeTab={activeTab}
           profile={profile}
           accountPhotoUrl={auth.currentUser?.photoURL || ''}
           unreadNotificationsCount={respondentNotifications.filter((item) => !item.read).length}
@@ -1198,7 +1199,11 @@ export default function App() {
             isOpen={true}
             onClose={() => setIsSettingsOpen(false)}
             settings={settings}
-            onSave={(updated) => setSettings(updated)}
+            onSave={(updated) => {
+              setSettings(updated);
+              try { localStorage.setItem('sipandu_settings', JSON.stringify(updated)); }
+              catch (error) { console.warn('SIPANDU settings could not be saved immediately:', error); }
+            }}
           />
         )}
 
@@ -1224,7 +1229,11 @@ export default function App() {
             onClose={() => setIsGoogleWorkspaceOpen(false)}
             ppksList={ppksList}
             settings={settings}
-            onUpdateSettings={(updated) => setSettings(updated)}
+            onUpdateSettings={(updated) => {
+              setSettings(updated);
+              try { localStorage.setItem('sipandu_settings', JSON.stringify(updated)); }
+              catch (error) { console.warn('SIPANDU Workspace settings could not be saved immediately:', error); }
+            }}
             onLoadPPKSFromCloud={handleLoadPPKSFromCloud}
           />
         )}
