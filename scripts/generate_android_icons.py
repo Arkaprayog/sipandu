@@ -25,7 +25,7 @@ except ImportError:
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "public" / "uploads" / "App Icon Picture.png"
 RES = ROOT / "android" / "app" / "src" / "main" / "res"
-BACKGROUND = (11, 20, 12, 255)  # SIPANDU dark forest green, #0B140C
+BACKGROUND = (3, 21, 64, 255)  # Match supplied SIPANDU ODHIV navy icon
 DENSITIES = (
     ("mdpi", 1),
     ("hdpi", 3 / 2),
@@ -76,8 +76,8 @@ def main() -> None:
     for density, factor in DENSITIES:
         classic_size = round(48 * factor)
         adaptive_size = round(108 * factor)
-        bucket = RES / f"mipmap-{density}"
-        classic = compose_icon(classic_size, 0.92, BACKGROUND)
+        bucket = RES / f"mipmap-{density}-v4"
+        classic = compose_icon(classic_size, 0.98, BACKGROUND)
         save_icon(classic, bucket / "ic_launcher.png")
         round_icon = classic.copy()
         round_mask = Image.new("L", (classic_size, classic_size), 0)
@@ -104,15 +104,15 @@ def main() -> None:
     (values / "sipandu_launcher_colors.xml").write_text(
         '<?xml version="1.0" encoding="utf-8"?>\n'
         '<resources>\n'
-        '    <color name="sipandu_launcher_background">#0B140C</color>\n'
+        '    <color name="sipandu_launcher_background">#031540</color>\n'
         '</resources>\n',
         encoding="utf-8",
     )
 
     expected = [
-        *(RES / f"mipmap-{density}" / "ic_launcher.png" for density, _ in DENSITIES),
-        *(RES / f"mipmap-{density}" / "ic_launcher_round.png" for density, _ in DENSITIES),
-        *(RES / f"mipmap-{density}" / "ic_launcher_foreground.png" for density, _ in DENSITIES),
+        *(RES / f"mipmap-{density}-v4" / "ic_launcher.png" for density, _ in DENSITIES),
+        *(RES / f"mipmap-{density}-v4" / "ic_launcher_round.png" for density, _ in DENSITIES),
+        *(RES / f"mipmap-{density}-v4" / "ic_launcher_foreground.png" for density, _ in DENSITIES),
         RES / "mipmap-anydpi-v26" / "ic_launcher.xml",
         RES / "mipmap-anydpi-v26" / "ic_launcher_round.xml",
         RES / "values" / "sipandu_launcher_colors.xml",
