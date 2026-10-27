@@ -13,7 +13,7 @@ const defaults: Fields = {
   nomor: '985/4.21/RH.00.01/10/2026',
   tanggal: '20 Oktober 2026',
   kota: 'Jakarta',
-  pegawai: '1. Deny Arifin Martyon Sikumbang / Psikolog Klinis Ahli Pertama',
+  pegawai: '1. Deny Arifin Martyon Sikumbang',
   jabatanPegawai: 'Psikolog Klinis Ahli Pertama',
   kegiatan: 'a. Bahwa akan melaksanakan kegiatan koordinasi bersama Layanan PDP HIV terkait Program Atensi Klaster ODHIV di Kota Padang Sidempuan;\nb. sehubungan dengan poin a, dipandang perlu menugaskan pegawai Direktorat RSKPNO untuk melaksanakan kegiatan dimaksud.',
   dasar: 'Daftar Isian Pelaksanaan Anggaran Direktorat RSKPNO Nomor : SP DIPA - 027.04.2.690589/2026 tanggal 1 Desember 2025.',
@@ -60,7 +60,7 @@ export const SuratTugasEditor: React.FC = () => {
         <div className="surat-tugas-overlay surat-tugas-number-overlay">{printableText(f.nomor)}</div>
         <div className="surat-tugas-overlay surat-tugas-kegiatan-overlay">{printableText(f.kegiatan)}</div>
         <div className="surat-tugas-overlay surat-tugas-dasar-overlay">{printableText(f.dasar)}</div>
-        <div className="surat-tugas-overlay surat-tugas-pegawai-overlay">{printableText(f.pegawai)}</div>
+        <div className="surat-tugas-overlay surat-tugas-pegawai-overlay">{printableText(f.pegawai + ' / ' + f.jabatanPegawai)}</div>
         <div className="surat-tugas-overlay surat-tugas-instruksi-overlay">{printableText(f.instruksi)}</div>
         <div className="surat-tugas-overlay surat-tugas-penutup-overlay">{printableText(f.penutup)}</div>
         <div className="surat-tugas-overlay surat-tugas-date-overlay">{f.kota}, {f.tanggal}</div>
