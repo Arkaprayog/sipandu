@@ -10,8 +10,8 @@ function normalizeHeader(value: string): string {
   return String(value ?? '')
     .toLowerCase()
     .normalize('NFD')
-    .replace(/[\\u0300-\\u036f]/g, '')
-    .replace(/^\\s*(?:q(?:uestion)?\\s*)?\\d{1,3}[\\s.)\\-:]+/i, '')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/^\s*(?:q(?:uestion)?\s*)?\d{1,3}[\s.)\\-:]+/i, '')
     .replace(/[^a-z0-9]/g, '');
 }
 
