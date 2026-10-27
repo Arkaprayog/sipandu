@@ -159,13 +159,15 @@ export const DokumenView: React.FC<DokumenViewProps> = ({ profile }) => {
                 <FileText className="h-6 w-6 text-emerald-300" />
               </div>
               <div>
-                <h3 className="text-sm font-extrabold text-white">Surat Tugas — Template Editable</h3>
+                <h3 className="text-sm font-extrabold text-white">Surat Tugas — Edit lalu Cetak PDF</h3>
                 <p className="mt-1 text-xs leading-relaxed text-neutral-300">
-                  Isi surat, nomor, dan tanggal dapat diedit. Kop surat Kemensos, jabatan pejabat penanda tangan,
-                  barcode tanda tangan elektronik, dan nama pejabat penanda tangan dikunci di Word.
+                  Unduh salinan DOCX hanya untuk mengisi atau mengubah bagian yang diizinkan. Kop surat Kemensos,
+                  jabatan pejabat penanda tangan, barcode tanda tangan elektronik, dan nama pejabat penanda tangan dikunci.
+                  Setelah selesai mengedit, gunakan Cetak di Word lalu pilih Simpan sebagai PDF. Hasil akhir yang dikirim
+                  atau diarsipkan adalah PDF, bukan DOCX.
                 </p>
                 <p className="mt-1 text-[10px] text-sky-200">
-                  Simpan sebagai salinan baru sebelum mengubah isi surat. Dokumen asli PDF tetap tersedia.
+                  DOCX adalah berkas kerja untuk penyuntingan; PDF adalah hasil final. PDF asli tetap tersedia sebagai referensi.
                 </p>
               </div>
             </div>
@@ -176,7 +178,7 @@ export const DokumenView: React.FC<DokumenViewProps> = ({ profile }) => {
                 className="inline-flex items-center justify-center gap-2 rounded-lg border border-emerald-400/50 bg-emerald-700/90 px-3 py-2.5 text-xs font-bold text-white hover:bg-emerald-600"
               >
                 <Download className="h-4 w-4" />
-                Unduh DOCX Editable
+                Unduh Berkas untuk Diedit (DOCX)
               </a>
               <a
                 href={`${import.meta.env.BASE_URL}uploads/Surat%20Tugas.pdf`}
@@ -185,7 +187,7 @@ export const DokumenView: React.FC<DokumenViewProps> = ({ profile }) => {
                 className="inline-flex items-center justify-center gap-2 rounded-lg border border-white/15 bg-black/40 px-3 py-2.5 text-xs font-semibold text-sky-200 hover:bg-black/60"
               >
                 <FileText className="h-4 w-4" />
-                PDF Asli
+                Lihat / Unduh PDF Asli
               </a>
             </div>
           </div>
