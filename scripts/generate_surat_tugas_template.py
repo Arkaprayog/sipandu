@@ -49,6 +49,7 @@ with fitz.open(SOURCE_PDF) as _pdf:
     _page = _pdf[0]
     _pix = _page.get_pixmap(matrix=fitz.Matrix(300 / 72, 300 / 72), alpha=False)
     _rendered = Image.frombytes('RGB', (_pix.width, _pix.height), _pix.samples)
+_rendered.save(UPLOADS / 'surat-tugas-original-background.png', optimize=True)
 _header = _rendered.crop((190, 105, 2290, 445)).resize((1600, 259), Image.Resampling.LANCZOS)
 _header = _header.quantize(colors=48, method=Image.Quantize.MEDIANCUT, dither=Image.Dither.NONE)
 HEADER_IMG = str(UPLOADS / 'surat-tugas-header-locked.png')
