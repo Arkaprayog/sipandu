@@ -779,6 +779,15 @@ export default function App() {
     if (!authReady || !localCacheReady) return;
 
     const formUrl = settings.googleFormTahapAwalUrl?.trim() || '';
+    if (isPrimaryGoogleFormUrl(formUrl)) {
+      stageOneRespondentsRef.current = [];
+      setStageOneRespondents([]);
+      setStageOneResponseSyncState({
+        type: 'error',
+        message: 'URL Asesmen Tahap Awal masih menunjuk Google Form utama. Tabel ini hanya menerima Form tahap awal khusus; data dari Form/spreadsheet utama tidak digunakan.',
+      });
+      return;
+    }
     if (!isAuthenticated || !formUrl) {
       stageOneRespondentsRef.current = [];
       setStageOneRespondents([]);
@@ -819,6 +828,23 @@ export default function App() {
 
         // Resolve the sheet linked to the stage-one Form itself, not the primary roster/source sheet.
         const responseSheetUrl = await getLinkedSpreadsheetUrlForForm(formUrl);
+        const stageOneSheetId = extractSpreadsheetId(responseSheetUrl);
+        const primarySourceUrl = settings.googleSpreadsheetSourceUrl?.trim() || '';
+        let primarySourceId = '';
+        if (primarySourceUrl) {
+          try { primarySourceId = extractSpreadsheetId(primarySourceUrl); } catch { primarySourceId = ''; }
+        }
+        if (primarySourceId && stageOneSheetId === primarySourceId) {
+          stageOneRespondentsRef.current = [];
+          setStageOneRespondents([]);
+          setStageOneResponseSyncState({
+            type: 'error',
+            message: 'Form tahap awal dan Google Form utama masih memakai spreadsheet respons yang sama. Tabel ini dikosongkan untuk mencegah data utama masuk; tautkan Form tahap awal ke spreadsheet respons yang terpisah.',
+          });
+          failedAttempts = 0;
+          nextDelay = LIVE_SYNC_INTERVAL_MS;
+          return;
+        }
         const imported = await importPPKSFromSpreadsheet(responseSheetUrl);
         if (!active) return;
 
@@ -882,6 +908,7 @@ export default function App() {
     isAuthenticated,
     localCacheReady,
     settings.googleFormTahapAwalUrl,
+    settings.googleSpreadsheetSourceUrl,
   ]);
 
   // Continuously poll Google Forms' linked response Sheet while the app is signed in.
