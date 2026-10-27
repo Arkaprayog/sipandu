@@ -206,7 +206,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
               Hak Cipta Kementerian Sosial RI
             </p>
             <p className="mt-1 text-[9px] leading-snug text-black">
-              Direktorat Rehabilitasi Sosial Korban Penyalahgunaan Narkoba
+              Direktorat Rehabilitasi Sosial Korban Penyalahgunaan Narkoba & ODHIV
             </p>
           </footer>
         </section>
