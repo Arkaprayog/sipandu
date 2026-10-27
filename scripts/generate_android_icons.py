@@ -92,7 +92,7 @@ def main() -> None:
     xml = (
         '<?xml version="1.0" encoding="utf-8"?>\n'
         '<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">\n'
-        '    <background android:drawable="@color/ic_launcher_background" />\n'
+        '    <background android:drawable="@color/sipandu_launcher_background" />\n'
         '    <foreground android:drawable="@mipmap/ic_launcher_foreground" />\n'
         '</adaptive-icon>\n'
     )
@@ -101,10 +101,10 @@ def main() -> None:
 
     values = RES / "values"
     values.mkdir(parents=True, exist_ok=True)
-    (values / "ic_launcher_background.xml").write_text(
+    (values / "sipandu_launcher_colors.xml").write_text(
         '<?xml version="1.0" encoding="utf-8"?>\n'
         '<resources>\n'
-        '    <color name="ic_launcher_background">#0B140C</color>\n'
+        '    <color name="sipandu_launcher_background">#0B140C</color>\n'
         '</resources>\n',
         encoding="utf-8",
     )
@@ -115,7 +115,7 @@ def main() -> None:
         *(RES / f"mipmap-{density}" / "ic_launcher_foreground.png" for density, _ in DENSITIES),
         RES / "mipmap-anydpi-v26" / "ic_launcher.xml",
         RES / "mipmap-anydpi-v26" / "ic_launcher_round.xml",
-        RES / "values" / "ic_launcher_background.xml",
+        RES / "values" / "sipandu_launcher_colors.xml",
     ]
     missing = [str(path.relative_to(ROOT)) for path in expected if not path.is_file() or path.stat().st_size == 0]
     if missing:
