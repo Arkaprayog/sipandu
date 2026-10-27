@@ -6,6 +6,7 @@ import { KemensosLogo } from './KemensosLogo';
 
 interface HeaderProps {
   currentUser: string;
+  activeTab?: string;
   profile: ProfileUser;
   accountPhotoUrl?: string | null;
   unreadNotificationsCount?: number;
@@ -17,6 +18,7 @@ interface HeaderProps {
 }
 
 export const Header: React.FC<HeaderProps> = ({
+  activeTab = '',
   profile,
   accountPhotoUrl,
   unreadNotificationsCount = 3,
@@ -116,7 +118,7 @@ export const Header: React.FC<HeaderProps> = ({
 
         {/* Right Side: Logo Kemensos & 3 Icon (Lonceng Notifikasi, Gear Pengaturan, Pintu Keluar) */}
         <div className="flex items-center justify-between md:justify-end gap-4 self-end md:self-center">
-          <div className="hidden lg:block">
+          <div className={`hidden lg:block app-header-kemensos-brand ${activeTab === 'beranda' ? 'app-header-kemensos-brand-home' : ''}`}>
             <KemensosLogo size="sm" />
           </div>
 
