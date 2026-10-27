@@ -1,5 +1,4 @@
 import React, { useRef, useState } from 'react';
-import originalPageAsset from '../assets/surat-tugas-original-background.png';
 import { Printer, FileText, RotateCcw } from 'lucide-react';
 
 type Fields = {
@@ -33,9 +32,12 @@ export const SuratTugasEditor: React.FC = () => {
   const base = import.meta.env.BASE_URL;
   // Resolve the fingerprinted Vite asset against the app root, not the current route.
   const appRoot = typeof window !== 'undefined' && window.location.hostname === 'arkaprayog.github.io' ? '/sipandu/' : '/';
+  // Use the generated public asset URL. Do not import a build-time-generated file
+  // from src/assets: some deployment builders run `vite build` directly and resolve
+  // imports before the PDF-to-PNG generator has created that file.
   const originalPageSrc = typeof window !== 'undefined'
-    ? new URL(originalPageAsset, new URL(appRoot, window.location.origin)).href
-    : originalPageAsset;
+    ? new URL(`${appRoot}uploads/surat-tugas-original-background.png`, window.location.origin).href
+    : 'uploads/surat-tugas-original-background.png';
   const handlePrint = async () => {
     setPrintError('');
     const image = originalPageRef.current;
