@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: sipandu-native-apk
@@ -128,26 +128,42 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-      - name: Create temporary release signing key
+      - name: Configure persistent or first-install release signing key
         if: github.event_name != 'pull_request'
         shell: bash
+        env:
+          SIPANDU_RELEASE_KEYSTORE_BASE64: ${{ secrets.SIPANDU_RELEASE_KEYSTORE_BASE64 }}
+          SIPANDU_RELEASE_STORE_PASSWORD: ${{ secrets.SIPANDU_RELEASE_STORE_PASSWORD }}
+          SIPANDU_RELEASE_KEY_ALIAS: ${{ secrets.SIPANDU_RELEASE_KEY_ALIAS }}
+          SIPANDU_RELEASE_KEY_PASSWORD: ${{ secrets.SIPANDU_RELEASE_KEY_PASSWORD }}
         run: |
           set -euo pipefail
-          KEYSTORE_PATH="$RUNNER_TEMP/sipandu-release-v${APP_VERSION}.jks"
-          KEYSTORE_PASSWORD="$(openssl rand -hex 24)"
-          KEY_ALIAS="sipandu-release"
-          keytool -genkeypair -v \
-            -keystore "$KEYSTORE_PATH" \
-            -storetype JKS \
-            -storepass "$KEYSTORE_PASSWORD" \
-            -keypass "$KEYSTORE_PASSWORD" \
-            -alias "$KEY_ALIAS" \
-            -keyalg RSA -keysize 4096 -validity 10000 \
-            -dname "CN=SIPANDU ODHIV, OU=Release, O=SIPANDU, L=Medan, ST=Sumatera Utara, C=ID"
+          KEYSTORE_PATH="$RUNNER_TEMP/sipandu-release.jks"
+          if [ -n "$SIPANDU_RELEASE_KEYSTORE_BASE64" ] && [ -n "$SIPANDU_RELEASE_STORE_PASSWORD" ] && [ -n "$SIPANDU_RELEASE_KEY_ALIAS" ] && [ -n "$SIPANDU_RELEASE_KEY_PASSWORD" ]; then
+            printf '%s' "$SIPANDU_RELEASE_KEYSTORE_BASE64" | base64 --decode > "$KEYSTORE_PATH"
+            echo "Using the configured persistent SIPANDU release signing key."
+            echo "SIPANDU_SIGNING_MODE=persistent" >> "$GITHUB_ENV"
+          else
+            KEYSTORE_PASSWORD="$(openssl rand -hex 24)"
+            KEY_ALIAS="sipandu-release"
+            keytool -genkeypair -v \
+              -keystore "$KEYSTORE_PATH" \
+              -storetype JKS \
+              -storepass "$KEYSTORE_PASSWORD" \
+              -keypass "$KEYSTORE_PASSWORD" \
+              -alias "$KEY_ALIAS" \
+              -keyalg RSA -keysize 4096 -validity 10000 \
+              -dname "CN=SIPANDU ODHIV, OU=Release, O=SIPANDU, L=Medan, ST=Sumatera Utara, C=ID"
+            echo "::warning::Persistent signing secrets are not configured. This APK can be installed, but future updates may not install over it until the same keystore is saved in GitHub Actions secrets."
+            echo "SIPANDU_SIGNING_MODE=temporary" >> "$GITHUB_ENV"
+            echo "SIPANDU_RELEASE_STORE_PASSWORD=$KEYSTORE_PASSWORD" >> "$GITHUB_ENV"
+            echo "SIPANDU_RELEASE_KEY_ALIAS=$KEY_ALIAS" >> "$GITHUB_ENV"
+            echo "SIPANDU_RELEASE_KEY_PASSWORD=$KEYSTORE_PASSWORD" >> "$GITHUB_ENV"
+          fi
           echo "SIPANDU_KEYSTORE_PATH=$KEYSTORE_PATH" >> "$GITHUB_ENV"
-          echo "SIPANDU_KEYSTORE_PASSWORD=$KEYSTORE_PASSWORD" >> "$GITHUB_ENV"
-          echo "SIPANDU_KEY_ALIAS=$KEY_ALIAS" >> "$GITHUB_ENV"
-          echo "SIPANDU_KEY_PASSWORD=$KEYSTORE_PASSWORD" >> "$GITHUB_ENV"
+          if [ -n "$SIPANDU_RELEASE_STORE_PASSWORD" ]; then echo "SIPANDU_KEYSTORE_PASSWORD=$SIPANDU_RELEASE_STORE_PASSWORD" >> "$GITHUB_ENV"; fi
+          if [ -n "$SIPANDU_RELEASE_KEY_ALIAS" ]; then echo "SIPANDU_KEY_ALIAS=$SIPANDU_RELEASE_KEY_ALIAS" >> "$GITHUB_ENV"; fi
+          if [ -n "$SIPANDU_RELEASE_KEY_PASSWORD" ]; then echo "SIPANDU_KEY_PASSWORD=$SIPANDU_RELEASE_KEY_PASSWORD" >> "$GITHUB_ENV"; fi
 
       - name: Configure Android release signing
         if: github.event_name != 'pull_request'
@@ -214,3 +230,36 @@ jobs:
           path: android/app/build/outputs/apk/release/app-release.apk
           if-no-files-found: error
           retention-days: 90
+
+      - name: Prepare stable download assets
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp android/app/build/outputs/apk/release/app-release.apk "$RUNNER_TEMP/SIPANDU-ODHIV.apk"
+          cp android/app/build/outputs/apk/release/app-release.apk "$RUNNER_TEMP/SIPANDU-ODHIV-v${APP_VERSION}.apk"
+          sha256sum "$RUNNER_TEMP/SIPANDU-ODHIV.apk" | tee "$RUNNER_TEMP/SIPANDU-ODHIV.sha256"
+
+      - name: Publish versioned GitHub Release and stable APK download
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ env.APP_VERSION }}
+          name: SIPANDU ODHIV v${{ env.APP_VERSION }}
+          target_commitish: ${{ github.sha }}
+          make_latest: true
+          draft: false
+          prerelease: false
+          fail_on_unmatched_files: true
+          body: |
+            SIPANDU ODHIV Android native release v${{ env.APP_VERSION }}.
+
+            - Package: `id.my.sipandu.odhiv`
+            - Build APK and signature verification passed in GitHub Actions.
+            - SHA-256 checksum is included as a release asset.
+            - Install the APK on Android. Android may ask permission to install apps from the browser.
+            - If the APK was signed with a temporary key, future in-place updates require configuring a persistent signing keystore in GitHub Actions secrets.
+          files: |
+            ${{ runner.temp }}/SIPANDU-ODHIV.apk
+            ${{ runner.temp }}/SIPANDU-ODHIV-v${{ env.APP_VERSION }}.apk
+            ${{ runner.temp }}/SIPANDU-ODHIV.sha256
