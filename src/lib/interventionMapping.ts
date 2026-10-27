@@ -11,7 +11,6 @@ function normalizeHeader(value: string): string {
     .toLowerCase()
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
-    .replace(/^\s*(?:q(?:uestion)?\s*)?\d{1,3}[\s.)\\-:]+/i, '')
     .replace(/[^a-z0-9]/g, '');
 }
 
