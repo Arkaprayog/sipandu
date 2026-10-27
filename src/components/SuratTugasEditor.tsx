@@ -80,11 +80,11 @@ export const SuratTugasEditor: React.FC = () => {
     <div className="surat-tugas-print-root" aria-hidden="true">
       <article className="surat-tugas-paper">
         <img className="surat-tugas-original-page" src={originalPageSrc} ref={originalPageRef} alt="" />
-        <div className="surat-tugas-overlay surat-tugas-number-overlay">{printableText(f.nomor)}</div>
-        <div className="surat-tugas-overlay surat-tugas-kegiatan-overlay">{printableText(f.kegiatan)}</div>
+        <div className="surat-tugas-overlay surat-tugas-number-overlay">{`NOMOR : ${printableText(f.nomor)}`}</div>
+        <div className="surat-tugas-overlay surat-tugas-kegiatan-overlay">{printableText(f.kegiatan).split("\n").map((line, index) => <div className="surat-tugas-hanging-line" key={index}>{line}</div>)}</div>
         <div className="surat-tugas-overlay surat-tugas-dasar-overlay">{printableText(f.dasar)}</div>
         <div className="surat-tugas-overlay surat-tugas-pegawai-overlay">{printableText(f.pegawai + ' / ' + f.jabatanPegawai)}</div>
-        <div className="surat-tugas-overlay surat-tugas-instruksi-overlay">{printableText(f.instruksi)}</div>
+        <div className="surat-tugas-overlay surat-tugas-instruksi-overlay">{printableText(f.instruksi).split("\n").map((line, index) => <div className="surat-tugas-hanging-line" key={index}>{line}</div>)}</div>
         <div className="surat-tugas-overlay surat-tugas-penutup-overlay">{printableText(f.penutup)}</div>
         <div className="surat-tugas-overlay surat-tugas-date-overlay">{f.kota}, {f.tanggal}</div>
       </article>
