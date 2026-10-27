@@ -33,6 +33,8 @@ interface AsesmenViewProps {
 
 
 
+type AsesmenSubMenu = 'tahap-awal' | 'google-form';
+
 export const AsesmenView: React.FC<AsesmenViewProps> = ({
   ppksList,
   onAddNewPPKS,
