@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { AppSettings } from '../types';
 import { toGoogleFormsRespondentUrl } from '../utils/helpers';
+import { getGoogleFormIdFromUrl, isPrimaryGoogleFormUrl } from '../lib/googleSIPANDUResources';
 import { Settings, Save, Check, Link, FileSpreadsheet, FolderGit2, X } from 'lucide-react';
 
 interface SettingsModalProps {
@@ -23,13 +24,23 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const respondentUrl = toGoogleFormsRespondentUrl(formData.googleFormTahapAwalUrl);
-    if (!respondentUrl) {
-      window.alert('URL Google Form tahap awal tidak dikenali. Tempel URL Google Form baru (/viewform, /edit, atau forms.gle) lalu simpan kembali.');
+    const rawStageOneUrl = String(formData.googleFormTahapAwalUrl || '').trim();
+    const respondentUrl = rawStageOneUrl ? toGoogleFormsRespondentUrl(rawStageOneUrl) : '';
+    if (rawStageOneUrl && !respondentUrl) {
+      window.alert('URL Google Form tahap awal tidak dikenali. Tempel URL Google Form yang valid.');
+      return;
+    }
+    if (respondentUrl && isPrimaryGoogleFormUrl(respondentUrl)) {
+      window.alert('Form ini adalah Google Form utama. Asesmen Tahap Awal wajib memakai Form khusus yang berbeda agar respons spreadsheet utama tidak masuk ke daftar tahap awal.');
+      return;
+    }
+    if (respondentUrl && !getGoogleFormIdFromUrl(respondentUrl)) {
+      window.alert('Untuk sinkronisasi otomatis, tempel URL lengkap docs.google.com/forms/d/FORM_ID/edit atau /viewform. Tautan pendek forms.gle tidak dapat digunakan untuk membaca sheet respons melalui Google API.');
       return;
     }
     const normalizedSettings = { ...formData, googleFormTahapAwalUrl: respondentUrl };
     onSave(normalizedSettings);
+    setFormData(normalizedSettings);
     setFormData(normalizedSettings);
     setSaved(true);
     setTimeout(() => {
@@ -70,11 +81,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 setFormData({ ...formData, googleFormTahapAwalUrl: e.target.value })
               }
               className="w-full p-2.5 rounded bg-black/60 border border-rose-500/30 font-mono text-white"
-              required
-              placeholder="Tempel URL Google Form terbaru"
+              placeholder="URL Form khusus tahap awal (bukan Form utama)"
             />
             <p className="mt-1 text-[10px] leading-relaxed text-neutral-400">
-              Tempel tautan Google Form terbaru. Setelah disimpan, tautan responden dan barcode tahap awal mengikuti URL ini secara otomatis; barcode tetap memakai logo Kemensos di tengah.
+              Gunakan Form yang khusus untuk responden dari link/barcode Asesmen Tahap Awal, berbeda dari Form utama. Tempel URL lengkap Google Forms (/edit atau /viewform); tautan dan barcode akan mengikuti URL ini.
             </p>
           </div>
 
