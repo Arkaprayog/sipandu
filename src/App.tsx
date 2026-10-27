@@ -831,16 +831,16 @@ export default function App() {
 
     // Focus/visibility events must not restart Google polling on every app switch.
     // Keep the existing five-minute schedule; only wake immediately if it is due.
-    const wakeSync = (immediate = false) => {
+    const wakeSync = () => {
       if (!active || running || !online()) return;
-      if (immediate) {
-        schedule(0);
-        return;
-      }
       if (timer === undefined || scheduledAt <= Date.now()) schedule(0);
     };
-    const handleOnline = () => wakeSync(true);
-    const handleWorkspaceTokenUpdated = () => wakeSync(true);
+    const wakeSyncImmediately = () => {
+      if (!active || running || !online()) return;
+      schedule(0);
+    };
+    const handleOnline = () => wakeSyncImmediately();
+    const handleWorkspaceTokenUpdated = () => wakeSyncImmediately();
     const handleOffline = () => {
       if (!active) return;
       setLiveSyncState({
