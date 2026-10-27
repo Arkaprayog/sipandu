@@ -288,16 +288,21 @@ export const AsesmenView: React.FC<AsesmenViewProps> = ({
                   <span className="px-2.5 py-0.5 rounded text-[10px] font-bold bg-emerald-900 text-emerald-200 border border-emerald-400">
                     KEMENSOS RI TAHAP AWAL
                   </span>
-                  <span className="text-xs text-sky-300 font-mono">
-                    LINK GOOGLE FORM AKTIF
+                  <span className={`text-xs font-mono ${stageOneRespondentUrl ? 'text-sky-300' : 'text-amber-200'}`}>
+                    {stageOneRespondentUrl ? 'LINK GOOGLE FORM AKTIF' : 'FORM TAHAP AWAL BELUM DIATUR'}
                   </span>
                 </div>
                 <h4 className="text-base font-bold text-white">
                   Tautan & Barcode Asesmen Tahap Awal ODHIV
                 </h4>
                 <p className="text-xs text-neutral-300 leading-relaxed">
-                  Responden dapat memindai barcode ini atau mengakses tautan resmi berikut untuk mengisi data awal secara mandiri atau didampingi petugas di lokasi layanan.
+                  Daftar di bawah hanya menampilkan respons dari Form khusus yang dibuka melalui link/barcode Asesmen Tahap Awal, bukan data dari Google Form utama.
                 </p>
+                {!stageOneRespondentUrl && (
+                  <div role="alert" className="rounded-lg border border-amber-400/40 bg-amber-950/30 p-3 text-xs leading-relaxed text-amber-100">
+                    URL Form khusus tahap awal belum diatur. Untuk mencegah data responden dari Form utama masuk ke daftar ini, link dan barcode dinonaktifkan sementara. Buka Pengaturan Integrasi Google & WhatsApp, masukkan URL lengkap Form tahap awal yang berbeda dari Form utama, lalu simpan. Form tersebut harus ditautkan ke spreadsheet responsnya sendiri.
+                  </div>
+                )}
 
                 {/* Link Box */}
                 <div className="flex items-center gap-2 bg-black/60 p-2 rounded-xl border border-rose-500/30">
@@ -305,6 +310,7 @@ export const AsesmenView: React.FC<AsesmenViewProps> = ({
                     type="text"
                     readOnly
                     value={stageOneRespondentUrl}
+                    placeholder="URL Form khusus belum diatur"
                     className="flex-1 bg-transparent text-xs text-sky-200 font-mono focus:outline-none px-2 select-all"
                   />
                   <button
