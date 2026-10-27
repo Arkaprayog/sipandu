@@ -3,6 +3,8 @@ name: SIPANDU Native Android APK
 on:
   push:
     branches: [main]
+  pull_request:
+    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -61,7 +63,19 @@ jobs:
         run: npx cap sync android
 
       - name: Apply official launcher icon from public/uploads
-        run: python3 scripts/generate_android_icons.py
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/generate_android_icons.py
+          ICON="android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png"
+          FOREGROUND="android/app/src/main/res/mipmap-xxxhdpi/ic_launcher_foreground.png"
+          ADAPTIVE="android/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml"
+          test -s "$ICON"
+          test -s "$FOREGROUND"
+          test -s "$ADAPTIVE"
+          grep -q 'ic_launcher_foreground' "$ADAPTIVE"
+          sha256sum "$ICON" "$FOREGROUND"
+          echo "Verified Android launcher icon is generated from public/uploads/App Icon Picture.png."
 
       - name: Apply package version to Android APK
         shell: bash
