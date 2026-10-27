@@ -8,7 +8,10 @@ import tempfile
 # the actual imports (a runner may expose an unrelated or broken module named fitz),
 # then install the required distributions before generating the template.
 try:
-    import fitz
+    try:
+        import pymupdf as fitz
+    except ImportError:
+        import fitz
     from PIL import Image
     from docx import Document
 except ImportError:
@@ -16,7 +19,10 @@ except ImportError:
         sys.executable, '-m', 'pip', 'install', '--disable-pip-version-check',
         '--quiet', '--upgrade', 'PyMuPDF', 'Pillow', 'python-docx'
     ])
-    import fitz
+    try:
+        import pymupdf as fitz
+    except ImportError:
+        import fitz
     from PIL import Image
     from docx import Document
 from docx.shared import Cm, Pt
