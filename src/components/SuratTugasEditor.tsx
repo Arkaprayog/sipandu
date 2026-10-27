@@ -54,8 +54,10 @@ export const SuratTugasEditor: React.FC = () => {
     try {
       // Edit the uploaded PDF itself, not a browser screenshot. This retains the
       // original vector artwork, letterhead, QR signature, signatory and footer.
-      const appRoot = window.location.hostname === 'arkaprayog.github.io' ? '/sipandu/' : '/';
-      const sourceUrl = new URL(appRoot + 'uploads/Surat%20Tugas.pdf', window.location.origin).href;
+      // Resolve the source PDF using Vite's configured base path. This works
+      // on the custom production domain and on the GitHub Pages project path,
+      // without hard-coding a hostname that can change between deployments.
+      const sourceUrl = new URL(`${import.meta.env.BASE_URL}uploads/Surat%20Tugas.pdf`, window.location.origin).href;
       const response = await fetch(sourceUrl, { cache: 'no-store' });
       if (!response.ok) throw new Error('PDF sumber tidak dapat dimuat (HTTP ' + response.status + ').');
       const sourceBytes = await response.arrayBuffer();
