@@ -25,7 +25,7 @@ const GoogleWorkspaceModal = lazyWithRecovery('GoogleWorkspaceModal', () => impo
 import { onAuthStateChanged, signOut, getIdTokenResult } from 'firebase/auth';
 import { auth, getAccessToken, savePPKSToFirestore, googleLogout, subscribeToPPKSChanges } from './lib/firebase';
 import { ensureSIPANDUDatabaseSheet, extractSpreadsheetId, getLinkedSpreadsheetUrlForForm, importPPKSFromSpreadsheet, upsertPPKSInSpreadsheet } from './lib/googleWorkspace';
-import { GOOGLE_SIPANDU_RESOURCES } from './lib/googleSIPANDUResources';
+import { GOOGLE_SIPANDU_RESOURCES, isPrimaryGoogleFormUrl } from './lib/googleSIPANDUResources';
 import { getLiveSyncRetryDelay, LIVE_SYNC_INTERVAL_MS } from './lib/liveSyncPolicy';
 import { filterStageOneLinkResponses } from './lib/stageOneRespondents';
 import { preservePPKSRecordOrder } from './lib/ppksRecordState';
@@ -173,6 +173,10 @@ function reconcileSpreadsheetPPKSRecords(localRecords: PPKSRecord[], sourceRecor
 
 function normalizeAppSettings(value: unknown): AppSettings {
   const saved = value && typeof value === 'object' ? value as Partial<AppSettings> : {};
+  // The primary Google Form and its response spreadsheet must never become the
+  // independent stage-one link/barcode source just because an older build defaulted to it.
+  let stageOneFormUrl = saved.googleFormTahapAwalUrl?.trim() || '';
+  if (isPrimaryGoogleFormUrl(stageOneFormUrl)) stageOneFormUrl = '';
   let databaseUrl = saved.googleSpreadsheetUrl?.trim() || '';
   if (databaseUrl.includes('1yA8KemensosODHIVSumut2026_LiveSync')) databaseUrl = '';
   if (databaseUrl) {
@@ -205,6 +209,7 @@ function normalizeAppSettings(value: unknown): AppSettings {
   return {
     ...initialAppSettings,
     ...saved,
+    googleFormTahapAwalUrl: stageOneFormUrl,
     googleFormTahapLanjutanUrl: saved.googleFormTahapLanjutanUrl || '',
     googleFormTahapLanjutanIdEntry: saved.googleFormTahapLanjutanIdEntry || '',
     googleSpreadsheetUrl: databaseUrl,
