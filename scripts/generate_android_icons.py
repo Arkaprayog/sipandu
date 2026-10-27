@@ -76,7 +76,7 @@ def main() -> None:
     for density, factor in DENSITIES:
         classic_size = round(48 * factor)
         adaptive_size = round(108 * factor)
-        bucket = RES / f"mipmap-{density}"
+        bucket = RES / f"mipmap-{density}-v4"
         classic = compose_icon(classic_size, 0.92, BACKGROUND)
         save_icon(classic, bucket / "ic_launcher.png")
         round_icon = classic.copy()
@@ -110,9 +110,9 @@ def main() -> None:
     )
 
     expected = [
-        *(RES / f"mipmap-{density}" / "ic_launcher.png" for density, _ in DENSITIES),
-        *(RES / f"mipmap-{density}" / "ic_launcher_round.png" for density, _ in DENSITIES),
-        *(RES / f"mipmap-{density}" / "ic_launcher_foreground.png" for density, _ in DENSITIES),
+        *(RES / f"mipmap-{density}-v4" / "ic_launcher.png" for density, _ in DENSITIES),
+        *(RES / f"mipmap-{density}-v4" / "ic_launcher_round.png" for density, _ in DENSITIES),
+        *(RES / f"mipmap-{density}-v4" / "ic_launcher_foreground.png" for density, _ in DENSITIES),
         RES / "mipmap-anydpi-v26" / "ic_launcher.xml",
         RES / "mipmap-anydpi-v26" / "ic_launcher_round.xml",
         RES / "values" / "sipandu_launcher_colors.xml",
