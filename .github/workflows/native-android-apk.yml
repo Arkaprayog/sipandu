@@ -63,7 +63,6 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          set -euo pipefail
           DEFAULT_ICON="android/app/src/main/res/mipmap-xxxhdpi-v4/ic_launcher.png"
           test -s "$DEFAULT_ICON"
           BEFORE_ICON_SHA="$(sha256sum "$DEFAULT_ICON" | awk '{print $1}')"
