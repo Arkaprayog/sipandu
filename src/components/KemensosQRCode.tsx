@@ -10,16 +10,34 @@ interface KemensosQRCodeProps {
   downloadFileName?: string;
 }
 
-const DOWNLOAD_RESOLUTION = 1600;
-const LOGO_ASSET = `${import.meta.env.BASE_URL}uploads/Logo%20Kemensos.png`;
+const DOWNLOAD_RESOLUTION = 2400;
+const LOGO_ASSETS = [
+  `${import.meta.env.BASE_URL}uploads/Logo%20Kemensos.png`,
+  `${import.meta.env.BASE_URL}uploads/Logo%20Kemensos%20Hadir.png`,
+];
 
-const loadKemensosLogo = (): Promise<HTMLImageElement> =>
+const loadLogoAsset = (src: string): Promise<HTMLImageElement> =>
   new Promise((resolve, reject) => {
     const image = new Image();
     image.onload = () => resolve(image);
-    image.onerror = () => reject(new Error('Logo Kemensos dari public/uploads tidak dapat dimuat.'));
-    image.src = LOGO_ASSET;
+    image.onerror = () => reject(new Error(`Logo Kemensos tidak dapat dimuat dari ${src}`));
+    image.src = src;
   });
+
+/** Try the primary official asset first, then the alternate uploaded Kemensos logo. */
+const loadKemensosLogo = async (): Promise<HTMLImageElement> => {
+  let lastError: unknown;
+  for (const source of LOGO_ASSETS) {
+    try {
+      return await loadLogoAsset(source);
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  throw lastError instanceof Error
+    ? lastError
+    : new Error('Kedua berkas logo Kemensos gagal dimuat; barcode tidak dibuat tanpa logo.');
+};
 
 /**
  * Draw the actual uploaded Kemensos logo on a clean white quiet-zone panel.
@@ -96,13 +114,9 @@ const buildBrandedQrCanvas = async (
     errorCorrectionLevel: 'H',
   });
 
-  try {
-    const logo = await loadKemensosLogo();
-    drawKemensosLogo(canvas, logo);
-  } catch (error) {
-    // Keep a valid QR available even if the logo asset is unavailable for a moment.
-    console.error('Logo Kemensos tidak berhasil dimuat; QR dibuat tanpa logo.', error);
-  }
+  // Do not silently export an unbranded QR: if both official assets fail, surface an error.
+  const logo = await loadKemensosLogo();
+  drawKemensosLogo(canvas, logo);
 
   return canvas;
 };
@@ -117,6 +131,7 @@ export const KemensosQRCode: React.FC<KemensosQRCodeProps> = ({
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [isDownloading, setIsDownloading] = useState(false);
   const [downloadError, setDownloadError] = useState('');
+  const [previewError, setPreviewError] = useState('');
 
   useEffect(() => {
     let cancelled = false;
@@ -124,17 +139,30 @@ export const KemensosQRCode: React.FC<KemensosQRCodeProps> = ({
     if (!displayCanvas || !value) return () => { cancelled = true; };
 
     const render = async () => {
+      setPreviewError('');
+      if (!value.trim()) {
+        setPreviewError('URL Google Form responden belum diatur. Periksa Pengaturan Integrasi Google & WhatsApp.');
+        return;
+      }
       try {
-        // Render at 2x backing resolution for sharper display on high-density screens.
-        const rendered = await buildBrandedQrCanvas(value, Math.max(size * 2, 440));
+        // Triple CSS-size backing resolution keeps the displayed QR and centered Kemensos logo sharp.
+        const rendered = await buildBrandedQrCanvas(value, Math.max(size * 3, 720));
         if (cancelled) return;
 
         displayCanvas.width = rendered.width;
         displayCanvas.height = rendered.height;
         const ctx = displayCanvas.getContext('2d');
-        if (ctx) ctx.drawImage(rendered, 0, 0);
+        if (ctx) {
+          ctx.imageSmoothingEnabled = true;
+          ctx.imageSmoothingQuality = 'high';
+          ctx.drawImage(rendered, 0, 0);
+        }
       } catch (error) {
-        if (!cancelled) console.error('Gagal membuat barcode asesmen:', error);
+        if (!cancelled) {
+          const message = error instanceof Error ? error.message : String(error);
+          console.error('Gagal membuat barcode asesmen dengan logo Kemensos:', error);
+          setPreviewError('Barcode belum dibuat karena logo Kemensos gagal dimuat. Periksa aset logo dan muat ulang. ' + message);
+        }
       }
     };
 
@@ -148,7 +176,7 @@ export const KemensosQRCode: React.FC<KemensosQRCodeProps> = ({
     setDownloadError('');
 
     try {
-      // A dedicated 1600 x 1600 image keeps the downloaded barcode crisp when printed.
+      // A dedicated 2400 x 2400 image keeps the QR modules and centered logo sharp when printed.
       const canvas = await buildBrandedQrCanvas(value, DOWNLOAD_RESOLUTION);
       const blob = await new Promise<Blob>((resolve, reject) => {
         canvas.toBlob((result) => {
@@ -186,6 +214,11 @@ export const KemensosQRCode: React.FC<KemensosQRCodeProps> = ({
           aria-label={label || 'QR code dengan logo Kementerian Sosial RI'}
         />
       </div>
+      {previewError && (
+        <p role="alert" className="max-w-[260px] text-center text-[10px] leading-relaxed font-medium text-red-700">
+          {previewError}
+        </p>
+      )}
       {label && (
         <span className="max-w-[260px] text-center text-xs font-semibold leading-snug tracking-wide text-neutral-800">
           {label}
@@ -196,12 +229,12 @@ export const KemensosQRCode: React.FC<KemensosQRCodeProps> = ({
         onClick={handleDownload}
         disabled={!value || isDownloading}
         className="inline-flex items-center justify-center gap-2 rounded-lg border border-neutral-400 bg-white px-3 py-2 text-xs font-bold text-black transition hover:bg-neutral-100 disabled:cursor-not-allowed disabled:opacity-60"
-        title="Unduh barcode PNG resolusi tinggi 1600 × 1600 piksel"
+        title="Unduh barcode PNG resolusi tinggi 2400 × 2400 piksel"
       >
         <Download className="h-4 w-4" />
         <span>{isDownloading ? 'Menyiapkan Barcode…' : 'Download Barcode'}</span>
       </button>
-      <span className="text-[10px] text-neutral-500">PNG HD · 1600 × 1600 piksel</span>
+      <span className="text-[10px] text-neutral-500">PNG HD · 2400 × 2400 piksel</span>
       {downloadError && (
         <p role="alert" className="max-w-[240px] text-center text-[10px] font-medium text-red-700">
           {downloadError}
