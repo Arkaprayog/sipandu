@@ -21,7 +21,6 @@ import {
   CheckCircle,
   Copy,
   Link,
-  Brain,
   Database,
   CloudCheck,
 } from 'lucide-react';
@@ -32,7 +31,7 @@ interface AsesmenViewProps {
   settings: AppSettings;
 }
 
-type AsesmenSubMenu = 'tahap-awal' | 'google-form' | 'kesehatan-mental';
+
 
 export const AsesmenView: React.FC<AsesmenViewProps> = ({
   ppksList,
@@ -231,7 +230,7 @@ export const AsesmenView: React.FC<AsesmenViewProps> = ({
         </div>
 
         {/* 3 Tombol Sub-menu Asesmen */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-8">
           <button
             type="button"
             onClick={() => setActiveSubMenu('tahap-awal')}
@@ -258,18 +257,7 @@ export const AsesmenView: React.FC<AsesmenViewProps> = ({
             <span>ASESMEN GOOGLE FORM</span>
           </button>
 
-          <button
-            type="button"
-            onClick={() => setActiveSubMenu('kesehatan-mental')}
-            className={`py-3 px-4 rounded-xl font-bold text-xs md:text-sm uppercase tracking-wider transition cursor-pointer flex items-center justify-center gap-2 ${
-              activeSubMenu === 'kesehatan-mental'
-                ? 'bg-gradient-to-r from-emerald-800 to-teal-800 text-white border-2 border-rose-500/60 shadow-[0_0_15px_rgba(244,63,94,0.25)]'
-                : 'bg-black/50 text-neutral-300 hover:text-white border border-rose-500/25 hover:bg-emerald-950/40'
-            }`}
-          >
-            <Brain className="w-4 h-4 text-sky-300" />
-            <span>ASESMEN KESEHATAN MENTAL</span>
-          </button>
+
         </div>
 
         {/* 1. KONTEN: ASESMEN TAHAP AWAL */}
@@ -687,67 +675,6 @@ export const AsesmenView: React.FC<AsesmenViewProps> = ({
           </div>
         )}
 
-        {/* 3. KONTEN: ASESMEN KESEHATAN MENTAL */}
-        {activeSubMenu === 'kesehatan-mental' && (
-          <div className="p-8 rounded-2xl bg-black/50 border border-rose-500/40 flex flex-col items-center text-center space-y-6">
-            <div className="p-3 rounded-full bg-emerald-950/80 border border-emerald-500/40 text-emerald-300">
-              <Brain className="w-8 h-8 text-sky-300" />
-            </div>
-
-            <div>
-              <h3 className="text-lg md:text-xl font-black text-white uppercase tracking-wider">
-                ASESMEN KESEHATAN MENTAL
-              </h3>
-              <p className="text-xs text-neutral-300 max-w-md mt-1">
-                Kuisioner skrining psikososial & kesehatan mental bagi PPKS ODHIV untuk deteksi dini depresi, kecemasan, dan stigma.
-              </p>
-            </div>
-
-            {/* Link Kuisioner Google Form Kesehatan Mental */}
-            <div className="w-full max-w-xl p-3.5 rounded-xl bg-black/70 border border-rose-500/35 flex flex-col sm:flex-row items-center gap-3">
-              <input
-                type="text"
-                readOnly
-                value={settings.googleFormKesehatanMentalUrl}
-                className="w-full sm:flex-1 bg-transparent text-xs text-sky-200 font-mono focus:outline-none px-2 select-all truncate"
-              />
-              <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
-                <button
-                  type="button"
-                  onClick={() =>
-                    handleCopyLink(
-                      settings.googleFormKesehatanMentalUrl,
-                      'Link Asesmen Mental'
-                    )
-                  }
-                  className="px-3 py-1.5 rounded-lg bg-emerald-800 hover:bg-emerald-700 text-white text-xs font-semibold flex items-center gap-1 cursor-pointer"
-                >
-                  <Copy className="w-3.5 h-3.5" />
-                  <span>Salin Link</span>
-                </button>
-                <a
-                  href={settings.googleFormKesehatanMentalUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="px-3 py-1.5 rounded-lg bg-sky-900 hover:bg-sky-800 text-white text-xs font-semibold flex items-center gap-1"
-                >
-                  <ExternalLink className="w-3.5 h-3.5" />
-                  <span>Buka Form</span>
-                </a>
-              </div>
-            </div>
-
-            {/* Barcode untuk asesmen kesehatan mental dengan logo Kemensos tepat di dalamnya */}
-            <div className="pt-2">
-              <KemensosQRCode
-                value={settings.googleFormKesehatanMentalUrl}
-                size={220}
-                label="Barcode Asesmen Kesehatan Mental (Logo Kemensos)"
-                downloadFileName="barcode-asesmen-kesehatan-mental.png"
-              />
-            </div>
-          </div>
-        )}
       </div>
 
       {/* 4. DATABASE PPKS ASESMEN TAHAP AWAL (di paling bawah):
