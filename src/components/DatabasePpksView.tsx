@@ -93,6 +93,13 @@ export const DatabasePpksView: React.FC<DatabasePpksViewProps> = ({
     }
   }, [displayPPKSList, selectedPPKSId]);
 
+  // Refresh the visible intervention field when a live spreadsheet sync updates
+  // the selected respondent. This keeps the editor in step with column BE.
+  useEffect(() => {
+    if (!currentPPKS) return;
+    setEditingIntervensi(currentPPKS.intervensiMental || '');
+  }, [currentPPKS?.id, currentPPKS?.intervensiMental]);
+
   const handleSave = () => {
     if (!currentPPKS) return;
     const updated: PPKSRecord = {
