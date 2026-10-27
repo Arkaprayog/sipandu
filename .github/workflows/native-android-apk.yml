@@ -69,11 +69,6 @@ jobs:
           DEFAULT_ICON="android/app/src/main/res/mipmap-xxxhdpi-v4/ic_launcher.png"
           test -s "$DEFAULT_ICON"
           BEFORE_ICON_SHA="$(sha256sum "$DEFAULT_ICON" | awk '{print $1}')"
-          # npm's current runner policy blocks unreviewed install hooks by default.
-          # Capacitor Assets uses sharp for image resize/encoding; approve that one
-          # reviewed build-time dependency and run its installer before generation.
-          npm install-scripts approve sharp
-          npm rebuild sharp --foreground-scripts
           npx capacitor-assets generate --android --assetPath assets \
             --iconBackgroundColor '#0b140c' \
             --iconBackgroundColorDark '#0b140c' \
