@@ -89,13 +89,15 @@ for (const reference of [...scriptRefs, ...cssRefs]) {
   }
 }
 
-// Verify code-split JavaScript and CSS modules from Vite's preload map.
-// Vite can emit dynamic imports using quote characters or a template literal.
+// The startup shell intentionally loads App as a separate chunk so the first
+// screen renders before large Firebase/Workspace dependencies are downloaded.
+// References to every dynamic JS/CSS dependency are validated below.
 const assetDirectory = path.join(dist, 'assets');
 if (fs.existsSync(assetDirectory)) {
   const splitAppModules = fs.readdirSync(assetDirectory).filter((name) => name.startsWith('App-') && name.endsWith('.js'));
-  if (splitAppModules.length) {
-    fail('Aplikasi utama terpisah menjadi chunk App-[hash].js; bundel aplikasi harus ikut entry agar tidak gagal dimuat pada domain khusus.');
+  for (const moduleName of splitAppModules) {
+    const modulePath = path.join(assetDirectory, moduleName);
+    if (fs.statSync(modulePath).size === 0) fail('Chunk aplikasi kosong: ' + moduleName);
   }
 }
 const checkChunkReference = (ownerFile, reference) => {

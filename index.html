@@ -132,7 +132,28 @@
         observer.observe(root, { childList: true });
         window.setTimeout(function () {
           if (!root || root.childElementCount === 0) {
-            showError('Aplikasi belum menampilkan antarmuka setelah 20 detik. Periksa koneksi, pemuatan berkas JavaScript, dan URL dasar GitHub Pages.');
+            // Some stalled/mismatched module requests do not surface a useful
+            // resource-error event. Force one fresh HTML request, but never loop.
+            var timeoutRetryKey = BOOT_RETRY_PREFIX + window.location.pathname + ':boot-timeout';
+            try {
+              if (window.sessionStorage.getItem(timeoutRetryKey) !== '1') {
+                window.sessionStorage.setItem(timeoutRetryKey, '1');
+                var freshUrl = new URL(window.location.href);
+                freshUrl.searchParams.set(BOOT_RETRY_QUERY, 'timeout-' + Date.now());
+                window.location.replace(freshUrl.toString());
+                return;
+              }
+            } catch (_) { /* Keep the actionable diagnostic when storage/navigation is unavailable. */ }
+            var appScripts = Array.prototype.map.call(
+              document.querySelectorAll('script[type="module"][src]'),
+              function (script) { return script.src; }
+            );
+            showError(
+              'Aplikasi tetap belum menampilkan antarmuka setelah percobaan muat ulang otomatis. URL modul: ' +
+              (appScripts.join(', ') || 'tag modul JavaScript tidak ditemukan') +
+              '. Periksa status berkas modul di jaringan atau deployment; data browser tidak dihapus.',
+              true
+            );
           }
         }, 20000);
       })();

@@ -1,8 +1,7 @@
 import React from 'react';
-import App from './App';
 import { createRoot } from 'react-dom/client';
 import './index.css';
-import { reloadSIPANDUWithFreshDocument } from './lib/lazyImportRecovery';
+import { importLazyModuleWithRecovery, reloadSIPANDUWithFreshDocument } from './lib/lazyImportRecovery';
 
 const rootElement = document.getElementById('root');
 
@@ -125,11 +124,31 @@ const loadingTimer = window.setTimeout(() => {
   );
 }, 20000);
 
-// The main application is bundled into the entry module. This deliberately avoids
-// a second network request for App-[hash].js, which can fail when a custom domain
-// serves a stale/mismatched deployment artifact.
+// Render the lightweight shell first, then fetch the full application as a
+// separately cache-busted/recoverable chunk. Slow mobile networks must not leave
+// #root blank while Firebase, Workspace, and the other app dependencies download.
 window.setTimeout(() => {
-  appLoaded = true;
-  window.clearTimeout(loadingTimer);
-  root.render(<StartupErrorBoundary><App /></StartupErrorBoundary>);
+  void importLazyModuleWithRecovery('app', () => import('./App'))
+    .then((appModule) => {
+      appLoaded = true;
+      window.clearTimeout(loadingTimer);
+      const App = appModule.default;
+      root.render(<StartupErrorBoundary><App /></StartupErrorBoundary>);
+    })
+    .catch((error: unknown) => {
+      appLoaded = true;
+      window.clearTimeout(loadingTimer);
+      console.error('SIPANDU failed to load the application module:', error);
+      const detail = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
+      root.render(
+        <main style={{ minHeight: '70vh', display: 'grid', placeItems: 'center', padding: 24, color: '#fff', background: '#0b140c', fontFamily: 'system-ui,sans-serif' }}>
+          <section role="alert" aria-live="assertive" style={{ boxSizing: 'border-box', width: '100%', maxWidth: 680, padding: 20, border: '1px solid #b91c1c', borderRadius: 14, background: '#111827', overflowWrap: 'anywhere' }}>
+            <h1 style={{ margin: '0 0 8px', color: '#fecaca', fontSize: 20 }}>Modul SIPANDU belum berhasil dimuat</h1>
+            <p style={{ margin: '8px 0', color: '#d1d5db', fontSize: 14, lineHeight: 1.5 }}>Layar awal berhasil dibuka, tetapi berkas aplikasi utama tidak dapat dijalankan. Data browser tidak dihapus.</p>
+            <code style={{ display: 'block', whiteSpace: 'pre-wrap', padding: 10, background: '#030712', borderRadius: 8, fontSize: 12 }}>{detail.slice(0, 2000)}</code>
+            <button type="button" onClick={() => reloadSIPANDUWithFreshDocument()} style={{ marginTop: 14, padding: '10px 16px', border: 0, borderRadius: 10, background: '#166534', color: '#fff', fontWeight: 700, cursor: 'pointer' }}>Coba muat ulang</button>
+          </section>
+        </main>
+      );
+    });
 }, 40);
