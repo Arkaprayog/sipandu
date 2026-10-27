@@ -11,7 +11,7 @@ export const initialProfileUser: ProfileUser = {
 };
 
 export const initialAppSettings: AppSettings = {
-  googleFormTahapAwalUrl: GOOGLE_SIPANDU_RESOURCES.formRespondentUrl,
+  googleFormTahapAwalUrl: '', // Stage-one Form must be configured separately from the primary Google Form.
   googleFormTahapLanjutanUrl: '',
   googleFormTahapLanjutanIdEntry: '',
   googleFormKesehatanMentalUrl: '',

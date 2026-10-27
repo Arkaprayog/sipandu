@@ -98,7 +98,7 @@ export const GoogleWorkspaceModal: React.FC<GoogleWorkspaceModalProps> = ({
   );
 
   // Forms state
-  const [formIdInput, setFormIdInput] = useState<string>(settings.googleFormTahapAwalUrl.includes('SIPANDU-ODHIV-Lanjutan-Sumut') ? GOOGLE_SIPANDU_RESOURCES.formEditorUrl : settings.googleFormTahapAwalUrl);
+  const [formIdInput, setFormIdInput] = useState<string>(settings.googleFormTahapAwalUrl || GOOGLE_SIPANDU_RESOURCES.formEditorUrl);
   const [formResponsesCount, setFormResponsesCount] = useState<number | null>(null);
 
   // Firestore sync state

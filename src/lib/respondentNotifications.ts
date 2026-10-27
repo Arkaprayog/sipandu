@@ -197,24 +197,35 @@ function baselineFor(questionnaireRecords: Array<{ id: string }>, assessmentReco
 export async function processRespondentSubmissionEvents(
   uid: string,
   questionnaireRecords: Array<{ id: string; namaLengkap?: string; timestamp?: string }>,
-  assessmentRecords: Array<Record<string, unknown>>
+  assessmentRecords: Array<Record<string, unknown>>,
+  options: {
+    /** Keep the separate stage-one form's notification baseline independent of the main Form sheet. */
+    baselineNamespace?: string;
+    /** Safe only when the caller has excluded every pre-cutover/historical response. */
+    notifyNewQuestionnairesOnFirstImport?: boolean;
+  } = {},
 ): Promise<RespondentNotification[]> {
-  const key = scopedKey(BASELINE_KEY, uid);
+  const baselineKey = options.baselineNamespace
+    ? `${BASELINE_KEY}:${options.baselineNamespace}`
+    : BASELINE_KEY;
+  const key = scopedKey(baselineKey, uid);
   const previous = safeRead<NotificationBaseline | null>(key, null);
   const current = baselineFor(questionnaireRecords, assessmentRecords);
   safeWrite(key, current);
+  const hasPreviousBaseline = Boolean(previous && Array.isArray(previous.questionnaireIds));
 
-  // The first successful import is a baseline; never alert for historic respondents.
-  if (!previous || !Array.isArray(previous.questionnaireIds)) return [];
+  // Normal imports remain quiet on first load. The dedicated stage-one flow may
+  // alert on first import only after its caller applies a fixed historical cutover.
+  if (!hasPreviousBaseline && !options.notifyNewQuestionnairesOnFirstImport) return [];
 
-  const knownQuestionnaireIds = new Set(previous.questionnaireIds);
+  const knownQuestionnaireIds = new Set(hasPreviousBaseline ? previous!.questionnaireIds : []);
   const currentQuestionnaireIds = new Set(current.questionnaireIds);
   const newlySubmitted = questionnaireRecords.filter((record) => {
     const id = String(record.id || '').trim();
     return id && !knownQuestionnaireIds.has(id);
   });
   const newQuestionnaireIdSet = new Set(newlySubmitted.map((record) => String(record.id).trim()));
-  const knownAssessment = previous.assessmentSignatures || {};
+  const knownAssessment = hasPreviousBaseline ? (previous!.assessmentSignatures || {}) : {};
   const events: RespondentNotification[] = [];
   const now = new Date().toISOString();
 
