@@ -1,12 +1,14 @@
 from pathlib import Path
-import importlib.util
+import shutil
 import subprocess
 import sys
 import tempfile
 
-# The public build runners do not always include document/PDF libraries. Test
-# the actual imports (a runner may expose an unrelated or broken module named fitz),
-# then install the required distributions before generating the template.
+ROOT = Path(__file__).resolve().parents[1]
+# Some hosted build runners hide user/site package locations from the Python process.
+# Install document dependencies into a temporary target directory and add that exact
+# directory to this process's import path, so the build uses the same libraries it installed.
+_DEPENDENCIES_TMP = tempfile.TemporaryDirectory(prefix='sipandu-doc-deps-')
 try:
     try:
         import pymupdf as fitz
@@ -17,8 +19,10 @@ try:
 except ImportError:
     subprocess.check_call([
         sys.executable, '-m', 'pip', 'install', '--disable-pip-version-check',
-        '--quiet', '--upgrade', 'PyMuPDF', 'Pillow', 'python-docx'
+        '--upgrade', '--target', _DEPENDENCIES_TMP.name,
+        'PyMuPDF', 'Pillow', 'python-docx'
     ])
+    sys.path.insert(0, _DEPENDENCIES_TMP.name)
     try:
         import pymupdf as fitz
     except ImportError:
@@ -30,8 +34,6 @@ from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.enum.table import WD_TABLE_ALIGNMENT, WD_CELL_VERTICAL_ALIGNMENT
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
-
-ROOT = Path(__file__).resolve().parents[1]
 UPLOADS = ROOT / 'public' / 'uploads'
 SOURCE_PDF = UPLOADS / 'Surat Tugas.pdf'
 OUT = UPLOADS / 'Surat Tugas - Template Editable Terkunci.docx'
@@ -354,4 +356,5 @@ doc.core_properties.comments = 'Bagian terpilih dikunci dengan Word content cont
 
 doc.save(OUT)
 _ASSET_TMP.cleanup()
+_DEPENDENCIES_TMP.cleanup()
 print(OUT)
