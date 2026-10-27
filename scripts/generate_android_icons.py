@@ -77,6 +77,13 @@ def main() -> None:
         classic_size = round(48 * factor)
         adaptive_size = round(108 * factor)
         bucket = RES / f"mipmap-{density}-v4"
+        # Capacitor can generate launcher bitmaps under both the legacy
+        # mipmap-<density> and the Android v4-qualified mipmap-<density>-v4
+        # folder. Resource merger treats these as the same qualifier and
+        # fails with Duplicate resources. Keep the explicit v4 set only.
+        legacy_bucket = RES / f"mipmap-{density}"
+        for filename in ("ic_launcher.png", "ic_launcher_round.png", "ic_launcher_foreground.png"):
+            (legacy_bucket / filename).unlink(missing_ok=True)
         classic = compose_icon(classic_size, 0.98, BACKGROUND)
         save_icon(classic, bucket / "ic_launcher.png")
         round_icon = classic.copy()
