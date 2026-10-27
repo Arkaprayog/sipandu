@@ -174,6 +174,45 @@ for (const required of ['manifest.webmanifest', 'sw.js']) {
   }
 }
 
+// Verify the logo source and all generated icon variants that are linked to the
+// PWA install prompt, iOS home screen, and browser tab.
+const appLogoSource = path.join(dist, 'uploads', 'sipandu-odhiv-logo.webp');
+if (!fs.existsSync(appLogoSource) || fs.statSync(appLogoSource).size < 10000) {
+  fail('Logo sumber resmi SIPANDU tidak ada/kosong di dist/uploads.');
+}
+const pwaIconFiles = [
+  'icons/sipandu-favicon.png',
+  'icons/sipandu-icon-192.png',
+  'icons/sipandu-icon-512.png',
+  'icons/sipandu-apple-touch-icon.png',
+];
+for (const relative of pwaIconFiles) {
+  const file = path.join(dist, relative);
+  if (!fs.existsSync(file) || fs.statSync(file).size < 1000) {
+    fail('Ikon aplikasi tidak ada/kosong pada hasil build: ' + relative);
+  }
+}
+try {
+  const manifest = JSON.parse(fs.readFileSync(path.join(dist, 'manifest.webmanifest'), 'utf8'));
+  for (const requiredSize of ['192x192', '512x512']) {
+    const icon = (manifest.icons || []).find((entry) => entry.sizes === requiredSize && entry.type === 'image/png');
+    if (!icon) {
+      fail('Manifest PWA tidak memiliki ikon PNG ukuran ' + requiredSize + '.');
+      continue;
+    }
+    const target = path.resolve(dist, 'manifest.webmanifest/..', icon.src.replace(/^\.\//, ''));
+    if (!fs.existsSync(target) || fs.statSync(target).size < 1000) {
+      fail('Manifest menunjuk ke ikon yang tidak ada: ' + icon.src);
+    }
+  }
+} catch (error) {
+  fail('Manifest PWA tidak valid: ' + (error instanceof Error ? error.message : String(error)));
+}
+for (const link of ['icons/sipandu-favicon.png', 'icons/sipandu-apple-touch-icon.png']) {
+  if (!html.includes(link)) fail('index.html tidak menunjuk ke ikon aplikasi yang benar: ' + link);
+}
+
+
 if (/src=["']\/src\/main\.tsx["']/i.test(html)) {
   fail('Index produksi masih menunjuk ke src/main.tsx, bukan berkas hasil build.');
 }

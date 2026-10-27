@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Generate Android launcher resources from SIPANDU's approved uploaded icon.
 
-Source of truth: public/uploads/App Icon Picture.png.
+Source of truth: public/uploads/sipandu-odhiv-logo.webp.
 No alternate/drawn logo is substituted. The source artwork is resized with
 LANCZOS and kept fully visible; classic and adaptive Android launcher assets
 are produced in all required density buckets.
@@ -23,7 +23,7 @@ except ImportError:
     from PIL import Image, ImageDraw, ImageOps
 
 ROOT = Path(__file__).resolve().parents[1]
-SOURCE = ROOT / "public" / "uploads" / "App Icon Picture.png"
+SOURCE = ROOT / "public" / "uploads" / "sipandu-odhiv-logo.webp"
 RES = ROOT / "android" / "app" / "src" / "main" / "res"
 BACKGROUND = (3, 21, 64, 255)  # Match supplied SIPANDU ODHIV navy icon
 DENSITIES = (
