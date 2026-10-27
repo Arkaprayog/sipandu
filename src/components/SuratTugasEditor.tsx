@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
+import originalPageAsset from '../assets/surat-tugas-original-background.png';
 import { Printer, FileText, RotateCcw } from 'lucide-react';
 
 type Fields = {
@@ -25,9 +26,30 @@ const labelClass = 'block text-xs font-semibold text-sky-100';
 
 export const SuratTugasEditor: React.FC = () => {
   const [f, setF] = useState<Fields>(defaults);
+  const [printError, setPrintError] = useState('');
+  const originalPageRef = useRef<HTMLImageElement | null>(null);
   const update = (key: keyof Fields, value: string) => setF(old => ({ ...old, [key]: value }));
   const reset = () => setF(defaults);
   const base = import.meta.env.BASE_URL;
+  // Resolve the fingerprinted Vite asset against the app root, not the current route.
+  const appRoot = typeof window !== 'undefined' && window.location.hostname === 'arkaprayog.github.io' ? '/sipandu/' : '/';
+  const originalPageSrc = typeof window !== 'undefined'
+    ? new URL(originalPageAsset, new URL(appRoot, window.location.origin)).href
+    : originalPageAsset;
+  const handlePrint = async () => {
+    setPrintError('');
+    const image = originalPageRef.current;
+    try {
+      if (!image) throw new Error('Halaman dasar PDF asli belum siap.');
+      await image.decode();
+      if (!image.complete || image.naturalWidth < 1000 || image.naturalHeight < 1000) {
+        throw new Error('Gambar dasar PDF asli tidak terbaca dengan benar.');
+      }
+      window.print();
+    } catch (error) {
+      setPrintError('Cetak dihentikan agar tidak menghasilkan PDF yang berbeda dari aslinya. ' + (error instanceof Error ? error.message : 'Gambar dasar tidak dapat dimuat.'));
+    }
+  };
   const printableText = (value: string) => value.replace(/\r/g, '');
   return <section className="mb-6 rounded-2xl border border-emerald-400/35 bg-emerald-950/35 p-4 md:p-5">
     <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
@@ -49,14 +71,15 @@ export const SuratTugasEditor: React.FC = () => {
       <label className={labelClass + ' md:col-span-2'}>Kalimat penutup<textarea rows={2} className={inputClass} value={f.penutup} onChange={e => update('penutup',e.target.value)} /></label>
     </div>
     <div className="mt-5 flex flex-wrap items-center gap-3">
-      <button type="button" onClick={() => window.print()} className="inline-flex items-center gap-2 rounded-xl border border-emerald-300/40 bg-emerald-700 px-4 py-3 text-sm font-extrabold text-white hover:bg-emerald-600"><Printer className="h-5 w-5" /> Cetak / Unduh PDF</button>
+      <button type="button" onClick={handlePrint} className="inline-flex items-center gap-2 rounded-xl border border-emerald-300/40 bg-emerald-700 px-4 py-3 text-sm font-extrabold text-white hover:bg-emerald-600"><Printer className="h-5 w-5" /> Cetak / Unduh PDF</button>
       <a href={`${base}uploads/Surat%20Tugas.pdf`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 rounded-xl border border-white/15 bg-black/40 px-4 py-3 text-sm font-semibold text-sky-100 hover:bg-black/60"><FileText className="h-5 w-5" /> Lihat PDF Asli</a>
     </div>
     <p className="mt-3 text-[11px] leading-relaxed text-sky-100/80">Pada dialog cetak, pilih kertas A4, skala 100%, margin “Tidak ada”, dan nonaktifkan header/footer browser. Pada Android, pilih “Simpan sebagai PDF”.</p>
+    {printError && <p role="alert" className="mt-3 rounded-lg border border-red-400/40 bg-red-950/50 p-3 text-sm text-red-100">{printError}</p>}
 
     <div className="surat-tugas-print-root" aria-hidden="true">
       <article className="surat-tugas-paper">
-        <img className="surat-tugas-original-page" src={`${base}uploads/surat-tugas-original-background.png`} alt="" />
+        <img className="surat-tugas-original-page" src={originalPageSrc} ref={originalPageRef} alt="" />
         <div className="surat-tugas-overlay surat-tugas-number-overlay">{printableText(f.nomor)}</div>
         <div className="surat-tugas-overlay surat-tugas-kegiatan-overlay">{printableText(f.kegiatan)}</div>
         <div className="surat-tugas-overlay surat-tugas-dasar-overlay">{printableText(f.dasar)}</div>
