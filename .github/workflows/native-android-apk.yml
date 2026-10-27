@@ -52,10 +52,33 @@ jobs:
         run: bun run build
 
       - name: Install Capacitor Android tooling
-        run: npm install --no-save --package-lock=false --legacy-peer-deps @capacitor/core@7 @capacitor/cli@7 @capacitor/android@7
+        run: npm install --no-save --package-lock=false --legacy-peer-deps @capacitor/core@7 @capacitor/cli@7 @capacitor/android@7 @capacitor/assets
 
       - name: Generate native Android project
         run: npx cap add android
+
+      - name: Generate official SIPANDU Android icon and splash resources
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p assets
+          test -s "public/uploads/App Icon Picture.png"
+          cp "public/uploads/App Icon Picture.png" assets/icon.png
+          DEFAULT_ICON="android/app/src/main/res/mipmap-xxxhdpi-v4/ic_launcher.png"
+          test -s "$DEFAULT_ICON"
+          BEFORE_ICON_SHA="$(sha256sum "$DEFAULT_ICON" | awk '{print $1}')"
+          npx capacitor-assets generate --android --assetPath assets \
+            --iconBackgroundColor '#0b140c' \
+            --iconBackgroundColorDark '#0b140c' \
+            --splashBackgroundColor '#0b140c' \
+            --splashBackgroundColorDark '#0b140c'
+          test -s "$DEFAULT_ICON"
+          AFTER_ICON_SHA="$(sha256sum "$DEFAULT_ICON" | awk '{print $1}')"
+          if [ "$BEFORE_ICON_SHA" = "$AFTER_ICON_SHA" ]; then
+            echo "Android launcher icon still matches the default Capacitor icon." >&2
+            exit 1
+          fi
+          echo "Verified branded launcher icon: $AFTER_ICON_SHA"
 
       - name: Copy web assets into Android app
         run: npx cap sync android
@@ -72,9 +95,36 @@ jobs:
           sed -i -E "s/versionName \"[^\"]+\"/versionName \"$APP_VERSION\"/" "$GRADLE_FILE"
           grep -E 'versionCode|versionName' "$GRADLE_FILE"
 
+      - name: Verify native package, name, version, and launcher assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          APP_VERSION="$(node -p "require('./package.json').version")"
+          GRADLE_FILE="android/app/build.gradle"
+          STRINGS_FILE="android/app/src/main/res/values/strings.xml"
+          ICON_FILE="android/app/src/main/res/mipmap-xxxhdpi-v4/ic_launcher.png"
+          grep -q 'applicationId "id.my.sipandu.odhiv"' "$GRADLE_FILE"
+          grep -q "versionName \"$APP_VERSION\"" "$GRADLE_FILE"
+          grep -q 'SIPANDU ODHIV' "$STRINGS_FILE"
+          test -s "$ICON_FILE"
+          echo "Native identity verified: id.my.sipandu.odhiv / SIPANDU ODHIV / v$APP_VERSION"
+
       - name: Build APK
         working-directory: android
         run: ./gradlew --no-daemon assembleDebug
+
+      - name: Verify APK metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK="android/app/build/outputs/apk/debug/app-debug.apk"
+          AAPT="$ANDROID_HOME/build-tools/35.0.0/aapt"
+          test -s "$APK"
+          test -x "$AAPT"
+          "$AAPT" dump badging "$APK" | tee /tmp/sipandu-apk-badging.txt
+          grep -q "package: name='id.my.sipandu.odhiv' versionName='$(node -p "require('./package.json').version")'" /tmp/sipandu-apk-badging.txt
+          grep -q "application-label:'SIPANDU ODHIV'" /tmp/sipandu-apk-badging.txt
+          grep -q 'application-icon-xxxhdpi' /tmp/sipandu-apk-badging.txt
 
       - name: Upload installable APK
         uses: actions/upload-artifact@v4
