@@ -60,6 +60,9 @@ jobs:
       - name: Copy web assets into Android app
         run: npx cap sync android
 
+      - name: Apply official launcher icon from public/uploads
+        run: python3 scripts/generate_android_icons.py
+
       - name: Apply package version to Android APK
         shell: bash
         run: |
