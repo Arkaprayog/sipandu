@@ -136,14 +136,14 @@ export const KemensosQRCode: React.FC<KemensosQRCodeProps> = ({
   useEffect(() => {
     let cancelled = false;
     const displayCanvas = canvasRef.current;
-    if (!displayCanvas || !value) return () => { cancelled = true; };
+    if (!displayCanvas) return () => { cancelled = true; };
+    if (!value.trim()) {
+      setPreviewError('URL Google Form responden belum diatur. Periksa Pengaturan Integrasi Google & WhatsApp.');
+      return () => { cancelled = true; };
+    }
 
     const render = async () => {
       setPreviewError('');
-      if (!value.trim()) {
-        setPreviewError('URL Google Form responden belum diatur. Periksa Pengaturan Integrasi Google & WhatsApp.');
-        return;
-      }
       try {
         // Triple CSS-size backing resolution keeps the displayed QR and centered Kemensos logo sharp.
         const rendered = await buildBrandedQrCanvas(value, Math.max(size * 3, 720));
