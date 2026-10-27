@@ -927,36 +927,6 @@ export default function App() {
           </div>
         )}
 
-        <div
-          role="status"
-          aria-live="polite"
-          className={`mb-4 rounded-xl border p-3 text-xs break-words ${
-            liveSyncState.type === 'success' ? 'border-emerald-500/35 bg-emerald-950/40 text-emerald-100' :
-            liveSyncState.type === 'paused' || liveSyncState.type === 'error' ? 'border-amber-500/40 bg-amber-950/40 text-amber-100' :
-            'border-white/10 bg-black/20 text-neutral-300'
-          }`}
-        >
-          <div className="flex items-start justify-between gap-3">
-            <span>
-              <strong>{liveSyncState.type === 'success' ? 'LIVE SYNC' : liveSyncState.type === 'paused' ? 'SYNC DIJEDA' : liveSyncState.type === 'error' ? 'SYNC PERLU DIPERIKSA' : 'LIVE SYNC'}</strong>
-              <span className="ml-2">{liveSyncState.message}</span>
-              {liveSyncState.lastUpdatedAt && <span className="ml-2 text-[10px] opacity-80">Pembaruan terakhir: {liveSyncState.lastUpdatedAt}</span>}
-            </span>
-          </div>
-        </div>
-        <div
-          role="status"
-          aria-live="polite"
-          className={`mb-4 rounded-xl border p-3 text-xs break-words ${
-            firestoreRealtimeState.type === 'connected' ? 'border-sky-500/35 bg-sky-950/35 text-sky-100' :
-            firestoreRealtimeState.type === 'paused' || firestoreRealtimeState.type === 'error' ? 'border-amber-500/40 bg-amber-950/35 text-amber-100' :
-            'border-white/10 bg-black/20 text-neutral-300'
-          }`}
-        >
-          <strong>{firestoreRealtimeState.type === 'connected' ? 'FIRESTORE REALTIME' : firestoreRealtimeState.type === 'paused' ? 'FIRESTORE MENUNGGU KONEKSI' : firestoreRealtimeState.type === 'error' ? 'FIRESTORE MENYAMBUNG ULANG' : 'FIRESTORE REALTIME'}</strong>
-          <span className="ml-2">{firestoreRealtimeState.message}</span>
-          {firestoreRealtimeState.lastUpdatedAt && <span className="ml-2 text-[10px] opacity-80">Pembaruan terakhir: {firestoreRealtimeState.lastUpdatedAt}</span>}
-        </div>
         <Suspense fallback={<div role="status" aria-live="polite" className="flex min-h-40 items-center justify-center text-sm text-emerald-200">Memuat menu SIPANDU…</div>}>
           {activeTab === 'beranda' && (
             <BerandaView
@@ -964,6 +934,8 @@ export default function App() {
               googleSpreadsheetUrl={settings.googleSpreadsheetSourceUrl || ''}
               googleSpreadsheetName={settings.googleSpreadsheetSourceName || ''}
               onSyncGoogleSpreadsheet={handleSyncGoogleSpreadsheet}
+              liveSyncStatus={liveSyncState.type}
+              liveSyncLastUpdatedAt={liveSyncState.lastUpdatedAt}
             />
           )}
 
