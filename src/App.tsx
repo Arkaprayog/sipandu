@@ -23,9 +23,10 @@ const SettingsModal = lazyWithRecovery('SettingsModal', () => import('./componen
 const NotificationsModal = lazyWithRecovery('NotificationsModal', () => import('./components/NotificationsModal').then((module) => ({ default: module.NotificationsModal })));
 const GoogleWorkspaceModal = lazyWithRecovery('GoogleWorkspaceModal', () => import('./components/GoogleWorkspaceModal').then((module) => ({ default: module.GoogleWorkspaceModal })));
 import { onAuthStateChanged, signOut, getIdTokenResult } from 'firebase/auth';
-import { auth, getAccessToken, savePPKSToFirestore, googleLogout } from './lib/firebase';
+import { auth, getAccessToken, savePPKSToFirestore, googleLogout, subscribeToPPKSChanges } from './lib/firebase';
 import { ensureSIPANDUDatabaseSheet, extractSpreadsheetId, getLinkedSpreadsheetUrlForForm, importPPKSFromSpreadsheet, upsertPPKSInSpreadsheet } from './lib/googleWorkspace';
 import { GOOGLE_SIPANDU_RESOURCES } from './lib/googleSIPANDUResources';
+import { getLiveSyncRetryDelay, LIVE_SYNC_INTERVAL_MS } from './lib/liveSyncPolicy';
 import { deduplicatePPKSRecords, parsePPKSTimestamp, samePPKSIdentity, sortPPKSRecordsByName, sortPPKSRecordsByTimestamp } from './lib/ppksData';
 import { normalizePPKSPhotoSource } from './lib/photoSources';
 import {
@@ -288,6 +289,11 @@ export default function App() {
     message: string;
     lastUpdatedAt?: string;
   }>({ type: 'idle', message: 'Sinkronisasi otomatis belum dimulai.' });
+  const [firestoreRealtimeState, setFirestoreRealtimeState] = useState<{
+    type: 'idle' | 'connected' | 'paused' | 'error';
+    message: string;
+    lastUpdatedAt?: string;
+  }>({ type: 'idle', message: 'Realtime Firestore menunggu sesi SIPANDU.' });
 
   // Modals state
   const [isEditProfileOpen, setIsEditProfileOpen] = useState<boolean>(false);
@@ -586,51 +592,201 @@ export default function App() {
     };
   };
 
-  // Poll the selected read-only Google Sheet while the dashboard is open.
-  // Polling is paused rather than prompting repeatedly when the OAuth token expires.
+  // Realtime Firestore sync: apply cloud edits to records already in the selected
+  // source roster. This prevents stale Firestore-only rows from reappearing after
+  // Google Sheets has identified the current master roster. No automatic writes/deletes.
   useEffect(() => {
+    if (!authReady || !isAuthenticated || !localCacheReady) {
+      setFirestoreRealtimeState({
+        type: 'idle',
+        message: 'Realtime Firestore aktif setelah sesi dan cache SIPANDU siap.',
+      });
+      return;
+    }
+
+    let active = true;
+    let unsubscribe: (() => void) | null = null;
+    let retryTimer: number | undefined;
+    let retryCount = 0;
+    const online = () => typeof navigator === 'undefined' || navigator.onLine !== false;
+
+    const clearRetry = () => {
+      if (retryTimer !== undefined) {
+        window.clearTimeout(retryTimer);
+        retryTimer = undefined;
+      }
+    };
+
+    const scheduleReconnect = (error?: Error) => {
+      if (!active) return;
+      if (unsubscribe) {
+        unsubscribe();
+        unsubscribe = null;
+      }
+      clearRetry();
+      retryCount += 1;
+      const delay = getLiveSyncRetryDelay(retryCount);
+      const delaySeconds = Math.ceil(delay / 1000);
+      setFirestoreRealtimeState({
+        type: online() ? 'error' : 'paused',
+        message: online()
+          ? `Realtime Firestore terputus: ${error?.message || 'koneksi terputus'}. Mencoba tersambung kembali otomatis dalam ${delaySeconds} detik.`
+          : `Perangkat sedang offline. Realtime Firestore akan menyambung kembali otomatis; percobaan berikutnya dalam ${delaySeconds} detik.`,
+      });
+      retryTimer = window.setTimeout(() => {
+        retryTimer = undefined;
+        connect();
+      }, delay);
+    };
+
+    const connect = () => {
+      if (!active || unsubscribe) return;
+      if (!online()) {
+        scheduleReconnect(new Error('Tidak ada koneksi internet.'));
+        return;
+      }
+      try {
+        unsubscribe = subscribeToPPKSChanges((cloudRecords, info) => {
+          if (!active) return;
+          retryCount = 0;
+          setPpksList((currentRecords) => {
+            const knownIds = new Set(currentRecords.map((record) => record.id));
+            const recordsFromCurrentRoster = cloudRecords.filter((record) => knownIds.has(record.id));
+            return recordsFromCurrentRoster.length
+              ? mergePPKSRecords(currentRecords, recordsFromCurrentRoster)
+              : currentRecords;
+          });
+          setFirestoreRealtimeState({
+            type: info.fromCache ? 'paused' : 'connected',
+            message: info.fromCache
+              ? `Data realtime memakai cache lokal sementara; perubahan cloud diterapkan ketika server tersambung (${cloudRecords.length} dokumen terbaca).`
+              : `Realtime Firestore aktif — perubahan antarperangkat diterapkan otomatis (${cloudRecords.length} dokumen cloud terbaca).`,
+            lastUpdatedAt: new Date().toLocaleString('id-ID'),
+          });
+        }, (error) => {
+          if (!active) return;
+          unsubscribe = null;
+          scheduleReconnect(error);
+        });
+      } catch (error) {
+        scheduleReconnect(error instanceof Error ? error : new Error(String(error)));
+      }
+    };
+
+    const wakeReconnect = () => {
+      if (!active || unsubscribe || !online()) return;
+      clearRetry();
+      retryCount = 0;
+      connect();
+    };
+    const handleOffline = () => {
+      if (!active) return;
+      setFirestoreRealtimeState({
+        type: 'paused',
+        message: 'Koneksi internet terputus. Firestore akan menyambung kembali otomatis saat perangkat online.',
+      });
+    };
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') wakeReconnect();
+    };
+
+    window.addEventListener('online', wakeReconnect);
+    window.addEventListener('offline', handleOffline);
+    window.addEventListener('focus', wakeReconnect);
+    window.addEventListener('pageshow', wakeReconnect);
+    document.addEventListener('visibilitychange', handleVisibility);
+    connect();
+
+    return () => {
+      active = false;
+      clearRetry();
+      if (unsubscribe) unsubscribe();
+      unsubscribe = null;
+      window.removeEventListener('online', wakeReconnect);
+      window.removeEventListener('offline', handleOffline);
+      window.removeEventListener('focus', wakeReconnect);
+      window.removeEventListener('pageshow', wakeReconnect);
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
+  }, [authReady, isAuthenticated, localCacheReady]);
+
+  // Continuously poll Google Forms' linked response Sheet while the app is signed in.
+  // Firestore provides instant cross-device updates; Google Sheets does not expose a
+  // browser push subscription, so this side uses a quota-conscious retrying poll loop.
+  useEffect(() => {
+    if (!authReady || !localCacheReady) return;
+
     const sourceUrl = settings.googleSpreadsheetSourceUrl?.trim() || '';
     const sourceTab = settings.googleSpreadsheetSourceTab?.trim() || undefined;
     if (!isAuthenticated || !sourceUrl) {
       setLiveSyncState({
         type: 'idle',
         message: isAuthenticated
-          ? 'Pilih spreadsheet sumber di Google Workspace & Cloud Hub untuk mengaktifkan live sync.'
-          : 'Live sync aktif setelah akun SIPANDU masuk.',
+          ? 'Live sync menunggu spreadsheet sumber Google Workspace yang valid.'
+          : 'Live sync berjalan setelah akun SIPANDU masuk.',
       });
       return;
     }
 
     let active = true;
     let running = false;
+    let timer: number | undefined;
+    let failedAttempts = 0;
+    const online = () => typeof navigator === 'undefined' || navigator.onLine !== false;
+
+    const schedule = (delay: number) => {
+      if (!active) return;
+      if (timer !== undefined) window.clearTimeout(timer);
+      timer = window.setTimeout(() => {
+        timer = undefined;
+        void syncOnce();
+      }, delay);
+    };
+
     const syncOnce = async () => {
-      // Keep trying to detect new respondent submissions while the tab/app is in the background.
-      // Mobile browsers may throttle background timers; a closed app still needs server-side push.
       if (!active || running) return;
       running = true;
+      let nextDelay = LIVE_SYNC_INTERVAL_MS;
       try {
-        const token = await getAccessToken();
-        if (!token) {
-          if (active) setLiveSyncState({
+        if (!online()) {
+          failedAttempts += 1;
+          nextDelay = getLiveSyncRetryDelay(failedAttempts);
+          setLiveSyncState({
             type: 'paused',
-            message: 'Live sync dijeda karena izin Google API perlu dipulihkan. Sesi SIPANDU tetap aktif; buka Koneksi Akun lalu tekan Pulihkan Izin Google API.',
+            message: `Koneksi internet terputus. Live sync Google akan mencoba kembali otomatis dalam ${Math.ceil(nextDelay / 1000)} detik.`,
           });
           return;
         }
+
+        const token = await getAccessToken();
+        if (!active) return;
+        if (!token) {
+          failedAttempts += 1;
+          nextDelay = getLiveSyncRetryDelay(failedAttempts);
+          setLiveSyncState({
+            type: 'paused',
+            message: `Live sync Google menunggu izin API. SIPANDU akan mencoba lagi otomatis dalam ${Math.ceil(nextDelay / 1000)} detik; pemulihan izin manual hanya diperlukan jika sesi benar-benar dicabut.`,
+          });
+          return;
+        }
+
         const imported = await importPPKSFromSpreadsheet(sourceUrl, sourceTab);
         if (!active) return;
         if (!imported.records.length) {
-          setLiveSyncState({
-            type: 'error',
-            message: `Spreadsheet “${imported.spreadsheetTitle}” terbaca (${imported.rowsRead} baris), tetapi tidak ditemukan baris dengan kolom nama responden yang dikenali. Periksa tab dan judul kolom.`,
-          });
-          return;
+          throw new Error(
+            `Spreadsheet “${imported.spreadsheetTitle}” terbaca (${imported.rowsRead} baris), tetapi tidak ditemukan baris responden dengan kolom nama yang dikenali. Periksa tab dan judul kolom.`
+          );
         }
+
         const continuation = await mergeContinuationResponses(imported.records);
         if (!active) return;
         const recordsForSync = continuation.records;
         const notificationUid = auth.currentUser?.uid || 'default';
-        await processRespondentSubmissionEvents(notificationUid, imported.records, recordsForSync as unknown as Array<Record<string, unknown>>);
+        await processRespondentSubmissionEvents(
+          notificationUid,
+          imported.records,
+          recordsForSync as unknown as Array<Record<string, unknown>>
+        );
         if (!active) return;
         setRespondentNotifications(loadRespondentNotifications(notificationUid));
         setPpksList((current) => reconcileSpreadsheetPPKSRecords(current, recordsForSync));
@@ -646,40 +802,70 @@ export default function App() {
             googleSpreadsheetSourceTab: imported.selectedTab,
           };
         });
-        const firestoreMessage = 'Live sync tidak menghapus atau merekonsiliasi dokumen Firestore secara otomatis; penghapusan data memerlukan tindakan operator yang disengaja.';
+        failedAttempts = 0;
         setLiveSyncState({
           type: 'success',
-          message: `LIVE SYNC — “${imported.spreadsheetTitle}” → “${imported.selectedTab}”: ${recordsForSync.length} PPKS unik dimuat dari ${imported.sourceDataRows} baris tahap awal; ${imported.duplicateRowsCollapsed} duplikat digabung; ${imported.sampleRecordsFiltered} contoh disaring; respons Google Form lanjutan yang dipadankan: ${continuation.matchedResponses}. ${continuation.warning ? continuation.warning + ' ' : ''}Foto diri ${imported.photoCounts.diri}/${imported.records.length}, KTP ${imported.photoCounts.ktp}/${imported.records.length}, KK ${imported.photoCounts.kk}/${imported.records.length}, rumah ${imported.photoCounts.rumah}/${imported.records.length}; tautan Forms dipulihkan: ${imported.photosRecoveredFromForm} (${imported.photoRecoveryStatus}); diagnosis: ${imported.photoRecoveryDetail}; ${firestoreMessage} NIK ${imported.recordsWithNIK}/${imported.records.length}.`,
+          message: `LIVE SYNC aktif berulang — “${imported.spreadsheetTitle}” → “${imported.selectedTab}”: ${recordsForSync.length} PPKS unik dimuat dari ${imported.sourceDataRows} baris tahap awal; ${imported.duplicateRowsCollapsed} duplikat digabung; ${imported.sampleRecordsFiltered} contoh disaring; respons Google Form lanjutan yang dipadankan: ${continuation.matchedResponses}. ${continuation.warning ? continuation.warning + ' ' : ''}Foto diri ${imported.photoCounts.diri}/${imported.records.length}, KTP ${imported.photoCounts.ktp}/${imported.records.length}, KK ${imported.photoCounts.kk}/${imported.records.length}, rumah ${imported.photoCounts.rumah}/${imported.records.length}; tautan Forms dipulihkan: ${imported.photosRecoveredFromForm} (${imported.photoRecoveryStatus}); diagnosis: ${imported.photoRecoveryDetail}. Firestore tidak dihapus secara otomatis.`,
           lastUpdatedAt: new Date().toLocaleString('id-ID'),
         });
       } catch (error) {
         if (!active) return;
+        failedAttempts += 1;
+        nextDelay = getLiveSyncRetryDelay(failedAttempts);
+        const detail = error instanceof Error ? error.message : String(error);
+        console.error('SIPANDU continuous Google Workspace live sync failed; retry scheduled:', error);
         setLiveSyncState({
           type: 'error',
-          message: error instanceof Error ? error.message : String(error),
+          message: `${detail} Percobaan ulang otomatis dalam ${Math.ceil(nextDelay / 1000)} detik; sinkronisasi tidak dihentikan permanen.`,
         });
       } finally {
         running = false;
+        if (active) schedule(nextDelay);
       }
     };
 
-    // Let the dashboard render before reading the response spreadsheet.
-    const initialSyncTimer = window.setTimeout(() => { void syncOnce(); }, 1500);
-    const timer = window.setInterval(() => { void syncOnce(); }, 5 * 60 * 1000);
-    const onVisibilityChange = () => {
-      if (document.visibilityState === 'visible') void syncOnce();
+    const wakeSync = () => {
+      if (!active || running || !online()) return;
+      schedule(0);
     };
-    const onWorkspaceTokenUpdated = () => { void syncOnce(); };
-    document.addEventListener('visibilitychange', onVisibilityChange);
-    window.addEventListener('sipandu-workspace-token-updated', onWorkspaceTokenUpdated);
+    const handleOffline = () => {
+      if (!active) return;
+      setLiveSyncState({
+        type: 'paused',
+        message: 'Koneksi internet terputus. Live sync akan dilanjutkan otomatis ketika perangkat online.',
+      });
+    };
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') wakeSync();
+    };
+
+    window.addEventListener('online', wakeSync);
+    window.addEventListener('offline', handleOffline);
+    window.addEventListener('focus', wakeSync);
+    window.addEventListener('pageshow', wakeSync);
+    window.addEventListener('sipandu-workspace-token-updated', wakeSync);
+    document.addEventListener('visibilitychange', handleVisibility);
+    schedule(1500);
+
     return () => {
       active = false;
-      window.clearTimeout(initialSyncTimer);
-      window.clearInterval(timer);
-      document.removeEventListener('visibilitychange', onVisibilityChange);
-      window.removeEventListener('sipandu-workspace-token-updated', onWorkspaceTokenUpdated);
+      if (timer !== undefined) window.clearTimeout(timer);
+      window.removeEventListener('online', wakeSync);
+      window.removeEventListener('offline', handleOffline);
+      window.removeEventListener('focus', wakeSync);
+      window.removeEventListener('pageshow', wakeSync);
+      window.removeEventListener('sipandu-workspace-token-updated', wakeSync);
+      document.removeEventListener('visibilitychange', handleVisibility);
     };
-  }, [isAuthenticated, settings.googleSpreadsheetSourceUrl, settings.googleSpreadsheetSourceTab, settings.googleFormTahapLanjutanUrl, currentUserRole]);
+  }, [
+    authReady,
+    isAuthenticated,
+    localCacheReady,
+    settings.googleSpreadsheetSourceUrl,
+    settings.googleSpreadsheetSourceTab,
+    settings.googleFormTahapLanjutanUrl,
+    currentUserRole,
+  ]);
 
   // Destructive demo-data cleanup is intentionally manual in Google Workspace & Cloud Hub.
   // Login and ordinary live sync never delete cloud rows/files as automatic side effects.
@@ -757,6 +943,19 @@ export default function App() {
               {liveSyncState.lastUpdatedAt && <span className="ml-2 text-[10px] opacity-80">Pembaruan terakhir: {liveSyncState.lastUpdatedAt}</span>}
             </span>
           </div>
+        </div>
+        <div
+          role="status"
+          aria-live="polite"
+          className={`mb-4 rounded-xl border p-3 text-xs break-words ${
+            firestoreRealtimeState.type === 'connected' ? 'border-sky-500/35 bg-sky-950/35 text-sky-100' :
+            firestoreRealtimeState.type === 'paused' || firestoreRealtimeState.type === 'error' ? 'border-amber-500/40 bg-amber-950/35 text-amber-100' :
+            'border-white/10 bg-black/20 text-neutral-300'
+          }`}
+        >
+          <strong>{firestoreRealtimeState.type === 'connected' ? 'FIRESTORE REALTIME' : firestoreRealtimeState.type === 'paused' ? 'FIRESTORE MENUNGGU KONEKSI' : firestoreRealtimeState.type === 'error' ? 'FIRESTORE MENYAMBUNG ULANG' : 'FIRESTORE REALTIME'}</strong>
+          <span className="ml-2">{firestoreRealtimeState.message}</span>
+          {firestoreRealtimeState.lastUpdatedAt && <span className="ml-2 text-[10px] opacity-80">Pembaruan terakhir: {firestoreRealtimeState.lastUpdatedAt}</span>}
         </div>
         <Suspense fallback={<div role="status" aria-live="polite" className="flex min-h-40 items-center justify-center text-sm text-emerald-200">Memuat menu SIPANDU…</div>}>
           {activeTab === 'beranda' && (

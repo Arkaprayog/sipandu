@@ -1,12 +1,12 @@
 {
   "name": "sipandu-odhiv",
   "private": true,
-  "version": "1.0.4",
+  "version": "1.0.5",
   "type": "module",
   "scripts": {
     "dev": "vite --port=3000 --host=0.0.0.0",
     "build": "vite build",
-    "test": "tsx --test src/data/initialData.test.ts src/lib/nikNumeric.test.ts src/lib/ppksData.test.ts src/lib/photoSources.test.ts src/utils/helpers.test.ts src/utils/whatsappTemplate.test.ts src/lib/lazyImportRecovery.test.ts",
+    "test": "tsx --test src/data/initialData.test.ts src/lib/nikNumeric.test.ts src/lib/ppksData.test.ts src/lib/photoSources.test.ts src/utils/helpers.test.ts src/utils/whatsappTemplate.test.ts src/lib/lazyImportRecovery.test.ts src/lib/liveSyncPolicy.test.ts",
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit"

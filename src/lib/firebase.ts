@@ -4,6 +4,7 @@ import {
   doc,
   collection,
   getDocs,
+  onSnapshot,
   setDoc,
   deleteDoc,
   writeBatch,
@@ -545,6 +546,37 @@ export async function fetchPPKSFromFirestore(): Promise<PPKSRecord[]> {
     return snapshot.docs.map((document) => ({ id: document.id, ...document.data() }) as PPKSRecord);
   } catch (error) {
     throw new Error(describeConnectionError(error));
+  }
+}
+
+/**
+ * Subscribe to cross-device PPKS changes in real time. Firestore's listener is
+ * intentionally read-only; it never writes data or propagates deletions.
+ * Callers must reconnect after onError because Firestore ends a failed listener.
+ */
+export function subscribeToPPKSChanges(
+  onRecords: (records: PPKSRecord[], info: { fromCache: boolean }) => void,
+  onError: (error: Error) => void,
+): () => void {
+  if (!auth.currentUser) {
+    onError(new Error('Sesi SIPANDU belum aktif untuk realtime Firestore.'));
+    return () => undefined;
+  }
+
+  try {
+    return onSnapshot(
+      collection(db, 'ppks'),
+      (snapshot) => {
+        const records = snapshot.docs
+          .map((document) => ({ ...document.data(), id: document.id }) as PPKSRecord)
+          .filter((record) => record && !isLegacySamplePPKS(record));
+        onRecords(records, { fromCache: snapshot.metadata.fromCache });
+      },
+      (error) => onError(new Error(describeConnectionError(error))),
+    );
+  } catch (error) {
+    onError(new Error(describeConnectionError(error)));
+    return () => undefined;
   }
 }
 
