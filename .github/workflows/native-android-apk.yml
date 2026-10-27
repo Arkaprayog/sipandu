@@ -116,7 +116,8 @@ jobs:
           test -s "$APK"
           test -x "$AAPT"
           "$AAPT" dump badging "$APK" | tee /tmp/sipandu-apk-badging.txt
-          grep -q "package: name='id.my.sipandu.odhiv' versionName='$(node -p "require('./package.json').version")'" /tmp/sipandu-apk-badging.txt
+          grep -q "package: name='id.my.sipandu.odhiv'" /tmp/sipandu-apk-badging.txt
+          grep -q "versionName='$(node -p "require('./package.json').version")'" /tmp/sipandu-apk-badging.txt
           grep -q "application-label:'SIPANDU ODHIV'" /tmp/sipandu-apk-badging.txt
 
       - name: Upload installable APK
