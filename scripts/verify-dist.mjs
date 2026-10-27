@@ -145,6 +145,14 @@ if (!fs.existsSync(suratTugasOriginalPage) || fs.statSync(suratTugasOriginalPage
 } else {
   console.log(`Original Surat Tugas page artwork present: ${fs.statSync(suratTugasOriginalPage).size} bytes.`);
 }
+const bundledSuratTugasPages = fs.existsSync(assetDirectory)
+  ? fs.readdirSync(assetDirectory).filter((name) => /^surat-tugas-original-background-[a-z0-9_-]+\.png$/i.test(name))
+  : [];
+if (bundledSuratTugasPages.length === 0) {
+  fail('Aset halaman asli Surat Tugas tidak terbundle dengan fingerprint Vite. Cetak dapat kehilangan kop/barcode.');
+} else {
+  console.log(`Original Surat Tugas bundled assets present: ${bundledSuratTugasPages.join(', ')}.`);
+}
 
 const loginBackground = path.join(dist, 'uploads', 'Wallpaper Background Landingpage.webp');
 const originalLoginBackground = path.join(dist, 'uploads', 'Wallpaper Background Landingpage.jpg');
