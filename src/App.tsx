@@ -27,6 +27,7 @@ import { auth, getAccessToken, savePPKSToFirestore, googleLogout, subscribeToPPK
 import { ensureSIPANDUDatabaseSheet, extractSpreadsheetId, getLinkedSpreadsheetUrlForForm, importPPKSFromSpreadsheet, upsertPPKSInSpreadsheet } from './lib/googleWorkspace';
 import { GOOGLE_SIPANDU_RESOURCES } from './lib/googleSIPANDUResources';
 import { getLiveSyncRetryDelay, LIVE_SYNC_INTERVAL_MS } from './lib/liveSyncPolicy';
+import { preservePPKSRecordOrder } from './lib/ppksRecordState';
 import { deduplicatePPKSRecords, parsePPKSTimestamp, samePPKSIdentity, sortPPKSRecordsByName, sortPPKSRecordsByTimestamp } from './lib/ppksData';
 import { normalizePPKSPhotoSource } from './lib/photoSources';
 import {
@@ -472,7 +473,7 @@ export default function App() {
   };
 
   const handleLoadPPKSFromCloud = (cloudRecords: PPKSRecord[]) => {
-    setPpksList((localRecords) => mergePPKSRecords(localRecords, cloudRecords));
+    setPpksList((localRecords) => preservePPKSRecordOrder(localRecords, mergePPKSRecords(localRecords, cloudRecords)));
   };
 
   /**
@@ -564,7 +565,7 @@ export default function App() {
     const notificationUid = auth.currentUser?.uid || 'default';
     await processRespondentSubmissionEvents(notificationUid, imported.records, recordsForSync as unknown as Array<Record<string, unknown>>);
     setRespondentNotifications(loadRespondentNotifications(notificationUid));
-    setPpksList((localRecords) => reconcileSpreadsheetPPKSRecords(localRecords, recordsForSync));
+    setPpksList((localRecords) => preservePPKSRecordOrder(localRecords, reconcileSpreadsheetPPKSRecords(localRecords, recordsForSync)));
     setSettings((current) => ({
       ...current,
       googleSpreadsheetSourceUrl: sourceUrl,
@@ -653,7 +654,7 @@ export default function App() {
             const knownIds = new Set(currentRecords.map((record) => record.id));
             const recordsFromCurrentRoster = cloudRecords.filter((record) => knownIds.has(record.id));
             return recordsFromCurrentRoster.length
-              ? mergePPKSRecords(currentRecords, recordsFromCurrentRoster)
+              ? preservePPKSRecordOrder(currentRecords, mergePPKSRecords(currentRecords, recordsFromCurrentRoster))
               : currentRecords;
           });
           setFirestoreRealtimeState({
@@ -731,16 +732,20 @@ export default function App() {
     let active = true;
     let running = false;
     let timer: number | undefined;
+    let scheduledAt = 0;
     let failedAttempts = 0;
     const online = () => typeof navigator === 'undefined' || navigator.onLine !== false;
 
     const schedule = (delay: number) => {
       if (!active) return;
       if (timer !== undefined) window.clearTimeout(timer);
+      const safeDelay = Math.max(0, delay);
+      scheduledAt = Date.now() + safeDelay;
       timer = window.setTimeout(() => {
         timer = undefined;
+        scheduledAt = 0;
         void syncOnce();
-      }, delay);
+      }, safeDelay);
     };
 
     const syncOnce = async () => {
@@ -824,10 +829,18 @@ export default function App() {
       }
     };
 
-    const wakeSync = () => {
+    // Focus/visibility events must not restart Google polling on every app switch.
+    // Keep the existing five-minute schedule; only wake immediately if it is due.
+    const wakeSync = (immediate = false) => {
       if (!active || running || !online()) return;
-      schedule(0);
+      if (immediate) {
+        schedule(0);
+        return;
+      }
+      if (timer === undefined || scheduledAt <= Date.now()) schedule(0);
     };
+    const handleOnline = () => wakeSync(true);
+    const handleWorkspaceTokenUpdated = () => wakeSync(true);
     const handleOffline = () => {
       if (!active) return;
       setLiveSyncState({
@@ -839,22 +852,22 @@ export default function App() {
       if (document.visibilityState === 'visible') wakeSync();
     };
 
-    window.addEventListener('online', wakeSync);
+    window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
     window.addEventListener('focus', wakeSync);
     window.addEventListener('pageshow', wakeSync);
-    window.addEventListener('sipandu-workspace-token-updated', wakeSync);
+    window.addEventListener('sipandu-workspace-token-updated', handleWorkspaceTokenUpdated);
     document.addEventListener('visibilitychange', handleVisibility);
     schedule(1500);
 
     return () => {
       active = false;
       if (timer !== undefined) window.clearTimeout(timer);
-      window.removeEventListener('online', wakeSync);
+      window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
       window.removeEventListener('focus', wakeSync);
       window.removeEventListener('pageshow', wakeSync);
-      window.removeEventListener('sipandu-workspace-token-updated', wakeSync);
+      window.removeEventListener('sipandu-workspace-token-updated', handleWorkspaceTokenUpdated);
       document.removeEventListener('visibilitychange', handleVisibility);
     };
   }, [
