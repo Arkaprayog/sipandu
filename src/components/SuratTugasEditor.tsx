@@ -113,6 +113,37 @@ export const SuratTugasEditor: React.FC = () => {
       drawEditable({ text: f.penutup, x: 18.2, top: 153.5, width: 173.9, height: 10.2, size: 10.8 });
       drawEditable({ text: f.kota + ', ' + f.tanggal, x: 113.8, top: 187.7, width: 77, height: 6, size: 10.8, nowrap: true });
 
+      // Never copy the original QR/TTE image onto a changed official letter.
+      // Editing the signed source invalidates its cryptographic signature; leaving
+      // the old QR could misleadingly imply the new content was officially signed.
+      const qrBox = { x: 114, top: 210.5, width: 24, height: 28 };
+      const qrX = qrBox.x * scaleX;
+      const qrWidth = qrBox.width * scaleX;
+      const qrHeight = qrBox.height * scaleY;
+      const qrTop = qrBox.top * scaleY;
+      page.drawRectangle({
+        x: qrX,
+        y: pageHeight - qrTop - qrHeight,
+        width: qrWidth,
+        height: qrHeight,
+        color: white,
+        borderColor: rgb(0.55, 0.55, 0.55),
+        borderWidth: 0.6,
+      });
+      const qrPlaceholder = ['QR TTE', 'BARU', 'SETELAH', 'PENGESAHAN'];
+      const qrFontSize = 7.5;
+      const qrLineHeight = 9;
+      qrPlaceholder.forEach((line, index) => {
+        const lineWidth = bold.widthOfTextAtSize(line, qrFontSize);
+        page.drawText(line, {
+          x: qrX + (qrWidth - lineWidth) / 2,
+          y: pageHeight - qrTop - 38 - index * qrLineHeight,
+          size: qrFontSize,
+          font: bold,
+          color: rgb(0.35, 0.35, 0.35),
+        });
+      });
+
       const bytes = await pdf.save();
       const blob = new Blob([bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer], { type: 'application/pdf' });
       const objectUrl = URL.createObjectURL(blob);
@@ -136,7 +167,7 @@ export const SuratTugasEditor: React.FC = () => {
     <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
       <div>
         <h3 className="text-base font-extrabold text-white">Template Surat Tugas — Editor SIPANDU</h3>
-        <p className="mt-1 max-w-2xl text-xs leading-relaxed text-neutral-300">Edit isi surat di aplikasi, lalu unduh PDF satu halaman. PDF dibuat langsung dari file asli, sehingga kop surat, logo, barcode tanda tangan elektronik, tanda tangan pejabat, dan footer asli dipertahankan.</p>
+        <p className="mt-1 max-w-2xl text-xs leading-relaxed text-neutral-300">Edit isi surat di aplikasi, lalu unduh PDF satu halaman. Kop, logo, tata letak, nama pejabat, dan footer asli dipertahankan. QR TTE lama tidak disalin ke isi yang diubah karena tanda tangan digital harus diterbitkan ulang oleh pejabat berwenang.</p>
       </div>
       <button type="button" onClick={reset} className="inline-flex shrink-0 items-center gap-2 rounded-lg border border-white/20 px-3 py-2 text-xs font-semibold text-neutral-200 hover:bg-white/10"><RotateCcw className="h-4 w-4" /> Pulihkan Template</button>
     </div>
