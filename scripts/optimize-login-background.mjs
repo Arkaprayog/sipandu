@@ -22,20 +22,41 @@ if (!fs.existsSync(input)) {
 
 fs.rmSync(output, { force: true });
 
-const magickArgs = [input, '-auto-orient', '-resize', '900x1800>', '-strip', '-quality', '55', output];
+// Preserve the source image's full pixel dimensions and encode WebP losslessly.
+// Do not resize or use a lossy quality value: both would lower image fidelity.
+const magickArgs = [
+  input,
+  '-auto-orient',
+  '-strip',
+  '-define', 'webp:lossless=true',
+  '-quality', '100',
+  output,
+];
 let ok = run('magick', magickArgs);
 if (!ok) ok = run('convert', magickArgs);
 if (!ok) {
-  // Portable fallback for build hosts without ImageMagick.
-  ok = run('npx', ['--yes', '--package=sharp-cli', 'sharp', '-i', input, '-o', output, '-f', 'webp', '-q', '55']);
+  // Portable fallback for build hosts without ImageMagick. --lossless keeps
+  // every decoded source pixel; no resize or lossy quality setting is applied.
+  ok = run('npx', [
+    '--yes',
+    '--package=sharp-cli',
+    'sharp',
+    '-i', input,
+    '-o', output,
+    '-f', 'webp',
+    '--lossless',
+  ]);
 }
 if (!ok) {
-  throw new Error('Gagal mengonversi gambar latar login ke WebP. Pastikan ImageMagick tersedia atau npm registry dapat dijangkau untuk sharp-cli.');
+  throw new Error(
+    'Gagal mengonversi wallpaper ke WebP lossless. Pastikan ImageMagick tersedia ' +
+    'atau npm registry dapat dijangkau untuk sharp-cli.'
+  );
 }
 
 const sourceBytes = fs.statSync(input).size;
 const optimizedBytes = fs.statSync(output).size;
-if (optimizedBytes >= sourceBytes * 0.6) {
-  throw new Error(`WebP tidak cukup kecil: ${optimizedBytes} byte; target di bawah ${Math.round(sourceBytes * 0.6)} byte.`);
-}
-console.log(`SIPANDU login image: ${sourceBytes} → ${optimizedBytes} bytes (${Math.round((1 - optimizedBytes / sourceBytes) * 100)}% smaller).`);
+const delta = Math.round((1 - optimizedBytes / sourceBytes) * 100);
+console.log(
+  `SIPANDU login image encoded losslessly at original dimensions: ${sourceBytes} → ${optimizedBytes} bytes (${delta}% size reduction; negative means lossless WebP is larger).`
+);
