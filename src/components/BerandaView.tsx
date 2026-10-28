@@ -122,9 +122,9 @@ export const BerandaView: React.FC<BerandaViewProps> = ({
   }));
 
   return (
-    <div className="space-y-6 pb-24 text-white">
+    <div className="space-y-3 pb-24 text-white">
       {/* Top Banner: Sumber Google Spreadsheet */}
-      <div className="p-4 rounded-2xl bg-black/40 border border-rose-500/35 shadow-[0_0_20px_rgba(244,63,94,0.15)] flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="p-3 rounded-2xl bg-black/40 border border-rose-500/35 shadow-[0_0_20px_rgba(244,63,94,0.15)] flex flex-col md:flex-row md:items-center justify-between gap-2">
         <div className="flex items-center gap-3">
           <div className="p-2.5 rounded-xl bg-emerald-950/80 border border-emerald-500/40 text-emerald-400">
             <FileSpreadsheet className="w-6 h-6" />
@@ -165,27 +165,27 @@ export const BerandaView: React.FC<BerandaViewProps> = ({
       </div>
 
       {/* Grid: Peta Sumatera Utara & Donut Jenis Kelamin */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
         {/* Peta Sumatera Utara */}
-        <div className="lg:col-span-2 p-5 rounded-2xl bg-black/40 border border-rose-500/35 shadow-[0_0_20px_rgba(244,63,94,0.12)] flex flex-col justify-between">
-          <div className="flex items-center justify-between mb-3 border-b border-rose-500/20 pb-3">
+        <div className="lg:col-span-2 p-3 rounded-2xl bg-black/40 border border-rose-500/35 shadow-[0_0_20px_rgba(244,63,94,0.12)] flex flex-col justify-between">
+          <div className="flex items-center justify-between gap-2 mb-2 border-b border-rose-500/20 pb-2">
             <div className="flex items-center gap-2">
-              <MapPin className="w-5 h-5 text-sky-300" />
-              <h3 className="text-base font-bold text-white tracking-wide">
+              <MapPin className="w-4 h-4 shrink-0 text-sky-300" />
+              <h3 className="text-sm font-bold text-white tracking-wide leading-tight">
                 Peta Sebaran PPKS ODHIV Sumatera Utara
               </h3>
             </div>
-            <span className="text-xs font-mono text-emerald-300 bg-emerald-950/80 px-2 py-0.5 rounded border border-emerald-500/30">
+            <span className="shrink-0 text-[10px] font-mono text-emerald-300 bg-emerald-950/80 px-1.5 py-0.5 rounded border border-emerald-500/30">
               33 Kab/Kota Sumut
             </span>
           </div>
 
-          <p className="text-xs text-neutral-300 mb-4">
+          <p className="text-[10px] leading-snug text-neutral-300 mb-2">
             Visualisasi distribusi respon asesmen terpadu berbasis titik koordinat wilayah layanan Direktorat Rehabilitasi Sosial Kemensos di Provinsi Sumatera Utara.
           </p>
 
           {/* Map Representation (Custom Interactive SVG Map of North Sumatra) */}
-          <div className="relative w-full h-80 rounded-xl bg-gradient-to-b from-[#142618] to-[#0c160e] border border-emerald-500/30 p-3 overflow-hidden flex flex-col items-center justify-center">
+          <div className="relative w-full h-44 sm:h-48 rounded-xl bg-gradient-to-b from-[#142618] to-[#0c160e] border border-emerald-500/30 p-2 overflow-hidden flex flex-col items-center justify-center">
             {/* Ambient map grid background */}
             <div
               className="absolute inset-0 opacity-15"
@@ -199,7 +199,7 @@ export const BerandaView: React.FC<BerandaViewProps> = ({
             {/* SVG stylized map of North Sumatra */}
             <svg
               viewBox="0 0 700 400"
-              className="w-full h-full max-h-72 drop-shadow-[0_4px_12px_rgba(0,0,0,0.6)]"
+              className="w-full h-full max-h-40 sm:max-h-44 drop-shadow-[0_4px_12px_rgba(0,0,0,0.6)]"
             >
               {/* Mainland Sumut silhouette */}
               <path
