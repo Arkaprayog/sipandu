@@ -39,7 +39,7 @@ jobs:
         with:
           # The legacy "tools" SDK package is no longer published; requesting it
           # makes sdkmanager exit with "Failed to find package 'tools'".
-          packages: platform-tools platforms;android-35 build-tools;35.0.0
+          packages: platform-tools platforms;android-36 build-tools;36.0.0
 
       - name: Install web dependencies
         run: bun install --frozen-lockfile
@@ -58,6 +58,19 @@ jobs:
 
       - name: Generate native Android project
         run: npx cap add android
+
+      - name: Upgrade generated Android build tools for AndroidX Browser
+        shell: bash
+        run: |
+          set -euo pipefail
+          BUILD_FILE="android/build.gradle"
+          APP_FILE="android/app/build.gradle"
+          test -f "$BUILD_FILE"
+          # androidx.browser:browser 1.9.0 requires AGP >= 8.9.1 and compileSdk >= 36.
+          sed -i -E 's/com.android.tools.build:gradle:8\.7\.2/com.android.tools.build:gradle:8.9.1/g' "$BUILD_FILE"
+          sed -i -E 's/compileSdkVersion 35/compileSdkVersion 36/g; s/compileSdk 35/compileSdk 36/g' "$APP_FILE"
+          grep -q 'com.android.tools.build:gradle:8.9.1' "$BUILD_FILE"
+          grep -E 'compileSdk(Version)? 36' "$APP_FILE"
 
       - name: Configure native Google API scope callback
         run: python3 scripts/patch_native_google_login.py
@@ -115,14 +128,14 @@ jobs:
         run: |
           set -euo pipefail
           APK="android/app/build/outputs/apk/debug/app-debug.apk"
-          AAPT="$ANDROID_HOME/build-tools/35.0.0/aapt"
+          AAPT="$ANDROID_HOME/build-tools/36.0.0/aapt"
           test -s "$APK"
           test -x "$AAPT"
           "$AAPT" dump badging "$APK" | tee /tmp/sipandu-apk-badging.txt
           grep -q "package: name='id.my.sipandu.odhiv'" /tmp/sipandu-apk-badging.txt
           grep -q "versionName='$(node -p "require('./package.json').version")'" /tmp/sipandu-apk-badging.txt
           grep -q "application-label:'SIPANDU ODHIV'" /tmp/sipandu-apk-badging.txt
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$APK" | tee /tmp/sipandu-debug-signing.txt
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs "$APK" | tee /tmp/sipandu-debug-signing.txt
           grep -E "Signer #1 certificate SHA-1 digest|Signer #1 certificate SHA-256 digest" /tmp/sipandu-debug-signing.txt
 
       - name: Upload installable APK
