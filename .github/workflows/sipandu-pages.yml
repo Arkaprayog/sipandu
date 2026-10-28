@@ -36,7 +36,7 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
       - name: Install native Google sign-in module for type-check and build
-        run: npm install --no-save --package-lock=false --legacy-peer-deps @capacitor/core@7 @capgo/capacitor-social-login@7
+        run: npm install --save --package-lock=false --legacy-peer-deps @capacitor/core@7 @capgo/capacitor-social-login@7
       - name: Test cleanup marker detection
         run: bun run test
       - name: TypeScript check
