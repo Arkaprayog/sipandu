@@ -5,7 +5,7 @@ import { auth } from '../lib/firebase';
 import { AppSettings, GoogleFormUtamaPrefillEntries } from '../types';
 import { toGoogleFormsRespondentUrl } from '../utils/helpers';
 import { getGoogleFormIdFromUrl } from '../lib/googleSIPANDUResources';
-import { Settings, Save, Check, Link, FileSpreadsheet, FolderGit2, X, Lock, Unlock, Fingerprint, ShieldCheck } from 'lucide-react';
+import { Settings, Save, Check, Link, FileSpreadsheet, FolderGit2, X, Lock, Unlock, Fingerprint, ShieldCheck, ScanFace } from 'lucide-react';
 
 type UrlSettingKey = 'googleFormTahapAwalUrl' | 'googleFormTahapLanjutanUrl' | 'googleSpreadsheetUrl' | 'googleDriveFolderUrl';
 const URL_SETTING_KEYS: UrlSettingKey[] = [
@@ -166,6 +166,25 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </p>
                 <p role="status" className="mt-2 rounded-lg border border-white/10 bg-black/25 p-2 text-[10px] leading-relaxed text-neutral-300">
                   Diagnostik perangkat: {biometricDiagnostics}
+                </p>
+                <div className="mt-3 grid grid-cols-2 gap-2">
+                  <div className="flex items-center gap-2 rounded-lg border border-emerald-300/15 bg-black/20 p-2">
+                    <Fingerprint className="h-4 w-4 shrink-0 text-emerald-200" />
+                    <div>
+                      <p className="text-[10px] font-bold text-emerald-100">Fingerprint</p>
+                      <p className="text-[9px] text-neutral-400">Jika didukung</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 rounded-lg border border-sky-300/15 bg-black/20 p-2">
+                    <ScanFace className="h-4 w-4 shrink-0 text-sky-200" />
+                    <div>
+                      <p className="text-[10px] font-bold text-sky-100">Face Unlock</p>
+                      <p className="text-[9px] text-neutral-400">Jika didukung</p>
+                    </div>
+                  </div>
+                </div>
+                <p className="mt-2 text-[10px] leading-relaxed text-neutral-400">
+                  Satu pendaftaran biometrik mengaktifkan autentikator yang diizinkan perangkat. Android/browser dapat memilih wajah atau sidik jari; bila verifikasi dibatalkan atau gagal, PIN SIPANDU ditampilkan sebagai cadangan.
                 </p>
                 {isBiometricLockEnabled(auth.currentUser?.uid) && (
                   <p className="mt-2 text-[10px] font-semibold text-emerald-200">Autentikasi biometrik terdaftar untuk akun ini.</p>
