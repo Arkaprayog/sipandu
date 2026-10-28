@@ -312,6 +312,13 @@ jobs:
           grep -q "application-label:'SIPANDU ODHIV'" /tmp/sipandu-release-badging.txt
           "$APKSIGNER" verify --verbose --print-certs "$APK"
 
+      - name: Verify Google scope bridge inside signed release APK bytecode
+        if: github.event_name != 'pull_request'
+        run: |
+          APK="android/app/build/outputs/apk/release/app-release.apk"
+          test -s "$APK"
+          python3 scripts/verify_apk_native_google_bridge.py "$APK"
+
       - name: Upload native release APK
         if: github.event_name != 'pull_request'
         uses: actions/upload-artifact@v4
