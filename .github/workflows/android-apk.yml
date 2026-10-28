@@ -11,6 +11,9 @@ on:
       - "capacitor.config.json"
       - "vite.config.ts"
       - "scripts/patch_native_google_login.py"
+      - "scripts/generate_pwa_icons.py"
+      - "scripts/generate_android_icons.py"
+      - "scripts/verify-dist.mjs"
       - "scripts/verify_apk_native_google_bridge.py"
       - ".github/workflows/android-apk.yml"
 
