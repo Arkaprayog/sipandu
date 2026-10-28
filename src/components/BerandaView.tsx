@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { PPKSRecord } from '../types';
 import { SUMUT_DISTRICTS } from '../data/initialData';
 import { normalizeNorthSumatraRegion } from '../lib/ppksData';
@@ -30,6 +30,17 @@ export const BerandaView: React.FC<BerandaViewProps> = ({
   liveSyncLastUpdatedAt,
 }) => {
   const [selectedDistrict, setSelectedDistrict] = useState<string | null>(null);
+
+  useEffect(() => {
+    const onAppNavigateBack = (event: Event) => {
+      const detail = (event as CustomEvent<{ handled: boolean }>).detail;
+      if (!detail || detail.handled || selectedDistrict === null) return;
+      setSelectedDistrict(null);
+      detail.handled = true;
+    };
+    window.addEventListener('sipandu:navigate-back', onAppNavigateBack);
+    return () => window.removeEventListener('sipandu:navigate-back', onAppNavigateBack);
+  }, [selectedDistrict]);
 
   // Compute live statistics based on ppksList; an empty database displays zero, never demo percentages.
   const totalPPKS = ppksList.length;
