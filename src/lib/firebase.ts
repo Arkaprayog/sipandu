@@ -525,6 +525,9 @@ export const invalidateAccessToken = (): void => {
 
 export const googleLogout = async () => {
   try {
+    if (Capacitor.isNativePlatform()) {
+      try { await GoogleSignIn.signOut(); } catch { /* Firebase session cleanup must still run */ }
+    }
     await signOut(workspaceAuth);
   } finally {
     // Always remove the tab-scoped bearer token, even if signOut encounters an error.
