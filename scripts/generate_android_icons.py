@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Generate Android launcher resources from SIPANDU's approved uploaded icon.
 
-Source of truth: public/uploads/sipandu-odhiv-logo.webp.
+Prefer public/uploads/sipandu-odhiv-logo.webp. If that optional legacy
+filename has been removed, use public/uploads/sipandu-logo.png as fallback.
 No alternate/drawn logo is substituted. The source artwork is resized with
 LANCZOS and kept fully visible; classic and adaptive Android launcher assets
 are produced in all required density buckets.
@@ -23,7 +24,11 @@ except ImportError:
     from PIL import Image, ImageDraw, ImageOps
 
 ROOT = Path(__file__).resolve().parents[1]
-SOURCE = ROOT / "public" / "uploads" / "sipandu-odhiv-logo.webp"
+LOGO_CANDIDATES = (
+    ROOT / "public" / "uploads" / "sipandu-odhiv-logo.webp",
+    ROOT / "public" / "uploads" / "sipandu-logo.png",
+)
+SOURCE = next((candidate for candidate in LOGO_CANDIDATES if candidate.is_file()), LOGO_CANDIDATES[0])
 RES = ROOT / "android" / "app" / "src" / "main" / "res"
 BACKGROUND = (3, 21, 64, 255)  # Match supplied SIPANDU ODHIV navy icon
 DENSITIES = (
@@ -58,7 +63,8 @@ def save_icon(image: Image.Image, path: Path) -> None:
 
 def main() -> None:
     if not SOURCE.is_file():
-        raise SystemExit(f"Ikon resmi aplikasi tidak ditemukan: {SOURCE}")
+        candidates = ", ".join(str(path) for path in LOGO_CANDIDATES)
+        raise SystemExit(f"Ikon sumber aplikasi tidak ditemukan. Periksa salah satu sumber yang didukung: {candidates}")
     try:
         with Image.open(SOURCE) as opened:
             width, height = opened.size
