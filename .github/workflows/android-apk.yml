@@ -71,6 +71,8 @@ jobs:
             SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -path '*/bin/sdkmanager' -type f | sort -V | tail -1)"
           fi
           test -x "$SDKMANAGER" || { echo "::error::Android sdkmanager was not found"; exit 1; }
+          # sdkmanager may close stdin after package metadata is loaded; keep the final command status authoritative, not yes(1) SIGPIPE.
+          set +o pipefail
           yes | "$SDKMANAGER" "platforms;android-36" "build-tools;36.0.0"
           python3 - <<'PY'
           from pathlib import Path
