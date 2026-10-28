@@ -59,6 +59,9 @@ jobs:
       - name: Generate native Android project
         run: npx cap add android
 
+      - name: Configure native Google API scope callback
+        run: python3 scripts/patch_native_google_login.py
+
       - name: Copy web assets into Android app
         run: npx cap sync android
 
