@@ -27,6 +27,7 @@ const NotificationsModal = lazyWithRecovery('NotificationsModal', () => import('
 const GoogleWorkspaceModal = lazyWithRecovery('GoogleWorkspaceModal', () => import('./components/GoogleWorkspaceModal').then((module) => ({ default: module.GoogleWorkspaceModal })));
 import { onAuthStateChanged, signOut, getIdTokenResult } from 'firebase/auth';
 import { auth, getAccessToken, savePPKSToFirestore, googleLogout, subscribeToPPKSChanges, saveStageOneIntakeToFirestore, subscribeToStageOneIntake } from './lib/firebase';
+import { isQuickUnlockEnabled } from './lib/biometricLock';
 import { ensureSIPANDUDatabaseSheet, extractSpreadsheetId, getLinkedSpreadsheetUrlForForm, importPPKSFromSpreadsheet, upsertPPKSInSpreadsheet } from './lib/googleWorkspace';
 import { GOOGLE_SIPANDU_RESOURCES } from './lib/googleSIPANDUResources';
 import { getLiveSyncRetryDelay, LIVE_SYNC_INTERVAL_MS } from './lib/liveSyncPolicy';
@@ -554,12 +555,26 @@ function StaffApp() {
   };
 
   const handleLogout = async () => {
-    if (window.confirm('Apakah Anda yakin ingin keluar dari aplikasi SIPANDU ODHIV?')) {
-      await signOut(auth);
-      await googleLogout();
-      setIsAuthenticated(false);
-      setCurrentUserName('');
+    const currentUser = auth.currentUser;
+    if (!window.confirm(
+      currentUser && isQuickUnlockEnabled(currentUser.uid)
+        ? 'Kunci aplikasi SIPANDU ODHIV sekarang? Sesi akun tetap tersimpan di perangkat ini agar Anda bisa membuka kembali dengan sidik jari/face unlock atau PIN.'
+        : 'Apakah Anda yakin ingin keluar dari aplikasi SIPANDU ODHIV?'
+    )) return;
+
+    // A configured quick-unlock method means "Keluar Aplikasi" locks the UI,
+    // not the Firebase account. Keeping Firebase's persisted session allows
+    // the biometric prompt to unlock the same account on the next launch.
+    if (currentUser && isQuickUnlockEnabled(currentUser.uid)) {
+      window.dispatchEvent(new Event('sipandu:lock-app'));
+      return;
     }
+
+    // Preserve the original full sign-out when no local quick-unlock method exists.
+    await signOut(auth);
+    await googleLogout();
+    setIsAuthenticated(false);
+    setCurrentUserName('');
   };
 
   // A record edit/add is persisted locally first, then pushed to each configured cloud target.
