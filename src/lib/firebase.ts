@@ -1,4 +1,6 @@
 import { initializeApp, getApps } from 'firebase/app';
+import { Capacitor } from '@capacitor/core';
+import { GoogleSignIn } from '@capawesome/capacitor-google-sign-in';
 import {
   getFirestore,
   doc,
@@ -20,6 +22,7 @@ import {
   signInWithRedirect,
   getRedirectResult,
   GoogleAuthProvider,
+  signInWithCredential,
   onAuthStateChanged,
   User,
   signOut,
@@ -302,6 +305,8 @@ function buildWorkspaceProvider(prompt?: 'none' | 'select_account'): GoogleAuthP
   return provider;
 }
 
+let nativeGoogleSignInInitialized = false;
+
 export const googleSignIn = async (): Promise<{
   user: User;
   accessToken: string;
@@ -309,6 +314,55 @@ export const googleSignIn = async (): Promise<{
   // Keep the Workspace identity across reloads; the short-lived Google API
   // access token is still held only in sessionStorage for security.
   await setPersistence(workspaceAuth, browserLocalPersistence);
+
+  // Android/iOS must use the operating-system Google sign-in flow. Firebase JS
+  // popup/redirect OAuth runs on Capacitor's localhost origin and is unreliable
+  // or rejected inside a WebView. The native plugin returns both an ID token for
+  // Firebase identity and a scoped Google API access token for Drive/Sheets/Forms.
+  if (Capacitor.isNativePlatform()) {
+    try {
+      if (!nativeGoogleSignInInitialized) {
+        await GoogleSignIn.initialize({
+          clientId: firebaseConfig.oAuthClientId,
+          scopes: [
+            'email',
+            'profile',
+            'https://www.googleapis.com/auth/drive',
+            'https://www.googleapis.com/auth/drive.file',
+            'https://www.googleapis.com/auth/spreadsheets',
+            'https://www.googleapis.com/auth/forms.body',
+            'https://www.googleapis.com/auth/forms.responses.readonly',
+          ],
+        });
+        nativeGoogleSignInInitialized = true;
+      }
+
+      const nativeResult = await GoogleSignIn.signIn();
+      const selectedEmail = nativeResult.email?.trim();
+      if (!selectedEmail || selectedEmail.toLowerCase() !== GOOGLE_WORKSPACE_EMAIL.toLowerCase()) {
+        try { await GoogleSignIn.signOut(); } catch { /* keep the account mismatch as the main error */ }
+        cacheWorkspaceToken(null);
+        throw new Error(
+          `Pilih akun Google ${GOOGLE_WORKSPACE_EMAIL}. Akun yang dipilih: ${selectedEmail || 'email tidak tersedia'}.`
+        );
+      }
+      if (!nativeResult.idToken) {
+        throw new Error('Google Sign-In native tidak mengembalikan ID token. Periksa Web OAuth Client ID pada Firebase/Google Cloud.');
+      }
+      if (!nativeResult.accessToken) {
+        throw new Error('Login berhasil, tetapi token Google API tidak tersedia. Ulangi persetujuan akses Drive, Sheets, dan Forms.');
+      }
+
+      const firebaseCredential = GoogleAuthProvider.credential(nativeResult.idToken);
+      const userCredential = await signInWithCredential(workspaceAuth, firebaseCredential);
+      cacheWorkspaceToken(nativeResult.accessToken);
+      return { user: userCredential.user, accessToken: nativeResult.accessToken };
+    } catch (error: any) {
+      cacheWorkspaceToken(null);
+      const message = error?.message || String(error);
+      throw new Error(`Login Google native SIPANDU gagal: ${message}. Jika pesan menyebut konfigurasi aplikasi, pastikan package id.my.sipandu.odhiv dan SHA-1 sertifikat APK telah didaftarkan pada Google Cloud/Firebase.`);
+    }
+  }
 
   // Google blocks popup-based OAuth in many mobile and embedded WebViews.
   // Start a top-level redirect directly from the user's tap on those clients.
