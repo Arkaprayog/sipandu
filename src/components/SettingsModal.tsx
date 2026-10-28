@@ -109,10 +109,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       window.alert('URL Google Form tahap awal tidak dikenali. Tempel URL Google Form yang valid.');
       return;
     }
-    if (respondentUrl && isPrimaryGoogleFormUrl(respondentUrl)) {
-      window.alert('Form ini adalah Google Form utama. Asesmen Tahap Awal wajib memakai Form khusus yang berbeda agar respons spreadsheet utama tidak masuk ke daftar tahap awal.');
-      return;
-    }
     if (respondentUrl && !getGoogleFormIdFromUrl(respondentUrl)) {
       window.alert('Untuk sinkronisasi otomatis, tempel URL lengkap docs.google.com/forms/d/FORM_ID/edit atau /viewform. Tautan pendek forms.gle tidak dapat digunakan untuk membaca sheet respons melalui Google API.');
       return;

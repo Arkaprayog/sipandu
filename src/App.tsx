@@ -173,10 +173,9 @@ function reconcileSpreadsheetPPKSRecords(localRecords: PPKSRecord[], sourceRecor
 
 function normalizeAppSettings(value: unknown): AppSettings {
   const saved = value && typeof value === 'object' ? value as Partial<AppSettings> : {};
-  // The primary Google Form and its response spreadsheet must never become the
-  // independent stage-one link/barcode source just because an older build defaulted to it.
-  let stageOneFormUrl = saved.googleFormTahapAwalUrl?.trim() || '';
-  if (isPrimaryGoogleFormUrl(stageOneFormUrl)) stageOneFormUrl = '';
+  // The Asesmen Tahap Awal link/barcode uses the project's existing respondent Form.
+  // New submissions are separated by the stage-one cutover timestamp before display/persistence.
+  const stageOneFormUrl = saved.googleFormTahapAwalUrl?.trim() || GOOGLE_SIPANDU_RESOURCES.formRespondentUrl;
   let databaseUrl = saved.googleSpreadsheetUrl?.trim() || '';
   if (databaseUrl.includes('1yA8KemensosODHIVSumut2026_LiveSync')) databaseUrl = '';
   if (databaseUrl) {
@@ -786,15 +785,6 @@ export default function App() {
       type: 'idle',
       message: formUrl ? 'Menghubungkan Form khusus Asesmen Tahap Awal…' : 'URL Form khusus Asesmen Tahap Awal belum diatur.',
     });
-    if (isPrimaryGoogleFormUrl(formUrl)) {
-      stageOneRespondentsRef.current = [];
-      setStageOneRespondents([]);
-      setStageOneResponseSyncState({
-        type: 'error',
-        message: 'URL Asesmen Tahap Awal masih menunjuk Google Form utama. Tabel ini hanya menerima Form tahap awal khusus; data dari Form/spreadsheet utama tidak digunakan.',
-      });
-      return;
-    }
     if (!isAuthenticated || !formUrl) {
       stageOneRespondentsRef.current = [];
       setStageOneRespondents([]);
@@ -836,26 +826,21 @@ export default function App() {
         // Resolve the sheet linked to the stage-one Form itself, not the primary roster/source sheet.
         const responseSheetUrl = await getLinkedSpreadsheetUrlForForm(formUrl);
         const stageOneSheetId = extractSpreadsheetId(responseSheetUrl);
-        const primarySourceUrl = settings.googleSpreadsheetSourceUrl?.trim() || '';
-        let primarySourceId = '';
-        if (primarySourceUrl) {
-          try { primarySourceId = extractSpreadsheetId(primarySourceUrl); } catch { primarySourceId = ''; }
-        }
-        if (primarySourceId && stageOneSheetId === primarySourceId) {
-          stageOneRespondentsRef.current = [];
-          setStageOneRespondents([]);
-          setStageOneResponseSyncState({
-            type: 'error',
-            message: 'Form tahap awal dan Google Form utama masih memakai spreadsheet respons yang sama. Tabel ini dikosongkan untuk mencegah data utama masuk; tautkan Form tahap awal ke spreadsheet respons yang terpisah.',
-          });
-          failedAttempts = 0;
-          nextDelay = LIVE_SYNC_INTERVAL_MS;
-          return;
-        }
         const imported = await importPPKSFromSpreadsheet(responseSheetUrl);
         if (!active) return;
 
         const freshStageOneRecords = filterStageOneLinkResponses(imported.records);
+        // Persist newly submitted/changed stage-one respondents to the real PPKS database.
+        // Stable record IDs and upsert semantics make repeated polling idempotent.
+        const previousById = new Map(stageOneRespondentsRef.current.map((record) => [record.id, record]));
+        const changedRecords = freshStageOneRecords.filter((record) => {
+          const previous = previousById.get(record.id);
+          return !previous || previous.timestamp !== record.timestamp || previous.namaLengkap !== record.namaLengkap;
+        });
+        for (const record of changedRecords) {
+          await persistRecordToCloud(record);
+          if (!active) return;
+        }
         const notificationUid = auth.currentUser?.uid || 'default';
         await processRespondentSubmissionEvents(
           notificationUid,

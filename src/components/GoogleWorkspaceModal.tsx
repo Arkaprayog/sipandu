@@ -564,10 +564,6 @@ export const GoogleWorkspaceModal: React.FC<GoogleWorkspaceModalProps> = ({
       setStatusMessage({ type: 'error', text: 'URL Google Form tidak valid. Gunakan URL lengkap docs.google.com/forms/d/FORM_ID/edit atau /viewform.' });
       return;
     }
-    if (isPrimaryGoogleFormUrl(normalized)) {
-      setStatusMessage({ type: 'error', text: 'Gunakan Google Form khusus Asesmen Tahap Awal, bukan Form utama.' });
-      return;
-    }
     onUpdateSettings({ ...settings, googleFormTahapAwalUrl: normalized });
     setFormIdInput(normalized);
     setEditingFormUrl(false);
