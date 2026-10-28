@@ -260,7 +260,7 @@ jobs:
 
           p.write_text(s)
           content = p.read_text()
-          if r"\\n" in content:
+          if r"\n" in content:
               raise SystemExit("Unexpected literal backslash-n in generated Gradle file")
           required = [
               "storePassword System.getenv('SIPANDU_KEYSTORE_PASSWORD')",
