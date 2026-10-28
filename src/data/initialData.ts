@@ -14,7 +14,7 @@ export const initialAppSettings: AppSettings = {
   googleFormTahapAwalUrl: '', // Legacy key; stage-one respondents use the native SIPANDU form.
   googleFormTahapLanjutanUrl: '',
   googleFormTahapLanjutanIdEntry: '',
-  googleFormUtamaPrefillEntries: { namaLengkap: '', nik: '', usia: '', jenisKelamin: '', kotaDomisili: '', noHpWa: '', idPpks: '' },
+  googleFormUtamaPrefillEntries: { namaLengkap: '', nik: '', usia: '', jenisKelamin: '', kotaDomisili: '', noHpWa: '', jenisBantuan: '', idPpks: '' },
   googleFormKesehatanMentalUrl: '',
   googleSpreadsheetUrl: '', // Writable database target stays separate from the Google Forms response spreadsheet.
   // Read-only Google Forms response sheet; live sync runs every five minutes after Google authorization.

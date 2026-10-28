@@ -359,6 +359,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 ['jenisKelamin', 'Jenis Kelamin'],
                 ['kotaDomisili', 'Kota Domisili'],
                 ['noHpWa', 'No. HP / WhatsApp'],
+                ['jenisBantuan', 'Jenis Bantuan'],
                 ['idPpks', 'ID PPKS (wajib)'],
               ] as Array<[keyof GoogleFormUtamaPrefillEntries, string]>).map(([key, label]) => (
                 <label key={key} className="block text-[11px] text-sky-100">
@@ -377,6 +378,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         jenisKelamin: '',
                         kotaDomisili: '',
                         noHpWa: '',
+                        jenisBantuan: '',
                         idPpks: '',
                         ...(formData.googleFormUtamaPrefillEntries || {}),
                         [key]: event.target.value.replace(/^entry\./i, '').replace(/\D/g, ''),

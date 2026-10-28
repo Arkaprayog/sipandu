@@ -140,6 +140,7 @@ export interface GoogleFormUtamaPrefillEntries {
   jenisKelamin: string;
   kotaDomisili: string;
   noHpWa: string;
+  jenisBantuan: string;
   idPpks: string;
 }
 

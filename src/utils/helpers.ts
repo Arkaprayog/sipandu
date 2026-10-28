@@ -110,7 +110,7 @@ export function buildGoogleFormUtamaPrefilledUrl(
   }
   const mapping = entries || {
     namaLengkap: '', nik: '', usia: '', jenisKelamin: '',
-    kotaDomisili: '', noHpWa: '', idPpks: '',
+    kotaDomisili: '', noHpWa: '', jenisBantuan: '', idPpks: '',
   };
   const getEntryId = (value: string | undefined) => String(value || '').trim().replace(/^entry\./i, '');
   const idEntry = getEntryId(mapping.idPpks);
@@ -125,10 +125,11 @@ export function buildGoogleFormUtamaPrefilledUrl(
     ['jenisKelamin', String(ppks.jenisKelamin || '')],
     ['kotaDomisili', String(ppks.kotaDomisili || '')],
     ['noHpWa', String(ppks.noHpWa || '')],
+    ['jenisBantuan', String(ppks.jenisBantuan || '')],
     ['idPpks', String(ppks.id || '')],
   ];
   const identityFieldCount = values.filter(([key, value]) =>
-    key !== 'idPpks' && value.trim() && /^\d+$/.test(getEntryId(mapping[key]))
+    key !== 'idPpks' && key !== 'jenisBantuan' && value.trim() && /^\d+$/.test(getEntryId(mapping[key]))
   ).length;
   if (identityFieldCount === 0) {
     throw new Error('Entry ID untuk setidaknya satu pertanyaan identitas belum dikonfigurasi. SIPANDU tidak menebak ID pertanyaan Google Forms.');
