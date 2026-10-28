@@ -356,7 +356,12 @@ export const googleSignIn = async (): Promise<{
         provider: 'google',
         options: {
           scopes: nativeScopes,
-          forceRefreshToken: true,
+          // Make the account picker explicit and avoid forcing a refresh of a
+          // cached token, which can trigger Credential Manager error [16].
+          style: 'standard',
+          filterByAuthorizedAccounts: false,
+          autoSelectEnabled: false,
+          forceRefreshToken: false,
         },
       });
 
