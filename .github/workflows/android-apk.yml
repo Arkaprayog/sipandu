@@ -63,42 +63,42 @@ jobs:
           npx cap sync android
 
       - name: Align Android build tools with dependency requirements
+        shell: bash
         run: |
+          set -euo pipefail
           SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
           if [ ! -x "$SDKMANAGER" ]; then
             SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -path '*/bin/sdkmanager' -type f | sort -V | tail -1)"
           fi
           test -x "$SDKMANAGER" || { echo "::error::Android sdkmanager was not found"; exit 1; }
           yes | "$SDKMANAGER" "platforms;android-36" "build-tools;36.0.0"
-          python - <<'PY'
+          python3 - <<'PY'
           from pathlib import Path
-          import re
 
-          root_gradle = Path("android/build.gradle")
-          root_text = root_gradle.read_text()
-          updated_root, agp_count = re.subn(
-              r"(com\\.android\\.tools\\.build:gradle:)8\\.7\\.2\\b",
-              r"\\g<1>8.9.1",
-              root_text,
-              count=1,
-          )
-          if agp_count != 1:
-              raise SystemExit("Expected Android Gradle Plugin 8.7.2 declaration was not found; refusing to guess.")
-          root_gradle.write_text(updated_root)
-
-          variables_gradle = Path("android/variables.gradle")
-          variables_text = variables_gradle.read_text()
-          updated_variables, sdk_count = re.subn(
-              r"(compileSdkVersion\\s*=\\s*)35\\b",
-              r"\\g<1>36",
-              variables_text,
-              count=1,
-          )
-          if sdk_count != 1:
-              raise SystemExit("Expected compileSdkVersion = 35 declaration was not found; refusing to guess.")
-          variables_gradle.write_text(updated_variables)
-          print("Configured Android Gradle Plugin 8.9.1 and compile SDK 36; target SDK left unchanged.")
+          gradle_files = list(Path("android").rglob("*.gradle")) + list(Path("android").rglob("*.gradle.kts"))
+          agp_changed = []
+          sdk_changed = []
+          for path in gradle_files:
+              content = path.read_text()
+              updated = content.replace("8.7.2", "8.9.1")
+              if updated != content:
+                  agp_changed.append(str(path))
+              updated = updated.replace("compileSdkVersion = 35", "compileSdkVersion = 36")
+              updated = updated.replace("compileSdkVersion 35", "compileSdkVersion 36")
+              updated = updated.replace("compileSdk 35", "compileSdk 36")
+              if updated != content and str(path) not in sdk_changed:
+                  sdk_changed.append(str(path))
+              if updated != content:
+                  path.write_text(updated)
+          if not agp_changed:
+              raise SystemExit("Could not locate generated Android Gradle Plugin 8.7.2 declaration")
+          if not sdk_changed:
+              raise SystemExit("Could not locate generated compile SDK 35 declaration")
+          print("Updated AGP in:", ", ".join(agp_changed))
+          print("Updated compile SDK in:", ", ".join(sdk_changed))
           PY
+          grep -R -n '8.9.1' android --include='*.gradle' --include='*.gradle.kts'
+          grep -R -E 'compileSdkVersion =? 36|compileSdk 36' android --include='*.gradle' --include='*.gradle.kts'
 
       - name: Configure private release signing
         env:
