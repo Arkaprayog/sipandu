@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import crypto from 'node:crypto';
 
 const dist = path.resolve('dist');
 const fail = (message) => {
@@ -203,17 +204,22 @@ for (const required of ['manifest.webmanifest', 'sw.js']) {
   }
 }
 
-// Verify at least one approved SIPANDU logo source and generated icon variants.
-// The original WebP is preferred, but the uploaded PNG is a supported fallback.
-const appLogoSources = [
-  path.join(dist, 'uploads', 'sipandu-odhiv-logo.webp'),
-  path.join(dist, 'uploads', 'sipandu-logo.png'),
-];
-const usableLogoSource = appLogoSources.find((file) => fs.existsSync(file) && fs.statSync(file).size >= 10000);
-if (!usableLogoSource) {
-  fail('Logo sumber resmi SIPANDU tidak ada/kosong di dist/uploads (membutuhkan sipandu-odhiv-logo.webp atau sipandu-logo.png).');
-} else {
-  console.log('Approved SIPANDU logo source present: ' + path.relative(dist, usableLogoSource));
+// Enforce the exact logo file supplied by the project owner. No legacy filename,
+// alternate artwork, or generated replacement may satisfy this production check.
+const repositoryLogoSource = path.resolve('public', 'uploads', 'sipandu-logo.png');
+const appLogoSource = path.join(dist, 'uploads', 'sipandu-logo.png');
+if (!fs.existsSync(repositoryLogoSource) || fs.statSync(repositoryLogoSource).size < 10000) {
+  fail('Sumber logo resmi wajib tersedia: public/uploads/sipandu-logo.png.');
+}
+if (!fs.existsSync(appLogoSource) || fs.statSync(appLogoSource).size < 10000) {
+  fail('Logo SIPANDU wajib disalin ke dist/uploads/sipandu-logo.png.');
+} else if (fs.existsSync(repositoryLogoSource)) {
+  const sha256 = (file) => crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
+  if (sha256(repositoryLogoSource) !== sha256(appLogoSource)) {
+    fail('Logo di dist berbeda dari public/uploads/sipandu-logo.png; file sumber harus disalin persis tanpa penggantian artwork.');
+  } else {
+    console.log('Exact uploaded SIPANDU PNG verified in dist (SHA-256: ' + sha256(appLogoSource) + ').');
+  }
 }
 const pwaIconFiles = [
   'icons/sipandu-favicon.png',
