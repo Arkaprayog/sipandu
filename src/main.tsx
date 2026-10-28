@@ -1,6 +1,7 @@
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import './index.css';
+import { BiometricGate } from './components/BiometricGate';
 import { importLazyModuleWithRecovery, reloadSIPANDUWithFreshDocument } from './lib/lazyImportRecovery';
 
 const rootElement = document.getElementById('root');
@@ -133,7 +134,7 @@ window.setTimeout(() => {
       appLoaded = true;
       window.clearTimeout(loadingTimer);
       const App = appModule.default;
-      root.render(<StartupErrorBoundary><App /></StartupErrorBoundary>);
+      root.render(<StartupErrorBoundary><BiometricGate><App /></BiometricGate></StartupErrorBoundary>);
     })
     .catch((error: unknown) => {
       appLoaded = true;
