@@ -6,7 +6,9 @@ import { auth } from '../lib/firebase';
 import { authenticateBiometricLock, isBiometricLockEnabled } from '../lib/biometricLock';
 
 export const BiometricGate: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [locked, setLocked] = useState(false);
+  // Start locked when the preference is enabled so authenticated content cannot flash
+  // between the first render and Firebase's asynchronous auth-state callback.
+  const [locked, setLocked] = useState(() => Capacitor.isNativePlatform() && isBiometricLockEnabled());
   const [error, setError] = useState('');
   const [checking, setChecking] = useState(false);
   const lastAuthenticatedUid = useRef<string | null>(null);
@@ -24,7 +26,11 @@ export const BiometricGate: React.FC<{ children: React.ReactNode }> = ({ childre
       lastAuthenticatedUid.current = uid;
       setLocked(false);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Verifikasi biometrik gagal. Coba lagi.');
+      const message = e instanceof Error ? e.message : 'Verifikasi biometrik gagal. Coba lagi.';
+      const code = e && typeof e === 'object' && 'code' in e
+        ? String((e as { code?: unknown }).code || '')
+        : '';
+      setError(code ? `${message} (kode diagnostik: ${code})` : message);
       setLocked(true);
     } finally {
       setChecking(false);
@@ -51,7 +57,12 @@ export const BiometricGate: React.FC<{ children: React.ReactNode }> = ({ childre
 
     const onVisibilityChange = () => {
       if (document.visibilityState === 'hidden') {
-        if (auth.currentUser && isBiometricLockEnabled()) wasBackgrounded.current = true;
+        if (auth.currentUser && isBiometricLockEnabled()) {
+          // Mask sensitive content before the OS app switcher/background snapshot.
+          wasBackgrounded.current = true;
+          setLocked(true);
+          setError('');
+        }
         return;
       }
       if (document.visibilityState === 'visible' && wasBackgrounded.current) {
