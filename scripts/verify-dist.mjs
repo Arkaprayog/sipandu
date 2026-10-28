@@ -15,6 +15,7 @@ if (!fs.existsSync(indexPath)) {
 }
 
 const html = fs.readFileSync(indexPath, 'utf8');
+const sha256File = (file) => crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
 
 // The app icons must be generated from the uploaded official logo, not an AI substitute.
 const iconChecks = [
@@ -214,13 +215,38 @@ if (!fs.existsSync(repositoryLogoSource) || fs.statSync(repositoryLogoSource).si
 if (!fs.existsSync(appLogoSource) || fs.statSync(appLogoSource).size < 10000) {
   fail('Logo SIPANDU wajib disalin ke dist/uploads/sipandu-logo.png.');
 } else if (fs.existsSync(repositoryLogoSource)) {
-  const sha256 = (file) => crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
-  if (sha256(repositoryLogoSource) !== sha256(appLogoSource)) {
+  if (sha256File(repositoryLogoSource) !== sha256File(appLogoSource)) {
     fail('Logo di dist berbeda dari public/uploads/sipandu-logo.png; file sumber harus disalin persis tanpa penggantian artwork.');
   } else {
-    console.log('Exact uploaded SIPANDU PNG verified in dist (SHA-256: ' + sha256(appLogoSource) + ').');
+    console.log('Exact uploaded SIPANDU PNG verified in dist (SHA-256: ' + sha256File(appLogoSource) + ').');
   }
 }
+// Keep the role-specific uploaded Kemensos/ATENSI assets intact in production.
+// These are source images owned by the project; no generated substitute is accepted.
+const requiredOfficialLogoAssets = [
+  { filename: 'Logo Kemensos Hadir.png', usage: 'logo Kemensos Hadir halaman login' },
+  { filename: 'logo-kemsos.webp', usage: 'logo Kemensos di tengah barcode' },
+  { filename: 'Logo Kemensos.png', usage: 'logo Kemensos pada kop Form Asesmen Terintegrasi' },
+  { filename: 'ATENSI HD.png', usage: 'logo ATENSI pada kop Form Asesmen Terintegrasi' },
+];
+for (const asset of requiredOfficialLogoAssets) {
+  const source = path.resolve('public', 'uploads', asset.filename);
+  const built = path.join(dist, 'uploads', asset.filename);
+  if (!fs.existsSync(source) || fs.statSync(source).size < 10000) {
+    fail('Aset sumber ' + asset.usage + ' tidak tersedia/terlalu kecil: public/uploads/' + asset.filename);
+    continue;
+  }
+  if (!fs.existsSync(built) || fs.statSync(built).size < 10000) {
+    fail('Aset ' + asset.usage + ' tidak ikut tersalin ke dist/uploads/' + asset.filename);
+    continue;
+  }
+  if (sha256File(source) !== sha256File(built)) {
+    fail('Aset produksi berbeda dari sumber asli public/uploads/' + asset.filename + '; jangan mengganti artwork.');
+  } else {
+    console.log('Exact uploaded logo verified in dist: uploads/' + asset.filename + ' (' + asset.usage + ').');
+  }
+}
+
 const pwaIconFiles = [
   'icons/sipandu-favicon.png',
   'icons/sipandu-icon-192.png',

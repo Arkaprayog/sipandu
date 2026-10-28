@@ -2,12 +2,16 @@
 
 Folder ini menyimpan aset gambar, logo, dan dokumen yang dipakai aplikasi SIPANDU ODHIV.
 
-## Aset logo aplikasi
+## Pemetaan aset logo
 
-- Sumber logo aktif untuk ikon PWA/iOS dan ikon peluncur Android: `sipandu-logo.png`.
-- Generator ikon ada di `scripts/generate_pwa_icons.py` dan `scripts/generate_android_icons.py`.
-- Jangan hapus atau mengganti nama aset yang dirujuk generator kecuali kedua generator dan pemeriksaan build juga diperbarui.
-- Setelah perubahan aset atau dependency, pastikan GitHub Actions serta Cloudflare Workers Builds selesai tanpa error.
+- `sipandu-logo.png`: sumber resmi ikon aplikasi PWA, favicon, iOS, dan launcher Android.
+- `Logo Kemensos Hadir.png`: logo yang ditampilkan pada halaman login.
+- `logo-kemsos.webp`: logo Kemensos yang ditanam di tengah QR/barcode asesmen.
+- `Logo Kemensos.png` dan `ATENSI HD.png`: dua logo asli pada kop Form Asesmen Terintegrasi.
+
+Generator ikon aplikasi berada di `scripts/generate_pwa_icons.py` dan `scripts/generate_android_icons.py`; keduanya mengambil `sipandu-logo.png` tanpa mengganti artwork. Pertahankan nama/case file persis karena dipakai pada source code. Tidak boleh memakai gambar buatan AI atau mengambil logo dari internet.
+
+Setelah perubahan kode, pastikan GitHub Actions build/test, pemeriksaan `node scripts/verify-dist.mjs`, dan deployment yang terhubung berhasil.
 
 ## Panduan keamanan
 

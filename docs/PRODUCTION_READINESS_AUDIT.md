@@ -84,10 +84,10 @@ Cakupan tambahan: seluruh pohon repo pada branch `main` (direktori `.github/work
 
 ### Perbaikan terverifikasi di kode
 
-- Menghapus lambang Kemensos SVG yang digambar manual; logo aplikasi pada login/header memakai file sumber `public/uploads/sipandu-logo.png`. QR asesmen kini menyematkan file yang sama di bagian tengah.
-- Ikon PWA/favicon/iOS dan launcher Android tetap dibuat oleh generator dari file PNG itu. Generator hanya mengubah ukuran/penempatan; tidak membuat desain/logo alternatif.
-- Komponen kop surat mempertahankan logo Kemensos dari aset yang diunggah, bukan dari SVG buatan.
-- Pemeriksa dist mewajibkan logo PNG sumber dan salinan dist identik berdasarkan SHA-256; nama WebP lama tidak lagi diterima sebagai pengganti.
+- Identitas ikon aplikasi PWA/favicon/iOS dan launcher Android bersumber dari `public/uploads/sipandu-logo.png`; generator hanya menyesuaikan ukuran/penempatan.
+- Halaman login memakai file upload `public/uploads/Logo Kemensos Hadir.png`; QR/barcode memakai `public/uploads/logo-kemsos.webp` di tengah.
+- Kop Form Asesmen Terintegrasi memakai dua file upload `public/uploads/Logo Kemensos.png` dan `public/uploads/ATENSI HD.png`; tidak ada lambang yang digambar ulang.
+- Pemeriksa dist membandingkan SHA-256 sumber dan salinan produksi untuk semua file logo di atas agar tidak ada penggantian gambar.
 - Metadata pratinjau sosial menunjuk ikon SIPANDU 512 px yang dibuat dari sumber tersebut.
 - Workflow web/Android memakai lockfile Bun yang terkunci dan tidak lagi menjalankan instalasi npm kedua setelah Bun. Workers Builds juga dikonfigurasi untuk menjalankan `bun run build` langsung setelah pemasangan dependency, menghindari kegagalan cache npm `ENOENT` yang ditemukan di log.
 

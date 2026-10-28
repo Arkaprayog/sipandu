@@ -85,12 +85,12 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
         <section className="w-full rounded-2xl border border-white/80 bg-white/[0.24] p-5 shadow-[0_12px_40px_rgba(20,40,35,0.18),inset_0_1px_0_rgba(255,255,255,0.65)] backdrop-blur-[14px]">
           <div className="mb-4 flex flex-col items-center text-center">
             {logoFailed ? (
-              <p className="mb-2 text-sm font-semibold text-black">Logo SIPANDU ODHIV tidak dapat dimuat</p>
+              <p className="mb-2 text-sm font-semibold text-black">Logo Kemensos Hadir tidak dapat dimuat</p>
             ) : (
               <img
-                src={publicAssetUrl('uploads/sipandu-logo.png')}
-                alt="Logo resmi SIPANDU ODHIV"
-                className="mb-2 h-auto w-[135px] max-w-full object-contain"
+                src={publicAssetUrl('uploads/Logo Kemensos Hadir.png')}
+                alt="Logo resmi Kemensos Hadir"
+                className="mb-2 h-auto w-[160px] max-w-full object-contain"
                 loading="eager"
                 decoding="async"
                 onError={() => setLogoFailed(true)}

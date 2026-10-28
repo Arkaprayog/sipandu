@@ -3,6 +3,7 @@ import { CheckCircle2, FileText, Printer, RotateCcw, Save, Search } from 'lucide
 import { PPKSRecord } from '../types';
 import { getAccessToken, invalidateAccessToken, refreshWorkspaceAccessToken } from '../lib/firebase';
 import { formatPPKSTimestamp } from '../lib/ppksData';
+import { publicAssetUrl } from '../lib/publicAssets';
 import '../officialAssessment.css';
 
 type AnswerValue = string | string[];
@@ -765,7 +766,7 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
               <div className="official-letterhead" aria-label="Kop surat resmi Form Asesmen Terintegrasi (terkunci)">
                 <div className="official-letterhead-logo official-kemensos-logo">
                   <img
-                    src={import.meta.env.BASE_URL + 'uploads/Logo%20Kemensos.png'}
+                    src={publicAssetUrl('uploads/Logo Kemensos.png')}
                     alt="Logo resmi Kementerian Sosial Republik Indonesia"
                     loading="eager"
                     decoding="sync"
@@ -777,7 +778,7 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
                 </div>
                 <div className="official-letterhead-logo official-atensi-logo">
                   <img
-                    src={import.meta.env.BASE_URL + 'uploads/ATENSI%20HD.png'}
+                    src={publicAssetUrl('uploads/ATENSI HD.png')}
                     alt="Logo ATENSI resmi"
                     loading="eager"
                     decoding="sync"

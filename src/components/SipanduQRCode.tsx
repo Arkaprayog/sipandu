@@ -12,25 +12,25 @@ interface SipanduQRCodeProps {
 }
 
 const DOWNLOAD_RESOLUTION = 2400;
-const SIPANDU_LOGO_ASSET = publicAssetUrl('uploads/sipandu-logo.png');
+const KEMENSOS_BARCODE_LOGO_ASSET = publicAssetUrl('uploads/logo-kemsos.webp');
 
 const loadLogoAsset = (src: string): Promise<HTMLImageElement> =>
   new Promise((resolve, reject) => {
     const image = new Image();
     image.onload = () => resolve(image);
-    image.onerror = () => reject(new Error(`Logo SIPANDU tidak dapat dimuat dari ${src}`));
+    image.onerror = () => reject(new Error(`Logo Kemensos pada barcode tidak dapat dimuat dari ${src}`));
     image.src = src;
   });
 
 /** Load the exact logo file supplied in public/uploads; never synthesize or substitute branding. */
-const loadSipanduLogo = (): Promise<HTMLImageElement> => loadLogoAsset(SIPANDU_LOGO_ASSET);
+const loadKemensosBarcodeLogo = (): Promise<HTMLImageElement> => loadLogoAsset(KEMENSOS_BARCODE_LOGO_ASSET);
 
 /**
- * Draw the actual uploaded SIPANDU logo on a clean white quiet-zone panel.
+ * Draw the exact uploaded Kemensos logo on a clean white quiet-zone panel.
  * The image keeps its original aspect ratio and is drawn at the target canvas
  * resolution, so it stays crisp in both the preview and exported PNG.
  */
-const drawSipanduLogo = (canvas: HTMLCanvasElement, logo: HTMLImageElement) => {
+const drawKemensosBarcodeLogo = (canvas: HTMLCanvasElement, logo: HTMLImageElement) => {
   const ctx = canvas.getContext('2d');
   if (!ctx || !logo.naturalWidth || !logo.naturalHeight) return;
 
@@ -101,8 +101,8 @@ const buildBrandedQrCanvas = async (
   });
 
   // Do not silently export an unbranded QR: if both official assets fail, surface an error.
-  const logo = await loadSipanduLogo();
-  drawSipanduLogo(canvas, logo);
+  const logo = await loadKemensosBarcodeLogo();
+  drawKemensosBarcodeLogo(canvas, logo);
 
   return canvas;
 };
@@ -131,7 +131,7 @@ export const SipanduQRCode: React.FC<SipanduQRCodeProps> = ({
     const render = async () => {
       setPreviewError('');
       try {
-        // Triple CSS-size backing resolution keeps the displayed QR and centered SIPANDU logo sharp.
+        // Triple CSS-size backing resolution keeps the displayed QR and centered Kemensos logo sharp.
         const rendered = await buildBrandedQrCanvas(value, Math.max(size * 3, 720));
         if (cancelled) return;
 
@@ -146,8 +146,8 @@ export const SipanduQRCode: React.FC<SipanduQRCodeProps> = ({
       } catch (error) {
         if (!cancelled) {
           const message = error instanceof Error ? error.message : String(error);
-          console.error('Gagal membuat barcode asesmen dengan logo SIPANDU:', error);
-          setPreviewError('Barcode belum dibuat karena logo SIPANDU gagal dimuat. Periksa aset logo dan muat ulang. ' + message);
+          console.error('Gagal membuat barcode asesmen dengan logo Kemensos:', error);
+          setPreviewError('Barcode belum dibuat karena logo Kemensos gagal dimuat. Periksa public/uploads/logo-kemsos.webp lalu muat ulang. ' + message);
         }
       }
     };
@@ -197,7 +197,7 @@ export const SipanduQRCode: React.FC<SipanduQRCodeProps> = ({
           style={{ width: size, height: size }}
           className="block rounded"
           role="img"
-          aria-label={label || 'QR code dengan logo SIPANDU ODHIV'}
+          aria-label={label || 'QR code dengan logo Kemensos'}
         />
       </div>
       {previewError && (
