@@ -55,10 +55,10 @@ export const Header: React.FC<HeaderProps> = ({
   }, []);
 
   return (
-    <header className="app-header-safe-area relative w-full bg-[#112214]/90 border-b border-rose-500/35 shadow-[0_4px_20px_rgba(244,63,94,0.12)] px-4 pb-3 md:px-6 select-none z-20">
-      <div className="max-w-7xl mx-auto flex flex-col md:flex-row md:items-center justify-between gap-4">
+    <header className="app-header-safe-area relative w-full bg-[#112214]/90 border-b border-rose-500/35 shadow-[0_4px_20px_rgba(244,63,94,0.12)] px-3 pb-2 md:px-6 select-none z-20">
+      <div className="max-w-7xl mx-auto flex flex-col md:flex-row md:items-center justify-between gap-2">
         {/* Left Side: Greeting & Profil Pengguna */}
-        <div className="flex flex-col gap-2">
+        <div className="flex flex-col gap-1.5">
           {/* Greeting hanya menampilkan salam dan jam live; email akun tidak ditampilkan. */}
           <div className="flex items-center gap-2 text-xs md:text-sm">
             <span className="inline-block w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
@@ -68,10 +68,10 @@ export const Header: React.FC<HeaderProps> = ({
           </div>
 
           {/* Profil pengguna (di pojok kiri atas) */}
-          <div className="flex items-start gap-3.5 pt-1">
+          <div className="flex items-start gap-2.5 pt-0.5">
             {/* Foto profil + tombol Edit di bawahnya */}
             <div className="flex flex-col items-center">
-              <div className="relative w-14 h-14 md:w-16 md:h-16 rounded-full p-0.5 border-2 border-rose-500/50 shadow-[0_0_12px_rgba(244,63,94,0.3)] bg-black/40 overflow-hidden">
+              <div className="relative w-12 h-12 md:w-14 md:h-14 rounded-full p-0.5 border-2 border-rose-500/50 shadow-[0_0_12px_rgba(244,63,94,0.3)] bg-black/40 overflow-hidden">
                 {headerPhotoUrl ? (
                   <img
                     src={headerPhotoUrl}
@@ -90,7 +90,7 @@ export const Header: React.FC<HeaderProps> = ({
               <button
                 type="button"
                 onClick={onOpenEditProfile}
-                className="mt-1.5 inline-flex items-center gap-1 text-[10px] md:text-xs text-sky-300 hover:text-sky-100 hover:underline transition font-medium cursor-pointer"
+                className="mt-1 inline-flex items-center gap-1 text-[9px] md:text-xs text-sky-300 hover:text-sky-100 hover:underline transition font-medium cursor-pointer"
                 title="Buka Menu Edit Profil"
               >
                 <Edit3 className="w-3 h-3 text-sky-300" />
@@ -119,18 +119,18 @@ export const Header: React.FC<HeaderProps> = ({
         </div>
 
         {/* Right Side: Logo SIPANDU & 3 Icon (Lonceng Notifikasi, Gear Pengaturan, Pintu Keluar) */}
-        <div className="flex items-center justify-between md:justify-end gap-4 self-end md:self-center">
+        <div className="flex items-center justify-between md:justify-end gap-2 self-end md:self-center">
           <div className={`hidden lg:block app-header-sipandu-brand ${activeTab === 'beranda' ? 'app-header-sipandu-brand-home' : ''}`}>
             <SipanduLogo size="sm" />
           </div>
 
           {/* The 3 icons */}
-          <div className="flex items-center gap-2 bg-black/40 p-1.5 rounded-xl border border-rose-500/35 shadow-[0_0_15px_rgba(244,63,94,0.15)]">
+          <div className="flex items-center gap-1 bg-black/40 p-1 rounded-xl border border-rose-500/35 shadow-[0_0_15px_rgba(244,63,94,0.15)]">
             {/* 1. Lonceng Notifikasi */}
             <button
               type="button"
               onClick={onOpenNotifications}
-              className="relative p-2.5 rounded-lg text-neutral-300 hover:text-white hover:bg-emerald-950/60 active:scale-95 transition cursor-pointer"
+              className="relative p-2 rounded-lg text-neutral-300 hover:text-white hover:bg-emerald-950/60 active:scale-95 transition cursor-pointer"
               title="Notifikasi & Peringatan Asesmen"
               aria-label="Lonceng Notifikasi"
             >
@@ -147,7 +147,7 @@ export const Header: React.FC<HeaderProps> = ({
               <button
                 type="button"
                 onClick={onOpenGoogleWorkspace}
-                className="p-2.5 rounded-lg text-neutral-300 hover:text-white hover:bg-emerald-950/60 active:scale-95 transition cursor-pointer"
+                className="p-2 rounded-lg text-neutral-300 hover:text-white hover:bg-emerald-950/60 active:scale-95 transition cursor-pointer"
                 title="Google Workspace & Cloud Hub (Drive, Sheets, Forms, Firebase)"
                 aria-label="Google Workspace dan Cloud"
               >
@@ -159,7 +159,7 @@ export const Header: React.FC<HeaderProps> = ({
             <button
               type="button"
               onClick={onOpenSettings}
-              className="p-2.5 rounded-lg text-neutral-300 hover:text-white hover:bg-emerald-950/60 active:scale-95 transition cursor-pointer"
+              className="p-2 rounded-lg text-neutral-300 hover:text-white hover:bg-emerald-950/60 active:scale-95 transition cursor-pointer"
               title="Pengaturan Integrasi Google & WhatsApp"
               aria-label="Gear Pengaturan"
             >
@@ -170,7 +170,7 @@ export const Header: React.FC<HeaderProps> = ({
             <button
               type="button"
               onClick={onLogout}
-              className="p-2.5 rounded-lg text-rose-300 hover:text-rose-100 hover:bg-rose-950/50 active:scale-95 transition cursor-pointer"
+              className="p-2 rounded-lg text-rose-300 hover:text-rose-100 hover:bg-rose-950/50 active:scale-95 transition cursor-pointer"
               title="Keluar dari Aplikasi (Logout)"
               aria-label="Pintu Keluar"
             >
