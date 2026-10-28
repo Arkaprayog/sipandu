@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { ProfileUser } from '../types';
 import { getWaktuGreeting } from '../utils/helpers';
 import { Bell, Settings, LogOut, Edit3, ShieldAlert, Cloud, User } from 'lucide-react';
-import { KemensosLogo } from './KemensosLogo';
+import { SipanduLogo } from './SipanduLogo';
 
 interface HeaderProps {
   currentUser: string;
@@ -118,10 +118,10 @@ export const Header: React.FC<HeaderProps> = ({
           </div>
         </div>
 
-        {/* Right Side: Logo Kemensos & 3 Icon (Lonceng Notifikasi, Gear Pengaturan, Pintu Keluar) */}
+        {/* Right Side: Logo SIPANDU & 3 Icon (Lonceng Notifikasi, Gear Pengaturan, Pintu Keluar) */}
         <div className="flex items-center justify-between md:justify-end gap-4 self-end md:self-center">
-          <div className={`hidden lg:block app-header-kemensos-brand ${activeTab === 'beranda' ? 'app-header-kemensos-brand-home' : ''}`}>
-            <KemensosLogo size="sm" />
+          <div className={`hidden lg:block app-header-sipandu-brand ${activeTab === 'beranda' ? 'app-header-sipandu-brand-home' : ''}`}>
+            <SipanduLogo size="sm" />
           </div>
 
           {/* The 3 icons */}
