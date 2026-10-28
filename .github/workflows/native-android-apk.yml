@@ -44,6 +44,9 @@ jobs:
       - name: Install web dependencies
         run: bun install --frozen-lockfile
 
+      - name: Install Capacitor Android and native Google Sign-In tooling
+        run: npm install --no-save --package-lock=false --legacy-peer-deps @capacitor/core@7 @capacitor/cli@7 @capacitor/android@7 @capgo/capacitor-social-login@7
+
       - name: Run application tests
         run: bun run test
 
@@ -53,11 +56,11 @@ jobs:
       - name: Build web application
         run: bun run build
 
-      - name: Install Capacitor Android tooling
-        run: npm install --no-save --package-lock=false --legacy-peer-deps @capacitor/core@7 @capacitor/cli@7 @capacitor/android@7
-
       - name: Generate native Android project
         run: npx cap add android
+
+      - name: Configure native Google API scope callback
+        run: python3 scripts/patch_native_google_login.py
 
       - name: Copy web assets into Android app
         run: npx cap sync android
