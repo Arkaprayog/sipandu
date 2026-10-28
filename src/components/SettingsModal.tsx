@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Capacitor } from '@capacitor/core';
 import { enableBiometricLock, disableBiometricLock, isBiometricLockEnabled, getBiometricDiagnostics } from '../lib/biometricLock';
-import { AppSettings } from '../types';
+import { AppSettings, GoogleFormUtamaPrefillEntries } from '../types';
 import { toGoogleFormsRespondentUrl } from '../utils/helpers';
 import { getGoogleFormIdFromUrl } from '../lib/googleSIPANDUResources';
 import { Settings, Save, Check, Link, FileSpreadsheet, FolderGit2, X, Lock, Unlock, Fingerprint, ShieldCheck } from 'lucide-react';
@@ -214,7 +214,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           <div>
             <label className="block text-sky-200 font-semibold mb-1 flex items-center gap-1.5">
               <Link className="w-3.5 h-3.5 text-sky-300" />
-              <span>URL Google Form Asesmen Tahap Awal:</span>
+              <span>URL Google Form utama (tahap berikutnya):</span>
             </label>
             <div className="flex items-stretch gap-2">
               <input
@@ -230,7 +230,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               {renderUrlLockButton('googleFormTahapAwalUrl')}
             </div>
             <p className="mt-1 text-[10px] leading-relaxed text-neutral-400">
-              Gunakan Form yang khusus untuk responden dari link/barcode Asesmen Tahap Awal, berbeda dari Form utama. Tempel URL lengkap Google Forms (/edit atau /viewform); tautan dan barcode akan mengikuti URL ini.
+              Form Asesmen Tahap Awal sekarang diisi langsung di SIPANDU. Pengaturan ini dipertahankan untuk kompatibilitas versi lama; barcode tahap awal tidak menggunakan URL Google Form.
             </p>
           </div>
 
@@ -341,6 +341,52 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 onChange={(e) => setFormData({ ...formData, senderRole: e.target.value })}
                 className="w-full p-2 rounded bg-black/60 border border-rose-500/30 text-white"
               />
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-sky-400/30 bg-sky-950/20 p-3 space-y-3">
+            <div>
+              <h4 className="text-sky-100 font-bold text-xs">Pemetaan pertanyaan Google Form utama</h4>
+              <p className="mt-1 text-[10px] leading-relaxed text-neutral-300">
+                Ambil entry ID dari Google Forms → menu tiga titik → Dapatkan link yang telah diisi sebelumnya. Masukkan angka entry yang benar untuk setiap pertanyaan. Entry ID “ID PPKS” wajib agar respons dapat dipadankan kembali. SIPANDU tidak menebak ID pertanyaan.
+              </p>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {([
+                ['namaLengkap', 'Nama Lengkap'],
+                ['nik', 'NIK'],
+                ['usia', 'Usia'],
+                ['jenisKelamin', 'Jenis Kelamin'],
+                ['kotaDomisili', 'Kota Domisili'],
+                ['noHpWa', 'No. HP / WhatsApp'],
+                ['idPpks', 'ID PPKS (wajib)'],
+              ] as Array<[keyof GoogleFormUtamaPrefillEntries, string]>).map(([key, label]) => (
+                <label key={key} className="block text-[11px] text-sky-100">
+                  {label}
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    autoComplete="off"
+                    value={formData.googleFormUtamaPrefillEntries?.[key] || ''}
+                    onChange={(event) => setFormData({
+                      ...formData,
+                      googleFormUtamaPrefillEntries: {
+                        namaLengkap: '',
+                        nik: '',
+                        usia: '',
+                        jenisKelamin: '',
+                        kotaDomisili: '',
+                        noHpWa: '',
+                        idPpks: '',
+                        ...(formData.googleFormUtamaPrefillEntries || {}),
+                        [key]: event.target.value.replace(/^entry\./i, '').replace(/\D/g, ''),
+                      },
+                    })}
+                    placeholder="Nomor entry angka"
+                    className="mt-1 w-full rounded-lg border border-sky-400/25 bg-black/60 p-2 font-mono text-white"
+                  />
+                </label>
+              ))}
             </div>
           </div>
 
