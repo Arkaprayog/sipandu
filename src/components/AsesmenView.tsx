@@ -654,78 +654,34 @@ export const AsesmenView: React.FC<AsesmenViewProps> = ({
           </div>
         )}
 
-        {/* 2. KONTEN: ASESMEN GOOGLE FORM */}
+        {/* 2. KONTEN: GOOGLE FORM UTAMA (tautan personal saja) */}
         {activeSubMenu === 'google-form' && (
-          <div className="p-8 rounded-2xl bg-black/50 border border-rose-500/40 flex flex-col items-center text-center space-y-6">
-            <div className="p-3 rounded-full bg-emerald-950/80 border border-emerald-500/40 text-emerald-300">
-              <Link className="w-8 h-8 text-sky-300" />
-            </div>
-
-            <div>
-              <h3 className="text-lg md:text-xl font-black text-white uppercase tracking-wider">
+          <div className="p-6 md:p-8 rounded-2xl bg-black/50 border border-rose-500/40 space-y-5">
+            <div className="flex flex-col items-center text-center">
+              <div className="p-3 rounded-full bg-emerald-950/80 border border-emerald-500/40">
+                <Link className="w-8 h-8 text-sky-300" />
+              </div>
+              <h3 className="mt-3 text-lg md:text-xl font-black text-white uppercase tracking-wider">
                 GOOGLE FORM UTAMA
               </h3>
-              <p className="text-xs text-neutral-300 max-w-md mt-1">
-                Google Form utama digunakan setelah data Asesmen Tahap Awal tersimpan di SIPANDU. Tautan personal dengan jawaban terisi otomatis dikirim dari tombol WhatsApp pada baris responden.
+              <p className="mt-2 max-w-xl text-xs leading-relaxed text-neutral-300">
+                Google Form utama digunakan setelah responden menyelesaikan Asesmen Tahap Awal di SIPANDU. Gunakan tombol WhatsApp pada baris responden di database Tahap Awal untuk membuat tautan khusus dengan data yang sudah dipraisi.
               </p>
             </div>
-
-            {/* Link Kuisioner Google Form */}
-            <div className="w-full max-w-xl p-3.5 rounded-xl bg-black/70 border border-rose-500/35 flex flex-col sm:flex-row items-center gap-3">
-              <input
-                type="text"
-                readOnly
-                value={GOOGLE_SIPANDU_RESOURCES.formRespondentUrl}
-                className="w-full sm:flex-1 bg-transparent text-xs text-sky-200 font-mono focus:outline-none px-2 select-all truncate"
-              />
-              <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
-                <button
-                  type="button"
-                  onClick={() => void handleCopyLink(GOOGLE_SIPANDU_RESOURCES.formRespondentUrl, 'Link Google Form')}
-                  disabled={!GOOGLE_SIPANDU_RESOURCES.formRespondentUrl}
-                  className="px-3 py-1.5 rounded-lg bg-emerald-800 hover:bg-emerald-700 text-white text-xs font-semibold flex items-center gap-1 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  <Copy className="w-3.5 h-3.5" />
-                  <span>Salin Google Form Utama</span>
-                </button>
-                <a
-                  href={GOOGLE_SIPANDU_RESOURCES.formRespondentUrl || undefined}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  aria-disabled={!GOOGLE_SIPANDU_RESOURCES.formRespondentUrl}
-                  onClick={(event) => {
-                    if (!GOOGLE_SIPANDU_RESOURCES.formRespondentUrl) event.preventDefault();
-                  }}
-                  className={`px-3 py-1.5 rounded-lg bg-sky-900 hover:bg-sky-800 text-white text-xs font-semibold flex items-center gap-1 ${GOOGLE_SIPANDU_RESOURCES.formRespondentUrl ? '' : 'pointer-events-none opacity-50'}`}
-                >
-                  <ExternalLink className="w-3.5 h-3.5" />
-                  <span>Buka Google Form Utama</span>
-                </a>
-              </div>
+            <div className="rounded-xl border border-sky-400/25 bg-sky-950/20 p-4 text-xs leading-relaxed text-sky-100">
+              <h4 className="font-bold text-sm">Alur pengiriman tautan personal</h4>
+              <ol className="mt-2 list-decimal space-y-2 pl-5 text-neutral-200">
+                <li>Pastikan data responden sudah tersimpan di DATABASE PPKS ASESMEN TAHAP AWAL.</li>
+                <li>Isi entry ID asli untuk pertanyaan Google Form utama pada Pengaturan SIPANDU. Entry ID diperoleh dari Google Forms → menu tiga titik → Dapatkan link yang telah diisi sebelumnya.</li>
+                <li>Tekan tombol WhatsApp pada baris responden. SIPANDU akan menyiapkan tautan utama dengan bidang yang cocok terisi otomatis serta ID PPKS untuk pemadanan respons.</li>
+                <li>Setelah responden mengirim Google Form utama, data pada spreadsheet respons akan dipadankan kembali dengan record SIPANDU menggunakan ID PPKS.</li>
+              </ol>
             </div>
-            {copyFeedback && (
-              <p role="status" className="text-xs text-emerald-300 font-semibold">
-                ✓ {copyFeedback} berhasil disalin ke clipboard!
-              </p>
-            )}
-            {copyError && (
-              <p role="alert" className="text-xs text-amber-200 font-medium">
-                {copyError}
-              </p>
-            )}
-
-            {/* Barcode generik Google Form utama; tautan personal dipraisi dikirim dari baris database */}
-            <div className="pt-2">
-              <SipanduQRCode
-                value={GOOGLE_SIPANDU_RESOURCES.formRespondentUrl}
-                size={220}
-                label="Barcode Google Form Utama"
-                downloadFileName="barcode-asesmen-google-form.png"
-              />
+            <div className="rounded-lg border border-amber-400/30 bg-amber-950/20 p-3 text-[11px] leading-relaxed text-amber-100">
+              Tautan umum dan barcode Google Form utama tidak ditampilkan di sini agar responden menerima tautan personal yang sudah terhubung ke data Tahap Awal, bukan formulir tanpa ID PPKS.
             </div>
           </div>
         )}
-
       </div>
 
       {/* 4. DATABASE PPKS ASESMEN TAHAP AWAL (di paling bawah):
@@ -824,7 +780,7 @@ export const AsesmenView: React.FC<AsesmenViewProps> = ({
                       type="button"
                       onClick={() => handleSendWA(ppks)}
                       className="inline-flex items-center gap-1.5 py-1.5 px-3 rounded-lg text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-500 active:scale-95 transition border border-rose-500/40 shadow-sm cursor-pointer"
-                      title="Kirim WhatsApp untuk melengkapi asesmen lanjutan"
+                      title="Kirim Google Form utama yang sudah dipraisi sebagian ke responden"
                     >
                       <MessageCircle className="w-3.5 h-3.5 text-white" />
                       <span>WhatsApp</span>
@@ -835,7 +791,7 @@ export const AsesmenView: React.FC<AsesmenViewProps> = ({
               {stageOneRespondents.length === 0 && (
                 <tr>
                   <td colSpan={9} className="px-4 py-8 text-center text-xs leading-relaxed text-neutral-400">
-                    Belum ada respons baru dari link/barcode Asesmen Tahap Awal sejak pemisahan sumber pada 27 Oktober 2026. Responden lama dari spreadsheet utama sengaja tidak ditampilkan di bagian ini.
+                    Belum ada kiriman Asesmen Tahap Awal. Data baru dari formulir publik SIPANDU akan muncul di sini setelah Firestore menerima pengiriman dan petugas berwenang tersambung.
                   </td>
                 </tr>
               )}
