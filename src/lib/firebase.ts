@@ -308,6 +308,25 @@ function buildWorkspaceProvider(prompt?: 'none' | 'select_account'): GoogleAuthP
 
 let nativeGoogleSignInInitialized = false;
 
+async function initializeNativeGoogleSignIn(): Promise<void> {
+  // Re-running initialize recreates the provider with the current native Activity.
+  // This is important if the Android app was resumed/recreated before a login tap.
+  await SocialLogin.initialize({
+    google: {
+      webClientId: firebaseConfig.oAuthClientId,
+      mode: 'online',
+    },
+  });
+  nativeGoogleSignInInitialized = true;
+}
+
+function nativeGoogleErrorMessage(error: unknown): string {
+  const candidate = error as { message?: unknown };
+  return typeof candidate?.message === 'string'
+    ? candidate.message
+    : error instanceof Error ? error.message : String(error);
+}
+
 export const googleSignIn = async (): Promise<{
   user: User;
   accessToken: string;
@@ -322,31 +341,43 @@ export const googleSignIn = async (): Promise<{
   // Firebase identity and a scoped Google API access token for Drive/Sheets/Forms.
   if (Capacitor.isNativePlatform()) {
     try {
-      if (!nativeGoogleSignInInitialized) {
-        await SocialLogin.initialize({
-          google: {
-            webClientId: firebaseConfig.oAuthClientId,
-            mode: 'online',
-          },
-        });
-        nativeGoogleSignInInitialized = true;
-      }
-
-      const nativeResponse: any = await SocialLogin.login({
+      const nativeScopes = [
+        'email',
+        'profile',
+        'https://www.googleapis.com/auth/drive',
+        'https://www.googleapis.com/auth/drive.file',
+        'https://www.googleapis.com/auth/spreadsheets',
+        'https://www.googleapis.com/auth/forms.body',
+        'https://www.googleapis.com/auth/forms.responses.readonly',
+      ];
+      const requestNativeLogin = () => SocialLogin.login({
         provider: 'google',
         options: {
-          scopes: [
-            'email',
-            'profile',
-            'https://www.googleapis.com/auth/drive',
-            'https://www.googleapis.com/auth/drive.file',
-            'https://www.googleapis.com/auth/spreadsheets',
-            'https://www.googleapis.com/auth/forms.body',
-            'https://www.googleapis.com/auth/forms.responses.readonly',
-          ],
+          scopes: nativeScopes,
           forceRefreshToken: true,
         },
       });
+
+      let nativeResponse: any;
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        try {
+          if (!nativeGoogleSignInInitialized) await initializeNativeGoogleSignIn();
+          nativeResponse = await requestNativeLogin();
+          break;
+        } catch (loginError) {
+          const loginMessage = nativeGoogleErrorMessage(loginError);
+          const missingActivityBridge = /You CANNOT use scopes without modifying the main activity/i.test(loginMessage);
+          if (!missingActivityBridge || attempt !== 0) throw loginError;
+
+          // Retry once with a fresh provider/Activity binding. If the installed APK
+          // truly lacks the interface, the second attempt remains a clear hard failure.
+          nativeGoogleSignInInitialized = false;
+          await initializeNativeGoogleSignIn();
+        }
+      }
+      if (!nativeResponse) {
+        throw new Error('Native Google login ended without a response after reinitializing the provider.');
+      }
       const nativeResult = nativeResponse?.result;
       const selectedEmail = nativeResult?.profile?.email?.trim();
       if (!selectedEmail || selectedEmail.toLowerCase() !== GOOGLE_WORKSPACE_EMAIL.toLowerCase()) {
@@ -371,10 +402,20 @@ export const googleSignIn = async (): Promise<{
       const userCredential = await signInWithCredential(workspaceAuth, firebaseCredential);
       cacheWorkspaceToken(accessToken);
       return { user: userCredential.user, accessToken };
-    } catch (error: any) {
+    } catch (error: unknown) {
       cacheWorkspaceToken(null);
-      const message = error?.message || String(error);
-      throw new Error(`Login Google native SIPANDU gagal: ${message}. Jika pesan menyebut konfigurasi aplikasi, pastikan package id.my.sipandu.odhiv dan SHA-1 sertifikat APK telah didaftarkan pada Google Cloud/Firebase.`);
+      const message = nativeGoogleErrorMessage(error);
+      if (/You CANNOT use scopes without modifying the main activity/i.test(message)) {
+        throw new Error(
+          'Login Google native gagal karena MainActivity pada APK yang sedang berjalan tidak memuat bridge izin Google API. Ini bukan kesalahan SHA-1. Tutup aplikasi sepenuhnya lalu pasang ulang APK SIPANDU ODHIV Release v2.1.3 atau versi terbaru dari GitHub Releases. Jika error tetap muncul di versi terbaru, kirim tangkapan layar versi aplikasi pada perangkat agar build yang terpasang dapat dibandingkan dengan APK yang diverifikasi CI.'
+        );
+      }
+      if (/DEVELOPER_ERROR|status code:?\s*10|\[28444\]/i.test(message)) {
+        throw new Error(
+          `Login Google native gagal karena konfigurasi OAuth Android (DEVELOPER_ERROR). Periksa OAuth client ID, package id.my.sipandu.odhiv, serta SHA-1 sertifikat penandatangan APK Release pada proyek Firebase/Google Cloud gen-lang-client-0197631978. Detail: ${message}`
+        );
+      }
+      throw new Error(`Login Google native SIPANDU gagal: ${message}`);
     }
   }
 
