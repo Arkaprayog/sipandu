@@ -59,3 +59,13 @@ Integrasi Google harus diuji dengan akun OAuth dan spreadsheet/drive/Form target
 ## Status keamanan rilis
 
 Lihat [Audit kesiapan produksi v1.0.0](docs/PRODUCTION_READINESS_AUDIT.md). Nomor major dan APK debug adalah awal rilis aplikasi; keduanya bukan pengganti pemeriksaan akses data PPKS/ODHIV, verifikasi rules pada Firebase aktif, serta uji end-to-end dengan peran pengguna berbeda.
+
+
+## Alur Asesmen Tahap Awal dan Google Form utama
+
+- Tautan/barcode Tahap Awal membuka formulir native SIPANDU di `/?mode=asesmen-tahap-awal`, tanpa login staf dan tanpa mengalihkan responden ke Google Forms.
+- Respons disimpan pada koleksi Firestore terpisah `stageOneIntake`; pembacaan hanya tersedia untuk petugas dengan role SIPANDU, sedangkan kiriman publik hanya boleh membuat dokumen dengan skema yang divalidasi.
+- Petugas dapat mengisi formulir Tahap Awal dari dashboard dan memakai database intake yang sama.
+- Dari database Tahap Awal, petugas mengirim tautan Google Form utama dengan jawaban terisi otomatis. Entry ID harus diambil dari tautan prefilled Google Forms asli lalu dikonfigurasi pada Pengaturan SIPANDU; ID tidak ditebak.
+- Respons Google Form utama disinkronkan dari spreadsheet respons yang tertaut dan dipadankan kembali menggunakan ID PPKS.
+- Perubahan `firestore.rules` harus diterapkan ke Firebase aktif secara terpisah; workflow frontend/Cloudflare tidak menerapkan aturan Firestore secara otomatis.

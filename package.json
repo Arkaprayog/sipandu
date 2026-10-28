@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite --port=3000 --host=0.0.0.0",
     "build": "vite build",
-    "test": "tsx --test src/data/initialData.test.ts src/lib/nikNumeric.test.ts src/lib/ppksData.test.ts src/lib/photoSources.test.ts src/utils/helpers.test.ts src/utils/whatsappTemplate.test.ts src/lib/lazyImportRecovery.test.ts src/lib/liveSyncPolicy.test.ts src/lib/ppksRecordState.test.ts src/lib/interventionMapping.test.ts src/lib/stageOneRespondents.test.ts",
+    "test": "tsx --test src/data/initialData.test.ts src/lib/nikNumeric.test.ts src/lib/ppksData.test.ts src/lib/photoSources.test.ts src/utils/helpers.test.ts src/utils/whatsappTemplate.test.ts src/lib/lazyImportRecovery.test.ts src/lib/liveSyncPolicy.test.ts src/lib/ppksRecordState.test.ts src/lib/interventionMapping.test.ts src/lib/stageOneRespondents.test.ts src/utils/primaryFormPrefill.test.ts",
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
     "lint": "python3 scripts/generate_surat_tugas_template.py && tsc --noEmit"

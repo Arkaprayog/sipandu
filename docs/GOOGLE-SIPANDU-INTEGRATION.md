@@ -16,7 +16,7 @@ IDs di atas diambil dari URL yang diberikan pengguna, bukan dibuat-buat. Konfigu
 - Notifikasi responden baru hanya dipicu dari feed Form Tahap Awal khusus ini. Sinkronisasi spreadsheet utama tetap mengisi Database PPKS utama tetapi tidak memicu notifikasi “responden baru tahap awal”.
 
 ## Alur link, barcode, dan WhatsApp lanjutan
-- Link/barcode tahap awal memakai URL responden dari pengaturan aplikasi. Saat URL disimpan, URL editor `/edit` dinormalisasi menjadi `/viewform`, dan QR dirender kembali dari nilai terbaru.
+- Link/barcode Asesmen Tahap Awal membuka halaman formulir native SIPANDU (`/?mode=asesmen-tahap-awal`), bukan Google Forms. Data disimpan ke koleksi Firestore `stageOneIntake`; Google Form utama baru dikirim dari dashboard setelah data tahap awal tersimpan.
 - PNG barcode HD berukuran 2400 × 2400 piksel memakai file logo Kemensos yang diunggah pemilik proyek, `public/uploads/logo-kemsos.webp`, tepat di tengah. Barcode tidak diekspor jika aset tersebut gagal dimuat. File logo tidak digambar ulang, dibuat dengan AI, atau diambil dari internet.
 - Notifikasi pengisian tahap awal menyediakan tombol untuk membuka WhatsApp dengan pesan dan URL formulir lanjutan yang dipraisi dengan ID PPKS. Petugas tetap mengirim pesan lewat tombol kirim WhatsApp.
 - Untuk mengaktifkan tindakan WhatsApp, pengaturan harus berisi URL Google Form tahap lanjutan dan nomor entry pertanyaan `ID PPKS` yang benar dari tautan praisi Google Forms. Jangan gunakan nomor entry tebakan.
