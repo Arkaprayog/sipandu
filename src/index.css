@@ -95,3 +95,8 @@
 @media (orientation: landscape) {
   .app-header-sipandu-brand-home { display: none !important; }
 }
+
+/* Keep the live greeting below Android/iOS system status bars on edge-to-edge screens. */
+.app-header-safe-area {
+  padding-top: calc(env(safe-area-inset-top, 0px) + 1.25rem);
+}
