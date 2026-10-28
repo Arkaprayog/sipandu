@@ -5,6 +5,7 @@ import { Fingerprint, ShieldCheck, RefreshCw, KeyRound, LockKeyhole, ScanFace } 
 import { auth, googleLogout } from '../lib/firebase';
 import {
   authenticateBiometricLock,
+  disableBiometricLock,
   isAppPinConfigured,
   isBiometricLockEnabled,
   isQuickUnlockEnabled,
@@ -72,6 +73,9 @@ export const BiometricGate: React.FC<{ children: React.ReactNode }> = ({ childre
     setChecking(true);
     setError('');
     try {
+      // Older installs may have biometric lock enabled without the new PIN fallback.
+      // Disable that legacy-only lock before returning to password login to avoid a lockout.
+      if (!isAppPinConfigured(userId)) disableBiometricLock();
       // Recovery returns to the normal Firebase login screen; it never bypasses auth.
       await signOut(auth);
       await googleLogout();
