@@ -246,7 +246,7 @@ jobs:
               build_span = block_span(s, "buildTypes")
               if not build_span:
                   raise SystemExit("Android buildTypes block was not found")
-              s = s[:build_span[0]] + signing_block + "\\n\\n    " + s[build_span[0]:]
+              s = s[:build_span[0]] + signing_block + "\n\n    " + s[build_span[0]:]
 
           build_span = block_span(s, "buildTypes")
           release_span = block_span(s, "release", build_span[0] if build_span else 0)
@@ -255,11 +255,13 @@ jobs:
           release_block = s[release_span[0]:release_span[1]]
           if "signingConfig signingConfigs.release" not in release_block:
               opening_end = release_block.find("{") + 1
-              release_block = release_block[:opening_end] + "\\n            signingConfig signingConfigs.release" + release_block[opening_end:]
+              release_block = release_block[:opening_end] + "\n            signingConfig signingConfigs.release" + release_block[opening_end:]
               s = s[:release_span[0]] + release_block + s[release_span[1]:]
 
           p.write_text(s)
           content = p.read_text()
+          if r"\\n" in content:
+              raise SystemExit("Unexpected literal backslash-n in generated Gradle file")
           required = [
               "storePassword System.getenv('SIPANDU_KEYSTORE_PASSWORD')",
               "keyAlias System.getenv('SIPANDU_KEY_ALIAS')",
