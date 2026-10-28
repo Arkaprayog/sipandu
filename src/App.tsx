@@ -366,6 +366,7 @@ function StaffApp() {
 
   // Keep browser/PWA Back inside SIPANDU. Capacitor's hardware Back uses the same handler.
   useEffect(() => {
+    if (!isAuthenticated) return;
     const guardState = () => ({
       ...(window.history.state && typeof window.history.state === 'object' ? window.history.state : {}),
       __sipanduNavigationGuard: true,
@@ -377,7 +378,7 @@ function StaffApp() {
     };
     window.addEventListener('popstate', onPopState);
     return () => window.removeEventListener('popstate', onPopState);
-  }, []);
+  }, [isAuthenticated]);
 
   useEffect(() => {
     if (!Capacitor.isNativePlatform()) return;
