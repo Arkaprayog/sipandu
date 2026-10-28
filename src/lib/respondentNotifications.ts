@@ -1,3 +1,6 @@
+import { Capacitor } from '@capacitor/core';
+import { LocalNotifications } from '@capacitor/local-notifications';
+
 export type RespondentNotificationKind = 'kuisioner' | 'asesmen';
 
 export interface RespondentNotification {
@@ -59,12 +62,40 @@ export function markRespondentNotificationsRead(uid: string): RespondentNotifica
 }
 
 export function getRespondentNotificationPermission(): NotificationPermission | 'unsupported' {
+  if (Capacitor.isNativePlatform()) {
+    const saved = window.localStorage.getItem('sipandu_native_notification_permission');
+    return saved === 'granted' || saved === 'denied' || saved === 'default' ? saved : 'default';
+  }
   return typeof window !== 'undefined' && 'Notification' in window
     ? Notification.permission
     : 'unsupported';
 }
 
 export async function enableRespondentNotifications(): Promise<NotificationPermission | 'unsupported'> {
+  if (Capacitor.isNativePlatform()) {
+    try {
+      let permission = await LocalNotifications.checkPermissions();
+      if (permission.display !== 'granted') permission = await LocalNotifications.requestPermissions();
+      const mapped: NotificationPermission = permission.display === 'granted'
+        ? 'granted'
+        : permission.display === 'denied' ? 'denied' : 'default';
+      window.localStorage.setItem('sipandu_native_notification_permission', mapped);
+      if (mapped !== 'granted') return mapped;
+      await LocalNotifications.createChannel({
+        id: 'sipandu-respondent-updates',
+        name: 'Pemberitahuan Responden SIPANDU',
+        description: 'Respons baru kuisioner dan pembaruan asesmen',
+        importance: 5,
+        sound: 'default',
+        vibration: true,
+        visibility: 1,
+      });
+      return 'granted';
+    } catch (error) {
+      console.warn('SIPANDU native notification permission setup failed:', error);
+      return 'denied';
+    }
+  }
   if (!('Notification' in window) || !('serviceWorker' in navigator)) return 'unsupported';
   if (Notification.permission === 'default') await Notification.requestPermission();
   if (Notification.permission !== 'granted') return Notification.permission;
@@ -111,6 +142,29 @@ function playForegroundAlert(): void {
 }
 
 async function showSystemNotification(item: RespondentNotification, uid: string): Promise<void> {
+  if (Capacitor.isNativePlatform()) {
+    if (getRespondentNotificationPermission() !== 'granted') return;
+    try {
+      await LocalNotifications.schedule({
+        notifications: [{
+          id: Number.parseInt(fingerprint(item.id), 16) % 2147483647,
+          title: item.title,
+          body: item.body,
+          schedule: { at: new Date(Date.now() + 250) },
+          sound: 'default',
+          channelId: 'sipandu-respondent-updates',
+          smallIcon: 'ic_launcher',
+          largeIcon: 'ic_launcher',
+          ongoing: false,
+          autoCancel: true,
+          extra: { notificationId: item.id, uid, kind: item.kind },
+        }],
+      });
+    } catch (error) {
+      console.warn('SIPANDU native notification could not be scheduled:', error);
+    }
+    return;
+  }
   if (getRespondentNotificationPermission() !== 'granted') return;
 
   const basePath = import.meta.env.BASE_URL || './';
