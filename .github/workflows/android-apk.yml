@@ -62,6 +62,44 @@ jobs:
           npx cap add android
           npx cap sync android
 
+      - name: Align Android build tools with dependency requirements
+        run: |
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          if [ ! -x "$SDKMANAGER" ]; then
+            SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -path '*/bin/sdkmanager' -type f | sort -V | tail -1)"
+          fi
+          test -x "$SDKMANAGER" || { echo "::error::Android sdkmanager was not found"; exit 1; }
+          yes | "$SDKMANAGER" "platforms;android-36" "build-tools;36.0.0"
+          python - <<'PY'
+          from pathlib import Path
+          import re
+
+          root_gradle = Path("android/build.gradle")
+          root_text = root_gradle.read_text()
+          updated_root, agp_count = re.subn(
+              r"(com\\.android\\.tools\\.build:gradle:)8\\.7\\.2\\b",
+              r"\\g<1>8.9.1",
+              root_text,
+              count=1,
+          )
+          if agp_count != 1:
+              raise SystemExit("Expected Android Gradle Plugin 8.7.2 declaration was not found; refusing to guess.")
+          root_gradle.write_text(updated_root)
+
+          variables_gradle = Path("android/variables.gradle")
+          variables_text = variables_gradle.read_text()
+          updated_variables, sdk_count = re.subn(
+              r"(compileSdkVersion\\s*=\\s*)35\\b",
+              r"\\g<1>36",
+              variables_text,
+              count=1,
+          )
+          if sdk_count != 1:
+              raise SystemExit("Expected compileSdkVersion = 35 declaration was not found; refusing to guess.")
+          variables_gradle.write_text(updated_variables)
+          print("Configured Android Gradle Plugin 8.9.1 and compile SDK 36; target SDK left unchanged.")
+          PY
+
       - name: Configure private release signing
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
