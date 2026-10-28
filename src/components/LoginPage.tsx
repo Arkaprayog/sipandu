@@ -19,13 +19,14 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [logoFailed, setLogoFailed] = useState(false);
   const [quickPin, setQuickPin] = useState('');
+  const [forcePasswordLogin, setForcePasswordLogin] = useState(false);
   const formRef = useRef<HTMLFormElement>(null);
 
   const handlePrimaryAction = async () => {
     const currentUser = auth.currentUser;
-    // Biometric unlock is allowed only for an existing Firebase session.
-    // It never authenticates a signed-out user or replaces account login.
-    if (currentUser && isBiometricLockEnabled(currentUser.uid) && !email.trim() && !password) {
+    // On a registered account, the primary action always opens Android's native
+    // biometric prompt first. Password entry remains an explicit fallback.
+    if (currentUser && isBiometricLockEnabled(currentUser.uid) && !forcePasswordLogin) {
       setErrorMsg('');
       setIsSubmitting(true);
       try {
@@ -33,7 +34,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
         onLogin(currentUser.displayName || currentUser.email || 'Pengguna SIPANDU');
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Verifikasi biometrik gagal.';
-        setErrorMsg(`Biometrik belum berhasil. ${message} Anda juga dapat masuk dengan email dan kata sandi.`);
+        setErrorMsg(`Biometrik belum berhasil. ${message} Pilih “Gunakan email dan kata sandi” untuk cara masuk alternatif.`);
       } finally {
         setIsSubmitting(false);
       }
@@ -234,6 +235,25 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
               <Fingerprint className="h-5 w-5" aria-hidden="true" />
             </button>
           </form>
+
+          {auth.currentUser && isBiometricLockEnabled(auth.currentUser.uid) && !forcePasswordLogin && (
+            <button
+              type="button"
+              onClick={() => { setForcePasswordLogin(true); setErrorMsg(''); }}
+              className="mt-2 w-full rounded-lg px-3 py-2 text-[11px] font-semibold text-black underline decoration-black/40 underline-offset-2 transition hover:bg-white/25"
+            >
+              Gunakan email dan kata sandi
+            </button>
+          )}
+          {forcePasswordLogin && auth.currentUser && isBiometricLockEnabled(auth.currentUser.uid) && (
+            <button
+              type="button"
+              onClick={() => { setForcePasswordLogin(false); setErrorMsg(''); }}
+              className="mt-2 w-full rounded-lg px-3 py-2 text-[11px] font-semibold text-black underline decoration-black/40 underline-offset-2 transition hover:bg-white/25"
+            >
+              Kembali ke biometrik
+            </button>
+          )}
 
           {/* Buka cepat stays within the existing login card; no separate biometric page. */}
           {auth.currentUser && isAppPinConfigured(auth.currentUser.uid) && (
