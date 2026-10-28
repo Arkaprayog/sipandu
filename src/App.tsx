@@ -3,6 +3,7 @@ import { PPKSRecord, ProfileUser, AppSettings } from './types';
 import { importLazyModuleWithRecovery } from './lib/lazyImportRecovery';
 import { initialPPKSList, initialProfileUser, initialAppSettings, isLegacySamplePPKS } from './data/initialData';
 import { LoginPage } from './components/LoginPage';
+import { StageOneRespondentPage } from './components/StageOneRespondentPage';
 import { Header } from './components/Header';
 import { BottomNav } from './components/BottomNav';
 import type { TabKey } from './components/BottomNav';
@@ -23,11 +24,10 @@ const SettingsModal = lazyWithRecovery('SettingsModal', () => import('./componen
 const NotificationsModal = lazyWithRecovery('NotificationsModal', () => import('./components/NotificationsModal').then((module) => ({ default: module.NotificationsModal })));
 const GoogleWorkspaceModal = lazyWithRecovery('GoogleWorkspaceModal', () => import('./components/GoogleWorkspaceModal').then((module) => ({ default: module.GoogleWorkspaceModal })));
 import { onAuthStateChanged, signOut, getIdTokenResult } from 'firebase/auth';
-import { auth, getAccessToken, savePPKSToFirestore, googleLogout, subscribeToPPKSChanges } from './lib/firebase';
+import { auth, getAccessToken, savePPKSToFirestore, googleLogout, subscribeToPPKSChanges, saveStageOneIntakeToFirestore, subscribeToStageOneIntake } from './lib/firebase';
 import { ensureSIPANDUDatabaseSheet, extractSpreadsheetId, getLinkedSpreadsheetUrlForForm, importPPKSFromSpreadsheet, upsertPPKSInSpreadsheet } from './lib/googleWorkspace';
 import { GOOGLE_SIPANDU_RESOURCES } from './lib/googleSIPANDUResources';
 import { getLiveSyncRetryDelay, LIVE_SYNC_INTERVAL_MS } from './lib/liveSyncPolicy';
-import { filterStageOneLinkResponses } from './lib/stageOneRespondents';
 import { preservePPKSRecordOrder } from './lib/ppksRecordState';
 import { deduplicatePPKSRecords, parsePPKSTimestamp, samePPKSIdentity, sortPPKSRecordsByName, sortPPKSRecordsByTimestamp } from './lib/ppksData';
 import { normalizePPKSPhotoSource } from './lib/photoSources';
@@ -218,7 +218,7 @@ function normalizeAppSettings(value: unknown): AppSettings {
   };
 }
 
-export default function App() {
+function StaffApp() {
   // Firebase Authentication is the source of truth; URL/localStorage flags cannot bypass login.
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [authReady, setAuthReady] = useState(false);
@@ -483,8 +483,24 @@ export default function App() {
   };
 
   const handleAddNewPPKS = (newPPKS: PPKSRecord) => {
-    setPpksList((prev) => sortPPKSRecordsByTimestamp(deduplicatePPKSRecords([newPPKS, ...prev])));
-    void persistRecordToCloud(newPPKS);
+    // Tahap awal disimpan di database intake khusus. Data baru masuk ke sumber
+    // PPKS utama setelah responden melanjutkan Google Form utama dan respons tersinkron.
+    setStageOneRespondents((previous) => {
+      const next = sortPPKSRecordsByTimestamp(deduplicatePPKSRecords([newPPKS, ...previous]));
+      stageOneRespondentsRef.current = next;
+      return next;
+    });
+    void saveStageOneIntakeToFirestore(newPPKS).then(() => {
+      setStageOneResponseSyncState({
+        type: 'success',
+        message: `Asesmen tahap awal ${newPPKS.namaLengkap} tersimpan ke Database PPKS Asesmen Tahap Awal.`,
+        lastUpdatedAt: new Date().toLocaleString('id-ID'),
+      });
+    }).catch((error) => {
+      const detail = error instanceof Error ? error.message : String(error);
+      setStageOneResponseSyncState({ type: 'error', message: `Gagal menyimpan asesmen tahap awal: ${detail}` });
+      console.error('SIPANDU staff stage-one intake save failed:', error);
+    });
   };
 
   const handleLoadPPKSFromCloud = (cloudRecords: PPKSRecord[]) => {
@@ -549,7 +565,7 @@ export default function App() {
     matchedResponses: number;
     warning: string;
   }> => {
-    const formUrl = settings.googleFormTahapLanjutanUrl?.trim() || '';
+    const formUrl = GOOGLE_SIPANDU_RESOURCES.formRespondentUrl;
     if (!formUrl) {
       return {
         records: stageOneRecords,
@@ -772,136 +788,81 @@ export default function App() {
     };
   }, [authReady, isAuthenticated, localCacheReady]);
 
-  // Separate source: only responses submitted through the configured stage-one Form link/barcode
-  // are shown in the Asesmen Tahap Awal table. The primary/master spreadsheet never feeds this list.
+  // Asesmen Tahap Awal berasal dari koleksi intake native SIPANDU, bukan Google Form.
   useEffect(() => {
     if (!authReady || !localCacheReady) return;
-
-    const formUrl = settings.googleFormTahapAwalUrl?.trim() || '';
-    // Clear a previous source immediately when this dedicated Form configuration changes.
-    stageOneRespondentsRef.current = [];
-    setStageOneRespondents([]);
-    setStageOneResponseSyncState({
-      type: 'idle',
-      message: formUrl ? 'Menghubungkan Form khusus Asesmen Tahap Awal…' : 'URL Form khusus Asesmen Tahap Awal belum diatur.',
-    });
-    if (!isAuthenticated || !formUrl) {
+    if (!isAuthenticated) {
       stageOneRespondentsRef.current = [];
       setStageOneRespondents([]);
       setStageOneResponseSyncState({
-        type: !isAuthenticated ? 'idle' : 'error',
-        message: !isAuthenticated
-          ? 'Sumber asesmen tahap awal aktif setelah petugas masuk.'
-          : 'URL Google Form Asesmen Tahap Awal belum diatur; daftar tidak mengambil data dari spreadsheet utama.',
+        type: 'idle',
+        message: 'Database Asesmen Tahap Awal tersedia setelah petugas SIPANDU masuk.',
       });
       return;
     }
 
     let active = true;
-    let running = false;
-    let timer: number | undefined;
-    let failedAttempts = 0;
-    const schedule = (delay: number) => {
-      if (!active) return;
-      if (timer !== undefined) window.clearTimeout(timer);
-      timer = window.setTimeout(() => {
-        timer = undefined;
-        void syncStageOneForm();
-      }, Math.max(0, delay));
-    };
-
-    const syncStageOneForm = async () => {
-      if (!active || running) return;
-      running = true;
-      let nextDelay = LIVE_SYNC_INTERVAL_MS;
+    let unsubscribe: (() => void) | null = null;
+    let retryTimer: number | undefined;
+    const connect = () => {
+      if (!active || unsubscribe || !isAuthenticated) return;
       try {
-        if (typeof navigator !== 'undefined' && navigator.onLine === false) {
-          throw new Error('Koneksi internet terputus; sumber asesmen tahap awal akan dicoba kembali otomatis.');
-        }
-        const token = await getAccessToken();
-        if (!token) {
-          throw new Error('Izin Google belum tersedia. Masuk kembali melalui Google Workspace & Cloud Hub agar respons Form tahap awal dapat dibaca.');
-        }
-
-        // Resolve the sheet linked to the stage-one Form itself, not the primary roster/source sheet.
-        const responseSheetUrl = await getLinkedSpreadsheetUrlForForm(formUrl);
-        const stageOneSheetId = extractSpreadsheetId(responseSheetUrl);
-        const imported = await importPPKSFromSpreadsheet(responseSheetUrl);
-        if (!active) return;
-
-        const freshStageOneRecords = filterStageOneLinkResponses(imported.records);
-        // Persist newly submitted/changed stage-one respondents to the real PPKS database.
-        // Stable record IDs and upsert semantics make repeated polling idempotent.
-        const previousById = new Map(stageOneRespondentsRef.current.map((record) => [record.id, record]));
-        const changedRecords = freshStageOneRecords.filter((record) => {
-          const previous = previousById.get(record.id);
-          return !previous || previous.timestamp !== record.timestamp || previous.namaLengkap !== record.namaLengkap;
-        });
-        for (const record of changedRecords) {
-          await persistRecordToCloud(record);
+        unsubscribe = subscribeToStageOneIntake((records) => {
           if (!active) return;
-        }
-        const notificationUid = auth.currentUser?.uid || 'default';
-        await processRespondentSubmissionEvents(
-          notificationUid,
-          freshStageOneRecords.map(({ id, namaLengkap, timestamp }) => ({ id, namaLengkap, timestamp })),
-          freshStageOneRecords as unknown as Array<Record<string, unknown>>,
-          {
-            baselineNamespace: 'stage-one-form-link',
-            notifyNewQuestionnairesOnFirstImport: true,
-          },
-        );
-        if (!active) return;
-        setRespondentNotifications(loadRespondentNotifications(notificationUid));
-        stageOneRespondentsRef.current = freshStageOneRecords;
-        setStageOneRespondents(freshStageOneRecords);
-        failedAttempts = 0;
-        setStageOneResponseSyncState({
-          type: 'success',
-          message: `Sumber khusus Form tahap awal terhubung: tab “${imported.selectedTab}”. ${freshStageOneRecords.length} responden setelah pemisahan sumber ditampilkan; ${Math.max(0, imported.records.length - freshStageOneRecords.length)} baris lama/tidak memenuhi batas pemisahan tidak ditampilkan. Diperbarui ${new Date().toLocaleString('id-ID')}.`,
-          lastUpdatedAt: new Date().toLocaleString('id-ID'),
+          stageOneRespondentsRef.current = records;
+          setStageOneRespondents(records);
+          setStageOneResponseSyncState({
+            type: 'success',
+            message: `Database Firestore Asesmen Tahap Awal aktif: ${records.length} responden. Diperbarui ${new Date().toLocaleString('id-ID')}.`,
+            lastUpdatedAt: new Date().toLocaleString('id-ID'),
+          });
+          const notificationUid = auth.currentUser?.uid || 'default';
+          void processRespondentSubmissionEvents(
+            notificationUid,
+            records.map(({ id, namaLengkap, timestamp }) => ({ id, namaLengkap, timestamp })),
+            records as unknown as Array<Record<string, unknown>>,
+            { baselineNamespace: 'native-sipandu-stage-one', notifyNewQuestionnairesOnFirstImport: true },
+          ).then(() => {
+            if (active) setRespondentNotifications(loadRespondentNotifications(notificationUid));
+          }).catch((error) => console.warn('Stage-one respondent notifications could not be updated:', error));
+        }, (error) => {
+          if (!active) return;
+          unsubscribe = null;
+          setStageOneResponseSyncState({
+            type: 'error',
+            message: `Database Asesmen Tahap Awal belum dapat dibaca: ${error.message} Periksa apakah aturan firestore.rules terbaru sudah diterapkan ke Firebase.`,
+          });
+          if (retryTimer !== undefined) window.clearTimeout(retryTimer);
+          retryTimer = window.setTimeout(connect, 5000);
         });
       } catch (error) {
-        if (!active) return;
-        failedAttempts += 1;
-        nextDelay = getLiveSyncRetryDelay(failedAttempts);
-        const detail = error instanceof Error ? error.message : String(error);
         setStageOneResponseSyncState({
           type: 'error',
-          message: `Daftar khusus asesmen tahap awal belum dapat disinkronkan dari link/barcode Form: ${detail} Percobaan ulang otomatis dalam ${Math.ceil(nextDelay / 1000)} detik. Data dari spreadsheet utama tidak akan dipakai sebagai pengganti.`,
+          message: `Database Asesmen Tahap Awal belum dapat dihubungkan: ${error instanceof Error ? error.message : String(error)}`,
         });
-        console.error('SIPANDU stage-one Form response sync failed:', error);
-      } finally {
-        running = false;
-        if (active) schedule(nextDelay);
+        retryTimer = window.setTimeout(connect, 5000);
       }
     };
-
     const wake = () => {
-      if (!active || running || (typeof navigator !== 'undefined' && navigator.onLine === false)) return;
-      schedule(0);
+      if (!active || unsubscribe || !isAuthenticated) return;
+      if (retryTimer !== undefined) window.clearTimeout(retryTimer);
+      retryTimer = undefined;
+      connect();
     };
     window.addEventListener('online', wake);
     window.addEventListener('focus', wake);
     window.addEventListener('pageshow', wake);
-    window.addEventListener('sipandu-workspace-token-updated', wake);
-    schedule(1200);
-
+    connect();
     return () => {
       active = false;
-      if (timer !== undefined) window.clearTimeout(timer);
+      if (retryTimer !== undefined) window.clearTimeout(retryTimer);
+      if (unsubscribe) unsubscribe();
+      unsubscribe = null;
       window.removeEventListener('online', wake);
       window.removeEventListener('focus', wake);
       window.removeEventListener('pageshow', wake);
-      window.removeEventListener('sipandu-workspace-token-updated', wake);
     };
-  }, [
-    authReady,
-    isAuthenticated,
-    localCacheReady,
-    settings.googleFormTahapAwalUrl,
-    settings.googleSpreadsheetSourceUrl,
-  ]);
+  }, [authReady, isAuthenticated, localCacheReady]);
 
   // Continuously poll Google Forms' linked response Sheet while the app is signed in.
   // Firestore provides instant cross-device updates; Google Sheets does not expose a
@@ -1225,4 +1186,13 @@ export default function App() {
       </Suspense>
     </div>
   );
+}
+
+
+/** Public respondent flow: the shareable URL bypasses the staff dashboard and login. */
+export default function App() {
+  if (typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('mode') === 'asesmen-tahap-awal') {
+    return <StageOneRespondentPage />;
+  }
+  return <StaffApp />;
 }
