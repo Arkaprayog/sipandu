@@ -15,6 +15,35 @@ if (!fs.existsSync(indexPath)) {
 
 const html = fs.readFileSync(indexPath, 'utf8');
 
+// The app icons must be generated from the uploaded official logo, not an AI substitute.
+const iconChecks = [
+  ['icons/sipandu-icon-192.png', '192x192'],
+  ['icons/sipandu-icon-512.png', '512x512'],
+  ['icons/sipandu-apple-touch-icon.png', '180x180'],
+  ['icons/sipandu-favicon.png', '48x48'],
+];
+for (const [relativePath, dimensions] of iconChecks) {
+  const iconPath = path.join(dist, relativePath);
+  if (!fs.existsSync(iconPath) || fs.statSync(iconPath).size < 1000) {
+    fail('Ikon resmi tidak ditemukan atau kosong: dist/' + relativePath);
+  }
+}
+const manifestPath = path.join(dist, 'manifest.webmanifest');
+if (!fs.existsSync(manifestPath)) {
+  fail('dist/manifest.webmanifest tidak ditemukan.');
+} else {
+  try {
+    const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+    for (const size of ['192x192', '512x512']) {
+      if (!manifest.icons?.some((icon) => icon.sizes === size && icon.type === 'image/png')) {
+        fail('Manifest tidak memiliki ikon PNG ukuran ' + size + '.');
+      }
+    }
+  } catch (error) {
+    fail('Manifest ikon tidak valid: ' + error.message);
+  }
+}
+
 // Guard against regressions in the two fixes for stale entrypoint assets:
 // automatic one-shot recovery is inlined in HTML, and Vercel must not cache HTML.
 for (const marker of [

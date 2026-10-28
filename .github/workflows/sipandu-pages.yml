@@ -41,6 +41,8 @@ jobs:
         run: bun run test
       - name: TypeScript check
         run: bun run lint
+      - name: Generate PWA, iOS, and favicon icons from the official uploaded logo
+        run: python3 scripts/generate_pwa_icons.py
       - name: Build SIPANDU
         run: bun run build
       - name: Verify production assets and relative URLs
