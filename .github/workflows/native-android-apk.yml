@@ -250,8 +250,8 @@ jobs:
         run: |
           set -euo pipefail
           APK="android/app/build/outputs/apk/release/app-release.apk"
-          AAPT="$ANDROID_HOME/build-tools/35.0.0/aapt"
-          APKSIGNER="$ANDROID_HOME/build-tools/35.0.0/apksigner"
+          AAPT="$ANDROID_HOME/build-tools/36.0.0/aapt"
+          APKSIGNER="$ANDROID_HOME/build-tools/36.0.0/apksigner"
           test -s "$APK"
           "$AAPT" dump badging "$APK" | tee /tmp/sipandu-release-badging.txt
           grep -q "package: name='id.my.sipandu.odhiv'" /tmp/sipandu-release-badging.txt
