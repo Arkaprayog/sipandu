@@ -37,7 +37,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
     } catch (error) {
       const code = (error as { code?: string })?.code;
       if (code === 'sipandu/login-timeout') {
-        setErrorMsg('Permintaan login belum mendapat jawaban selama 18 detik. Periksa koneksi internet, lalu coba masuk kembali. Jika login sebenarnya sudah diterima server, aplikasi dapat tetap melanjutkan ke dashboard.');
+        setErrorMsg('Login belum mendapat jawaban setelah 18 detik. Periksa koneksi dan status sesi sebelum mencoba kembali. Bila permintaan sudah diproses, muat ulang aplikasi untuk memeriksa apakah sesi telah aktif.');
       } else if (code === 'auth/invalid-credential' || code === 'auth/wrong-password' || code === 'auth/user-not-found') {
         setErrorMsg('Email atau kata sandi tidak sesuai.');
       } else if (code === 'auth/too-many-requests') {

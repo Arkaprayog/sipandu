@@ -66,6 +66,7 @@ export const AsesmenView: React.FC<AsesmenViewProps> = ({
   // Submission feedback
   const [formSubmitted, setFormSubmitted] = useState<boolean>(false);
   const [copyFeedback, setCopyFeedback] = useState<string>('');
+  const [copyError, setCopyError] = useState<string>('');
   const [photoUploadError, setPhotoUploadError] = useState('');
   const [isCompressingPhoto, setIsCompressingPhoto] = useState(false);
 
@@ -191,10 +192,28 @@ export const AsesmenView: React.FC<AsesmenViewProps> = ({
     setTimeout(() => setFormSubmitted(false), 4500);
   };
 
-  const handleCopyLink = (url: string, label: string) => {
-    navigator.clipboard.writeText(url);
-    setCopyFeedback(label);
-    setTimeout(() => setCopyFeedback(''), 2500);
+  const handleCopyLink = async (url: string, label: string) => {
+    if (!url.trim()) {
+      setCopyFeedback('');
+      setCopyError('Tautan formulir belum diatur.');
+      window.setTimeout(() => setCopyError(''), 3000);
+      return;
+    }
+    try {
+      if (!navigator.clipboard?.writeText) {
+        throw new Error('Clipboard API tidak tersedia di browser ini.');
+      }
+      await navigator.clipboard.writeText(url);
+      setCopyError('');
+      setCopyFeedback(label);
+    } catch {
+      setCopyFeedback('');
+      setCopyError('Gagal menyalin tautan. Salin URL secara manual dari kolom formulir.');
+    }
+    window.setTimeout(() => {
+      setCopyFeedback('');
+      setCopyError('');
+    }, 3000);
   };
 
   const handleSendWA = (ppks: PPKSRecord) => {
@@ -515,7 +534,7 @@ export const AsesmenView: React.FC<AsesmenViewProps> = ({
                     <label className="block text-xs font-bold text-sky-200">
                       FOTO DIRI:
                       <span className="block text-[10px] text-neutral-400 font-normal">
-                        (Bisa live kamera atau ambil file handphone: JPG, JPEG, PNG, WEBP, DOC, PDF)
+                        (Bisa live kamera atau pilih foto dari handphone: JPG, PNG, WEBP)
                       </span>
                     </label>
 
@@ -545,7 +564,7 @@ export const AsesmenView: React.FC<AsesmenViewProps> = ({
                         <span>Pilih File</span>
                         <input
                           type="file"
-                          accept=".jpg,.jpeg,.png,.webp,.doc,.docx,.pdf"
+                          accept="image/jpeg,image/png,image/webp"
                           onChange={(e) => handleFileUpload(e, 'fotoDiri')}
                           className="hidden"
                         />
@@ -558,7 +577,7 @@ export const AsesmenView: React.FC<AsesmenViewProps> = ({
                     <label className="block text-xs font-bold text-sky-200">
                       FOTO KTP:
                       <span className="block text-[10px] text-neutral-400 font-normal">
-                        (Bisa live kamera atau ambil file handphone: JPG, JPEG, PNG, WEBP, DOC, PDF)
+                        (Bisa live kamera atau pilih foto dari handphone: JPG, PNG, WEBP)
                       </span>
                     </label>
 
@@ -588,7 +607,7 @@ export const AsesmenView: React.FC<AsesmenViewProps> = ({
                         <span>Pilih File</span>
                         <input
                           type="file"
-                          accept=".jpg,.jpeg,.png,.webp,.doc,.docx,.pdf"
+                          accept="image/jpeg,image/png,image/webp"
                           onChange={(e) => handleFileUpload(e, 'fotoKtp')}
                           className="hidden"
                         />
@@ -662,19 +681,22 @@ export const AsesmenView: React.FC<AsesmenViewProps> = ({
               <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
                 <button
                   type="button"
-                  onClick={() =>
-                    handleCopyLink(stageOneRespondentUrl, 'Link Google Form')
-                  }
-                  className="px-3 py-1.5 rounded-lg bg-emerald-800 hover:bg-emerald-700 text-white text-xs font-semibold flex items-center gap-1 cursor-pointer"
+                  onClick={() => void handleCopyLink(stageOneRespondentUrl, 'Link Google Form')}
+                  disabled={!stageOneRespondentUrl}
+                  className="px-3 py-1.5 rounded-lg bg-emerald-800 hover:bg-emerald-700 text-white text-xs font-semibold flex items-center gap-1 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   <Copy className="w-3.5 h-3.5" />
                   <span>Salin Link</span>
                 </button>
                 <a
-                  href={stageOneRespondentUrl}
+                  href={stageOneRespondentUrl || undefined}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="px-3 py-1.5 rounded-lg bg-sky-900 hover:bg-sky-800 text-white text-xs font-semibold flex items-center gap-1"
+                  aria-disabled={!stageOneRespondentUrl}
+                  onClick={(event) => {
+                    if (!stageOneRespondentUrl) event.preventDefault();
+                  }}
+                  className={`px-3 py-1.5 rounded-lg bg-sky-900 hover:bg-sky-800 text-white text-xs font-semibold flex items-center gap-1 ${stageOneRespondentUrl ? '' : 'pointer-events-none opacity-50'}`}
                 >
                   <ExternalLink className="w-3.5 h-3.5" />
                   <span>Buka Form</span>
