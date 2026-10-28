@@ -273,6 +273,9 @@ export async function enableBiometricLock(user?: QuickUnlockUser): Promise<void>
   if (!user?.uid) {
     throw new Error('Sesi akun SIPANDU tidak ditemukan. Masuk dengan akun resmi sebelum mendaftarkan biometrik.');
   }
+  if (!isAppPinConfigured(user.uid)) {
+    throw new Error('Daftarkan PIN SIPANDU 4 angka terlebih dahulu. PIN wajib tersedia sebagai cadangan jika biometrik gagal.');
+  }
 
   if (!Capacitor.isNativePlatform()) {
     await registerPlatformAuthenticator(user);
