@@ -703,6 +703,16 @@ export const AsesmenView: React.FC<AsesmenViewProps> = ({
                 </a>
               </div>
             </div>
+            {copyFeedback && (
+              <p role="status" className="text-xs text-emerald-300 font-semibold">
+                ✓ {copyFeedback} berhasil disalin ke clipboard!
+              </p>
+            )}
+            {copyError && (
+              <p role="alert" className="text-xs text-amber-200 font-medium">
+                {copyError}
+              </p>
+            )}
 
             {/* Barcode untuk asesmen tahap awal dengan logo SIPANDU tepat di dalamnya */}
             <div className="pt-2">
