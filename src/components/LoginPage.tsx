@@ -253,7 +253,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
                   pattern="[0-9]{4}"
                   maxLength={4}
                   value={quickPin}
-                  onChange={(event) => setQuickPin(event.target.value.replace(/\\D/g, '').slice(0, 4))}
+                  onChange={(event) => setQuickPin(event.target.value.replace(/\D/g, '').slice(0, 4))}
                   placeholder="4 angka"
                   aria-label="PIN SIPANDU empat angka"
                   className="min-w-0 flex-1 rounded-lg border border-white bg-white/70 px-3 py-2 text-center text-sm tracking-[0.35em] text-black outline-none focus:border-teal-700 focus:ring-2 focus:ring-teal-700/20"
