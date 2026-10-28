@@ -20,6 +20,7 @@ export const BiometricGate: React.FC<{ children: React.ReactNode }> = ({ childre
   const [hasPin, setHasPin] = useState(false);
   const [hasBiometric, setHasBiometric] = useState(false);
   const [pin, setPin] = useState('');
+  const [showPinFallback, setShowPinFallback] = useState(false);
 
   const unlock = useCallback(() => {
     setLocked(false);
@@ -40,7 +41,8 @@ export const BiometricGate: React.FC<{ children: React.ReactNode }> = ({ childre
       unlock();
     } catch (e) {
       const message = e instanceof Error ? e.message : 'Verifikasi biometrik gagal. Silakan coba lagi.';
-      setError(message + (hasPin ? ' Anda dapat mencoba biometrik lagi atau menggunakan PIN SIPANDU.' : ' Coba lagi atau masuk dengan email dan kata sandi jika sesi akun telah berakhir.'));
+      setError(message + (hasPin ? ' Gunakan PIN SIPANDU sebagai cadangan atau coba biometrik lagi.' : ' Coba lagi atau masuk dengan email dan kata sandi jika sesi akun telah berakhir.'));
+      setShowPinFallback(hasPin);
     } finally {
       setChecking(false);
     }
@@ -79,8 +81,11 @@ export const BiometricGate: React.FC<{ children: React.ReactNode }> = ({ childre
 
       setUserId(user.uid);
       const configured = isQuickUnlockEnabled(user.uid);
-      setHasPin(isAppPinConfigured(user.uid));
-      setHasBiometric(isBiometricLockEnabled(user.uid));
+      const pinAvailable = isAppPinConfigured(user.uid);
+      const biometricAvailable = isBiometricLockEnabled(user.uid);
+      setHasPin(pinAvailable);
+      setHasBiometric(biometricAvailable);
+      setShowPinFallback(!biometricAvailable);
       // A live Firebase session is preserved; quick unlock is a local privacy gate
       // in front of it. A PIN/passkey never creates or replaces a Firebase session.
       setLocked(configured);
@@ -95,6 +100,7 @@ export const BiometricGate: React.FC<{ children: React.ReactNode }> = ({ childre
           setLocked(true);
           setError('');
           setPin('');
+          setShowPinFallback(!isBiometricLockEnabled(auth.currentUser.uid));
         }
       }
     };
@@ -134,7 +140,7 @@ export const BiometricGate: React.FC<{ children: React.ReactNode }> = ({ childre
           </button>
         )}
 
-        {hasPin && (
+        {hasPin && showPinFallback && (
           <form
             className="mt-5 border-t border-white/10 pt-5 text-left"
             onSubmit={(event) => {
