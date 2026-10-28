@@ -1,11 +1,8 @@
 #!/usr/bin/env python3
-"""Generate Android launcher resources from SIPANDU's approved uploaded icon.
+"""Generate Android launcher resources from SIPANDU's uploaded official logo.
 
-Prefer public/uploads/sipandu-logo.png. If that optional legacy
-filename has been removed, use public/uploads/sipandu-logo.png as fallback.
-No alternate/drawn logo is substituted. The source artwork is resized with
-LANCZOS and kept fully visible; classic and adaptive Android launcher assets
-are produced in all required density buckets.
+The source asset is public/uploads/sipandu-logo.png. No alternate or drawn
+logo is substituted. The artwork is resized with LANCZOS and kept fully visible.
 """
 from pathlib import Path
 import subprocess
@@ -24,11 +21,7 @@ except ImportError:
     from PIL import Image, ImageDraw, ImageOps
 
 ROOT = Path(__file__).resolve().parents[1]
-LOGO_CANDIDATES = (
-    ROOT / "public" / "uploads" / "sipandu-logo.png",
-    ROOT / "public" / "uploads" / "sipandu-logo.png",
-)
-SOURCE = next((candidate for candidate in LOGO_CANDIDATES if candidate.is_file()), LOGO_CANDIDATES[0])
+SOURCE = ROOT / "public" / "uploads" / "sipandu-logo.png"
 RES = ROOT / "android" / "app" / "src" / "main" / "res"
 BACKGROUND = (3, 21, 64, 255)  # Match supplied SIPANDU ODHIV navy icon
 DENSITIES = (
@@ -63,8 +56,7 @@ def save_icon(image: Image.Image, path: Path) -> None:
 
 def main() -> None:
     if not SOURCE.is_file():
-        candidates = ", ".join(str(path) for path in LOGO_CANDIDATES)
-        raise SystemExit(f"Ikon sumber aplikasi tidak ditemukan. Periksa salah satu sumber yang didukung: {candidates}")
+        raise SystemExit(f"Ikon sumber aplikasi tidak ditemukan: {SOURCE}")
     try:
         with Image.open(SOURCE) as opened:
             width, height = opened.size
