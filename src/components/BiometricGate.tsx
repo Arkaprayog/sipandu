@@ -24,6 +24,15 @@ export const BiometricGate: React.FC<{ children: React.ReactNode }> = ({ childre
   }, []);
 
   useEffect(() => {
+    const lockApp = () => {
+      const user = auth.currentUser;
+      if (user && isQuickUnlockEnabled(user.uid)) setLocked(true);
+    };
+    window.addEventListener('sipandu:lock-app', lockApp);
+    return () => window.removeEventListener('sipandu:lock-app', lockApp);
+  }, []);
+
+  useEffect(() => {
     const onVisibilityChange = () => {
       if (document.visibilityState === 'hidden') {
         const user = auth.currentUser;
