@@ -65,7 +65,7 @@ jobs:
       - name: Align Android build tools with dependency requirements
         shell: bash
         run: |
-          set -euo pipefail
+          set -eu
           SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
           if [ ! -x "$SDKMANAGER" ]; then
             SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -path '*/bin/sdkmanager' -type f | sort -V | tail -1)"
