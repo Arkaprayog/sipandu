@@ -9,7 +9,17 @@ if len(candidates) != 1:
 path = candidates[0]
 source = path.read_text()
 if "ModifiedMainActivityForSocialLoginPlugin" in source:
-    print(f"Native Google authorization bridge already configured: {path}")
+    required = (
+        "implements ModifiedMainActivityForSocialLoginPlugin",
+        "handleGoogleLoginIntent(requestCode, data)",
+        "IHaveModifiedTheMainActivityForTheUseWithSocialLoginPlugin",
+    )
+    missing = [item for item in required if item not in source]
+    if missing:
+        raise SystemExit(
+            f"MainActivity contains an incomplete Google authorization bridge: {', '.join(missing)}"
+        )
+    print(f"Native Google authorization bridge already configured and verified: {path}")
     raise SystemExit(0)
 
 imports = """import ee.forgr.capacitor.social.login.GoogleProvider;
@@ -59,4 +69,15 @@ if last_brace < 0:
     raise SystemExit(f"Cannot find closing class brace in {path}")
 source = source[:last_brace] + methods + "\n" + source[last_brace:]
 path.write_text(source)
-print(f"Configured native Google authorization callback: {path}")
+verified = path.read_text()
+required = (
+    "implements ModifiedMainActivityForSocialLoginPlugin",
+    "handleGoogleLoginIntent(requestCode, data)",
+    "IHaveModifiedTheMainActivityForTheUseWithSocialLoginPlugin",
+)
+missing = [item for item in required if item not in verified]
+if missing:
+    raise SystemExit(
+        f"Generated MainActivity failed Google authorization verification: {', '.join(missing)}"
+    )
+print(f"Configured and verified native Google authorization callback: {path}")
