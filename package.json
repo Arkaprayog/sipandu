@@ -1,7 +1,7 @@
 {
   "name": "sipandu-odhiv",
   "private": true,
-  "version": "2.1.8",
+  "version": "2.1.9",
   "type": "module",
   "scripts": {
     "dev": "vite --port=3000 --host=0.0.0.0",
@@ -12,6 +12,7 @@
     "lint": "python3 scripts/generate_surat_tugas_template.py && tsc --noEmit"
   },
   "dependencies": {
+    "@capacitor/app": "^7.0.0",
     "@google/genai": "^2.4.0",
     "@tailwindcss/vite": "^4.3.3",
     "@types/qrcode": "^1.5.6",
