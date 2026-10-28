@@ -255,7 +255,8 @@ function describeGoogleOAuthError(error: unknown): string {
   if (code.includes('auth/unauthorized-domain')) {
     const hostname = typeof window !== 'undefined' ? window.location.hostname : '';
     const projectId = auth.app.options.projectId || 'gen-lang-client-0197631978';
-    return `Domain aplikasi "${hostname || '(tidak terdeteksi)'}" belum diizinkan pada Firebase Authentication. Admin harus membuka https://console.firebase.google.com/project/${projectId}/authentication/settings, lalu menambahkan hostname aplikasi pada Authorized domains (tanpa https:// atau path). Untuk GitHub Pages, tambahkan arkaprayog.github.io; untuk Vercel, tambahkan sipandu-sigma.vercel.app. Setelah itu ulangi login.`;
+    const localHostHint = hostname === 'localhost' || hostname === '127.0.0.1' ? `Untuk aplikasi debug lokal, tambahkan tepat ${hostname} pada Authorized domains (tanpa port atau path). ` : '';
+    return `Domain aplikasi "${hostname || '(tidak terdeteksi)'}" belum diizinkan pada Firebase Authentication. Buka https://console.firebase.google.com/project/${projectId}/authentication/settings, lalu tambahkan hostname aplikasi pada Authorized domains (tanpa https://, port, atau path). ${localHostHint}Untuk GitHub Pages, tambahkan arkaprayog.github.io; untuk Vercel, tambahkan sipandu-sigma.vercel.app. Simpan perubahan, muat ulang aplikasi, lalu ulangi login.`;
   }
   if (code.includes('auth/operation-not-allowed')) {
     return 'Penyedia Google belum diaktifkan pada Firebase Authentication. Admin harus membuka Firebase Console > Authentication > Sign-in method dan mengaktifkan Google pada proyek gen-lang-client-0197631978.';
