@@ -100,3 +100,10 @@
 .app-header-safe-area {
   padding-top: calc(env(safe-area-inset-top, 0px) + 1.25rem);
 }
+
+/* Keep horizontal edge swipes inside SIPANDU instead of navigating away from the PWA. */
+html,
+body,
+.sipandu-navigation-shell {
+  overscroll-behavior-x: contain;
+}
