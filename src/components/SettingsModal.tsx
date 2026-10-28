@@ -189,9 +189,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 {isBiometricLockEnabled(auth.currentUser?.uid) && (
                   <p className="mt-2 text-[10px] font-semibold text-emerald-200">Autentikasi biometrik terdaftar untuk akun ini.</p>
                 )}
+                {!pinConfigured && !biometricEnabled && (
+                  <p className="mt-3 rounded-lg border border-amber-300/20 bg-amber-950/30 p-2 text-[10px] leading-relaxed text-amber-100">
+                    Daftarkan PIN 4 angka di bagian berikut terlebih dahulu. PIN wajib tersedia sebagai cadangan sebelum biometrik dapat diaktifkan.
+                  </p>
+                )}
                 <button
                   type="button"
-                  disabled={biometricBusy}
+                  disabled={biometricBusy || (!biometricEnabled && !pinConfigured)}
                   onClick={async () => {
                     if (biometricEnabled) {
                       disableBiometricLock();
