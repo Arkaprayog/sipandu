@@ -210,41 +210,66 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
           import re
+
           p = Path("android/app/build.gradle")
           s = p.read_text()
-          # Always replace the release signing block: Capacitor's generated Gradle
-          # file may already contain signingConfigs, but without environment values.
-          signing = """    signingConfigs {
-                  release {
-                      storeFile file(System.getenv('SIPANDU_KEYSTORE_PATH'))
-                      storePassword System.getenv('SIPANDU_KEYSTORE_PASSWORD')
-                      keyAlias System.getenv('SIPANDU_KEY_ALIAS')
-                      keyPassword System.getenv('SIPANDU_KEY_PASSWORD')
-                  }
-              }"""
-          if re.search(r"(?m)^\s*signingConfigs\s*\{", s):
-              s = re.sub(r"(?ms)^\s*signingConfigs\s*\{.*?^\s*\}", signing, s, count=1)
+
+          def block_span(source, keyword, search_from=0):
+              match = re.search(r"(?m)^\\s*" + re.escape(keyword) + r"\\s*\\{", source[search_from:])
+              if not match:
+                  return None
+              begin = search_from + match.start()
+              brace = source.find("{", search_from + match.start())
+              depth = 0
+              for pos in range(brace, len(source)):
+                  if source[pos] == "{":
+                      depth += 1
+                  elif source[pos] == "}":
+                      depth -= 1
+                      if depth == 0:
+                          return begin, pos + 1
+              raise SystemExit("Unclosed Gradle block: " + keyword)
+
+          signing_block = """    signingConfigs {
+              release {
+                  storeFile file(System.getenv('SIPANDU_KEYSTORE_PATH'))
+                  storePassword System.getenv('SIPANDU_KEYSTORE_PASSWORD')
+                  keyAlias System.getenv('SIPANDU_KEY_ALIAS')
+                  keyPassword System.getenv('SIPANDU_KEY_PASSWORD')
+              }
+          }"""
+
+          span = block_span(s, "signingConfigs")
+          if span:
+              s = s[:span[0]] + signing_block + s[span[1]:]
           else:
-              if "    buildTypes {" not in s:
+              build_span = block_span(s, "buildTypes")
+              if not build_span:
                   raise SystemExit("Android buildTypes block was not found")
-              s = s.replace("    buildTypes {", signing + "\n\n    buildTypes {", 1)
-          # Ensure the release build type uses the configured release key.
-          match = re.search(r"(?ms)^\s*release\s*\{.*?^\s*\}", s[s.find("buildTypes {"):])
-          if not match:
-              raise SystemExit("Release build type was not found in generated Gradle file")
-          build_start = s.find("buildTypes {")
-          start = build_start + match.start()
-          end = build_start + match.end()
-          block = s[start:end]
-          if "signingConfig signingConfigs.release" not in block:
-              block = re.sub(r"(?m)^(\s*release\s*\{)", r"\1\n            signingConfig signingConfigs.release", block, count=1)
-              s = s[:start] + block + s[end:]
+              s = s[:build_span[0]] + signing_block + "\\n\\n    " + s[build_span[0]:]
+
+          build_span = block_span(s, "buildTypes")
+          release_span = block_span(s, "release", build_span[0] if build_span else 0)
+          if not release_span:
+              raise SystemExit("Release build type was not found")
+          release_block = s[release_span[0]:release_span[1]]
+          if "signingConfig signingConfigs.release" not in release_block:
+              opening_end = release_block.find("{") + 1
+              release_block = release_block[:opening_end] + "\\n            signingConfig signingConfigs.release" + release_block[opening_end:]
+              s = s[:release_span[0]] + release_block + s[release_span[1]:]
+
           p.write_text(s)
-          required = ["storePassword System.getenv('SIPANDU_KEYSTORE_PASSWORD')", "keyAlias System.getenv('SIPANDU_KEY_ALIAS')", "keyPassword System.getenv('SIPANDU_KEY_PASSWORD')", "signingConfig signingConfigs.release"]
           content = p.read_text()
+          required = [
+              "storePassword System.getenv('SIPANDU_KEYSTORE_PASSWORD')",
+              "keyAlias System.getenv('SIPANDU_KEY_ALIAS')",
+              "keyPassword System.getenv('SIPANDU_KEY_PASSWORD')",
+              "signingConfig signingConfigs.release",
+          ]
           missing = [item for item in required if item not in content]
           if missing:
               raise SystemExit("Release signing configuration incomplete: " + ", ".join(missing))
+          print("Release signing configuration verified.")
           PY
           grep -n -A10 -B3 'signingConfigs\|signingConfig signingConfigs.release' android/app/build.gradle
 
