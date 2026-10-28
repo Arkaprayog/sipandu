@@ -1,8 +1,9 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import QRCode from 'qrcode';
 import { Download } from 'lucide-react';
+import { publicAssetUrl } from '../lib/publicAssets';
 
-interface KemensosQRCodeProps {
+interface SipanduQRCodeProps {
   value: string;
   size?: number;
   label?: string;
@@ -11,40 +12,25 @@ interface KemensosQRCodeProps {
 }
 
 const DOWNLOAD_RESOLUTION = 2400;
-const LOGO_ASSETS = [
-  `${import.meta.env.BASE_URL}uploads/Logo%20Kemensos.png`,
-  `${import.meta.env.BASE_URL}uploads/Logo%20Kemensos%20Hadir.png`,
-];
+const SIPANDU_LOGO_ASSET = publicAssetUrl('uploads/sipandu-logo.png');
 
 const loadLogoAsset = (src: string): Promise<HTMLImageElement> =>
   new Promise((resolve, reject) => {
     const image = new Image();
     image.onload = () => resolve(image);
-    image.onerror = () => reject(new Error(`Logo Kemensos tidak dapat dimuat dari ${src}`));
+    image.onerror = () => reject(new Error(`Logo SIPANDU tidak dapat dimuat dari ${src}`));
     image.src = src;
   });
 
-/** Try the primary official asset first, then the alternate uploaded Kemensos logo. */
-const loadKemensosLogo = async (): Promise<HTMLImageElement> => {
-  let lastError: unknown;
-  for (const source of LOGO_ASSETS) {
-    try {
-      return await loadLogoAsset(source);
-    } catch (error) {
-      lastError = error;
-    }
-  }
-  throw lastError instanceof Error
-    ? lastError
-    : new Error('Kedua berkas logo Kemensos gagal dimuat; barcode tidak dibuat tanpa logo.');
-};
+/** Load the exact logo file supplied in public/uploads; never synthesize or substitute branding. */
+const loadSipanduLogo = (): Promise<HTMLImageElement> => loadLogoAsset(SIPANDU_LOGO_ASSET);
 
 /**
- * Draw the actual uploaded Kemensos logo on a clean white quiet-zone panel.
+ * Draw the actual uploaded SIPANDU logo on a clean white quiet-zone panel.
  * The image keeps its original aspect ratio and is drawn at the target canvas
  * resolution, so it stays crisp in both the preview and exported PNG.
  */
-const drawKemensosLogo = (canvas: HTMLCanvasElement, logo: HTMLImageElement) => {
+const drawSipanduLogo = (canvas: HTMLCanvasElement, logo: HTMLImageElement) => {
   const ctx = canvas.getContext('2d');
   if (!ctx || !logo.naturalWidth || !logo.naturalHeight) return;
 
@@ -115,13 +101,13 @@ const buildBrandedQrCanvas = async (
   });
 
   // Do not silently export an unbranded QR: if both official assets fail, surface an error.
-  const logo = await loadKemensosLogo();
-  drawKemensosLogo(canvas, logo);
+  const logo = await loadSipanduLogo();
+  drawSipanduLogo(canvas, logo);
 
   return canvas;
 };
 
-export const KemensosQRCode: React.FC<KemensosQRCodeProps> = ({
+export const SipanduQRCode: React.FC<SipanduQRCodeProps> = ({
   value,
   size = 220,
   label,
@@ -145,7 +131,7 @@ export const KemensosQRCode: React.FC<KemensosQRCodeProps> = ({
     const render = async () => {
       setPreviewError('');
       try {
-        // Triple CSS-size backing resolution keeps the displayed QR and centered Kemensos logo sharp.
+        // Triple CSS-size backing resolution keeps the displayed QR and centered SIPANDU logo sharp.
         const rendered = await buildBrandedQrCanvas(value, Math.max(size * 3, 720));
         if (cancelled) return;
 
@@ -160,8 +146,8 @@ export const KemensosQRCode: React.FC<KemensosQRCodeProps> = ({
       } catch (error) {
         if (!cancelled) {
           const message = error instanceof Error ? error.message : String(error);
-          console.error('Gagal membuat barcode asesmen dengan logo Kemensos:', error);
-          setPreviewError('Barcode belum dibuat karena logo Kemensos gagal dimuat. Periksa aset logo dan muat ulang. ' + message);
+          console.error('Gagal membuat barcode asesmen dengan logo SIPANDU:', error);
+          setPreviewError('Barcode belum dibuat karena logo SIPANDU gagal dimuat. Periksa aset logo dan muat ulang. ' + message);
         }
       }
     };
@@ -211,7 +197,7 @@ export const KemensosQRCode: React.FC<KemensosQRCodeProps> = ({
           style={{ width: size, height: size }}
           className="block rounded"
           role="img"
-          aria-label={label || 'QR code dengan logo Kementerian Sosial RI'}
+          aria-label={label || 'QR code dengan logo SIPANDU ODHIV'}
         />
       </div>
       {previewError && (

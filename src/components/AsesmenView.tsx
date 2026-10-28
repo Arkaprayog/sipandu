@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { PPKSRecord, AppSettings } from '../types';
-import { KemensosQRCode } from './KemensosQRCode';
+import { SipanduQRCode } from './SipanduQRCode';
 import { isPrimaryGoogleFormUrl } from '../lib/googleSIPANDUResources';
 import { CameraCaptureModal } from './CameraCaptureModal';
 import { PrivateDriveImage } from './PrivateDriveImage';
@@ -281,7 +281,7 @@ export const AsesmenView: React.FC<AsesmenViewProps> = ({
                 {photoUploadError}
               </div>
             )}
-            {/* Link & Barcode dengan Logo Kemensos di dalamnya */}
+            {/* Link & Barcode dengan Logo SIPANDU di dalamnya */}
             <div className="p-5 rounded-2xl bg-[#112415]/70 border border-rose-500/35 flex flex-col md:flex-row items-center justify-between gap-6">
               <div className="flex-1 space-y-3">
                 <div className="flex items-center gap-2">
@@ -347,7 +347,7 @@ export const AsesmenView: React.FC<AsesmenViewProps> = ({
 
               {/* Barcode/QR Code with Kemensos logo inside */}
               <div className="flex flex-col items-center">
-                <KemensosQRCode
+                <SipanduQRCode
                   value={stageOneRespondentUrl}
                   size={190}
                   label="Scan Barcode Asesmen Tahap Awal"
@@ -682,12 +682,12 @@ export const AsesmenView: React.FC<AsesmenViewProps> = ({
               </div>
             </div>
 
-            {/* Barcode untuk asesmen tahap awal dengan logo Kemensos tepat di dalamnya */}
+            {/* Barcode untuk asesmen tahap awal dengan logo SIPANDU tepat di dalamnya */}
             <div className="pt-2">
-              <KemensosQRCode
+              <SipanduQRCode
                 value={stageOneRespondentUrl}
                 size={220}
-                label="Barcode Kuisioner Google Form (Logo Kemensos)"
+                label="Barcode Kuisioner Google Form (Logo SIPANDU)"
                 downloadFileName="barcode-asesmen-google-form.png"
               />
             </div>
