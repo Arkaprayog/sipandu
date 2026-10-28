@@ -56,8 +56,13 @@ jobs:
           test -n "$ANDROID_KEY_ALIAS" || (echo "::error::Missing GitHub Actions secret ANDROID_KEY_ALIAS" && exit 1)
           test -n "$ANDROID_KEY_PASSWORD" || (echo "::error::Missing GitHub Actions secret ANDROID_KEY_PASSWORD" && exit 1)
 
-      - name: Install npm dependencies
-        run: npm install --legacy-peer-deps --no-audit --no-fund
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install locked dependencies
+        run: bun install --frozen-lockfile
 
       - name: Build web application
         run: npm run build

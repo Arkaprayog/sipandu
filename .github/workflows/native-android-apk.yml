@@ -42,10 +42,8 @@ jobs:
           packages: platform-tools platforms;android-36 build-tools;36.0.0
 
       - name: Install web dependencies
-        run: bun install
+        run: bun install --frozen-lockfile
 
-      - name: Install Capacitor Android and native Google Sign-In tooling
-        run: npm install --save --package-lock=false --legacy-peer-deps @capacitor/core@7 @capacitor/cli@7 @capacitor/android@7 @capgo/capacitor-social-login@7 @capacitor/local-notifications@7 @aparajita/capacitor-biometric-auth@7
 
       - name: Run application tests
         run: bun run test
