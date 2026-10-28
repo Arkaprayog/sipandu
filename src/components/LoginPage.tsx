@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import { auth } from '../lib/firebase';
-import { Lock, User, Eye, EyeOff, ArrowRight } from 'lucide-react';
+import { authenticateBiometricLock, isBiometricLockEnabled } from '../lib/biometricLock';
+import { Lock, User, Eye, EyeOff, Fingerprint } from 'lucide-react';
 import { publicAssetUrl } from '../lib/publicAssets';
 
 const LOGIN_TIMEOUT_MS = 18_000;
@@ -17,6 +18,29 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
   const [errorMsg, setErrorMsg] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [logoFailed, setLogoFailed] = useState(false);
+  const formRef = useRef<HTMLFormElement>(null);
+
+  const handlePrimaryAction = async () => {
+    const currentUser = auth.currentUser;
+    // Biometric unlock is allowed only for an existing Firebase session.
+    // It never authenticates a signed-out user or replaces account login.
+    if (currentUser && isBiometricLockEnabled(currentUser.uid) && !email.trim() && !password) {
+      setErrorMsg('');
+      setIsSubmitting(true);
+      try {
+        await authenticateBiometricLock(currentUser.uid);
+        onLogin(currentUser.displayName || currentUser.email || 'Pengguna SIPANDU');
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Verifikasi biometrik gagal.';
+        setErrorMsg(`Biometrik belum berhasil. ${message} Anda juga dapat masuk dengan email dan kata sandi.`);
+      } finally {
+        setIsSubmitting(false);
+      }
+      return;
+    }
+    // Preserve browser validation and the existing email/password login flow.
+    formRef.current?.requestSubmit();
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -116,7 +140,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-3">
+          <form ref={formRef} onSubmit={handleSubmit} className="space-y-3">
             <div>
               <label
                 htmlFor="sipandu-email"
@@ -174,12 +198,14 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
             </div>
 
             <button
-              type="submit"
+              type="button"
+              onClick={() => void handlePrimaryAction()}
               disabled={isSubmitting}
+              aria-label="Masuk Aplikasi dengan sidik jari jika tersedia, atau email dan kata sandi"
               className="mt-1 flex w-full items-center justify-center gap-2 rounded-xl border border-teal-700/70 bg-teal-700 px-3 py-3 text-sm font-bold uppercase tracking-wide text-white shadow-[0_6px_18px_rgba(15,118,110,0.28)] transition hover:bg-teal-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
             >
               <span>{isSubmitting ? 'Memeriksa akun…' : 'Masuk Aplikasi'}</span>
-              <ArrowRight className="h-4 w-4" />
+              <Fingerprint className="h-5 w-5" aria-hidden="true" />
             </button>
           </form>
 
