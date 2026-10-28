@@ -10,6 +10,7 @@ on:
       - "package.json"
       - "capacitor.config.json"
       - "vite.config.ts"
+      - "scripts/patch_native_google_login.py"
       - ".github/workflows/android-apk.yml"
 
 permissions:
