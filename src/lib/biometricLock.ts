@@ -367,6 +367,24 @@ export function disableBiometricLock(): void {
   }
 }
 
+/** Reset only local quick-unlock secrets; Firebase account authentication is unchanged. */
+export function resetQuickUnlockSettings(): void {
+  try {
+    const s = storage();
+    [
+      BIOMETRIC_LOCK_KEY,
+      BIOMETRIC_USER_KEY,
+      APP_PIN_HASH_KEY,
+      APP_PIN_SALT_KEY,
+      APP_PIN_USER_KEY,
+      APP_PIN_FAILURES_KEY,
+      WEBAUTHN_CREDENTIAL_KEY,
+    ].forEach((key) => s.removeItem(key));
+  } catch {
+    /* storage may be unavailable */
+  }
+}
+
 /** Store only a salted PBKDF2 verifier; never store the four-digit PIN itself. */
 export async function setAppPin(pin: string, confirmation: string, userId: string): Promise<void> {
   if (!userId) throw new Error('Sesi akun SIPANDU tidak ditemukan. Masuk kembali sebelum membuat PIN.');
