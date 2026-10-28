@@ -76,3 +76,24 @@ Area penting: `src/App.tsx` (sesi, cache, sinkronisasi, navigasi), `src/componen
 ## Keputusan
 
 Status: **perbaikan hardening sedang diverifikasi; belum dinyatakan production-ready** sampai CI branch lulus dan checklist autentikasi, rules, sinkronisasi, domain, dan perangkat nyata diverifikasi. Jangan gunakan build debug ini sebagai bukti bahwa semua integrasi cloud sudah benar.
+
+
+## Suplemen audit repo dan branding — 28 Oktober 2026
+
+Cakupan tambahan: seluruh pohon repo pada branch `main` (direktori `.github/workflows`, `admin-tools`, `docs`, `public/uploads`, `scripts`, dan `src`), konfigurasi Vite/Capacitor/Wrangler, manifest PWA, Firebase client/rules, generator ikon, serta riwayat build terbaru. Audit ini adalah pemeriksaan statis dan CI; bukan sertifikasi keamanan dan bukan pengganti pengujian perangkat/layanan produksi.
+
+### Perbaikan terverifikasi di kode
+
+- Menghapus lambang Kemensos SVG yang digambar manual; logo aplikasi pada login/header memakai file sumber `public/uploads/sipandu-logo.png`. QR asesmen kini menyematkan file yang sama di bagian tengah.
+- Ikon PWA/favicon/iOS dan launcher Android tetap dibuat oleh generator dari file PNG itu. Generator hanya mengubah ukuran/penempatan; tidak membuat desain/logo alternatif.
+- Komponen kop surat mempertahankan logo Kemensos dari aset yang diunggah, bukan dari SVG buatan.
+- Pemeriksa dist mewajibkan logo PNG sumber dan salinan dist identik berdasarkan SHA-256; nama WebP lama tidak lagi diterima sebagai pengganti.
+- Metadata pratinjau sosial menunjuk ikon SIPANDU 512 px yang dibuat dari sumber tersebut.
+- Workflow web/Android memakai lockfile Bun yang terkunci dan tidak lagi menjalankan instalasi npm kedua setelah Bun. Workers Builds juga dikonfigurasi untuk menjalankan `bun run build` langsung setelah pemasangan dependency, menghindari kegagalan cache npm `ENOENT` yang ditemukan di log.
+
+### Batasan yang masih perlu validasi operasional
+
+- CI hijau memverifikasi build, test yang terdaftar, pemeriksaan TypeScript, metadata/signature APK, dan aset; itu tidak membuktikan login OAuth Google Workspace, izin Google Form/Sheet/Drive, Firestore Rules yang aktif, atau notifikasi pada perangkat tertutup sudah lolos end-to-end.
+- Firestore berisi data pribadi/sensitif. Cache pada `localStorage` masih dapat memuat data dan foto; keamanan tetap memerlukan Rules Firebase aktif, role custom claim dari Admin SDK, serta perangkat/browser yang terlindungi.
+- Uji visual logo pada browser desktop, browser ponsel, instalasi PWA iOS, APK debug, dan APK release harus dilakukan setelah deployment selesai. Pengujian scanner QR dengan kamera nyata juga tetap diperlukan.
+- Tanda silang pada histori workflow lama tidak terhapus; penilaian rilis harus melihat run terbaru pada SHA terbaru, bukan status commit historis.

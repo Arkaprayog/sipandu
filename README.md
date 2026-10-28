@@ -8,7 +8,7 @@ Sistem Informasi & Pendampingan Terpadu untuk pengelolaan Database PPKS ODHIV Su
 - Vite 8 + Tailwind CSS 4
 - Firebase Authentication dan Cloud Firestore
 - Google Forms, Sheets, dan Drive REST APIs melalui OAuth Workspace
-- Capacitor 7 untuk membangun aplikasi Android; GitHub Actions menghasilkan debug APK
+- Capacitor 7 untuk membangun aplikasi Android; GitHub Actions memvalidasi APK debug dan release
 - Bun sebagai package manager dan runner tes
 
 ## Struktur direktori penting
@@ -21,8 +21,16 @@ Sistem Informasi & Pendampingan Terpadu untuk pengelolaan Database PPKS ODHIV Su
 - `src/lib/respondentNotifications.ts`: histori dan notifikasi responden
 - `firestore.rules`: policy akses Firestore yang harus diuji dan diterapkan ke database target
 - `admin-tools/`: utilitas Admin SDK untuk administrator tepercaya
-- `scripts/`: optimasi gambar latar dan verifikasi aset produksi
+- `scripts/`: generator ikon dari logo resmi, optimasi latar login, generator dokumen, dan pemeriksaan aset/bytecode produksi
 - `.github/workflows/`: build/deploy web dan build Android debug
+
+
+## Sumber identitas/logo aplikasi
+
+- Logo resmi aplikasi adalah **file yang diunggah pemilik proyek**: `public/uploads/sipandu-logo.png`. Jangan menggambar ulang, menghasilkan dengan AI, atau mengganti file tersebut dengan artwork lain.
+- Login, header aplikasi, logo tengah QR/barcode, ikon PWA/favicon/iOS, dan ikon launcher Android mengambil logo ini secara langsung atau melalui generator ukuran yang tidak mengubah desain.
+- Logo Kemensos hanya dipakai pada kop dokumen resmi dan juga dimuat dari file Kemensos yang diunggah; komponen tidak menggambar lambang pengganti.
+- Pemeriksaan produksi memverifikasi file PNG yang sama masuk ke `dist/uploads/sipandu-logo.png`. Jalankan `node scripts/verify-dist.mjs` setelah build.
 
 ## Menjalankan secara lokal
 
