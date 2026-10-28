@@ -52,7 +52,7 @@ test('cutover is a stable explicit timestamp rather than a per-device startup ti
   assert.equal(STAGE_ONE_FORM_CUTOVER_MS, Date.parse('2026-10-27T11:40:14Z'));
 });
 
-test('recognizes the known primary Form so it cannot populate the stage-one list', () => {
+test('recognizes the configured project Form used by the stage-one link/barcode', () => {
   assert.equal(
     isPrimaryGoogleFormUrl('https://docs.google.com/forms/d/12JJIlBzY9yA5taFIfkQ6r0dJDMEBbEw8ymX7mTUHmYc/viewform'),
     true

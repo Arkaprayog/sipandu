@@ -3,7 +3,7 @@ import { Capacitor } from '@capacitor/core';
 import { enableBiometricLock, disableBiometricLock, isBiometricLockEnabled, getBiometricDiagnostics } from '../lib/biometricLock';
 import { AppSettings } from '../types';
 import { toGoogleFormsRespondentUrl } from '../utils/helpers';
-import { getGoogleFormIdFromUrl, isPrimaryGoogleFormUrl } from '../lib/googleSIPANDUResources';
+import { getGoogleFormIdFromUrl } from '../lib/googleSIPANDUResources';
 import { Settings, Save, Check, Link, FileSpreadsheet, FolderGit2, X, Lock, Unlock, Fingerprint, ShieldCheck } from 'lucide-react';
 
 type UrlSettingKey = 'googleFormTahapAwalUrl' | 'googleFormTahapLanjutanUrl' | 'googleSpreadsheetUrl' | 'googleDriveFolderUrl';

@@ -25,7 +25,7 @@ const GoogleWorkspaceModal = lazyWithRecovery('GoogleWorkspaceModal', () => impo
 import { onAuthStateChanged, signOut, getIdTokenResult } from 'firebase/auth';
 import { auth, getAccessToken, savePPKSToFirestore, googleLogout, subscribeToPPKSChanges } from './lib/firebase';
 import { ensureSIPANDUDatabaseSheet, extractSpreadsheetId, getLinkedSpreadsheetUrlForForm, importPPKSFromSpreadsheet, upsertPPKSInSpreadsheet } from './lib/googleWorkspace';
-import { GOOGLE_SIPANDU_RESOURCES, isPrimaryGoogleFormUrl } from './lib/googleSIPANDUResources';
+import { GOOGLE_SIPANDU_RESOURCES } from './lib/googleSIPANDUResources';
 import { getLiveSyncRetryDelay, LIVE_SYNC_INTERVAL_MS } from './lib/liveSyncPolicy';
 import { filterStageOneLinkResponses } from './lib/stageOneRespondents';
 import { preservePPKSRecordOrder } from './lib/ppksRecordState';

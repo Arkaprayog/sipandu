@@ -28,7 +28,7 @@ import {
   removeObviousDemoFilesFromDrive,
   GoogleDriveFile,
 } from '../lib/googleWorkspace';
-import { GOOGLE_SIPANDU_RESOURCES, GOOGLE_WORKSPACE_EMAIL, getGoogleFormIdFromUrl, isPrimaryGoogleFormUrl } from '../lib/googleSIPANDUResources';
+import { GOOGLE_SIPANDU_RESOURCES, GOOGLE_WORKSPACE_EMAIL, getGoogleFormIdFromUrl } from '../lib/googleSIPANDUResources';
 import { toGoogleFormsRespondentUrl } from '../utils/helpers';
 import { PPKSRecord, AppSettings } from '../types';
 import {
@@ -659,9 +659,6 @@ export const GoogleWorkspaceModal: React.FC<GoogleWorkspaceModalProps> = ({
       const normalized = toGoogleFormsRespondentUrl(formIdInput.trim());
       if (!normalized || !getGoogleFormIdFromUrl(normalized)) {
         throw new Error('URL Google Form tidak valid. Gunakan URL lengkap docs.google.com/forms/d/FORM_ID/edit atau /viewform.');
-      }
-      if (isPrimaryGoogleFormUrl(normalized)) {
-        throw new Error('Gunakan Google Form khusus Asesmen Tahap Awal, bukan Form utama.');
       }
       const responses = await fetchFormResponses(normalized);
       onUpdateSettings({ ...settings, googleFormTahapAwalUrl: normalized });
