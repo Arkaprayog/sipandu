@@ -66,6 +66,22 @@ jobs:
       - name: Configure native Google Workspace scope authorization
         run: python3 scripts/patch_native_google_login.py
 
+      - name: Verify native biometric plugin registration
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          registries = list(Path("android").rglob("capacitor.plugins.json"))
+          if not registries:
+              raise SystemExit("Capacitor plugin registry was not generated after sync.")
+          content = "\\n".join(path.read_text() for path in registries)
+          if "BiometricAuthPlugin" not in content and "capacitor-biometric-auth" not in content.lower() and "biometricauth" not in content.lower():
+              raise SystemExit("Native biometric plugin is not registered in the generated Android project.")
+          print("Native biometric plugin registration verified:", ", ".join(map(str, registries)))
+          PY
+
       - name: Verify native Google Workspace scope authorization
         shell: bash
         run: |
