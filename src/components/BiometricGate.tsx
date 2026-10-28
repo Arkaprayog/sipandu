@@ -5,10 +5,10 @@ import { Fingerprint, ShieldCheck, RefreshCw, KeyRound, LockKeyhole, ScanFace } 
 import { auth, googleLogout } from '../lib/firebase';
 import {
   authenticateBiometricLock,
-  disableBiometricLock,
   isAppPinConfigured,
   isBiometricLockEnabled,
   isQuickUnlockEnabled,
+  resetQuickUnlockSettings,
   verifyAppPin,
 } from '../lib/biometricLock';
 
@@ -70,13 +70,16 @@ export const BiometricGate: React.FC<{ children: React.ReactNode }> = ({ childre
 
   const recoverWithPassword = useCallback(async () => {
     if (checking) return;
+    const confirmed = window.confirm(
+      'Pemulihan ini akan menghapus PIN dan pendaftaran biometrik lokal pada perangkat ini. Data SIPANDU tidak dihapus. Anda perlu masuk dengan email/kata sandi dan mendaftarkan metode buka cepat kembali. Lanjutkan?'
+    );
+    if (!confirmed) return;
     setChecking(true);
     setError('');
     try {
-      // Older installs may have biometric lock enabled without the new PIN fallback.
-      // Disable that legacy-only lock before returning to password login to avoid a lockout.
-      if (!isAppPinConfigured(userId)) disableBiometricLock();
-      // Recovery returns to the normal Firebase login screen; it never bypasses auth.
+      // Clear only the local quick-unlock layer to prevent a forgotten PIN or old
+      // biometric preference from locking the user out after password reauthentication.
+      resetQuickUnlockSettings();
       await signOut(auth);
       await googleLogout();
     } catch (e) {
@@ -212,7 +215,7 @@ export const BiometricGate: React.FC<{ children: React.ReactNode }> = ({ childre
           onClick={() => void recoverWithPassword()}
           className="mt-4 w-full rounded-lg border border-white/10 px-3 py-2 text-[10px] text-white/60 transition hover:bg-white/5 hover:text-white disabled:opacity-50"
         >
-          Tidak bisa membuka kunci? Keluar dan masuk dengan email/kata sandi
+          Reset metode buka cepat dan masuk dengan email/kata sandi
         </button>
       </section>
     </main>
