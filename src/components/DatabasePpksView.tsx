@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { PPKSRecord, AppSettings } from '../types';
 import { uploadPPKSPhotoToDrive, type PPKSPhotoKind } from '../lib/googleWorkspace';
 import { GOOGLE_SIPANDU_RESOURCES } from '../lib/googleSIPANDUResources';
@@ -54,6 +54,7 @@ export const DatabasePpksView: React.FC<DatabasePpksViewProps> = ({
   settings,
 }) => {
   const [selectedPPKSId, setSelectedPPKSId] = useState<string>('');
+  const suppressAutoSelectAfterBackRef = useRef(false);
   const [editingDesil, setEditingDesil] = useState<number>(0);
   const [editingIntervensi, setEditingIntervensi] = useState<string>('');
   const [saveSuccess, setSaveSuccess] = useState<boolean>(false);
@@ -89,9 +90,35 @@ export const DatabasePpksView: React.FC<DatabasePpksViewProps> = ({
       return;
     }
     if (!displayPPKSList.some((record) => record.id === selectedPPKSId)) {
+      if (!selectedPPKSId && suppressAutoSelectAfterBackRef.current) {
+        suppressAutoSelectAfterBackRef.current = false;
+        return;
+      }
       handleSelectPPKS(displayPPKSList[0].id);
     }
   }, [displayPPKSList, selectedPPKSId]);
+
+  useEffect(() => {
+    const onAppNavigateBack = (event: Event) => {
+      const detail = (event as CustomEvent<{ handled: boolean }>).detail;
+      if (!detail || detail.handled) return;
+      if (showWaPreview) {
+        setShowWaPreview(false);
+        detail.handled = true;
+        return;
+      }
+      if (selectedPPKSId) {
+        // Temporarily preserve the empty selection instead of auto-selecting the first row again.
+        suppressAutoSelectAfterBackRef.current = true;
+        setSelectedPPKSId('');
+        setSaveSuccess(false);
+        setPhotoUploadMessage('');
+        detail.handled = true;
+      }
+    };
+    window.addEventListener('sipandu:navigate-back', onAppNavigateBack);
+    return () => window.removeEventListener('sipandu:navigate-back', onAppNavigateBack);
+  }, [selectedPPKSId, showWaPreview]);
 
   // Refresh the visible intervention field when a live spreadsheet sync updates
   // the selected respondent. This keeps the editor in step with column BE.
