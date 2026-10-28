@@ -404,7 +404,7 @@ function StaffApp() {
     const shouldIgnoreSwipe = (target: EventTarget | null): boolean => {
       if (!(target instanceof Element)) return true;
       return Boolean(target.closest(
-        'input, textarea, select, button, a, [role="button"], [contenteditable="true"], form, [data-no-app-swipe="true"], .no-app-swipe, .overflow-x-auto, canvas, iframe, video, [role="dialog"]'
+        'input, textarea, select, button, a, [role="button"], [contenteditable="true"], [data-no-app-swipe="true"], .no-app-swipe, .overflow-x-auto, canvas, iframe, video, [role="dialog"]'
       ));
     };
     const onTouchStart = (event: TouchEvent) => {
