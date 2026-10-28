@@ -67,20 +67,26 @@ jobs:
           from pathlib import Path
           gradle_files = list(Path("android").rglob("*.gradle")) + list(Path("android").rglob("*.gradle.kts"))
           changed = []
+          agp_changed = []
+          sdk_changed = []
           for path in gradle_files:
               content = path.read_text()
               updated = content.replace("8.7.2", "8.9.1")
               if updated != content:
+                  agp_changed.append(str(path))
+              updated = updated.replace("compileSdkVersion = 35", "compileSdkVersion = 36")
+              updated = updated.replace("compileSdkVersion 35", "compileSdkVersion 36")
+              updated = updated.replace("compileSdk 35", "compileSdk 36")
+              if updated != content and str(path) not in sdk_changed:
+                  sdk_changed.append(str(path))
+              if updated != content:
                   path.write_text(updated)
-                  changed.append(str(path))
-          if not changed:
+          if not agp_changed:
               raise SystemExit("Could not locate generated Android Gradle Plugin 8.7.2 declaration")
-          app = Path("android/app/build.gradle")
-          content = app.read_text().replace("compileSdkVersion 35", "compileSdkVersion 36").replace("compileSdk 35", "compileSdk 36")
-          app.write_text(content)
-          if "compileSdkVersion 36" not in content and "compileSdk 36" not in content:
-              raise SystemExit("compileSdk 36 was not applied to the Android app")
-          print("Updated AGP in:", ", ".join(changed))
+          if not sdk_changed:
+              raise SystemExit("Could not locate generated compile SDK 35 declaration")
+          print("Updated AGP in:", ", ".join(agp_changed))
+          print("Updated compile SDK in:", ", ".join(sdk_changed))
           PY
           grep -R -n '8.9.1' android --include='*.gradle' --include='*.gradle.kts'
           grep -E 'compileSdk(Version)? 36' android/app/build.gradle
