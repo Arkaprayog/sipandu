@@ -46,6 +46,23 @@ export const AsesmenView: React.FC<AsesmenViewProps> = ({
 }) => {
   const [activeSubMenu, setActiveSubMenu] = useState<AsesmenSubMenu>('tahap-awal');
 
+  // Form states for ASESMEN TAHAP AWAL
+  const [namaLengkap, setNamaLengkap] = useState<string>('');
+  const [nik, setNik] = useState<string>('');
+  const [usia, setUsia] = useState<string>('');
+  const [jenisKelamin, setJenisKelamin] = useState<'Laki-laki' | 'Perempuan' | ''>('');
+  const [kotaDomisili, setKotaDomisili] = useState<string>('');
+  const [fotoDiri, setFotoDiri] = useState<string>('');
+  const [fotoDiriName, setFotoDiriName] = useState<string>('');
+  const [fotoKtp, setFotoKtp] = useState<string>('');
+  const [fotoKtpName, setFotoKtpName] = useState<string>('');
+  const [jenisBantuan, setJenisBantuan] = useState<string>('');
+  const [noHpWa, setNoHpWa] = useState<string>('');
+
+  // Camera modal states
+  const [isCameraOpen, setIsCameraOpen] = useState<boolean>(false);
+  const [cameraTarget, setCameraTarget] = useState<'fotoDiri' | 'fotoKtp'>('fotoDiri');
+
   useEffect(() => {
     const onAppNavigateBack = (event: Event) => {
       const detail = (event as CustomEvent<{ handled: boolean }>).detail;
@@ -63,23 +80,6 @@ export const AsesmenView: React.FC<AsesmenViewProps> = ({
     window.addEventListener('sipandu:navigate-back', onAppNavigateBack);
     return () => window.removeEventListener('sipandu:navigate-back', onAppNavigateBack);
   }, [activeSubMenu, isCameraOpen]);
-
-  // Form states for ASESMEN TAHAP AWAL
-  const [namaLengkap, setNamaLengkap] = useState<string>('');
-  const [nik, setNik] = useState<string>('');
-  const [usia, setUsia] = useState<string>('');
-  const [jenisKelamin, setJenisKelamin] = useState<'Laki-laki' | 'Perempuan' | ''>('');
-  const [kotaDomisili, setKotaDomisili] = useState<string>('');
-  const [fotoDiri, setFotoDiri] = useState<string>('');
-  const [fotoDiriName, setFotoDiriName] = useState<string>('');
-  const [fotoKtp, setFotoKtp] = useState<string>('');
-  const [fotoKtpName, setFotoKtpName] = useState<string>('');
-  const [jenisBantuan, setJenisBantuan] = useState<string>('');
-  const [noHpWa, setNoHpWa] = useState<string>('');
-
-  // Camera modal states
-  const [isCameraOpen, setIsCameraOpen] = useState<boolean>(false);
-  const [cameraTarget, setCameraTarget] = useState<'fotoDiri' | 'fotoKtp'>('fotoDiri');
 
   // Submission feedback
   const [formSubmitted, setFormSubmitted] = useState<boolean>(false);
