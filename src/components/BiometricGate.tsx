@@ -1,8 +1,8 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { onAuthStateChanged } from 'firebase/auth';
+import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { Capacitor } from '@capacitor/core';
 import { Fingerprint, ShieldCheck, RefreshCw, KeyRound, LockKeyhole, ScanFace } from 'lucide-react';
-import { auth } from '../lib/firebase';
+import { auth, googleLogout } from '../lib/firebase';
 import {
   authenticateBiometricLock,
   isAppPinConfigured,
@@ -66,6 +66,21 @@ export const BiometricGate: React.FC<{ children: React.ReactNode }> = ({ childre
       setChecking(false);
     }
   }, [checking, pin, unlock, userId]);
+
+  const recoverWithPassword = useCallback(async () => {
+    if (checking) return;
+    setChecking(true);
+    setError('');
+    try {
+      // Recovery returns to the normal Firebase login screen; it never bypasses auth.
+      await signOut(auth);
+      await googleLogout();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Tidak dapat membuka alur pemulihan akun. Coba muat ulang aplikasi.');
+    } finally {
+      setChecking(false);
+    }
+  }, [checking]);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
@@ -187,6 +202,14 @@ export const BiometricGate: React.FC<{ children: React.ReactNode }> = ({ childre
         <p className="mt-5 text-[10px] leading-relaxed text-white/45">
           Jika sesi Firebase telah berakhir, Anda tetap perlu masuk kembali dengan akun resmi. PIN dan biometrik hanya membuka kunci lokal, bukan menggantikan izin akun SIPANDU.
         </p>
+        <button
+          type="button"
+          disabled={checking}
+          onClick={() => void recoverWithPassword()}
+          className="mt-4 w-full rounded-lg border border-white/10 px-3 py-2 text-[10px] text-white/60 transition hover:bg-white/5 hover:text-white disabled:opacity-50"
+        >
+          Tidak bisa membuka kunci? Keluar dan masuk dengan email/kata sandi
+        </button>
       </section>
     </main>
   );
