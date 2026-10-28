@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import { auth } from '../lib/firebase';
-import { Lock, User, Eye, EyeOff, ArrowRight, Download, Smartphone } from 'lucide-react';
+import { Lock, User, Eye, EyeOff, ArrowRight } from 'lucide-react';
 
 // Public assets are served from the repository subpath on GitHub Pages and from
 // the site root on the custom domain. Avoid relative URLs: they can resolve
@@ -196,20 +196,6 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
               <ArrowRight className="h-4 w-4" />
             </button>
           </form>
-
-          <a
-            href="https://github.com/Arkaprayog/sipandu/releases/latest/download/SIPANDU-ODHIV.apk"
-            className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl border border-emerald-800/60 bg-white/55 px-3 py-3 text-sm font-bold text-emerald-950 shadow-sm transition hover:bg-white/75 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-700 focus-visible:ring-offset-2"
-            aria-label="Unduh aplikasi native SIPANDU ODHIV untuk Android"
-          >
-            <Smartphone className="h-4 w-4" />
-            <span>Unduh Aplikasi Android</span>
-            <Download className="h-4 w-4" />
-          </a>
-
-          <p className="mt-2 text-center text-[10px] leading-snug text-black/80">
-            File APK resmi SIPANDU ODHIV. Jika Android meminta izin instalasi, izinkan untuk browser yang digunakan.
-          </p>
 
           {/* Footer berada di dalam card, tepat di bawah tombol masuk. */}
           <footer className="mt-3 border-t border-white/45 pt-2 text-center">
