@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { PPKSRecord, AppSettings } from '../types';
 import { SipanduQRCode } from './SipanduQRCode';
-import { isPrimaryGoogleFormUrl } from '../lib/googleSIPANDUResources';
+import { GOOGLE_SIPANDU_RESOURCES } from '../lib/googleSIPANDUResources';
 import { CameraCaptureModal } from './CameraCaptureModal';
 import { PrivateDriveImage } from './PrivateDriveImage';
 import { compressImageForLocalStorage } from '../lib/imageCompression';
@@ -70,10 +70,14 @@ export const AsesmenView: React.FC<AsesmenViewProps> = ({
   const [photoUploadError, setPhotoUploadError] = useState('');
   const [isCompressingPhoto, setIsCompressingPhoto] = useState(false);
 
-  // Always show respondents the public fill-in URL, never the editor URL.
-  const configuredStageOneUrl = toGoogleFormsRespondentUrl(settings.googleFormTahapAwalUrl);
-  // Do not publish a barcode for the known primary/main Form.
-  const stageOneRespondentUrl = isPrimaryGoogleFormUrl(configuredStageOneUrl) ? '' : configuredStageOneUrl;
+  // Always provide an active respondent URL. Existing saved settings may still be blank
+  // from older builds, so fall back to the project's configured public Form URL.
+  // Normalize editor URLs to respondent URLs; never clear the link just because its Form ID
+  // matches the known project Form.
+  const configuredStageOneUrl = toGoogleFormsRespondentUrl(
+    settings.googleFormTahapAwalUrl || GOOGLE_SIPANDU_RESOURCES.formRespondentUrl,
+  );
+  const stageOneRespondentUrl = configuredStageOneUrl;
 
   const handleFileUpload = async (
     e: React.ChangeEvent<HTMLInputElement>,
@@ -319,7 +323,7 @@ export const AsesmenView: React.FC<AsesmenViewProps> = ({
                 </p>
                 {!stageOneRespondentUrl && (
                   <div role="alert" className="rounded-lg border border-amber-400/40 bg-amber-950/30 p-3 text-xs leading-relaxed text-amber-100">
-                    URL Form khusus tahap awal belum diatur. Untuk mencegah data responden dari Form utama masuk ke daftar ini, link dan barcode dinonaktifkan sementara. Buka Pengaturan Integrasi Google & WhatsApp, masukkan URL lengkap Form tahap awal yang berbeda dari Form utama, lalu simpan. Form tersebut harus ditautkan ke spreadsheet responsnya sendiri.
+                    URL Form tahap awal belum diatur. Periksa kembali koneksi Google Workspace bila tautan belum dapat dibuka. Respons yang masuk melalui tautan/barcode tahap awal akan disinkronkan ke DATABASE PPKS ASESMEN TAHAP AWAL.
                   </div>
                 )}
 
