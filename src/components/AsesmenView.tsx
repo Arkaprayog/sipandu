@@ -2,14 +2,14 @@ import React, { useState } from 'react';
 import { PPKSRecord, AppSettings } from '../types';
 import { SipanduQRCode } from './SipanduQRCode';
 import { GOOGLE_SIPANDU_RESOURCES } from '../lib/googleSIPANDUResources';
+import { STAGE_ONE_RESPONDENT_PORTAL_URL } from '../lib/stageOneRespondentPortal';
 import { CameraCaptureModal } from './CameraCaptureModal';
 import { PrivateDriveImage } from './PrivateDriveImage';
 import { compressImageForLocalStorage } from '../lib/imageCompression';
 import {
-  buildGoogleFormsPrefilledUrl,
+  buildGoogleFormUtamaPrefilledUrl,
   buildWhatsAppMessage,
   createWhatsAppLink,
-  toGoogleFormsRespondentUrl,
 } from '../utils/helpers';
 import {
   FileText,
@@ -70,14 +70,8 @@ export const AsesmenView: React.FC<AsesmenViewProps> = ({
   const [photoUploadError, setPhotoUploadError] = useState('');
   const [isCompressingPhoto, setIsCompressingPhoto] = useState(false);
 
-  // Always provide an active respondent URL. Existing saved settings may still be blank
-  // from older builds, so fall back to the project's configured public Form URL.
-  // Normalize editor URLs to respondent URLs; never clear the link just because its Form ID
-  // matches the known project Form.
-  const configuredStageOneUrl = toGoogleFormsRespondentUrl(
-    settings.googleFormTahapAwalUrl || GOOGLE_SIPANDU_RESOURCES.formRespondentUrl,
-  );
-  const stageOneRespondentUrl = configuredStageOneUrl;
+  // The public stage-one URL opens the respondent interface inside SIPANDU, never Google Forms.
+  const stageOneRespondentUrl = STAGE_ONE_RESPONDENT_PORTAL_URL;
 
   const handleFileUpload = async (
     e: React.ChangeEvent<HTMLInputElement>,
@@ -221,20 +215,22 @@ export const AsesmenView: React.FC<AsesmenViewProps> = ({
   };
 
   const handleSendWA = (ppks: PPKSRecord) => {
+    let prefilledPrimaryFormUrl = '';
     try {
-      // Do not open WhatsApp with a generic or stage-one form link if the
-      // unique stage-two prefill is not fully configured.
-      buildGoogleFormsPrefilledUrl(
-        settings.googleFormTahapLanjutanUrl,
-        settings.googleFormTahapLanjutanIdEntry,
-        ppks.id
+      prefilledPrimaryFormUrl = buildGoogleFormUtamaPrefilledUrl(
+        GOOGLE_SIPANDU_RESOURCES.formRespondentUrl,
+        settings.googleFormUtamaPrefillEntries,
+        ppks,
       );
     } catch (error) {
-      alert(error instanceof Error ? error.message + '\\n\\nBuka Pengaturan Integrasi Google & WhatsApp untuk melengkapi URL dan nomor entry formulir lanjutan.' : String(error));
+      alert(error instanceof Error
+        ? error.message + '\\n\\nBuka Pengaturan SIPANDU dan masukkan entry ID asli dari Google Form utama. Jangan menebak nomor entry.'
+        : String(error));
       return;
     }
 
     const message = buildWhatsAppMessage(ppks, {
+      googleFormUtamaPrefilledUrl: prefilledPrimaryFormUrl,
       senderName: settings.senderName,
       senderRole: settings.senderRole,
       senderUnit: settings.senderUnit,
@@ -285,7 +281,7 @@ export const AsesmenView: React.FC<AsesmenViewProps> = ({
             }`}
           >
             <Link className="w-4 h-4 text-sky-300" />
-            <span>ASESMEN GOOGLE FORM</span>
+            <span>GOOGLE FORM UTAMA</span>
           </button>
 
 
@@ -312,14 +308,14 @@ export const AsesmenView: React.FC<AsesmenViewProps> = ({
                     KEMENSOS RI TAHAP AWAL
                   </span>
                   <span className={`text-xs font-mono ${stageOneRespondentUrl ? 'text-sky-300' : 'text-amber-200'}`}>
-                    {stageOneRespondentUrl ? 'LINK GOOGLE FORM AKTIF' : 'FORM TAHAP AWAL BELUM DIATUR'}
+                    {stageOneRespondentUrl ? 'FORM SIPANDU AKTIF' : 'FORM SIPANDU TIDAK TERSEDIA'}
                   </span>
                 </div>
                 <h4 className="text-base font-bold text-white">
                   Tautan & Barcode Asesmen Tahap Awal ODHIV
                 </h4>
                 <p className="text-xs text-neutral-300 leading-relaxed">
-                  Daftar di bawah hanya menampilkan respons dari Form khusus yang dibuka melalui link/barcode Asesmen Tahap Awal, bukan data dari Google Form utama.
+                  Tautan dan barcode ini membuka formulir Asesmen Tahap Awal langsung di SIPANDU. Setelah dikirim, jawaban masuk ke Database PPKS Asesmen Tahap Awal. Google Form utama baru dikirim dari baris responden setelah data tersimpan.
                 </p>
                 {!stageOneRespondentUrl && (
                   <div role="alert" className="rounded-lg border border-amber-400/40 bg-amber-950/30 p-3 text-xs leading-relaxed text-amber-100">
@@ -333,7 +329,7 @@ export const AsesmenView: React.FC<AsesmenViewProps> = ({
                     type="text"
                     readOnly
                     value={stageOneRespondentUrl}
-                    placeholder="URL Form khusus belum diatur"
+                    placeholder="URL Form SIPANDU"
                     className="flex-1 bg-transparent text-xs text-sky-200 font-mono focus:outline-none px-2 select-all"
                   />
                   <button
@@ -639,7 +635,7 @@ export const AsesmenView: React.FC<AsesmenViewProps> = ({
                 <div className="p-2.5 rounded-lg bg-emerald-950/50 border border-emerald-500/30 flex items-center gap-2 text-[11px] text-emerald-200">
                   <CloudCheck className="w-4 h-4 text-emerald-400 shrink-0" />
                   <span>
-                    Responden mengisi Google Form resmi melalui tautan di atas. Input cepat petugas ini dicatat ke database SIPANDU/Firebase dan spreadsheet database terpisah bila dikonfigurasi; isian di sini tidak dikirim menjadi respons Google Forms.
+                    Ini adalah formulir asli SIPANDU untuk Asesmen Tahap Awal. Setelah tersimpan ke database tahap awal, petugas dapat mengirim tautan Google Form utama yang terisi sebagian dari data responden.
                   </span>
                 </div>
 
@@ -667,10 +663,10 @@ export const AsesmenView: React.FC<AsesmenViewProps> = ({
 
             <div>
               <h3 className="text-lg md:text-xl font-black text-white uppercase tracking-wider">
-                ASESMEN GOOGLE FORM
+                GOOGLE FORM UTAMA
               </h3>
               <p className="text-xs text-neutral-300 max-w-md mt-1">
-                Kuisioner Google Form resmi untuk asesmen PPKS ODHIV Kementerian Sosial RI.
+                Google Form utama digunakan setelah data Asesmen Tahap Awal tersimpan di SIPANDU. Tautan personal dengan jawaban terisi otomatis dikirim dari tombol WhatsApp pada baris responden.
               </p>
             </div>
 
@@ -679,31 +675,31 @@ export const AsesmenView: React.FC<AsesmenViewProps> = ({
               <input
                 type="text"
                 readOnly
-                value={stageOneRespondentUrl}
+                value={GOOGLE_SIPANDU_RESOURCES.formRespondentUrl}
                 className="w-full sm:flex-1 bg-transparent text-xs text-sky-200 font-mono focus:outline-none px-2 select-all truncate"
               />
               <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
                 <button
                   type="button"
-                  onClick={() => void handleCopyLink(stageOneRespondentUrl, 'Link Google Form')}
-                  disabled={!stageOneRespondentUrl}
+                  onClick={() => void handleCopyLink(GOOGLE_SIPANDU_RESOURCES.formRespondentUrl, 'Link Google Form')}
+                  disabled={!GOOGLE_SIPANDU_RESOURCES.formRespondentUrl}
                   className="px-3 py-1.5 rounded-lg bg-emerald-800 hover:bg-emerald-700 text-white text-xs font-semibold flex items-center gap-1 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   <Copy className="w-3.5 h-3.5" />
-                  <span>Salin Link</span>
+                  <span>Salin Google Form Utama</span>
                 </button>
                 <a
-                  href={stageOneRespondentUrl || undefined}
+                  href={GOOGLE_SIPANDU_RESOURCES.formRespondentUrl || undefined}
                   target="_blank"
                   rel="noopener noreferrer"
-                  aria-disabled={!stageOneRespondentUrl}
+                  aria-disabled={!GOOGLE_SIPANDU_RESOURCES.formRespondentUrl}
                   onClick={(event) => {
-                    if (!stageOneRespondentUrl) event.preventDefault();
+                    if (!GOOGLE_SIPANDU_RESOURCES.formRespondentUrl) event.preventDefault();
                   }}
-                  className={`px-3 py-1.5 rounded-lg bg-sky-900 hover:bg-sky-800 text-white text-xs font-semibold flex items-center gap-1 ${stageOneRespondentUrl ? '' : 'pointer-events-none opacity-50'}`}
+                  className={`px-3 py-1.5 rounded-lg bg-sky-900 hover:bg-sky-800 text-white text-xs font-semibold flex items-center gap-1 ${GOOGLE_SIPANDU_RESOURCES.formRespondentUrl ? '' : 'pointer-events-none opacity-50'}`}
                 >
                   <ExternalLink className="w-3.5 h-3.5" />
-                  <span>Buka Form</span>
+                  <span>Buka Google Form Utama</span>
                 </a>
               </div>
             </div>
@@ -718,12 +714,12 @@ export const AsesmenView: React.FC<AsesmenViewProps> = ({
               </p>
             )}
 
-            {/* Barcode untuk asesmen tahap awal dengan logo SIPANDU tepat di dalamnya */}
+            {/* Barcode generik Google Form utama; tautan personal dipraisi dikirim dari baris database */}
             <div className="pt-2">
               <SipanduQRCode
-                value={stageOneRespondentUrl}
+                value={GOOGLE_SIPANDU_RESOURCES.formRespondentUrl}
                 size={220}
-                label="Barcode Kuisioner Google Form (Logo SIPANDU)"
+                label="Barcode Google Form Utama"
                 downloadFileName="barcode-asesmen-google-form.png"
               />
             </div>
