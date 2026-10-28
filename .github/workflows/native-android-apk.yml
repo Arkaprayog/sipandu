@@ -89,7 +89,7 @@ jobs:
           print("Updated compile SDK in:", ", ".join(sdk_changed))
           PY
           grep -R -n '8.9.1' android --include='*.gradle' --include='*.gradle.kts'
-          grep -E 'compileSdk(Version)? 36' android/app/build.gradle
+          grep -R -E 'compileSdkVersion =? 36|compileSdk 36' android --include='*.gradle' --include='*.gradle.kts'
 
       - name: Configure native Google API scope callback
         run: python3 scripts/patch_native_google_login.py
