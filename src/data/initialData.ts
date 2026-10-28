@@ -11,9 +11,10 @@ export const initialProfileUser: ProfileUser = {
 };
 
 export const initialAppSettings: AppSettings = {
-  googleFormTahapAwalUrl: '', // Stage-one Form must be configured separately from the primary Google Form.
+  googleFormTahapAwalUrl: '', // Legacy key; stage-one respondents use the native SIPANDU form.
   googleFormTahapLanjutanUrl: '',
   googleFormTahapLanjutanIdEntry: '',
+  googleFormUtamaPrefillEntries: { namaLengkap: '', nik: '', usia: '', jenisKelamin: '', kotaDomisili: '', noHpWa: '', idPpks: '' },
   googleFormKesehatanMentalUrl: '',
   googleSpreadsheetUrl: '', // Writable database target stays separate from the Google Forms response spreadsheet.
   // Read-only Google Forms response sheet; live sync runs every five minutes after Google authorization.

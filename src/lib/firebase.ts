@@ -5,6 +5,8 @@ import {
   getFirestore,
   doc,
   collection,
+  addDoc,
+  serverTimestamp,
   getDocs,
   onSnapshot,
   setDoc,
@@ -29,7 +31,7 @@ import {
   getIdTokenResult,
 } from 'firebase/auth';
 import firebaseConfig from '../../firebase-applet-config.json';
-import { PPKSRecord } from '../types';
+import { PPKSRecord, StageOneIntakePayload } from '../types';
 import { deduplicatePPKSRecords, EXPECTED_REAL_PPKS_COUNT, parsePPKSTimestamp } from './ppksData';
 import { isLegacySamplePPKS } from '../data/initialData';
 import { GOOGLE_WORKSPACE_EMAIL } from './googleSIPANDUResources';
@@ -659,6 +661,86 @@ export async function fetchPPKSFromFirestore(): Promise<PPKSRecord[]> {
   } catch (error) {
     throw new Error(describeConnectionError(error));
   }
+}
+
+
+function toStageOneIntakeFields(record: StageOneIntakePayload | PPKSRecord) {
+  return {
+    timestamp: String(record.timestamp || ''),
+    namaLengkap: String(record.namaLengkap || '').trim(),
+    nik: String(record.nik || '').replace(/\D/g, ''),
+    usia: Number(record.usia),
+    jenisKelamin: record.jenisKelamin,
+    kotaDomisili: String(record.kotaDomisili || '').trim(),
+    alamatLengkap: String(record.alamatLengkap || ''),
+    noHpWa: String(record.noHpWa || '').trim(),
+    jenisBantuan: String(record.jenisBantuan || ''),
+    intervensiMental: String(record.intervensiMental || ''),
+    desil: Number(record.desil || 0),
+    fotoDiri: String(record.fotoDiri || ''),
+    fotoKtp: String(record.fotoKtp || ''),
+    statusAsesmen: 'Tahap Awal' as const,
+  };
+}
+
+/** Public, write-only intake used by the separate respondent-facing SIPANDU form. */
+export async function submitPublicStageOneIntake(payload: StageOneIntakePayload): Promise<string> {
+  const normalized = toStageOneIntakeFields(payload);
+  if (!normalized.namaLengkap || !/^\d{16}$/.test(normalized.nik)) {
+    throw new Error('Nama lengkap dan NIK 16 digit wajib diisi dengan benar.');
+  }
+  if (!Number.isInteger(normalized.usia) || normalized.usia < 1 || normalized.usia > 100) {
+    throw new Error('Usia responden harus berupa angka 1–100 tahun.');
+  }
+  try {
+    const created = await addDoc(collection(db, 'stageOneIntake'), {
+      ...normalized,
+      source: 'respondent-link',
+      submittedAt: serverTimestamp(),
+    });
+    return created.id;
+  } catch (error) {
+    throw new Error('Gagal menyimpan ke Database PPKS Asesmen Tahap Awal. Pastikan aturan Firestore terbaru telah diterapkan dan koneksi tersedia. ' + describeConnectionError(error));
+  }
+}
+
+/** Staff-entered stage-one forms are saved to the same dedicated intake feed. */
+export async function saveStageOneIntakeToFirestore(record: PPKSRecord): Promise<void> {
+  const user = auth.currentUser;
+  if (!user) throw new Error('Belum masuk ke Firebase Auth sebagai petugas SIPANDU.');
+  const token = await getIdTokenResult(user);
+  const role = token.claims.role;
+  if (role !== 'owner' && role !== 'supervisor') {
+    throw new Error('Penyimpanan asesmen tahap awal ke cloud memerlukan peran owner atau supervisor.');
+  }
+  try {
+    await setDoc(doc(db, 'stageOneIntake', record.id), {
+      ...toStageOneIntakeFields(record),
+      source: 'staff-entry',
+      submittedAt: serverTimestamp(),
+    }, { merge: true });
+  } catch (error) {
+    throw new Error('Gagal menyimpan asesmen tahap awal: ' + describeConnectionError(error));
+  }
+}
+
+/** Read the dedicated native-SIPANDU intake feed; clients without staff auth cannot read it. */
+export function subscribeToStageOneIntake(
+  onRecords: (records: PPKSRecord[]) => void,
+  onError: (error: Error) => void,
+): () => void {
+  if (!auth.currentUser) throw new Error('Sesi SIPANDU belum aktif untuk membaca database asesmen tahap awal.');
+  return onSnapshot(
+    collection(db, 'stageOneIntake'),
+    (snapshot) => {
+      const records = snapshot.docs
+        .map((document) => ({ ...document.data(), id: document.id }) as PPKSRecord)
+        .filter((record) => record.statusAsesmen === 'Tahap Awal' && !isLegacySamplePPKS(record))
+        .sort((left, right) => (Date.parse(String(right.timestamp || '')) || 0) - (Date.parse(String(left.timestamp || '')) || 0));
+      onRecords(records);
+    },
+    (error) => onError(new Error(describeConnectionError(error))),
+  );
 }
 
 /**

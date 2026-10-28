@@ -116,8 +116,38 @@ export interface SuratRecord {
   deskripsi: string;
 }
 
+export interface StageOneIntakePayload {
+  timestamp: string;
+  namaLengkap: string;
+  nik: string;
+  usia: number;
+  jenisKelamin: 'Laki-laki' | 'Perempuan';
+  kotaDomisili: string;
+  alamatLengkap: string;
+  noHpWa: string;
+  jenisBantuan: string;
+  intervensiMental: string;
+  desil: number;
+  fotoDiri: string;
+  fotoKtp: string;
+  statusAsesmen: 'Tahap Awal';
+}
+
+export interface GoogleFormUtamaPrefillEntries {
+  namaLengkap: string;
+  nik: string;
+  usia: string;
+  jenisKelamin: string;
+  kotaDomisili: string;
+  noHpWa: string;
+  idPpks: string;
+}
+
 export interface AppSettings {
+  /** Legacy setting; Stage-One respondents use a native SIPANDU page. */
   googleFormTahapAwalUrl: string;
+  /** Actual numeric entry IDs from Google Forms prefilled-link generation; never guessed. */
+  googleFormUtamaPrefillEntries?: GoogleFormUtamaPrefillEntries;
   /** Separate follow-up form used by per-PPKS WhatsApp links. */
   googleFormTahapLanjutanUrl?: string;
   /** Google Forms entry number of the prefilled "ID PPKS" question. */
