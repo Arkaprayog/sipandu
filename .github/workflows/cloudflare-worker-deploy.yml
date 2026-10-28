@@ -10,6 +10,10 @@ on:
       - "package.json"
       - "bun.lock"
       - "vite.config.ts"
+      - "scripts/generate_pwa_icons.py"
+      - "scripts/optimize-login-background.mjs"
+      - "scripts/generate_surat_tugas_template.py"
+      - "scripts/verify-dist.mjs"
       - "wrangler.jsonc"
       - ".github/workflows/cloudflare-worker-deploy.yml"
 
