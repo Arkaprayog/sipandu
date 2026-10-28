@@ -57,7 +57,7 @@ export const Header: React.FC<HeaderProps> = ({
   return (
     <header className="relative w-full bg-[#112214]/90 border-b border-rose-500/35 shadow-[0_4px_20px_rgba(244,63,94,0.12)] px-4 py-3 md:px-6 select-none z-20">
       <div className="max-w-7xl mx-auto flex flex-col md:flex-row md:items-center justify-between gap-4">
-        {/* Left Side: Greeting & Profil Owner */}
+        {/* Left Side: Greeting & Profil Pengguna */}
         <div className="flex flex-col gap-2">
           {/* Greeting hanya menampilkan salam dan jam live; email akun tidak ditampilkan. */}
           <div className="flex items-center gap-2 text-xs md:text-sm">
@@ -67,7 +67,7 @@ export const Header: React.FC<HeaderProps> = ({
             </span>
           </div>
 
-          {/* Profil Owner (di pojok kiri atas) */}
+          {/* Profil pengguna (di pojok kiri atas) */}
           <div className="flex items-start gap-3.5 pt-1">
             {/* Foto profil + tombol Edit di bawahnya */}
             <div className="flex flex-col items-center">
@@ -98,13 +98,15 @@ export const Header: React.FC<HeaderProps> = ({
               </button>
             </div>
 
-            {/* Di samping foto profil (sejajar): Nama owner, NIP, Unit Kerja */}
+            {/* Di samping foto profil (sejajar): nama, NIP, dan unit kerja */}
             <div className="flex flex-col justify-center text-left space-y-0.5">
               <h2 className="text-sm md:text-base font-bold text-white tracking-wide flex items-center gap-2">
                 <span>{profile.nama}</span>
-                <span className="text-[10px] bg-emerald-800/80 text-emerald-200 px-2 py-0.5 rounded border border-emerald-500/40">
-                  {profile.jabatan.includes('Pendamping') ? 'Pendamping' : 'Owner'}
-                </span>
+                {profile.jabatan.includes('Pendamping') && (
+                  <span className="text-[10px] bg-emerald-800/80 text-emerald-200 px-2 py-0.5 rounded border border-emerald-500/40">
+                    Pendamping
+                  </span>
+                )}
               </h2>
               <p className="text-xs text-neutral-300 font-mono tracking-tight">
                 <span className="text-sky-300/80">NIP:</span> {profile.nip}
