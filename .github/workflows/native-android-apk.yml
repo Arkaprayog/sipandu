@@ -97,6 +97,23 @@ jobs:
       - name: Copy web assets into Android app
         run: npx cap sync android
 
+      - name: Verify native biometric plugin registration
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          registries = list(Path("android").rglob("capacitor.plugins.json"))
+          if not registries:
+              raise SystemExit("Capacitor plugin registry was not generated after sync.")
+          content = "\n".join(path.read_text() for path in registries)
+          if "BiometricAuthPlugin" not in content and "capacitor-biometric-auth" not in content.lower() and "biometricauth" not in content.lower():
+              raise SystemExit("Native biometric plugin is not registered in the generated Android project.")
+          print("Native biometric plugin registration verified:", ", ".join(map(str, registries)))
+          PY
+
       - name: Apply official launcher icon from public/uploads
         shell: bash
         run: |
