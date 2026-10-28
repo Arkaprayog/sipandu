@@ -255,8 +255,8 @@ function describeGoogleOAuthError(error: unknown): string {
   if (code.includes('auth/unauthorized-domain')) {
     const hostname = typeof window !== 'undefined' ? window.location.hostname : '';
     const projectId = auth.app.options.projectId || 'gen-lang-client-0197631978';
-    const localHostHint = hostname === 'localhost' || hostname === '127.0.0.1' ? `Untuk aplikasi debug lokal, tambahkan tepat ${hostname} pada Authorized domains (tanpa port atau path). ` : '';
-    return `Domain aplikasi "${hostname || '(tidak terdeteksi)'}" belum diizinkan pada Firebase Authentication. Buka https://console.firebase.google.com/project/${projectId}/authentication/settings, lalu tambahkan hostname aplikasi pada Authorized domains (tanpa https://, port, atau path). ${localHostHint}Untuk GitHub Pages, tambahkan arkaprayog.github.io; untuk Vercel, tambahkan sipandu-sigma.vercel.app. Simpan perubahan, muat ulang aplikasi, lalu ulangi login.`;
+    const domainHint = hostname ? `Tambahkan domain persis ini: ${hostname} (hanya hostname, tanpa https://, port, atau path). ` : 'Tambahkan hostname yang terlihat di bilah alamat aplikasi, tanpa https://, port, atau path. ';
+    return `Domain aplikasi "${hostname || '(tidak terdeteksi)'}" belum diizinkan pada Firebase Authentication. Ini adalah pengaturan Firebase, bukan Cloudflare. Buka https://console.firebase.google.com/project/${projectId}/authentication/settings, cari Authorized domains, lalu pilih Add domain. ${domainHint}Simpan perubahan, tunggu sebentar, muat ulang aplikasi, lalu ulangi login. Jika masih gagal, pastikan Google aktif di Authentication > Sign-in method.`;
   }
   if (code.includes('auth/operation-not-allowed')) {
     return 'Penyedia Google belum diaktifkan pada Firebase Authentication. Admin harus membuka Firebase Console > Authentication > Sign-in method dan mengaktifkan Google pada proyek gen-lang-client-0197631978.';
