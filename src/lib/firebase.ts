@@ -358,7 +358,7 @@ export const googleSignIn = async (): Promise<{
         },
       });
 
-      let nativeResponse: any;
+      let nativeResponse: any = null;
       for (let attempt = 0; attempt < 2; attempt += 1) {
         try {
           if (!nativeGoogleSignInInitialized) await initializeNativeGoogleSignIn();
