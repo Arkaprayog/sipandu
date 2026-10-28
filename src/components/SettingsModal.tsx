@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Capacitor } from '@capacitor/core';
-import { enableBiometricLock, disableBiometricLock, isBiometricLockEnabled } from '../lib/biometricLock';
+import { enableBiometricLock, disableBiometricLock, isBiometricLockEnabled, getBiometricDiagnostics } from '../lib/biometricLock';
 import { AppSettings } from '../types';
 import { toGoogleFormsRespondentUrl } from '../utils/helpers';
 import { getGoogleFormIdFromUrl, isPrimaryGoogleFormUrl } from '../lib/googleSIPANDUResources';
@@ -28,6 +28,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [saved, setSaved] = useState(false);
   const [biometricEnabled, setBiometricEnabled] = useState(() => isBiometricLockEnabled());
   const [biometricBusy, setBiometricBusy] = useState(false);
+  const [biometricDiagnostics, setBiometricDiagnostics] = useState('Belum diperiksa.');
   const [editingUrlKeys, setEditingUrlKeys] = useState<Set<UrlSettingKey>>(() => new Set(
     URL_SETTING_KEYS.filter((key) => !String(settings[key] || '').trim())
   ));
@@ -36,12 +37,38 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   // Refresh the form from persisted settings instead of retaining stale component state.
   useEffect(() => {
     if (!isOpen) return;
+    let active = true;
     setFormData(settings);
     setBiometricEnabled(isBiometricLockEnabled());
     setSaved(false);
     setEditingUrlKeys(new Set(
       URL_SETTING_KEYS.filter((key) => !String(settings[key] || '').trim())
     ));
+
+    if (!Capacitor.isNativePlatform()) {
+      setBiometricDiagnostics('PWA web/iOS: belum didukung oleh versi ini. Plugin native tidak membuka prompt sidik jari/Face ID di browser; diperlukan alur passkey/WebAuthn dan validasi server.');
+    } else {
+      setBiometricDiagnostics('Memeriksa kemampuan biometrik perangkat…');
+      void getBiometricDiagnostics()
+        .then((result) => {
+          if (!active) return;
+          const types = result.biometryTypes.length ? result.biometryTypes.join(', ') : result.biometryType;
+          const detail = result.isAvailable
+            ? ('Tersedia untuk aplikasi: ' + result.biometryType + '. Keamanan perangkat: ' + (result.deviceIsSecure ? 'PIN/pola/kata sandi aktif' : 'kredensial perangkat belum terdeteksi') + '.')
+            : ('Tidak tersedia untuk aplikasi. ' + (result.reason || 'Daftarkan biometrik dan kunci layar pada pengaturan perangkat.'));
+          const hardware = types && types !== 'none' ? (' Jenis yang dilaporkan perangkat: ' + types + '.') : '';
+          const code = result.code ? (' Kode: ' + result.code + '.') : '';
+          const strong = result.strongBiometryIsAvailable ? ' Biometrik kuat tersedia.' : '';
+          setBiometricDiagnostics(detail + hardware + strong + code);
+        })
+        .catch((error: unknown) => {
+          if (!active) return;
+          const message = error instanceof Error ? error.message : String(error);
+          setBiometricDiagnostics('Pemeriksaan gagal: ' + message);
+        });
+    }
+
+    return () => { active = false; };
   }, [isOpen, settings]);
 
   const isUrlLocked = (key: UrlSettingKey) =>
@@ -121,7 +148,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4 text-xs">
-          {Capacitor.isNativePlatform() && (
+          {Capacitor.isNativePlatform() ? (
             <section className="rounded-xl border border-emerald-400/25 bg-emerald-950/30 p-3">
               <div className="flex items-start gap-3">
                 <div className="rounded-lg bg-emerald-400/10 p-2 text-emerald-200">
@@ -133,6 +160,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     {biometricEnabled
                       ? 'Aktif. SIPANDU meminta verifikasi saat dibuka kembali atau setelah kembali dari latar belakang.'
                       : 'Aktifkan verifikasi biometrik perangkat untuk mengunci akses ke aplikasi native.'}
+                  </p>
+                  <p role="status" className="mt-2 rounded-lg border border-white/10 bg-black/25 p-2 text-[10px] leading-relaxed text-neutral-300">
+                    Diagnostik perangkat: {biometricDiagnostics}
                   </p>
                   <button
                     type="button"
@@ -147,9 +177,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       try {
                         await enableBiometricLock();
                         setBiometricEnabled(true);
+                        setBiometricDiagnostics('Verifikasi biometrik berhasil. SIPANDU meminta biometrik saat aplikasi dibuka kembali atau kembali dari latar belakang.');
                         window.alert('Pengaman biometrik SIPANDU berhasil diaktifkan.');
                       } catch (error) {
-                        window.alert(error instanceof Error ? error.message : 'Pengaman biometrik gagal diaktifkan.');
+                        const message = error instanceof Error ? error.message : 'Pengaman biometrik gagal diaktifkan.';
+                        setBiometricDiagnostics('Aktivasi gagal: ' + message);
+                        window.alert(message);
                       } finally {
                         setBiometricBusy(false);
                       }
@@ -158,6 +191,23 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   >
                     {biometricBusy ? 'Memeriksa perangkat…' : biometricEnabled ? 'Nonaktifkan pengaman' : 'Aktifkan pengaman biometrik'}
                   </button>
+                </div>
+              </div>
+            </section>
+          ) : (
+            <section className="rounded-xl border border-amber-300/25 bg-amber-950/25 p-3">
+              <div className="flex items-start gap-3">
+                <div className="rounded-lg bg-amber-300/10 p-2 text-amber-200">
+                  <Fingerprint className="h-5 w-5" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="font-bold text-amber-100">Status biometrik PWA web / iOS</p>
+                  <p className="mt-1 leading-relaxed text-neutral-300">
+                    Pengaman sidik jari/Face ID belum diimplementasikan pada PWA ini. Plugin Capacitor hanya mengakses prompt native, bukan sensor biometrik sungguhan dari browser. Dukungan passkey/WebAuthn perlu alur tantangan dan verifikasi sisi server sebelum diaktifkan.
+                  </p>
+                  <p role="status" className="mt-2 text-[10px] leading-relaxed text-amber-100">
+                    Diagnostik: fitur belum tersedia di build PWA ini; ini bukan kegagalan sensor perangkat.
+                  </p>
                 </div>
               </div>
             </section>
