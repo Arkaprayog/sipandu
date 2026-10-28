@@ -1,4 +1,4 @@
-import { PPKSRecord } from '../types';
+import { GoogleFormUtamaPrefillEntries, PPKSRecord } from '../types';
 
 /**
  * Returns greeting based on hour (WIB)
@@ -94,6 +94,64 @@ export function buildGoogleFormsPrefilledUrl(
 }
 
 /**
+ * Build a prefilled respondent URL for the primary Google Form from native
+ * SIPANDU stage-one data. Google entry IDs must come from a real prefilled link.
+ */
+export function buildGoogleFormUtamaPrefilledUrl(
+  formUrl: string | undefined,
+  entries: GoogleFormUtamaPrefillEntries | undefined,
+  ppks: PPKSRecord,
+): string {
+  const baseUrl = toGoogleFormsRespondentUrl(formUrl);
+  if (!baseUrl) throw new Error('URL Google Form utama belum valid.');
+  const url = new URL(baseUrl);
+  if (url.hostname !== 'docs.google.com') {
+    throw new Error('Gunakan URL Google Forms lengkap untuk membuat tautan dengan data terisi otomatis.');
+  }
+  const mapping = entries || {
+    namaLengkap: '', nik: '', usia: '', jenisKelamin: '',
+    kotaDomisili: '', noHpWa: '', idPpks: '',
+  };
+  const getEntryId = (value: string | undefined) => String(value || '').trim().replace(/^entry\./i, '');
+  const idEntry = getEntryId(mapping.idPpks);
+  if (!/^\d+$/.test(idEntry)) {
+    throw new Error('Entry ID pertanyaan “ID PPKS” belum diatur. Ambil ID asli melalui Google Forms → menu tiga titik → Dapatkan link yang telah diisi sebelumnya.');
+  }
+
+  const values: Array<[keyof GoogleFormUtamaPrefillEntries, string]> = [
+    ['namaLengkap', String(ppks.namaLengkap || '')],
+    ['nik', String(ppks.nik || '')],
+    ['usia', ppks.usia > 0 ? String(ppks.usia) : ''],
+    ['jenisKelamin', String(ppks.jenisKelamin || '')],
+    ['kotaDomisili', String(ppks.kotaDomisili || '')],
+    ['noHpWa', String(ppks.noHpWa || '')],
+    ['idPpks', String(ppks.id || '')],
+  ];
+  const identityFieldCount = values.filter(([key, value]) =>
+    key !== 'idPpks' && value.trim() && /^\d+$/.test(getEntryId(mapping[key]))
+  ).length;
+  if (identityFieldCount === 0) {
+    throw new Error('Entry ID untuk setidaknya satu pertanyaan identitas belum dikonfigurasi. SIPANDU tidak menebak ID pertanyaan Google Forms.');
+  }
+
+  const configuredIds = values
+    .map(([key]) => getEntryId(mapping[key]))
+    .filter((entryId) => /^\d+$/.test(entryId));
+  if (new Set(configuredIds).size !== configuredIds.length) {
+    throw new Error('Ada entry ID Google Form yang sama dipakai pada beberapa pertanyaan. Periksa pemetaan entry ID.');
+  }
+
+  url.searchParams.set('usp', 'pp_url');
+  url.searchParams.set(`entry.${idEntry}`, String(ppks.id));
+  for (const [key, value] of values) {
+    if (key === 'idPpks' || !value.trim()) continue;
+    const entryId = getEntryId(mapping[key]);
+    if (/^\d+$/.test(entryId)) url.searchParams.set(`entry.${entryId}`, value);
+  }
+  return url.toString();
+}
+
+/**
  * Builds the official WhatsApp message for follow-up assessment.
  * It deliberately does not reuse the stage-one form URL: stage two must have
  * its own configured form URL and prefill field so each link is tied to one PPKS.
@@ -107,6 +165,7 @@ export function buildWhatsAppMessage(
     googleFormTahapLanjutanUrl?: string;
     googleFormTahapLanjutanIdEntry?: string;
     googleFormKesehatanMentalUrl?: string;
+    googleFormUtamaPrefilledUrl?: string;
   } = {}
 ): string {
   const waktu = getWaktuGreeting().toLowerCase();
@@ -119,16 +178,20 @@ export function buildWhatsAppMessage(
     'Direktorat Rehabilitasi Sosial Korban Penyalahgunaan Narkoba & ODHIV';
 
   let continuationText = '';
-  try {
-    const continuationUrl = buildGoogleFormsPrefilledUrl(
-      settings.googleFormTahapLanjutanUrl,
-      settings.googleFormTahapLanjutanIdEntry,
-      ppks.id
-    );
-    continuationText = `Silakan lanjutkan asesmen melalui tautan khusus untuk data Anda berikut. ID referensi PPKS: ${ppks.id}. ID ini sudah diisi otomatis pada formulir; mohon jangan mengubahnya.\n${continuationUrl}`;
-  } catch {
-    continuationText =
-      'Tautan asesmen lanjutan belum dapat dibuat karena pengaturan formulir lanjutan SIPANDU belum lengkap. Petugas akan mengirimkan tautan yang benar setelah konfigurasi selesai.';
+  if (settings.googleFormUtamaPrefilledUrl) {
+    continuationText = `Silakan lanjutkan asesmen pada Google Form utama melalui tautan khusus berikut. Data tahap awal telah dipraisi sejauh pertanyaan yang dipetakan. ID referensi PPKS: ${ppks.id}; mohon jangan mengubah kolom ID PPKS.\n${settings.googleFormUtamaPrefilledUrl}`;
+  } else {
+    try {
+      const continuationUrl = buildGoogleFormsPrefilledUrl(
+        settings.googleFormTahapLanjutanUrl,
+        settings.googleFormTahapLanjutanIdEntry,
+        ppks.id
+      );
+      continuationText = `Silakan lanjutkan asesmen melalui tautan khusus untuk data Anda berikut. ID referensi PPKS: ${ppks.id}. ID ini sudah diisi otomatis pada formulir; mohon jangan mengubahnya.\n${continuationUrl}`;
+    } catch {
+      continuationText =
+        'Tautan asesmen lanjutan belum dapat dibuat karena pengaturan formulir SIPANDU belum lengkap. Petugas akan mengirimkan tautan yang benar setelah konfigurasi selesai.';
+    }
   }
 
   const mentalHealthUrl = toGoogleFormsRespondentUrl(settings.googleFormKesehatanMentalUrl);
