@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Generate Android launcher resources from SIPANDU's approved uploaded icon.
 
-Prefer public/uploads/sipandu-odhiv-logo.webp. If that optional legacy
+Prefer public/uploads/sipandu-logo.png. If that optional legacy
 filename has been removed, use public/uploads/sipandu-logo.png as fallback.
 No alternate/drawn logo is substituted. The source artwork is resized with
 LANCZOS and kept fully visible; classic and adaptive Android launcher assets
@@ -25,7 +25,7 @@ except ImportError:
 
 ROOT = Path(__file__).resolve().parents[1]
 LOGO_CANDIDATES = (
-    ROOT / "public" / "uploads" / "sipandu-odhiv-logo.webp",
+    ROOT / "public" / "uploads" / "sipandu-logo.png",
     ROOT / "public" / "uploads" / "sipandu-logo.png",
 )
 SOURCE = next((candidate for candidate in LOGO_CANDIDATES if candidate.is_file()), LOGO_CANDIDATES[0])
