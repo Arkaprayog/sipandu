@@ -72,6 +72,21 @@ jobs:
           npx cap add android
           npx cap sync android
 
+      - name: Apply exact uploaded SIPANDU launcher icon
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/generate_android_icons.py
+          ICON="android/app/src/main/res/mipmap-xxxhdpi-v4/ic_launcher.png"
+          FOREGROUND="android/app/src/main/res/mipmap-xxxhdpi-v4/ic_launcher_foreground.png"
+          ADAPTIVE="android/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml"
+          test -s "$ICON"
+          test -s "$FOREGROUND"
+          test -s "$ADAPTIVE"
+          grep -q 'ic_launcher_foreground' "$ADAPTIVE"
+          sha256sum "$ICON" "$FOREGROUND"
+          echo "Verified Android launcher assets use public/uploads/sipandu-logo.png."
+
       - name: Configure native Google Workspace scope authorization
         run: python3 scripts/patch_native_google_login.py
 
