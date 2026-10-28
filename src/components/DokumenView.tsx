@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ProfileUser, SuratRecord } from '../types';
 import { initialSuratList } from '../data/initialData';
 import { KemensosLogo } from './KemensosLogo';
@@ -28,6 +28,34 @@ export const DokumenView: React.FC<DokumenViewProps> = ({ profile }) => {
   const [selectedSurat, setSelectedSurat] = useState<SuratRecord | null>(initialSuratList[0] || null);
   const [showCreateModal, setShowCreateModal] = useState<boolean>(false);
   const [showUploadModal, setShowUploadModal] = useState<boolean>(false);
+
+  useEffect(() => {
+    const onAppNavigateBack = (event: Event) => {
+      const detail = (event as CustomEvent<{ handled: boolean }>).detail;
+      if (!detail || detail.handled) return;
+      if (showCreateModal) {
+        setShowCreateModal(false);
+        detail.handled = true;
+        return;
+      }
+      if (showUploadModal) {
+        setShowUploadModal(false);
+        detail.handled = true;
+        return;
+      }
+      if (activeTab !== 'surat-tugas') {
+        setActiveTab('surat-tugas');
+        detail.handled = true;
+        return;
+      }
+      if (selectedSurat) {
+        setSelectedSurat(null);
+        detail.handled = true;
+      }
+    };
+    window.addEventListener('sipandu:navigate-back', onAppNavigateBack);
+    return () => window.removeEventListener('sipandu:navigate-back', onAppNavigateBack);
+  }, [activeTab, selectedSurat, showCreateModal, showUploadModal]);
 
   // New surat state
   const [newNomorSurat, setNewNomorSurat] = useState<string>(
