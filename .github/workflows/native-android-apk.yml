@@ -95,6 +95,9 @@ jobs:
       - name: Copy web assets into Android app
         run: npx cap sync android
 
+      - name: Patch Google Sign-In error 16 recovery
+        run: python3 scripts/patch_social_login_reauth.py
+
       - name: Verify native biometric plugin registration
         shell: bash
         run: |
