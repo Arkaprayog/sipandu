@@ -1,105 +1,186 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { onAuthStateChanged } from 'firebase/auth';
 import { Capacitor } from '@capacitor/core';
-import { Fingerprint, ShieldCheck, RefreshCw } from 'lucide-react';
+import { Fingerprint, ShieldCheck, RefreshCw, KeyRound, LockKeyhole, ScanFace } from 'lucide-react';
 import { auth } from '../lib/firebase';
-import { authenticateBiometricLock, isBiometricLockEnabled } from '../lib/biometricLock';
+import {
+  authenticateBiometricLock,
+  isAppPinConfigured,
+  isBiometricLockEnabled,
+  isQuickUnlockEnabled,
+  verifyAppPin,
+} from '../lib/biometricLock';
 
 export const BiometricGate: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  // Start locked when the preference is enabled so authenticated content cannot flash
-  // between the first render and Firebase's asynchronous auth-state callback.
-  const [locked, setLocked] = useState(() => Capacitor.isNativePlatform() && isBiometricLockEnabled());
+  // Do not flash the dashboard between Firebase's session restore and the local unlock gate.
+  const [locked, setLocked] = useState(() => isQuickUnlockEnabled());
   const [error, setError] = useState('');
   const [checking, setChecking] = useState(false);
-  const lastAuthenticatedUid = useRef<string | null>(null);
-  const attemptInFlight = useRef(false);
-  const wasBackgrounded = useRef(false);
+  const [userId, setUserId] = useState('');
+  const [hasPin, setHasPin] = useState(false);
+  const [hasBiometric, setHasBiometric] = useState(false);
+  const [pin, setPin] = useState('');
 
-  const authenticate = useCallback(async (uid: string) => {
-    if (attemptInFlight.current) return;
-    attemptInFlight.current = true;
-    setLocked(true);
+  const unlock = useCallback(() => {
+    setLocked(false);
+    setError('');
+    setPin('');
+  }, []);
+
+  const authenticate = useCallback(async () => {
+    if (!userId || checking) return;
+    if (!hasBiometric || !isBiometricLockEnabled(userId)) {
+      setError('Biometrik belum diaktifkan untuk akun ini. Gunakan PIN SIPANDU atau aktifkan biometrik pada Pengaturan.');
+      return;
+    }
     setChecking(true);
     setError('');
     try {
-      await authenticateBiometricLock();
-      lastAuthenticatedUid.current = uid;
-      setLocked(false);
+      await authenticateBiometricLock(userId);
+      unlock();
     } catch (e) {
-      const message = e instanceof Error ? e.message : 'Verifikasi biometrik gagal. Coba lagi.';
-      const code = e && typeof e === 'object' && 'code' in e
-        ? String((e as { code?: unknown }).code || '')
-        : '';
-      setError(code ? `${message} (kode diagnostik: ${code})` : message);
-      setLocked(true);
+      const message = e instanceof Error ? e.message : 'Verifikasi biometrik gagal. Silakan coba lagi.';
+      setError(message + (hasPin ? ' Anda dapat mencoba biometrik lagi atau menggunakan PIN SIPANDU.' : ' Coba lagi atau masuk dengan email dan kata sandi jika sesi akun telah berakhir.'));
     } finally {
       setChecking(false);
-      attemptInFlight.current = false;
     }
+  }, [checking, hasBiometric, hasPin, unlock, userId]);
+
+  const authenticatePin = useCallback(async () => {
+    if (!userId || checking) return;
+    setChecking(true);
+    setError('');
+    try {
+      const result = await verifyAppPin(pin, userId);
+      if (result.ok) {
+        unlock();
+      } else {
+        setError(result.message || 'PIN belum dapat diverifikasi.');
+        if (result.retryAfterMs) setPin('');
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'PIN belum dapat diverifikasi.');
+    } finally {
+      setChecking(false);
+    }
+  }, [checking, pin, unlock, userId]);
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      setError('');
+      setPin('');
+      if (!user) {
+        setUserId('');
+        setHasPin(false);
+        setHasBiometric(false);
+        setLocked(false);
+        return;
+      }
+
+      setUserId(user.uid);
+      const configured = isQuickUnlockEnabled(user.uid);
+      setHasPin(isAppPinConfigured(user.uid));
+      setHasBiometric(isBiometricLockEnabled(user.uid));
+      // A live Firebase session is preserved; quick unlock is a local privacy gate
+      // in front of it. A PIN/passkey never creates or replaces a Firebase session.
+      setLocked(configured);
+    });
+    return unsubscribe;
   }, []);
 
   useEffect(() => {
-    if (!Capacitor.isNativePlatform()) return;
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      if (!user) {
-        lastAuthenticatedUid.current = null;
-        setLocked(false);
-        setError('');
-        return;
-      }
-      if (!isBiometricLockEnabled()) {
-        lastAuthenticatedUid.current = user.uid;
-        setLocked(false);
-        return;
-      }
-      if (lastAuthenticatedUid.current !== user.uid) void authenticate(user.uid);
-    });
-
     const onVisibilityChange = () => {
       if (document.visibilityState === 'hidden') {
-        if (auth.currentUser && isBiometricLockEnabled()) {
-          // Mask sensitive content before the OS app switcher/background snapshot.
-          wasBackgrounded.current = true;
+        if (auth.currentUser && isQuickUnlockEnabled(auth.currentUser.uid)) {
           setLocked(true);
           setError('');
-        }
-        return;
-      }
-      if (document.visibilityState === 'visible' && wasBackgrounded.current) {
-        wasBackgrounded.current = false;
-        const user = auth.currentUser;
-        if (user && isBiometricLockEnabled()) {
-          lastAuthenticatedUid.current = null;
-          void authenticate(user.uid);
+          setPin('');
         }
       }
     };
     document.addEventListener('visibilitychange', onVisibilityChange);
-    return () => {
-      unsubscribe();
-      document.removeEventListener('visibilitychange', onVisibilityChange);
-    };
-  }, [authenticate]);
+    return () => document.removeEventListener('visibilitychange', onVisibilityChange);
+  }, []);
 
-  if (!Capacitor.isNativePlatform() || !locked) return <>{children}</>;
+  if (!locked) return <>{children}</>;
+
+  const isWebPwa = !Capacitor.isNativePlatform();
+  const biometricLabel = isWebPwa ? 'Masuk dengan biometrik perangkat' : 'Masuk dengan Face Unlock / Fingerprint';
 
   return (
-    <main className="fixed inset-0 z-[9999] grid min-h-screen place-items-center bg-[#07120b] px-6 py-10 text-white">
-      <section className="w-full max-w-sm rounded-3xl border border-white/15 bg-white/[0.06] p-7 text-center shadow-2xl">
+    <main className="fixed inset-0 z-[9999] grid min-h-screen place-items-center overflow-y-auto bg-[#07120b] px-5 py-8 text-white">
+      <section className="w-full max-w-sm rounded-3xl border border-emerald-300/20 bg-[#0e1d11] p-6 text-center shadow-2xl">
         <div className="mx-auto mb-4 grid h-16 w-16 place-items-center rounded-2xl border border-emerald-300/30 bg-emerald-300/10">
-          <Fingerprint className="h-9 w-9 text-emerald-200" />
+          <ShieldCheck className="h-9 w-9 text-emerald-200" />
         </div>
         <div className="mb-2 flex items-center justify-center gap-2 text-emerald-100">
-          <ShieldCheck className="h-4 w-4" />
-          <span className="text-xs font-bold uppercase tracking-[0.18em]">SIPANDU ODHIV Aman</span>
+          <LockKeyhole className="h-4 w-4" />
+          <span className="text-xs font-bold uppercase tracking-[0.16em]">SIPANDU ODHIV Aman</span>
         </div>
-        <h1 className="text-xl font-extrabold">Verifikasi biometrik</h1>
-        <p className="mt-2 text-sm leading-relaxed text-white/70">Buka aplikasi menggunakan sidik jari, face unlock, atau PIN perangkat sebagai cadangan.</p>
-        {error && <p role="alert" className="mt-4 rounded-xl border border-red-300/25 bg-red-500/10 p-3 text-xs text-red-100">{error}</p>}
-        <button type="button" disabled={checking} onClick={() => auth.currentUser && void authenticate(auth.currentUser.uid)} className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-300 px-4 py-3 font-bold text-emerald-950 disabled:opacity-60">
-          {checking ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Fingerprint className="h-4 w-4" />}
-          {checking ? 'Memverifikasi…' : 'Buka dengan biometrik'}
-        </button>
+        <h1 className="text-xl font-extrabold">Masuk SIPANDU</h1>
+        <p className="mt-2 text-sm leading-relaxed text-white/70">
+          Sesi akun Anda masih tersimpan. Verifikasi perangkat untuk membuka dashboard tanpa mengetik email dan kata sandi lagi.
+        </p>
+
+        {hasBiometric && (
+          <button
+            type="button"
+            disabled={checking}
+            onClick={() => void authenticate()}
+            className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-300 px-4 py-3 text-sm font-bold text-emerald-950 transition hover:bg-emerald-200 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {checking ? <RefreshCw className="h-4 w-4 animate-spin" /> : isWebPwa ? <ScanFace className="h-4 w-4" /> : <Fingerprint className="h-4 w-4" />}
+            {checking ? 'Memverifikasi…' : biometricLabel}
+          </button>
+        )}
+
+        {hasPin && (
+          <form
+            className="mt-5 border-t border-white/10 pt-5 text-left"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void authenticatePin();
+            }}
+          >
+            <label htmlFor="sipandu-quick-pin" className="mb-2 block text-xs font-semibold text-emerald-100">
+              PIN SIPANDU (4 angka)
+            </label>
+            <input
+              id="sipandu-quick-pin"
+              type="password"
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              pattern="[0-9]{4}"
+              maxLength={4}
+              value={pin}
+              onChange={(event) => setPin(event.target.value.replace(/\D/g, '').slice(0, 4))}
+              placeholder="••••"
+              aria-label="PIN SIPANDU empat angka"
+              className="w-full rounded-xl border border-white/15 bg-black/35 px-4 py-3 text-center text-2xl tracking-[0.55em] text-white outline-none focus:border-emerald-300 focus:ring-2 focus:ring-emerald-300/20"
+              required
+            />
+            <button
+              type="submit"
+              disabled={checking || pin.length !== 4}
+              className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-xl border border-sky-300/30 bg-sky-300/10 px-4 py-3 text-sm font-bold text-sky-100 transition hover:bg-sky-300/20 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {checking ? <RefreshCw className="h-4 w-4 animate-spin" /> : <KeyRound className="h-4 w-4" />}
+              {checking ? 'Memeriksa PIN…' : 'Masuk dengan PIN'}
+            </button>
+          </form>
+        )}
+
+        {error && <p role="alert" className="mt-4 rounded-xl border border-red-300/25 bg-red-500/10 p-3 text-left text-xs leading-relaxed text-red-100">{error}</p>}
+
+        {!hasBiometric && !hasPin && (
+          <p className="mt-4 rounded-xl border border-amber-300/25 bg-amber-500/10 p-3 text-left text-xs text-amber-100">
+            Metode buka cepat belum tersedia untuk akun ini. Masuk dengan akun SIPANDU dan daftarkan PIN atau biometrik pada Pengaturan.
+          </p>
+        )}
+
+        <p className="mt-5 text-[10px] leading-relaxed text-white/45">
+          Jika sesi Firebase telah berakhir, Anda tetap perlu masuk kembali dengan akun resmi. PIN dan biometrik hanya membuka kunci lokal, bukan menggantikan izin akun SIPANDU.
+        </p>
       </section>
     </main>
   );
