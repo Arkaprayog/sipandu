@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { PPKSRecord, AppSettings } from '../types';
 import { SipanduQRCode } from './SipanduQRCode';
 import { GOOGLE_SIPANDU_RESOURCES } from '../lib/googleSIPANDUResources';
@@ -45,6 +45,24 @@ export const AsesmenView: React.FC<AsesmenViewProps> = ({
   settings,
 }) => {
   const [activeSubMenu, setActiveSubMenu] = useState<AsesmenSubMenu>('tahap-awal');
+
+  useEffect(() => {
+    const onAppNavigateBack = (event: Event) => {
+      const detail = (event as CustomEvent<{ handled: boolean }>).detail;
+      if (!detail || detail.handled) return;
+      if (isCameraOpen) {
+        setIsCameraOpen(false);
+        detail.handled = true;
+        return;
+      }
+      if (activeSubMenu !== 'tahap-awal') {
+        setActiveSubMenu('tahap-awal');
+        detail.handled = true;
+      }
+    };
+    window.addEventListener('sipandu:navigate-back', onAppNavigateBack);
+    return () => window.removeEventListener('sipandu:navigate-back', onAppNavigateBack);
+  }, [activeSubMenu, isCameraOpen]);
 
   // Form states for ASESMEN TAHAP AWAL
   const [namaLengkap, setNamaLengkap] = useState<string>('');
