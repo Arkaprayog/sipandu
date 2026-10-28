@@ -15,6 +15,7 @@ on:
       - "scripts/generate_android_icons.py"
       - "scripts/verify-dist.mjs"
       - "scripts/verify_apk_native_google_bridge.py"
+      - "scripts/patch_social_login_reauth.py"
       - ".github/workflows/android-apk.yml"
 
 permissions:
@@ -71,6 +72,9 @@ jobs:
         run: |
           npx cap add android
           npx cap sync android
+
+      - name: Patch Google Sign-In error 16 recovery
+        run: python3 scripts/patch_social_login_reauth.py
 
       - name: Apply exact uploaded SIPANDU launcher icon
         shell: bash
