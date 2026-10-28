@@ -2,15 +2,8 @@ import React, { useState } from 'react';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import { auth } from '../lib/firebase';
 import { Lock, User, Eye, EyeOff, ArrowRight } from 'lucide-react';
+import { publicAssetUrl } from '../lib/publicAssets';
 
-// Public assets are served from the repository subpath on GitHub Pages and from
-// the site root on the custom domain. Avoid relative URLs: they can resolve
-// against the current route and silently break images.
-const ASSET_BASE = typeof window !== 'undefined' && window.location.hostname === 'arkaprayog.github.io'
-  ? '/sipandu/'
-  : '/';
-const publicAssetUrl = (filename: string) =>
-  `${ASSET_BASE}uploads/${filename.split('/').map((part) => encodeURIComponent(part)).join('/')}`;
 const LOGIN_TIMEOUT_MS = 18_000;
 
 interface LoginPageProps {
@@ -23,12 +16,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
   const [showPassword, setShowPassword] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [logoIndex, setLogoIndex] = useState(0);
   const [logoFailed, setLogoFailed] = useState(false);
-  const logoSources = [
-    publicAssetUrl('Logo Kemensos Hadir.png'),
-    publicAssetUrl('Logo Kemensos.png'),
-  ];
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -97,17 +85,15 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
         <section className="w-full rounded-2xl border border-white/80 bg-white/[0.24] p-5 shadow-[0_12px_40px_rgba(20,40,35,0.18),inset_0_1px_0_rgba(255,255,255,0.65)] backdrop-blur-[14px]">
           <div className="mb-4 flex flex-col items-center text-center">
             {logoFailed ? (
-              <p className="mb-2 text-sm font-semibold text-black">Kementerian Sosial RI</p>
+              <p className="mb-2 text-sm font-semibold text-black">Logo SIPANDU ODHIV tidak dapat dimuat</p>
             ) : (
               <img
-                src={logoSources[logoIndex]}
-                alt="Logo resmi Kementerian Sosial RI"
+                src={publicAssetUrl('uploads/sipandu-logo.png')}
+                alt="Logo resmi SIPANDU ODHIV"
                 className="mb-2 h-auto w-[135px] max-w-full object-contain"
                 loading="eager"
-                onError={() => {
-                  if (logoIndex < logoSources.length - 1) setLogoIndex(logoIndex + 1);
-                  else setLogoFailed(true);
-                }}
+                decoding="async"
+                onError={() => setLogoFailed(true)}
               />
             )}
             <h1 className="text-xl font-extrabold leading-tight tracking-wide text-black">
