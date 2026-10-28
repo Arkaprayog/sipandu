@@ -1,8 +1,10 @@
 import React, { useEffect, useState } from 'react';
+import { Capacitor } from '@capacitor/core';
+import { enableBiometricLock, disableBiometricLock, isBiometricLockEnabled } from '../lib/biometricLock';
 import { AppSettings } from '../types';
 import { toGoogleFormsRespondentUrl } from '../utils/helpers';
 import { getGoogleFormIdFromUrl, isPrimaryGoogleFormUrl } from '../lib/googleSIPANDUResources';
-import { Settings, Save, Check, Link, FileSpreadsheet, FolderGit2, X, Lock, Unlock } from 'lucide-react';
+import { Settings, Save, Check, Link, FileSpreadsheet, FolderGit2, X, Lock, Unlock, Fingerprint, ShieldCheck } from 'lucide-react';
 
 type UrlSettingKey = 'googleFormTahapAwalUrl' | 'googleFormTahapLanjutanUrl' | 'googleSpreadsheetUrl' | 'googleDriveFolderUrl';
 const URL_SETTING_KEYS: UrlSettingKey[] = [
@@ -24,6 +26,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 }) => {
   const [formData, setFormData] = useState<AppSettings>(settings);
   const [saved, setSaved] = useState(false);
+  const [biometricEnabled, setBiometricEnabled] = useState(() => isBiometricLockEnabled());
+  const [biometricBusy, setBiometricBusy] = useState(false);
   const [editingUrlKeys, setEditingUrlKeys] = useState<Set<UrlSettingKey>>(() => new Set(
     URL_SETTING_KEYS.filter((key) => !String(settings[key] || '').trim())
   ));
@@ -33,6 +37,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   useEffect(() => {
     if (!isOpen) return;
     setFormData(settings);
+    setBiometricEnabled(isBiometricLockEnabled());
     setSaved(false);
     setEditingUrlKeys(new Set(
       URL_SETTING_KEYS.filter((key) => !String(settings[key] || '').trim())
@@ -116,6 +121,47 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4 text-xs">
+          {Capacitor.isNativePlatform() && (
+            <section className="rounded-xl border border-emerald-400/25 bg-emerald-950/30 p-3">
+              <div className="flex items-start gap-3">
+                <div className="rounded-lg bg-emerald-400/10 p-2 text-emerald-200">
+                  {biometricEnabled ? <ShieldCheck className="h-5 w-5" /> : <Fingerprint className="h-5 w-5" />}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="font-bold text-emerald-100">Pengaman sidik jari &amp; face unlock</p>
+                  <p className="mt-1 leading-relaxed text-neutral-300">
+                    {biometricEnabled
+                      ? 'Aktif. SIPANDU meminta verifikasi saat dibuka kembali atau setelah kembali dari latar belakang.'
+                      : 'Aktifkan verifikasi biometrik perangkat untuk mengunci akses ke aplikasi native.'}
+                  </p>
+                  <button
+                    type="button"
+                    disabled={biometricBusy}
+                    onClick={async () => {
+                      if (biometricEnabled) {
+                        disableBiometricLock();
+                        setBiometricEnabled(false);
+                        return;
+                      }
+                      setBiometricBusy(true);
+                      try {
+                        await enableBiometricLock();
+                        setBiometricEnabled(true);
+                        window.alert('Pengaman biometrik SIPANDU berhasil diaktifkan.');
+                      } catch (error) {
+                        window.alert(error instanceof Error ? error.message : 'Pengaman biometrik gagal diaktifkan.');
+                      } finally {
+                        setBiometricBusy(false);
+                      }
+                    }}
+                    className="mt-3 inline-flex items-center gap-2 rounded-lg border border-emerald-300/30 bg-emerald-300 px-3 py-2 font-bold text-emerald-950 disabled:opacity-60"
+                  >
+                    {biometricBusy ? 'Memeriksa perangkat…' : biometricEnabled ? 'Nonaktifkan pengaman' : 'Aktifkan pengaman biometrik'}
+                  </button>
+                </div>
+              </div>
+            </section>
+          )}
           <p className="rounded-lg border border-emerald-500/20 bg-emerald-950/35 px-3 py-2 text-[10px] leading-relaxed text-emerald-100">
             URL yang telah tersimpan dikunci agar tidak terhapus tanpa sengaja. Tekan <strong>Ubah</strong> pada URL yang ingin diganti, lalu tekan <strong>Simpan Konfigurasi</strong> untuk menyimpan dan menguncinya kembali.
           </p>

@@ -39,13 +39,13 @@ jobs:
         with:
           # The legacy "tools" SDK package is no longer published; requesting it
           # makes sdkmanager exit with "Failed to find package 'tools'".
-          packages: platform-tools platforms;android-35 build-tools;35.0.0
+          packages: platform-tools platforms;android-36 build-tools;36.0.0
 
       - name: Install web dependencies
         run: bun install --frozen-lockfile
 
       - name: Install Capacitor Android and native Google Sign-In tooling
-        run: npm install --save --package-lock=false --legacy-peer-deps @capacitor/core@7 @capacitor/cli@7 @capacitor/android@7 @capgo/capacitor-social-login@7
+        run: npm install --save --package-lock=false --legacy-peer-deps @capacitor/core@7 @capacitor/cli@7 @capacitor/android@7 @capgo/capacitor-social-login@7 @capacitor/local-notifications@7 @aparajita/capacitor-biometric-auth@7
 
       - name: Run application tests
         run: bun run test
@@ -58,6 +58,38 @@ jobs:
 
       - name: Generate native Android project
         run: npx cap add android
+
+      - name: Upgrade generated Android build tools for AndroidX Browser
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          gradle_files = list(Path("android").rglob("*.gradle")) + list(Path("android").rglob("*.gradle.kts"))
+          changed = []
+          agp_changed = []
+          sdk_changed = []
+          for path in gradle_files:
+              content = path.read_text()
+              updated = content.replace("8.7.2", "8.9.1")
+              if updated != content:
+                  agp_changed.append(str(path))
+              updated = updated.replace("compileSdkVersion = 35", "compileSdkVersion = 36")
+              updated = updated.replace("compileSdkVersion 35", "compileSdkVersion 36")
+              updated = updated.replace("compileSdk 35", "compileSdk 36")
+              if updated != content and str(path) not in sdk_changed:
+                  sdk_changed.append(str(path))
+              if updated != content:
+                  path.write_text(updated)
+          if not agp_changed:
+              raise SystemExit("Could not locate generated Android Gradle Plugin 8.7.2 declaration")
+          if not sdk_changed:
+              raise SystemExit("Could not locate generated compile SDK 35 declaration")
+          print("Updated AGP in:", ", ".join(agp_changed))
+          print("Updated compile SDK in:", ", ".join(sdk_changed))
+          PY
+          grep -R -n '8.9.1' android --include='*.gradle' --include='*.gradle.kts'
+          grep -R -E 'compileSdkVersion =? 36|compileSdk 36' android --include='*.gradle' --include='*.gradle.kts'
 
       - name: Configure native Google API scope callback
         run: python3 scripts/patch_native_google_login.py
@@ -115,14 +147,14 @@ jobs:
         run: |
           set -euo pipefail
           APK="android/app/build/outputs/apk/debug/app-debug.apk"
-          AAPT="$ANDROID_HOME/build-tools/35.0.0/aapt"
+          AAPT="$ANDROID_HOME/build-tools/36.0.0/aapt"
           test -s "$APK"
           test -x "$AAPT"
           "$AAPT" dump badging "$APK" | tee /tmp/sipandu-apk-badging.txt
           grep -q "package: name='id.my.sipandu.odhiv'" /tmp/sipandu-apk-badging.txt
           grep -q "versionName='$(node -p "require('./package.json').version")'" /tmp/sipandu-apk-badging.txt
           grep -q "application-label:'SIPANDU ODHIV'" /tmp/sipandu-apk-badging.txt
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$APK" | tee /tmp/sipandu-debug-signing.txt
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs "$APK" | tee /tmp/sipandu-debug-signing.txt
           grep -E "Signer #1 certificate SHA-1 digest|Signer #1 certificate SHA-256 digest" /tmp/sipandu-debug-signing.txt
 
       - name: Upload installable APK
@@ -218,8 +250,8 @@ jobs:
         run: |
           set -euo pipefail
           APK="android/app/build/outputs/apk/release/app-release.apk"
-          AAPT="$ANDROID_HOME/build-tools/35.0.0/aapt"
-          APKSIGNER="$ANDROID_HOME/build-tools/35.0.0/apksigner"
+          AAPT="$ANDROID_HOME/build-tools/36.0.0/aapt"
+          APKSIGNER="$ANDROID_HOME/build-tools/36.0.0/apksigner"
           test -s "$APK"
           "$AAPT" dump badging "$APK" | tee /tmp/sipandu-release-badging.txt
           grep -q "package: name='id.my.sipandu.odhiv'" /tmp/sipandu-release-badging.txt
