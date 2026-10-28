@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Generate PWA/iOS icons from the official uploaded SIPANDU ODHIV logo.
 
-Source of truth: public/uploads/sipandu-odhiv-logo.webp.
+Source of truth: public/uploads/sipandu-logo.png.
 The uploaded composition is preserved; only pixel dimensions are resized.
 """
 from pathlib import Path
@@ -21,7 +21,7 @@ except ImportError:
     from PIL import Image, ImageOps
 
 ROOT = Path(__file__).resolve().parents[1]
-SOURCE = ROOT / "public" / "uploads" / "sipandu-odhiv-logo.webp"
+SOURCE = ROOT / "public" / "uploads" / "sipandu-logo.png"
 OUTPUT = ROOT / "public" / "icons"
 ICONS = {
     "sipandu-icon-192.png": 192,
