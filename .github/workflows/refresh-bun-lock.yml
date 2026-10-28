@@ -53,4 +53,8 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add bun.lock
           git commit -m "fix(deps): sync Bun lockfile with package.json"
+          # A normal application commit may land while dependency resolution runs.
+          # Rebase our lockfile-only commit onto the latest main instead of losing the update.
+          git fetch origin main
+          git rebase origin/main
           git push origin HEAD:main
