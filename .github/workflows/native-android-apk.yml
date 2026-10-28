@@ -215,7 +215,7 @@ jobs:
           s = p.read_text()
 
           def block_span(source, keyword, search_from=0):
-              match = re.search(r"(?m)^\\s*" + re.escape(keyword) + r"\\s*\\{", source[search_from:])
+              match = re.search(r"(?m)^\s*" + re.escape(keyword) + r"\s*\{", source[search_from:])
               if not match:
                   return None
               begin = search_from + match.start()
