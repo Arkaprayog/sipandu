@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Capacitor } from '@capacitor/core';
-import { enableBiometricLock, disableBiometricLock, isBiometricLockEnabled, getBiometricDiagnostics } from '../lib/biometricLock';
+import { enableBiometricLock, disableBiometricLock, isBiometricLockEnabled, getBiometricDiagnostics, isAppPinConfigured, setAppPin } from '../lib/biometricLock';
+import { auth } from '../lib/firebase';
 import { AppSettings, GoogleFormUtamaPrefillEntries } from '../types';
 import { toGoogleFormsRespondentUrl } from '../utils/helpers';
 import { getGoogleFormIdFromUrl } from '../lib/googleSIPANDUResources';
@@ -29,6 +30,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [biometricEnabled, setBiometricEnabled] = useState(() => isBiometricLockEnabled());
   const [biometricBusy, setBiometricBusy] = useState(false);
   const [biometricDiagnostics, setBiometricDiagnostics] = useState('Belum diperiksa.');
+  const [pinConfigured, setPinConfigured] = useState(() => isAppPinConfigured(auth.currentUser?.uid));
+  const [newPin, setNewPin] = useState('');
+  const [confirmPin, setConfirmPin] = useState('');
+  const [pinBusy, setPinBusy] = useState(false);
+  const [pinMessage, setPinMessage] = useState('');
   const [editingUrlKeys, setEditingUrlKeys] = useState<Set<UrlSettingKey>>(() => new Set(
     URL_SETTING_KEYS.filter((key) => !String(settings[key] || '').trim())
   ));
@@ -45,28 +51,30 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       URL_SETTING_KEYS.filter((key) => !String(settings[key] || '').trim())
     ));
 
-    if (!Capacitor.isNativePlatform()) {
-      setBiometricDiagnostics('PWA web/iOS: belum didukung oleh versi ini. Plugin native tidak membuka prompt sidik jari/Face ID di browser; diperlukan alur passkey/WebAuthn dan validasi server.');
-    } else {
-      setBiometricDiagnostics('Memeriksa kemampuan biometrik perangkat…');
-      void getBiometricDiagnostics()
-        .then((result) => {
-          if (!active) return;
-          const types = result.biometryTypes.length ? result.biometryTypes.join(', ') : result.biometryType;
-          const detail = result.isAvailable
-            ? ('Tersedia untuk aplikasi: ' + result.biometryType + '. Keamanan perangkat: ' + (result.deviceIsSecure ? 'PIN/pola/kata sandi aktif' : 'kredensial perangkat belum terdeteksi') + '.')
-            : ('Tidak tersedia untuk aplikasi. ' + (result.reason || 'Daftarkan biometrik dan kunci layar pada pengaturan perangkat.'));
-          const hardware = types && types !== 'none' ? (' Jenis yang dilaporkan perangkat: ' + types + '.') : '';
-          const code = result.code ? (' Kode: ' + result.code + '.') : '';
-          const strong = result.strongBiometryIsAvailable ? ' Biometrik kuat tersedia.' : '';
-          setBiometricDiagnostics(detail + hardware + strong + code);
-        })
-        .catch((error: unknown) => {
-          if (!active) return;
-          const message = error instanceof Error ? error.message : String(error);
-          setBiometricDiagnostics('Pemeriksaan gagal: ' + message);
-        });
-    }
+    setPinConfigured(isAppPinConfigured(auth.currentUser?.uid));
+    setNewPin('');
+    setConfirmPin('');
+    setPinMessage('');
+    setBiometricDiagnostics('Memeriksa dukungan biometrik perangkat…');
+    void getBiometricDiagnostics()
+      .then((result) => {
+        if (!active) return;
+        const detail = result.isAvailable
+          ? Capacitor.isNativePlatform()
+            ? ('Autentikasi native tersedia: ' + result.biometryType + '. Keamanan perangkat: ' + (result.deviceIsSecure ? 'kredensial perangkat aktif' : 'kredensial perangkat belum terdeteksi') + '.')
+            : 'Browser mendukung autentikator platform WebAuthn melalui HTTPS. Sistem akan memilih cara verifikasi perangkat yang tersedia.'
+          : ('Belum tersedia. ' + (result.reason || 'Periksa kunci layar dan dukungan autentikator perangkat.'));
+        const types = result.biometryTypes.length ? result.biometryTypes.join(', ') : result.biometryType;
+        const hardware = types && types !== 'none' ? (' Jenis yang dilaporkan: ' + types + '.') : '';
+        const code = result.code ? (' Kode: ' + result.code + '.') : '';
+        const strong = result.strongBiometryIsAvailable ? ' Verifikasi biometrik kuat tersedia.' : '';
+        setBiometricDiagnostics(detail + hardware + strong + code);
+      })
+      .catch((error: unknown) => {
+        if (!active) return;
+        const message = error instanceof Error ? error.message : String(error);
+        setBiometricDiagnostics('Pemeriksaan gagal: ' + message);
+      });
 
     return () => { active = false; };
   }, [isOpen, settings]);
@@ -144,70 +152,134 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4 text-xs">
-          {Capacitor.isNativePlatform() ? (
-            <section className="rounded-xl border border-emerald-400/25 bg-emerald-950/30 p-3">
-              <div className="flex items-start gap-3">
-                <div className="rounded-lg bg-emerald-400/10 p-2 text-emerald-200">
-                  {biometricEnabled ? <ShieldCheck className="h-5 w-5" /> : <Fingerprint className="h-5 w-5" />}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="font-bold text-emerald-100">Pengaman sidik jari &amp; face unlock</p>
-                  <p className="mt-1 leading-relaxed text-neutral-300">
-                    {biometricEnabled
-                      ? 'Aktif. SIPANDU meminta verifikasi saat dibuka kembali atau setelah kembali dari latar belakang.'
-                      : 'Aktifkan verifikasi biometrik perangkat untuk mengunci akses ke aplikasi native.'}
-                  </p>
-                  <p role="status" className="mt-2 rounded-lg border border-white/10 bg-black/25 p-2 text-[10px] leading-relaxed text-neutral-300">
-                    Diagnostik perangkat: {biometricDiagnostics}
-                  </p>
-                  <button
-                    type="button"
-                    disabled={biometricBusy}
-                    onClick={async () => {
-                      if (biometricEnabled) {
-                        disableBiometricLock();
-                        setBiometricEnabled(false);
-                        return;
-                      }
-                      setBiometricBusy(true);
-                      try {
-                        await enableBiometricLock();
-                        setBiometricEnabled(true);
-                        setBiometricDiagnostics('Verifikasi biometrik berhasil. SIPANDU meminta biometrik saat aplikasi dibuka kembali atau kembali dari latar belakang.');
-                        window.alert('Pengaman biometrik SIPANDU berhasil diaktifkan.');
-                      } catch (error) {
-                        const message = error instanceof Error ? error.message : 'Pengaman biometrik gagal diaktifkan.';
-                        setBiometricDiagnostics('Aktivasi gagal: ' + message);
-                        window.alert(message);
-                      } finally {
-                        setBiometricBusy(false);
-                      }
-                    }}
-                    className="mt-3 inline-flex items-center gap-2 rounded-lg border border-emerald-300/30 bg-emerald-300 px-3 py-2 font-bold text-emerald-950 disabled:opacity-60"
-                  >
-                    {biometricBusy ? 'Memeriksa perangkat…' : biometricEnabled ? 'Nonaktifkan pengaman' : 'Aktifkan pengaman biometrik'}
-                  </button>
-                </div>
+          <section className="rounded-xl border border-emerald-400/25 bg-emerald-950/30 p-3">
+            <div className="flex items-start gap-3">
+              <div className="rounded-lg bg-emerald-400/10 p-2 text-emerald-200">
+                {biometricEnabled ? <ShieldCheck className="h-5 w-5" /> : <Fingerprint className="h-5 w-5" />}
               </div>
-            </section>
-          ) : (
-            <section className="rounded-xl border border-amber-300/25 bg-amber-950/25 p-3">
-              <div className="flex items-start gap-3">
-                <div className="rounded-lg bg-amber-300/10 p-2 text-amber-200">
-                  <Fingerprint className="h-5 w-5" />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="font-bold text-amber-100">Status biometrik PWA web / iOS</p>
-                  <p className="mt-1 leading-relaxed text-neutral-300">
-                    Pengaman sidik jari/Face ID belum diimplementasikan pada PWA ini. Plugin Capacitor hanya mengakses prompt native, bukan sensor biometrik sungguhan dari browser. Dukungan passkey/WebAuthn perlu alur tantangan dan verifikasi sisi server sebelum diaktifkan.
-                  </p>
-                  <p role="status" className="mt-2 text-[10px] leading-relaxed text-amber-100">
-                    Diagnostik: fitur belum tersedia di build PWA ini; ini bukan kegagalan sensor perangkat.
-                  </p>
-                </div>
+              <div className="min-w-0 flex-1">
+                <p className="font-bold text-emerald-100">Fingerprint &amp; Face Unlock</p>
+                <p className="mt-1 leading-relaxed text-neutral-300">
+                  {Capacitor.isNativePlatform()
+                    ? 'APK Android memakai autentikasi biometrik sistem. Perangkat menentukan apakah wajah atau sidik jari yang dapat digunakan; SIPANDU tidak membaca atau menyimpan data biometrik.'
+                    : 'PWA memakai WebAuthn/autentikator platform browser melalui HTTPS. Pilihan wajah, sidik jari, atau verifikasi perangkat bergantung pada browser dan perangkat.'}
+                </p>
+                <p role="status" className="mt-2 rounded-lg border border-white/10 bg-black/25 p-2 text-[10px] leading-relaxed text-neutral-300">
+                  Diagnostik perangkat: {biometricDiagnostics}
+                </p>
+                {isBiometricLockEnabled(auth.currentUser?.uid) && (
+                  <p className="mt-2 text-[10px] font-semibold text-emerald-200">Autentikasi biometrik terdaftar untuk akun ini.</p>
+                )}
+                <button
+                  type="button"
+                  disabled={biometricBusy}
+                  onClick={async () => {
+                    if (biometricEnabled) {
+                      disableBiometricLock();
+                      setBiometricEnabled(false);
+                      setBiometricDiagnostics('Pengaman biometrik dinonaktifkan. PIN tetap tersedia jika sudah terdaftar.');
+                      return;
+                    }
+                    const user = auth.currentUser;
+                    if (!user) {
+                      setBiometricDiagnostics('Sesi akun tidak ditemukan. Masuk kembali terlebih dahulu.');
+                      return;
+                    }
+                    setBiometricBusy(true);
+                    try {
+                      await enableBiometricLock({ uid: user.uid, email: user.email, displayName: user.displayName });
+                      setBiometricEnabled(true);
+                      setBiometricDiagnostics('Pendaftaran berhasil. Saat masuk berikutnya, verifikasi perangkat akan tersedia sebagai pilihan utama.');
+                      window.alert('Pengaman biometrik SIPANDU berhasil didaftarkan.');
+                    } catch (error) {
+                      const message = error instanceof Error ? error.message : 'Pendaftaran biometrik gagal.';
+                      setBiometricDiagnostics('Pendaftaran gagal: ' + message);
+                    } finally {
+                      setBiometricBusy(false);
+                    }
+                  }}
+                  className="mt-3 inline-flex items-center gap-2 rounded-lg border border-emerald-300/30 bg-emerald-300 px-3 py-2 font-bold text-emerald-950 disabled:opacity-60"
+                >
+                  {biometricBusy ? 'Memeriksa perangkat…' : biometricEnabled ? 'Nonaktifkan biometrik' : 'Daftarkan biometrik perangkat'}
+                </button>
               </div>
-            </section>
-          )}
+            </div>
+          </section>
+
+          <section className="rounded-xl border border-sky-300/25 bg-sky-950/20 p-3">
+            <div className="flex items-start gap-3">
+              <div className="rounded-lg bg-sky-300/10 p-2 text-sky-100">
+                <Lock className="h-5 w-5" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="font-bold text-sky-100">PIN SIPANDU (4 angka)</p>
+                <p className="mt-1 leading-relaxed text-neutral-300">
+                  {pinConfigured
+                    ? 'PIN sudah terdaftar untuk akun ini. Isi PIN baru dan konfirmasikan untuk menggantinya.'
+                    : 'Buat PIN 4 angka sebagai metode cadangan jika biometrik tidak berhasil atau tidak tersedia.'}
+                </p>
+                <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  <label className="text-[10px] font-semibold text-sky-100">
+                    PIN baru
+                    <input
+                      type="password"
+                      inputMode="numeric"
+                      autoComplete="new-password"
+                      pattern="[0-9]{4}"
+                      maxLength={4}
+                      value={newPin}
+                      onChange={(event) => setNewPin(event.target.value.replace(/\D/g, '').slice(0, 4))}
+                      placeholder="4 angka"
+                      className="mt-1 w-full rounded-lg border border-sky-300/20 bg-black/40 px-3 py-2.5 text-center text-base tracking-[0.3em] text-white outline-none focus:border-sky-300"
+                    />
+                  </label>
+                  <label className="text-[10px] font-semibold text-sky-100">
+                    Konfirmasi PIN
+                    <input
+                      type="password"
+                      inputMode="numeric"
+                      autoComplete="new-password"
+                      pattern="[0-9]{4}"
+                      maxLength={4}
+                      value={confirmPin}
+                      onChange={(event) => setConfirmPin(event.target.value.replace(/\D/g, '').slice(0, 4))}
+                      placeholder="Ulangi PIN"
+                      className="mt-1 w-full rounded-lg border border-sky-300/20 bg-black/40 px-3 py-2.5 text-center text-base tracking-[0.3em] text-white outline-none focus:border-sky-300"
+                    />
+                  </label>
+                </div>
+                {pinMessage && <p role="status" className="mt-2 rounded-lg border border-white/10 bg-black/25 p-2 text-[10px] leading-relaxed text-sky-100">{pinMessage}</p>}
+                <button
+                  type="button"
+                  disabled={pinBusy || newPin.length !== 4 || confirmPin.length !== 4}
+                  onClick={async () => {
+                    const user = auth.currentUser;
+                    if (!user) {
+                      setPinMessage('Sesi akun tidak ditemukan. Masuk kembali terlebih dahulu.');
+                      return;
+                    }
+                    setPinBusy(true);
+                    setPinMessage('');
+                    try {
+                      await setAppPin(newPin, confirmPin, user.uid);
+                      setPinConfigured(true);
+                      setNewPin('');
+                      setConfirmPin('');
+                      setPinMessage('PIN berhasil disimpan. Saat membuka SIPANDU kembali, PIN dapat digunakan sebagai cadangan.');
+                    } catch (error) {
+                      setPinMessage(error instanceof Error ? error.message : 'PIN belum berhasil disimpan.');
+                    } finally {
+                      setPinBusy(false);
+                    }
+                  }}
+                  className="mt-3 inline-flex items-center gap-2 rounded-lg border border-sky-300/30 bg-sky-300 px-3 py-2 font-bold text-sky-950 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {pinBusy ? 'Menyimpan PIN…' : pinConfigured ? 'Ganti PIN' : 'Daftarkan PIN'}
+                </button>
+              </div>
+            </div>
+          </section>
+
           <p className="rounded-lg border border-emerald-500/20 bg-emerald-950/35 px-3 py-2 text-[10px] leading-relaxed text-emerald-100">
             URL yang telah tersimpan dikunci agar tidak terhapus tanpa sengaja. Tekan <strong>Ubah</strong> pada URL yang ingin diganti, lalu tekan <strong>Simpan Konfigurasi</strong> untuk menyimpan dan menguncinya kembali.
           </p>
