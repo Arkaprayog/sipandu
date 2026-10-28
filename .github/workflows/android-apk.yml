@@ -11,6 +11,7 @@ on:
       - "capacitor.config.json"
       - "vite.config.ts"
       - "scripts/patch_native_google_login.py"
+      - "scripts/verify_apk_native_google_bridge.py"
       - ".github/workflows/android-apk.yml"
 
 permissions:
@@ -187,6 +188,12 @@ jobs:
           APK="android/app/build/outputs/apk/release/app-release.apk"
           test -s "$APK"
           "$ANDROID_HOME/build-tools/$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -1)/apksigner" verify --verbose --print-certs "$APK"
+
+      - name: Verify Google scope bridge inside signed APK bytecode
+        run: |
+          APK="android/app/build/outputs/apk/release/app-release.apk"
+          test -s "$APK"
+          python3 scripts/verify_apk_native_google_bridge.py "$APK"
 
       - name: Upload private release APK
         uses: actions/upload-artifact@v4
