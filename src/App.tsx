@@ -1,4 +1,6 @@
-import React, { lazy, Suspense, useState, useEffect, useRef } from 'react';
+import React, { lazy, Suspense, useState, useEffect, useRef, useCallback } from 'react';
+import { Capacitor } from '@capacitor/core';
+import { App as CapacitorApp } from '@capacitor/app';
 import { PPKSRecord, ProfileUser, AppSettings } from './types';
 import { importLazyModuleWithRecovery } from './lib/lazyImportRecovery';
 import { initialPPKSList, initialProfileUser, initialAppSettings, isLegacySamplePPKS } from './data/initialData';
@@ -279,8 +281,14 @@ function StaffApp() {
     };
   }, []);
 
-  // App Navigation tab
+  // App navigation history: every selected bottom-nav menu pushes the previous menu.
   const [activeTab, setActiveTab] = useState<TabKey>('beranda');
+  const tabNavigationHistoryRef = useRef<TabKey[]>([]);
+  const navigateToTab = useCallback((tab: TabKey) => {
+    if (tab === activeTab) return;
+    tabNavigationHistoryRef.current = [...tabNavigationHistoryRef.current, activeTab].slice(-40);
+    setActiveTab(tab);
+  }, [activeTab]);
 
   // Defer parsing potentially large PPKS/photo data until Firebase confirms authorization.
   const [ppksList, setPpksList] = useState<PPKSRecord[]>([]);
@@ -316,6 +324,124 @@ function StaffApp() {
   const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState<boolean>(false);
   const [isGoogleWorkspaceOpen, setIsGoogleWorkspaceOpen] = useState<boolean>(false);
+
+  const lastBackNavigationAtRef = useRef(0);
+  const handleBackNavigation = useCallback(() => {
+    // Debounce duplicate events when an Android edge gesture and touch swipe arrive together.
+    const now = Date.now();
+    if (now - lastBackNavigationAtRef.current < 220) return;
+    lastBackNavigationAtRef.current = now;
+    if (!isAuthenticated) return;
+
+    // Close the top-most application modal before moving between menus.
+    if (isGoogleWorkspaceOpen) { setIsGoogleWorkspaceOpen(false); return; }
+    if (isNotificationsOpen) { setIsNotificationsOpen(false); return; }
+    if (isSettingsOpen) { setIsSettingsOpen(false); return; }
+    if (isEditProfileOpen) { setIsEditProfileOpen(false); return; }
+
+    // Give the active view the first chance to leave its own submenu, preview, or dialog.
+    const backDetail = { handled: false };
+    window.dispatchEvent(new CustomEvent('sipandu:navigate-back', { detail: backDetail }));
+    if (backDetail.handled) return;
+
+    const previousTab = tabNavigationHistoryRef.current.pop();
+    if (previousTab) {
+      setActiveTab(previousTab);
+      return;
+    }
+
+    // No older menu? Return to Beranda, and remain on Beranda rather than exiting the app.
+    if (activeTab !== 'beranda') setActiveTab('beranda');
+  }, [
+    activeTab,
+    isAuthenticated,
+    isEditProfileOpen,
+    isGoogleWorkspaceOpen,
+    isNotificationsOpen,
+    isSettingsOpen,
+  ]);
+
+  const backNavigationHandlerRef = useRef(handleBackNavigation);
+  backNavigationHandlerRef.current = handleBackNavigation;
+
+  // Keep browser/PWA Back inside SIPANDU. Capacitor's hardware Back uses the same handler.
+  useEffect(() => {
+    const guardState = () => ({
+      ...(window.history.state && typeof window.history.state === 'object' ? window.history.state : {}),
+      __sipanduNavigationGuard: true,
+    });
+    window.history.pushState(guardState(), '', window.location.href);
+    const onPopState = () => {
+      backNavigationHandlerRef.current();
+      window.history.pushState(guardState(), '', window.location.href);
+    };
+    window.addEventListener('popstate', onPopState);
+    return () => window.removeEventListener('popstate', onPopState);
+  }, []);
+
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform()) return;
+    let mounted = true;
+    let listener: { remove: () => Promise<void> } | undefined;
+    void CapacitorApp.addListener('backButton', () => {
+      backNavigationHandlerRef.current();
+    }).then((handle) => {
+      if (mounted) listener = handle;
+      else void handle.remove();
+    }).catch((error: unknown) => {
+      console.warn('SIPANDU could not register Android Back navigation:', error);
+    });
+    return () => {
+      mounted = false;
+      if (listener) void listener.remove();
+    };
+  }, []);
+
+  // Both left and right swipes go back one menu. Form controls and horizontal carousels
+  // are excluded so swiping never submits a form or fights a field/scroll container.
+  useEffect(() => {
+    let touchStart: { x: number; y: number; at: number; ignored: boolean } | null = null;
+    const shouldIgnoreSwipe = (target: EventTarget | null): boolean => {
+      if (!(target instanceof Element)) return true;
+      return Boolean(target.closest(
+        'input, textarea, select, button, a, [role="button"], [contenteditable="true"], form, [data-no-app-swipe="true"], .no-app-swipe, .overflow-x-auto, canvas, iframe, video, [role="dialog"]'
+      ));
+    };
+    const onTouchStart = (event: TouchEvent) => {
+      if (event.touches.length !== 1) { touchStart = null; return; }
+      const touch = event.touches[0];
+      touchStart = {
+        x: touch.clientX,
+        y: touch.clientY,
+        at: Date.now(),
+        ignored: shouldIgnoreSwipe(event.target),
+      };
+    };
+    const onTouchEnd = (event: TouchEvent) => {
+      if (!touchStart || touchStart.ignored || event.changedTouches.length !== 1) {
+        touchStart = null;
+        return;
+      }
+      const start = touchStart;
+      touchStart = null;
+      const end = event.changedTouches[0];
+      const deltaX = end.clientX - start.x;
+      const deltaY = end.clientY - start.y;
+      const elapsed = Date.now() - start.at;
+      if (Math.abs(deltaX) < 76 || Math.abs(deltaX) < Math.abs(deltaY) * 1.3 || elapsed > 1200) return;
+      event.preventDefault();
+      backNavigationHandlerRef.current();
+    };
+    const onTouchCancel = () => { touchStart = null; };
+    document.addEventListener('touchstart', onTouchStart, { passive: true });
+    document.addEventListener('touchend', onTouchEnd, { passive: false });
+    document.addEventListener('touchcancel', onTouchCancel, { passive: true });
+    return () => {
+      document.removeEventListener('touchstart', onTouchStart);
+      document.removeEventListener('touchend', onTouchEnd);
+      document.removeEventListener('touchcancel', onTouchCancel);
+    };
+  }, []);
 
   useEffect(() => {
     if (!authReady || !isAuthenticated) return;
@@ -1057,7 +1183,7 @@ function StaffApp() {
 
   // Part 2: DASHBOARD
   return (
-    <div className="min-h-screen w-full bg-[#0a140b] text-white flex flex-col justify-between selection:bg-emerald-600 selection:text-white overflow-x-hidden relative">
+    <div className="sipandu-navigation-shell min-h-screen w-full bg-[#0a140b] text-white flex flex-col justify-between selection:bg-emerald-600 selection:text-white overflow-x-hidden relative">
       {/* Background ambient lighting: deep moss green with subtle black vignetting and crimson outline aura */}
       <div className="fixed inset-0 bg-radial-[at_top_right] from-[#17301b]/80 via-[#0a140b] to-[#040905] pointer-events-none" />
       <div className="fixed -top-40 -left-40 w-96 h-96 rounded-full bg-rose-600/10 blur-3xl pointer-events-none" />
@@ -1135,7 +1261,7 @@ function StaffApp() {
       </main>
 
       {/* Bottom Navigation Bar: BERANDA - DATABASE PPKS - ASESMEN - FROM ASESMEN TERINTEGRASI - DOKUMEN */}
-      <BottomNav activeTab={activeTab} onSelectTab={setActiveTab} />
+      <BottomNav activeTab={activeTab} onSelectTab={navigateToTab} />
 
       {/* Load rarely used modal code only after the user opens that modal. */}
       <Suspense fallback={null}>
