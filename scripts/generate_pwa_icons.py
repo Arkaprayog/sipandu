@@ -41,7 +41,7 @@ def main() -> None:
                 raise SystemExit(f"Resolusi logo sumber terlalu kecil: {width}x{height}")
             opened.verify()
         with Image.open(SOURCE) as opened:
-            artwork = ImageOps.exif_transpose(opened).convert("RGB")
+            artwork = ImageOps.exif_transpose(opened).convert("RGBA")
     except SystemExit:
         raise
     except Exception as exc:
@@ -49,7 +49,10 @@ def main() -> None:
 
     OUTPUT.mkdir(parents=True, exist_ok=True)
     for name, size in ICONS.items():
-        icon = artwork.resize((size, size), Image.Resampling.LANCZOS)
+        # Preserve the supplied logo aspect ratio; never stretch or crop the artwork.
+        fitted = ImageOps.contain(artwork, (size, size), method=Image.Resampling.LANCZOS)
+        icon = Image.new("RGBA", (size, size), (3, 21, 64, 255))
+        icon.alpha_composite(fitted, ((size - fitted.width) // 2, (size - fitted.height) // 2))
         target = OUTPUT / name
         icon.save(target, format="PNG", optimize=True)
         if not target.is_file() or target.stat().st_size < 1000:
