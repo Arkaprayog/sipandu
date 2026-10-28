@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite --port=3000 --host=0.0.0.0",
-    "build": "if [ \"$SIPANDU_NATIVE_PLUGIN_READY\" = \"1\" ]; then vite build; else npm install --no-save --package-lock=false --legacy-peer-deps @capgo/capacitor-social-login@7 && vite build; fi",
+    "build": "vite build",
     "test": "tsx --test src/data/initialData.test.ts src/lib/nikNumeric.test.ts src/lib/ppksData.test.ts src/lib/photoSources.test.ts src/utils/helpers.test.ts src/utils/whatsappTemplate.test.ts src/lib/lazyImportRecovery.test.ts src/lib/liveSyncPolicy.test.ts src/lib/ppksRecordState.test.ts src/lib/interventionMapping.test.ts src/lib/stageOneRespondents.test.ts",
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
