@@ -45,7 +45,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     if (!isOpen) return;
     let active = true;
     setFormData(settings);
-    setBiometricEnabled(isBiometricLockEnabled());
+    setBiometricEnabled(isBiometricLockEnabled(auth.currentUser?.uid));
     setSaved(false);
     setEditingUrlKeys(new Set(
       URL_SETTING_KEYS.filter((key) => !String(settings[key] || '').trim())
