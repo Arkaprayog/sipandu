@@ -1,5 +1,6 @@
 import { Capacitor } from '@capacitor/core';
 import { BiometricAuth } from '@aparajita/capacitor-biometric-auth';
+import { isAppPinFormatValid } from './pinPolicy';
 
 export const BIOMETRIC_LOCK_KEY = 'sipandu_biometric_lock_enabled';
 const BIOMETRIC_USER_KEY = 'sipandu_biometric_lock_user_v1';
@@ -361,10 +362,6 @@ export function disableBiometricLock(): void {
   } catch {
     /* storage may be unavailable */
   }
-}
-
-export function isAppPinFormatValid(pin: string): boolean {
-  return /^\d{4}$/.test(pin);
 }
 
 /** Store only a salted PBKDF2 verifier; never store the four-digit PIN itself. */
