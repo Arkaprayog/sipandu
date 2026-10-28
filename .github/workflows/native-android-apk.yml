@@ -122,6 +122,8 @@ jobs:
           grep -q "package: name='id.my.sipandu.odhiv'" /tmp/sipandu-apk-badging.txt
           grep -q "versionName='$(node -p "require('./package.json').version")'" /tmp/sipandu-apk-badging.txt
           grep -q "application-label:'SIPANDU ODHIV'" /tmp/sipandu-apk-badging.txt
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$APK" | tee /tmp/sipandu-debug-signing.txt
+          grep -E "Signer #1 certificate SHA-1 digest|Signer #1 certificate SHA-256 digest" /tmp/sipandu-debug-signing.txt
 
       - name: Upload installable APK
         uses: actions/upload-artifact@v4
