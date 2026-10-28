@@ -209,33 +209,42 @@ jobs:
           set -euo pipefail
           python3 - <<'PY'
           from pathlib import Path
+          import re
           p = Path("android/app/build.gradle")
           s = p.read_text()
-          if "signingConfigs {" not in s:
-              s = s.replace(
-                  "    buildTypes {",
-                  """    signingConfigs {
+          # Always replace the release signing block: Capacitor's generated Gradle
+          # file may already contain signingConfigs, but without environment values.
+          signing = """    signingConfigs {
                   release {
                       storeFile file(System.getenv('SIPANDU_KEYSTORE_PATH'))
                       storePassword System.getenv('SIPANDU_KEYSTORE_PASSWORD')
                       keyAlias System.getenv('SIPANDU_KEY_ALIAS')
                       keyPassword System.getenv('SIPANDU_KEY_PASSWORD')
                   }
-              }
-
-              buildTypes {""",
-                  1,
-              )
-          if "signingConfig signingConfigs.release" not in s:
-              marker = "        release {"
-              start = s.find(marker, s.find("buildTypes {"))
-              if start < 0:
-                  raise SystemExit("Release build type was not found in generated Gradle file")
-              insert_at = start + len(marker)
-              s = s[:insert_at] + "\n            signingConfig signingConfigs.release" + s[insert_at:]
+              }"""
+          if re.search(r"(?m)^\s*signingConfigs\s*\{", s):
+              s = re.sub(r"(?ms)^\s*signingConfigs\s*\{.*?^\s*\}", signing, s, count=1)
+          else:
+              if "    buildTypes {" not in s:
+                  raise SystemExit("Android buildTypes block was not found")
+              s = s.replace("    buildTypes {", signing + "\n\n    buildTypes {", 1)
+          # Ensure the release build type uses the configured release key.
+          match = re.search(r"(?ms)^\s*release\s*\{.*?^\s*\}", s[s.find("buildTypes {"):])
+          if not match:
+              raise SystemExit("Release build type was not found in generated Gradle file")
+          build_start = s.find("buildTypes {")
+          start = build_start + match.start()
+          end = build_start + match.end()
+          block = s[start:end]
+          if "signingConfig signingConfigs.release" not in block:
+              block = re.sub(r"(?m)^(\s*release\s*\{)", r"\1\n            signingConfig signingConfigs.release", block, count=1)
+              s = s[:start] + block + s[end:]
           p.write_text(s)
-          if "signingConfig signingConfigs.release" not in p.read_text():
-              raise SystemExit("Release signing configuration was not applied")
+          required = ["storePassword System.getenv('SIPANDU_KEYSTORE_PASSWORD')", "keyAlias System.getenv('SIPANDU_KEY_ALIAS')", "keyPassword System.getenv('SIPANDU_KEY_PASSWORD')", "signingConfig signingConfigs.release"]
+          content = p.read_text()
+          missing = [item for item in required if item not in content]
+          if missing:
+              raise SystemExit("Release signing configuration incomplete: " + ", ".join(missing))
           PY
           grep -n -A10 -B3 'signingConfigs\|signingConfig signingConfigs.release' android/app/build.gradle
 
