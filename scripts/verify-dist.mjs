@@ -203,11 +203,17 @@ for (const required of ['manifest.webmanifest', 'sw.js']) {
   }
 }
 
-// Verify the logo source and all generated icon variants that are linked to the
-// PWA install prompt, iOS home screen, and browser tab.
-const appLogoSource = path.join(dist, 'uploads', 'sipandu-odhiv-logo.webp');
-if (!fs.existsSync(appLogoSource) || fs.statSync(appLogoSource).size < 10000) {
-  fail('Logo sumber resmi SIPANDU tidak ada/kosong di dist/uploads.');
+// Verify at least one approved SIPANDU logo source and generated icon variants.
+// The original WebP is preferred, but the uploaded PNG is a supported fallback.
+const appLogoSources = [
+  path.join(dist, 'uploads', 'sipandu-odhiv-logo.webp'),
+  path.join(dist, 'uploads', 'sipandu-logo.png'),
+];
+const usableLogoSource = appLogoSources.find((file) => fs.existsSync(file) && fs.statSync(file).size >= 10000);
+if (!usableLogoSource) {
+  fail('Logo sumber resmi SIPANDU tidak ada/kosong di dist/uploads (membutuhkan sipandu-odhiv-logo.webp atau sipandu-logo.png).');
+} else {
+  console.log('Approved SIPANDU logo source present: ' + path.relative(dist, usableLogoSource));
 }
 const pwaIconFiles = [
   'icons/sipandu-favicon.png',
