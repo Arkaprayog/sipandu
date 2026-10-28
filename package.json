@@ -25,7 +25,12 @@
     "react": "^19.0.1",
     "react-dom": "^19.0.1",
     "vite": "^8.3.0",
-    "pdf-lib": "^1.17.1"
+    "pdf-lib": "^1.17.1",
+    "@capacitor/android": "^7.4.3",
+    "@capacitor/core": "^7.4.3",
+    "@capgo/capacitor-social-login": "^7.0.0",
+    "@capacitor/local-notifications": "^7.0.0",
+    "@aparajita/capacitor-biometric-auth": "^7.0.0"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",
@@ -36,6 +41,7 @@
     "tailwindcss": "^4.3.3",
     "tsx": "^4.21.0",
     "typescript": "^7.0.2",
-    "@types/express": "^4.17.21"
+    "@types/express": "^4.17.21",
+    "@capacitor/cli": "^7.4.3"
   }
 }
