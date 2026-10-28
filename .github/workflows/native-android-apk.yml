@@ -42,7 +42,7 @@ jobs:
           packages: platform-tools platforms;android-36 build-tools;36.0.0
 
       - name: Install web dependencies
-        run: bun install --frozen-lockfile
+        run: bun install
 
       - name: Install Capacitor Android and native Google Sign-In tooling
         run: npm install --save --package-lock=false --legacy-peer-deps @capacitor/core@7 @capacitor/cli@7 @capacitor/android@7 @capgo/capacitor-social-login@7 @capacitor/local-notifications@7 @aparajita/capacitor-biometric-auth@7
@@ -169,10 +169,10 @@ jobs:
         if: github.event_name != 'pull_request'
         shell: bash
         env:
-          SIPANDU_RELEASE_KEYSTORE_BASE64: ${{ secrets.SIPANDU_RELEASE_KEYSTORE_BASE64 }}
-          SIPANDU_RELEASE_STORE_PASSWORD: ${{ secrets.SIPANDU_RELEASE_STORE_PASSWORD }}
-          SIPANDU_RELEASE_KEY_ALIAS: ${{ secrets.SIPANDU_RELEASE_KEY_ALIAS }}
-          SIPANDU_RELEASE_KEY_PASSWORD: ${{ secrets.SIPANDU_RELEASE_KEY_PASSWORD }}
+          SIPANDU_RELEASE_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 || secrets.SIPANDU_RELEASE_KEYSTORE_BASE64 }}
+          SIPANDU_RELEASE_STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD || secrets.SIPANDU_RELEASE_STORE_PASSWORD }}
+          SIPANDU_RELEASE_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS || secrets.SIPANDU_RELEASE_KEY_ALIAS }}
+          SIPANDU_RELEASE_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD || secrets.SIPANDU_RELEASE_KEY_PASSWORD }}
         run: |
           set -euo pipefail
           KEYSTORE_PATH="$RUNNER_TEMP/sipandu-release.jks"
