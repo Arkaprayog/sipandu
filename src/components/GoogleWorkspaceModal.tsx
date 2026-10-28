@@ -1212,15 +1212,15 @@ export const GoogleWorkspaceModal: React.FC<GoogleWorkspaceModalProps> = ({
           {activeTab === 'forms' && (
             <div className="space-y-4">
               <div>
-                <h4 className="font-bold text-white text-sm">Google Forms Responden Sync</h4>
+                <h4 className="font-bold text-white text-sm">Google Form Utama & Sinkronisasi Respons</h4>
                 <p className="text-[11px] text-neutral-300">
-                  Membaca respon masuk dari formulir online Asesmen Tahap Awal & Asesmen Kesehatan Mental.
+                  Asesmen Tahap Awal diisi langsung di SIPANDU. Bagian ini digunakan untuk memeriksa respons Google Form utama setelah responden melanjutkan pengisian.
                 </p>
               </div>
 
               <div className="p-3.5 rounded-xl bg-black/50 border border-emerald-500/30 space-y-3">
                 <label className="block text-sky-200 font-semibold text-[11px]">
-                  ID atau URL Google Form:
+                  URL Google Form utama untuk pemeriksaan respons:
                 </label>
                 <div className="flex flex-col sm:flex-row items-center gap-2">
                   <input
@@ -1228,7 +1228,7 @@ export const GoogleWorkspaceModal: React.FC<GoogleWorkspaceModalProps> = ({
                     value={formIdInput}
                     readOnly={!editingFormUrl && Boolean(settings.googleFormTahapAwalUrl?.trim())}
                     onChange={(e) => setFormIdInput(e.target.value)}
-                    placeholder="URL Google Form"
+                    placeholder="URL Google Form utama"
                     className={`w-full sm:flex-1 p-2 rounded bg-black/70 border border-rose-500/30 text-xs text-white font-mono ${!editingFormUrl && settings.googleFormTahapAwalUrl?.trim() ? 'cursor-not-allowed opacity-80' : ''}`}
                   />
                   <button

@@ -173,8 +173,8 @@ function reconcileSpreadsheetPPKSRecords(localRecords: PPKSRecord[], sourceRecor
 
 function normalizeAppSettings(value: unknown): AppSettings {
   const saved = value && typeof value === 'object' ? value as Partial<AppSettings> : {};
-  // The Asesmen Tahap Awal link/barcode uses the project's existing respondent Form.
-  // New submissions are separated by the stage-one cutover timestamp before display/persistence.
+  // Backward-compatible URL field used by the Google Workspace Forms diagnostic.
+  // The native SIPANDU stage-one form no longer uses a Google Form URL.
   const stageOneFormUrl = saved.googleFormTahapAwalUrl?.trim() || GOOGLE_SIPANDU_RESOURCES.formRespondentUrl;
   let databaseUrl = saved.googleSpreadsheetUrl?.trim() || '';
   if (databaseUrl.includes('1yA8KemensosODHIVSumut2026_LiveSync')) databaseUrl = '';
@@ -556,11 +556,11 @@ function StaffApp() {
   };
 
   /**
-   * Load follow-up answers from the response Sheet that Google Forms has linked
-   * to the configured stage-two Form. Merge only rows carrying an ID that exists
-   * in the stage-one roster; unmatched responses never create duplicate PPKS.
+   * Read the primary Google Form response spreadsheet and merge only rows whose
+   * prefilled PPKS ID points to an existing stage-one intake record. Stage-one
+   * records alone must not enter the main PPKS roster before Form utama is submitted.
    */
-  const mergeContinuationResponses = async (stageOneRecords: PPKSRecord[]): Promise<{
+  const mergeContinuationResponses = async (mainFormRecords: PPKSRecord[]): Promise<{
     records: PPKSRecord[];
     matchedResponses: number;
     warning: string;
@@ -568,9 +568,9 @@ function StaffApp() {
     const formUrl = GOOGLE_SIPANDU_RESOURCES.formRespondentUrl;
     if (!formUrl) {
       return {
-        records: stageOneRecords,
+        records: mainFormRecords,
         matchedResponses: 0,
-        warning: 'Formulir lanjutan belum dikonfigurasi; sinkronisasi tahap awal tetap berjalan.',
+        warning: 'URL Google Form utama belum tersedia; data tahap awal tetap terpisah.',
       };
     }
 
@@ -583,9 +583,8 @@ function StaffApp() {
         continuationSheetCacheRef.current = { formUrl, spreadsheetUrl };
       }
 
-      const followUpImport = await importPPKSFromSpreadsheet(spreadsheetUrl);
-      const stageOneRoster = mergePPKSRecords(stageOneRecords, stageOneRespondentsRef.current);
-      const stageOneById = new Map(stageOneRoster.map((record) => [record.id, record]));
+      const mainFormImport = await importPPKSFromSpreadsheet(spreadsheetUrl);
+      const stageOneById = new Map(stageOneRespondentsRef.current.map((record) => [record.id, record]));
       const normalizePersonName = (value: unknown) => String(value ?? '')
         .normalize('NFD')
         .replace(/[\\u0300-\\u036f]/g, '')
@@ -595,34 +594,43 @@ function StaffApp() {
         const candidate = String(record.nik || record.officialAssessment?.q23 || '').replace(/\\D/g, '');
         return /^\\d{16}$/.test(candidate) ? candidate : '';
       };
-      // Prefilled Google Forms values can be edited by respondents, so do not
-      // cross-link a response if its ID matches but its supplied identity
-      // contradicts a valid stage-one NIK or name.
-      const matched = followUpImport.records.filter((record) => {
-        const source = stageOneById.get(record.id);
-        if (!source) return false;
-        const sourceNIK = resolveNIK(source);
-        const followUpNIK = resolveNIK(record);
-        if (sourceNIK && followUpNIK && sourceNIK !== followUpNIK) return false;
-        const sourceName = normalizePersonName(source.namaLengkap);
-        const followUpName = normalizePersonName(record.namaLengkap);
-        if (sourceName && followUpName && sourceName !== followUpName) return false;
+
+      // Prefilled IDs can be edited by respondents, so reject identity conflicts.
+      const matched = mainFormImport.records.filter((record) => {
+        const stageOne = stageOneById.get(record.id);
+        if (!stageOne) return false;
+        const sourceNIK = resolveNIK(stageOne);
+        const responseNIK = resolveNIK(record);
+        if (sourceNIK && responseNIK && sourceNIK !== responseNIK) return false;
+        const sourceName = normalizePersonName(stageOne.namaLengkap);
+        const responseName = normalizePersonName(record.namaLengkap);
+        if (sourceName && responseName && sourceName !== responseName) return false;
         return true;
       });
-      const unmatchedCount = Math.max(0, followUpImport.records.length - matched.length);
+
+      const enrichedMatched = matched.map((response) => {
+        const stageOne = stageOneById.get(response.id);
+        if (!stageOne) return response;
+        return mergePPKSRecords([stageOne], [response]).find((record) => record.id === response.id) || response;
+      });
+      const byId = new Map(enrichedMatched.map((record) => [record.id, record]));
+      // Keep the master PPKS roster limited to records present in the primary
+      // Form spreadsheet. Do not append stage-one-only respondents prematurely.
+      const records = mainFormRecords.map((record) => byId.get(record.id) || record);
+      const unmatchedCount = Math.max(0, mainFormImport.records.length - matched.length);
       return {
-        records: mergePPKSRecords(stageOneRoster, matched),
+        records: mergePPKSRecords(records, enrichedMatched),
         matchedResponses: matched.length,
         warning: unmatchedCount > 0
-          ? `${unmatchedCount} respons lanjutan belum dipadankan. Periksa kolom “ID PPKS” dan pastikan nama/NIK yang dijawab tidak bertentangan dengan data tahap awal.`
+          ? `${unmatchedCount} respons Form utama belum dapat dipadankan ke database Tahap Awal. Periksa kolom “ID PPKS”, nama, dan NIK.`
           : '',
       };
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);
       return {
-        records: stageOneRecords,
+        records: mainFormRecords,
         matchedResponses: 0,
-        warning: `Sinkronisasi Form lanjutan belum aktif: ${detail}`,
+        warning: `Sinkronisasi respons Google Form utama belum aktif: ${detail}`,
       };
     }
   };
