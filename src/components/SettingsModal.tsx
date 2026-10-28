@@ -1,511 +1,328 @@
 import React, { useEffect, useState } from 'react';
 import { Capacitor } from '@capacitor/core';
-import { enableBiometricLock, disableBiometricLock, isBiometricLockEnabled, getBiometricDiagnostics, isAppPinConfigured, setAppPin } from '../lib/biometricLock';
+import {
+  Fingerprint,
+  ScanFace,
+  ShieldCheck,
+  KeyRound,
+  LockKeyhole,
+  RefreshCw,
+  X,
+  CheckCircle2,
+  AlertCircle,
+} from 'lucide-react';
+import {
+  enableBiometricLock,
+  disableBiometricLock,
+  isBiometricLockEnabled,
+  getBiometricDiagnostics,
+  isAppPinConfigured,
+  setAppPin,
+} from '../lib/biometricLock';
 import { auth } from '../lib/firebase';
-import { AppSettings, GoogleFormUtamaPrefillEntries } from '../types';
-import { toGoogleFormsRespondentUrl } from '../utils/helpers';
-import { getGoogleFormIdFromUrl } from '../lib/googleSIPANDUResources';
-import { Settings, Save, Check, Link, FileSpreadsheet, FolderGit2, X, Lock, Unlock, Fingerprint, ShieldCheck, ScanFace } from 'lucide-react';
-
-type UrlSettingKey = 'googleFormTahapAwalUrl' | 'googleFormTahapLanjutanUrl' | 'googleSpreadsheetUrl' | 'googleDriveFolderUrl';
-const URL_SETTING_KEYS: UrlSettingKey[] = [
-  'googleFormTahapAwalUrl', 'googleFormTahapLanjutanUrl', 'googleSpreadsheetUrl', 'googleDriveFolderUrl',
-];
+import { AppSettings } from '../types';
 
 interface SettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
+  /** Kept for the existing App integration; other application settings are no longer edited here. */
   settings: AppSettings;
   onSave: (updated: AppSettings) => void;
 }
 
-export const SettingsModal: React.FC<SettingsModalProps> = ({
-  isOpen,
-  onClose,
-  settings,
-  onSave,
-}) => {
-  const [formData, setFormData] = useState<AppSettings>(settings);
-  const [saved, setSaved] = useState(false);
-  const [biometricEnabled, setBiometricEnabled] = useState(() => isBiometricLockEnabled());
+export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
+  const [biometricEnabled, setBiometricEnabled] = useState(false);
   const [biometricBusy, setBiometricBusy] = useState(false);
-  const [biometricDiagnostics, setBiometricDiagnostics] = useState('Belum diperiksa.');
-  const [pinConfigured, setPinConfigured] = useState(() => isAppPinConfigured(auth.currentUser?.uid));
+  const [biometricDiagnostics, setBiometricDiagnostics] = useState('Memeriksa dukungan perangkat…');
+  const [pinConfigured, setPinConfigured] = useState(false);
   const [newPin, setNewPin] = useState('');
   const [confirmPin, setConfirmPin] = useState('');
   const [pinBusy, setPinBusy] = useState(false);
   const [pinMessage, setPinMessage] = useState('');
-  const [editingUrlKeys, setEditingUrlKeys] = useState<Set<UrlSettingKey>>(() => new Set(
-    URL_SETTING_KEYS.filter((key) => !String(settings[key] || '').trim())
-  ));
+  const [pinMessageType, setPinMessageType] = useState<'success' | 'error'>('success');
 
-  // The modal can reopen after settings changed elsewhere (e.g. Google Workspace).
-  // Refresh the form from persisted settings instead of retaining stale component state.
   useEffect(() => {
     if (!isOpen) return;
     let active = true;
-    setFormData(settings);
-    setBiometricEnabled(isBiometricLockEnabled(auth.currentUser?.uid));
-    setSaved(false);
-    setEditingUrlKeys(new Set(
-      URL_SETTING_KEYS.filter((key) => !String(settings[key] || '').trim())
-    ));
+    const user = auth.currentUser;
 
-    setPinConfigured(isAppPinConfigured(auth.currentUser?.uid));
+    setBiometricEnabled(isBiometricLockEnabled(user?.uid));
+    setPinConfigured(isAppPinConfigured(user?.uid));
     setNewPin('');
     setConfirmPin('');
     setPinMessage('');
     setBiometricDiagnostics('Memeriksa dukungan biometrik perangkat…');
+
     void getBiometricDiagnostics()
       .then((result) => {
         if (!active) return;
+        const isNative = Capacitor.isNativePlatform();
         const detail = result.isAvailable
-          ? Capacitor.isNativePlatform()
-            ? ('Autentikasi native tersedia: ' + result.biometryType + '. Keamanan perangkat: ' + (result.deviceIsSecure ? 'kredensial perangkat aktif' : 'kredensial perangkat belum terdeteksi') + '.')
-            : 'Browser mendukung autentikator platform WebAuthn melalui HTTPS. Sistem akan memilih cara verifikasi perangkat yang tersedia.'
-          : ('Belum tersedia. ' + (result.reason || 'Periksa kunci layar dan dukungan autentikator perangkat.'));
+          ? isNative
+            ? 'Autentikasi biometrik Android tersedia. Sistem perangkat memilih metode yang didukung.'
+            : 'WebAuthn tersedia pada browser ini. Gunakan autentikator perangkat melalui HTTPS.'
+          : 'Belum tersedia. ' + (result.reason || 'Periksa kunci layar dan dukungan perangkat.');
         const types = result.biometryTypes.length ? result.biometryTypes.join(', ') : result.biometryType;
-        const hardware = types && types !== 'none' ? (' Jenis yang dilaporkan: ' + types + '.') : '';
-        const code = result.code ? (' Kode: ' + result.code + '.') : '';
-        const strong = result.strongBiometryIsAvailable ? ' Verifikasi biometrik kuat tersedia.' : '';
-        setBiometricDiagnostics(detail + hardware + strong + code);
+        const hardware = types && types !== 'none' ? ' Jenis terdeteksi: ' + types + '.' : '';
+        const security = result.deviceIsSecure ? ' Keamanan perangkat aktif.' : '';
+        const code = result.code ? ' Kode: ' + result.code + '.' : '';
+        setBiometricDiagnostics(detail + hardware + security + code);
       })
       .catch((error: unknown) => {
         if (!active) return;
-        const message = error instanceof Error ? error.message : String(error);
-        setBiometricDiagnostics('Pemeriksaan gagal: ' + message);
+        setBiometricDiagnostics(
+          'Pemeriksaan gagal: ' + (error instanceof Error ? error.message : String(error))
+        );
       });
 
     return () => { active = false; };
-  }, [isOpen, settings]);
-
-  const isUrlLocked = (key: UrlSettingKey) =>
-    Boolean(String(formData[key] || '').trim()) && !editingUrlKeys.has(key);
-
-  const toggleUrlEdit = (key: UrlSettingKey) => {
-    setEditingUrlKeys((current) => {
-      const next = new Set(current);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
-      return next;
-    });
-  };
-
-  const renderUrlLockButton = (key: UrlSettingKey) => {
-    if (!String(formData[key] || '').trim()) return null;
-    const locked = isUrlLocked(key);
-    return (
-      <button
-        type="button"
-        onClick={() => toggleUrlEdit(key)}
-        className="shrink-0 inline-flex items-center justify-center gap-1 rounded-lg border border-white/15 bg-black/40 px-3 text-[10px] font-semibold text-sky-100 hover:bg-white/10"
-        aria-label={locked ? 'Buka kunci URL agar dapat diubah' : 'Kunci URL'}
-      >
-        {locked ? <Unlock className="h-3.5 w-3.5" /> : <Lock className="h-3.5 w-3.5" />}
-        {locked ? 'Ubah' : 'Kunci'}
-      </button>
-    );
-  };
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    const rawStageOneUrl = String(formData.googleFormTahapAwalUrl || '').trim();
-    const respondentUrl = rawStageOneUrl ? toGoogleFormsRespondentUrl(rawStageOneUrl) : '';
-    if (rawStageOneUrl && !respondentUrl) {
-      window.alert('URL Google Form tahap awal tidak dikenali. Tempel URL Google Form yang valid.');
+  const user = auth.currentUser;
+  const biometricIsAvailable = biometricDiagnostics.startsWith('Autentikasi biometrik Android tersedia') ||
+    biometricDiagnostics.startsWith('WebAuthn tersedia');
+
+  const handleBiometricToggle = async () => {
+    if (biometricBusy) return;
+    if (!user?.uid) {
+      setBiometricDiagnostics('Sesi akun SIPANDU tidak ditemukan. Masuk dengan akun resmi terlebih dahulu.');
       return;
     }
-    if (respondentUrl && !getGoogleFormIdFromUrl(respondentUrl)) {
-      window.alert('Untuk sinkronisasi otomatis, tempel URL lengkap docs.google.com/forms/d/FORM_ID/edit atau /viewform. Tautan pendek forms.gle tidak dapat digunakan untuk membaca sheet respons melalui Google API.');
+    if (biometricEnabled) {
+      disableBiometricLock();
+      setBiometricEnabled(false);
+      setBiometricDiagnostics('Pengaman biometrik dinonaktifkan. PIN yang telah didaftarkan tetap tersedia.');
       return;
     }
-    const normalizedSettings = { ...formData, googleFormTahapAwalUrl: respondentUrl };
-    onSave(normalizedSettings);
-    setFormData(normalizedSettings);
-    setEditingUrlKeys(new Set());
-    setSaved(true);
-    setTimeout(() => {
-      setSaved(false);
-      onClose();
-    }, 700);
+    if (!pinConfigured) {
+      setBiometricDiagnostics('Daftarkan PIN SIPANDU 4 angka terlebih dahulu. PIN wajib menjadi metode cadangan.');
+      return;
+    }
+
+    setBiometricBusy(true);
+    setBiometricDiagnostics('Menunggu verifikasi perangkat…');
+    try {
+      await enableBiometricLock({
+        uid: user.uid,
+        email: user.email,
+        displayName: user.displayName,
+      });
+      setBiometricEnabled(true);
+      setBiometricDiagnostics('Biometrik berhasil didaftarkan. Metode perangkat tersedia saat membuka SIPANDU.');
+    } catch (error) {
+      setBiometricDiagnostics(
+        'Pendaftaran belum berhasil: ' + (error instanceof Error ? error.message : 'Periksa pengaturan perangkat.')
+      );
+    } finally {
+      setBiometricBusy(false);
+    }
+  };
+
+  const handleSavePin = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (pinBusy) return;
+    if (!user?.uid) {
+      setPinMessageType('error');
+      setPinMessage('Sesi akun tidak ditemukan. Masuk kembali dengan akun SIPANDU.');
+      return;
+    }
+
+    setPinBusy(true);
+    setPinMessage('');
+    try {
+      await setAppPin(newPin, confirmPin, user.uid);
+      setPinConfigured(true);
+      setNewPin('');
+      setConfirmPin('');
+      setPinMessageType('success');
+      setPinMessage('PIN berhasil disimpan. PIN tersedia sebagai cadangan biometrik.');
+      setBiometricDiagnostics((current) =>
+        current.startsWith('Daftarkan PIN')
+          ? 'PIN sudah terdaftar. Anda dapat mengaktifkan biometrik perangkat sekarang.'
+          : current
+      );
+    } catch (error) {
+      setPinMessageType('error');
+      setPinMessage(error instanceof Error ? error.message : 'PIN belum berhasil disimpan.');
+    } finally {
+      setPinBusy(false);
+    }
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80">
-      <div className="w-full max-w-xl bg-[#0e1d11] border border-rose-500/40 rounded-2xl p-6 shadow-2xl text-white select-none">
-        <div className="flex items-center justify-between pb-3 mb-4 border-b border-rose-500/30">
-          <div className="flex items-center gap-2">
-            <Settings className="w-5 h-5 text-sky-300" />
-            <h3 className="text-base font-bold text-white">
-              Pengaturan Integrasi Google & WhatsApp
-            </h3>
+    <div
+      className="fixed inset-0 z-[100] flex items-end justify-center bg-black/75 px-0 pt-6 backdrop-blur-sm sm:items-center sm:px-4"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
+      <section
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="sipandu-biometric-settings-title"
+        className="max-h-[92dvh] w-full max-w-lg overflow-y-auto rounded-t-3xl border border-emerald-400/20 bg-[#0d1b10] p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] text-white shadow-2xl sm:rounded-3xl sm:p-6"
+      >
+        <div className="mb-5 flex items-start justify-between gap-3">
+          <div className="flex items-start gap-3">
+            <div className="rounded-xl border border-emerald-300/25 bg-emerald-300/10 p-2.5 text-emerald-200">
+              <ShieldCheck className="h-6 w-6" />
+            </div>
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-emerald-300">SIPANDU ODHIV</p>
+              <h2 id="sipandu-biometric-settings-title" className="mt-1 text-lg font-extrabold">Keamanan &amp; Biometrik</h2>
+              <p className="mt-1 text-xs leading-relaxed text-neutral-400">
+                Pengaturan ini hanya untuk PIN, Fingerprint, dan Face Unlock.
+              </p>
+            </div>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="p-1 rounded text-neutral-400 hover:text-white"
+            aria-label="Tutup pengaturan biometrik"
+            className="rounded-xl border border-white/10 p-2 text-neutral-300 transition hover:bg-white/10 hover:text-white"
           >
-            <X className="w-5 h-5" />
+            <X className="h-5 w-5" />
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4 text-xs">
-          <section className="rounded-xl border border-emerald-400/25 bg-emerald-950/30 p-3">
-            <div className="flex items-start gap-3">
-              <div className="rounded-lg bg-emerald-400/10 p-2 text-emerald-200">
-                {biometricEnabled ? <ShieldCheck className="h-5 w-5" /> : <Fingerprint className="h-5 w-5" />}
-              </div>
-              <div className="min-w-0 flex-1">
-                <p className="font-bold text-emerald-100">Fingerprint &amp; Face Unlock</p>
-                <p className="mt-1 leading-relaxed text-neutral-300">
-                  {Capacitor.isNativePlatform()
-                    ? 'APK Android memakai autentikasi biometrik sistem. Perangkat menentukan apakah wajah atau sidik jari yang dapat digunakan; SIPANDU tidak membaca atau menyimpan data biometrik.'
-                    : 'PWA memakai WebAuthn/autentikator platform browser melalui HTTPS. Pilihan wajah, sidik jari, atau verifikasi perangkat bergantung pada browser dan perangkat.'}
-                </p>
-                <p role="status" className="mt-2 rounded-lg border border-white/10 bg-black/25 p-2 text-[10px] leading-relaxed text-neutral-300">
-                  Diagnostik perangkat: {biometricDiagnostics}
-                </p>
-                <div className="mt-3 grid grid-cols-2 gap-2">
-                  <div className="flex items-center gap-2 rounded-lg border border-emerald-300/15 bg-black/20 p-2">
-                    <Fingerprint className="h-4 w-4 shrink-0 text-emerald-200" />
-                    <div>
-                      <p className="text-[10px] font-bold text-emerald-100">Fingerprint</p>
-                      <p className="text-[9px] text-neutral-400">Jika didukung</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2 rounded-lg border border-sky-300/15 bg-black/20 p-2">
-                    <ScanFace className="h-4 w-4 shrink-0 text-sky-200" />
-                    <div>
-                      <p className="text-[10px] font-bold text-sky-100">Face Unlock</p>
-                      <p className="text-[9px] text-neutral-400">Jika didukung</p>
-                    </div>
-                  </div>
-                </div>
-                <p className="mt-2 text-[10px] leading-relaxed text-neutral-400">
-                  Satu pendaftaran biometrik mengaktifkan autentikator yang diizinkan perangkat. Android/browser dapat memilih wajah atau sidik jari; bila verifikasi dibatalkan atau gagal, PIN SIPANDU ditampilkan sebagai cadangan.
-                </p>
-                {isBiometricLockEnabled(auth.currentUser?.uid) && (
-                  <p className="mt-2 text-[10px] font-semibold text-emerald-200">Autentikasi biometrik terdaftar untuk akun ini.</p>
-                )}
-                {!pinConfigured && !biometricEnabled && (
-                  <p className="mt-3 rounded-lg border border-amber-300/20 bg-amber-950/30 p-2 text-[10px] leading-relaxed text-amber-100">
-                    Daftarkan PIN 4 angka di bagian berikut terlebih dahulu. PIN wajib tersedia sebagai cadangan sebelum biometrik dapat diaktifkan.
-                  </p>
-                )}
-                <button
-                  type="button"
-                  disabled={biometricBusy || (!biometricEnabled && !pinConfigured)}
-                  onClick={async () => {
-                    if (biometricEnabled) {
-                      disableBiometricLock();
-                      setBiometricEnabled(false);
-                      setBiometricDiagnostics('Pengaman biometrik dinonaktifkan. PIN tetap tersedia jika sudah terdaftar.');
-                      return;
-                    }
-                    const user = auth.currentUser;
-                    if (!user) {
-                      setBiometricDiagnostics('Sesi akun tidak ditemukan. Masuk kembali terlebih dahulu.');
-                      return;
-                    }
-                    setBiometricBusy(true);
-                    try {
-                      await enableBiometricLock({ uid: user.uid, email: user.email, displayName: user.displayName });
-                      setBiometricEnabled(true);
-                      setBiometricDiagnostics('Pendaftaran berhasil. Saat masuk berikutnya, verifikasi perangkat akan tersedia sebagai pilihan utama.');
-                      window.alert('Pengaman biometrik SIPANDU berhasil didaftarkan.');
-                    } catch (error) {
-                      const message = error instanceof Error ? error.message : 'Pendaftaran biometrik gagal.';
-                      setBiometricDiagnostics('Pendaftaran gagal: ' + message);
-                    } finally {
-                      setBiometricBusy(false);
-                    }
-                  }}
-                  className="mt-3 inline-flex items-center gap-2 rounded-lg border border-emerald-300/30 bg-emerald-300 px-3 py-2 font-bold text-emerald-950 disabled:opacity-60"
-                >
-                  {biometricBusy ? 'Memeriksa perangkat…' : biometricEnabled ? 'Nonaktifkan biometrik' : 'Daftarkan biometrik perangkat'}
-                </button>
-              </div>
-            </div>
-          </section>
-
-          <section className="rounded-xl border border-sky-300/25 bg-sky-950/20 p-3">
-            <div className="flex items-start gap-3">
-              <div className="rounded-lg bg-sky-300/10 p-2 text-sky-100">
-                <Lock className="h-5 w-5" />
-              </div>
-              <div className="min-w-0 flex-1">
-                <p className="font-bold text-sky-100">PIN SIPANDU (4 angka)</p>
-                <p className="mt-1 leading-relaxed text-neutral-300">
+        <div className="space-y-4">
+          <section className="rounded-2xl border border-sky-300/20 bg-sky-950/20 p-4">
+            <div className="mb-3 flex items-center gap-2">
+              <KeyRound className="h-5 w-5 text-sky-200" />
+              <div>
+                <h3 className="text-sm font-bold text-sky-100">PIN SIPANDU · 4 angka</h3>
+                <p className="mt-0.5 text-[11px] text-neutral-400">
                   {pinConfigured
-                    ? 'PIN sudah terdaftar untuk akun ini. Isi PIN baru dan konfirmasikan untuk menggantinya.'
-                    : 'Buat PIN 4 angka sebagai metode cadangan jika biometrik tidak berhasil atau tidak tersedia.'}
+                    ? 'PIN sudah terdaftar. Masukkan PIN baru untuk menggantinya.'
+                    : 'Daftarkan PIN terlebih dahulu sebagai cadangan biometrik.'}
                 </p>
-                <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
-                  <label className="text-[10px] font-semibold text-sky-100">
-                    PIN baru
-                    <input
-                      type="password"
-                      inputMode="numeric"
-                      autoComplete="new-password"
-                      pattern="[0-9]{4}"
-                      maxLength={4}
-                      value={newPin}
-                      onChange={(event) => setNewPin(event.target.value.replace(/\D/g, '').slice(0, 4))}
-                      placeholder="4 angka"
-                      className="mt-1 w-full rounded-lg border border-sky-300/20 bg-black/40 px-3 py-2.5 text-center text-base tracking-[0.3em] text-white outline-none focus:border-sky-300"
-                    />
-                  </label>
-                  <label className="text-[10px] font-semibold text-sky-100">
-                    Konfirmasi PIN
-                    <input
-                      type="password"
-                      inputMode="numeric"
-                      autoComplete="new-password"
-                      pattern="[0-9]{4}"
-                      maxLength={4}
-                      value={confirmPin}
-                      onChange={(event) => setConfirmPin(event.target.value.replace(/\D/g, '').slice(0, 4))}
-                      placeholder="Ulangi PIN"
-                      className="mt-1 w-full rounded-lg border border-sky-300/20 bg-black/40 px-3 py-2.5 text-center text-base tracking-[0.3em] text-white outline-none focus:border-sky-300"
-                    />
-                  </label>
-                </div>
-                {pinMessage && <p role="status" className="mt-2 rounded-lg border border-white/10 bg-black/25 p-2 text-[10px] leading-relaxed text-sky-100">{pinMessage}</p>}
-                <button
-                  type="button"
-                  disabled={pinBusy || newPin.length !== 4 || confirmPin.length !== 4}
-                  onClick={async () => {
-                    const user = auth.currentUser;
-                    if (!user) {
-                      setPinMessage('Sesi akun tidak ditemukan. Masuk kembali terlebih dahulu.');
-                      return;
-                    }
-                    setPinBusy(true);
-                    setPinMessage('');
-                    try {
-                      await setAppPin(newPin, confirmPin, user.uid);
-                      setPinConfigured(true);
-                      setNewPin('');
-                      setConfirmPin('');
-                      setPinMessage('PIN berhasil disimpan. Saat membuka SIPANDU kembali, PIN dapat digunakan sebagai cadangan.');
-                    } catch (error) {
-                      setPinMessage(error instanceof Error ? error.message : 'PIN belum berhasil disimpan.');
-                    } finally {
-                      setPinBusy(false);
-                    }
-                  }}
-                  className="mt-3 inline-flex items-center gap-2 rounded-lg border border-sky-300/30 bg-sky-300 px-3 py-2 font-bold text-sky-950 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {pinBusy ? 'Menyimpan PIN…' : pinConfigured ? 'Ganti PIN' : 'Daftarkan PIN'}
-                </button>
               </div>
+              {pinConfigured && <CheckCircle2 className="ml-auto h-5 w-5 shrink-0 text-emerald-300" />}
             </div>
-          </section>
 
-          <p className="rounded-lg border border-emerald-500/20 bg-emerald-950/35 px-3 py-2 text-[10px] leading-relaxed text-emerald-100">
-            URL yang telah tersimpan dikunci agar tidak terhapus tanpa sengaja. Tekan <strong>Ubah</strong> pada URL yang ingin diganti, lalu tekan <strong>Simpan Konfigurasi</strong> untuk menyimpan dan menguncinya kembali.
-          </p>
-          <div>
-            <label className="block text-sky-200 font-semibold mb-1 flex items-center gap-1.5">
-              <Link className="w-3.5 h-3.5 text-sky-300" />
-              <span>URL Google Form utama (tahap berikutnya):</span>
-            </label>
-            <div className="flex items-stretch gap-2">
-              <input
-                type="url"
-                value={formData.googleFormTahapAwalUrl}
-                readOnly={isUrlLocked('googleFormTahapAwalUrl')}
-                onChange={(e) =>
-                  setFormData({ ...formData, googleFormTahapAwalUrl: e.target.value })
-                }
-                className={`min-w-0 flex-1 p-2.5 rounded bg-black/60 border border-rose-500/30 font-mono text-white ${isUrlLocked('googleFormTahapAwalUrl') ? 'cursor-not-allowed opacity-80' : ''}`}
-                placeholder="URL Form khusus tahap awal (bukan Form utama)"
-              />
-              {renderUrlLockButton('googleFormTahapAwalUrl')}
-            </div>
-            <p className="mt-1 text-[10px] leading-relaxed text-neutral-400">
-              Form Asesmen Tahap Awal sekarang diisi langsung di SIPANDU. Pengaturan ini dipertahankan untuk kompatibilitas versi lama; barcode tahap awal tidak menggunakan URL Google Form.
-            </p>
-          </div>
-
-          <div>
-            <label className="block text-sky-200 font-semibold mb-1 flex items-center gap-1.5">
-              <Link className="w-3.5 h-3.5 text-emerald-400" />
-              <span>URL Google Form Asesmen Tahap Lanjutan:</span>
-            </label>
-            <div className="flex items-stretch gap-2">
-              <input
-                type="url"
-                value={formData.googleFormTahapLanjutanUrl || ''}
-                readOnly={isUrlLocked('googleFormTahapLanjutanUrl')}
-                onChange={(e) =>
-                  setFormData({ ...formData, googleFormTahapLanjutanUrl: e.target.value })
-                }
-                placeholder="https://docs.google.com/forms/d/FORM_ID/edit"
-                className={`min-w-0 flex-1 p-2.5 rounded bg-black/60 border border-emerald-500/30 font-mono text-white ${isUrlLocked('googleFormTahapLanjutanUrl') ? 'cursor-not-allowed opacity-80' : ''}`}
-              />
-              {renderUrlLockButton('googleFormTahapLanjutanUrl')}
-            </div>
-            <p className="mt-1 text-[10px] text-neutral-400">
-              Gunakan formulir lanjutan yang berbeda dari tahap awal. Tautan WhatsApp dibuat khusus untuk setiap ID PPKS.
-            </p>
-          </div>
-
-          <div>
-            <label className="block text-sky-200 font-semibold mb-1">
-              Nomor entry pertanyaan “ID PPKS” pada Form lanjutan:
-            </label>
-            <input
-              type="text"
-              inputMode="numeric"
-              value={formData.googleFormTahapLanjutanIdEntry || ''}
-              onChange={(e) =>
-                setFormData({ ...formData, googleFormTahapLanjutanIdEntry: e.target.value })
-              }
-              placeholder="Contoh: 123456789 (atau entry.123456789)"
-              className="w-full p-2.5 rounded bg-black/60 border border-emerald-500/30 font-mono text-white"
-            />
-            <p className="mt-1 text-[10px] text-neutral-400">
-              Ambil nomor asli dari Google Forms → menu tiga titik → Dapatkan link yang telah diisi sebelumnya. Buat pertanyaan “ID PPKS” di formulir lanjutan.
-            </p>
-            <p className="mt-1 text-[10px] text-emerald-200">
-              Agar jawaban lanjutan otomatis masuk ke record PPKS yang sama, buka tab Respons pada Form lanjutan, tautkan ke Google Spreadsheet, dan pastikan kolom pertanyaan prefill berjudul “ID PPKS”. SIPANDU akan menemukan sheet tertaut dan memadankan respons setiap 5 menit saat dashboard aktif.
-            </p>
-          </div>
-
-          <div>
-            <label className="block text-sky-200 font-semibold mb-1 flex items-center gap-1.5">
-              <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-400" />
-              <span>URL Google Spreadsheet Database PPKS:</span>
-            </label>
-            <div className="flex items-stretch gap-2">
-              <input
-                type="url"
-                value={formData.googleSpreadsheetUrl}
-                readOnly={isUrlLocked('googleSpreadsheetUrl')}
-                onChange={(e) =>
-                  setFormData({ ...formData, googleSpreadsheetUrl: e.target.value })
-                }
-                className={`min-w-0 flex-1 p-2.5 rounded bg-black/60 border border-rose-500/30 font-mono text-white ${isUrlLocked('googleSpreadsheetUrl') ? 'cursor-not-allowed opacity-80' : ''}`}
-              />
-              {renderUrlLockButton('googleSpreadsheetUrl')}
-            </div>
-            <p className="mt-1 text-[10px] text-neutral-400">Kosongkan bila belum punya database terpisah. Buat database melalui Google Workspace & Cloud Hub; jangan gunakan spreadsheet respons Google Form.</p>
-          </div>
-
-          <div>
-            <label className="block text-sky-200 font-semibold mb-1 flex items-center gap-1.5">
-              <FolderGit2 className="w-3.5 h-3.5 text-amber-400" />
-              <span>URL Google Drive Arsip Berkas PPKS:</span>
-            </label>
-            <div className="flex items-stretch gap-2">
-              <input
-                type="url"
-                value={formData.googleDriveFolderUrl}
-                readOnly={isUrlLocked('googleDriveFolderUrl')}
-                onChange={(e) =>
-                  setFormData({ ...formData, googleDriveFolderUrl: e.target.value })
-                }
-                className={`min-w-0 flex-1 p-2.5 rounded bg-black/60 border border-rose-500/30 font-mono text-white ${isUrlLocked('googleDriveFolderUrl') ? 'cursor-not-allowed opacity-80' : ''}`}
-                required
-              />
-              {renderUrlLockButton('googleDriveFolderUrl')}
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3 pt-2 border-t border-rose-500/20">
-            <div>
-              <label className="block text-sky-200 font-semibold mb-1">
-                Nama Pengirim WhatsApp:
-              </label>
-              <input
-                type="text"
-                value={formData.senderName}
-                onChange={(e) => setFormData({ ...formData, senderName: e.target.value })}
-                className="w-full p-2 rounded bg-black/60 border border-rose-500/30 text-white"
-              />
-            </div>
-            <div>
-              <label className="block text-sky-200 font-semibold mb-1">
-                Peran Pengirim:
-              </label>
-              <input
-                type="text"
-                value={formData.senderRole}
-                onChange={(e) => setFormData({ ...formData, senderRole: e.target.value })}
-                className="w-full p-2 rounded bg-black/60 border border-rose-500/30 text-white"
-              />
-            </div>
-          </div>
-
-          <div className="rounded-xl border border-sky-400/30 bg-sky-950/20 p-3 space-y-3">
-            <div>
-              <h4 className="text-sky-100 font-bold text-xs">Pemetaan pertanyaan Google Form utama</h4>
-              <p className="mt-1 text-[10px] leading-relaxed text-neutral-300">
-                Ambil entry ID dari Google Forms → menu tiga titik → Dapatkan link yang telah diisi sebelumnya. Masukkan angka entry yang benar untuk setiap pertanyaan. Entry ID “ID PPKS” wajib agar respons dapat dipadankan kembali. SIPANDU tidak menebak ID pertanyaan.
-              </p>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              {([
-                ['namaLengkap', 'Nama Lengkap'],
-                ['nik', 'NIK'],
-                ['usia', 'Usia'],
-                ['jenisKelamin', 'Jenis Kelamin'],
-                ['kotaDomisili', 'Kota Domisili'],
-                ['noHpWa', 'No. HP / WhatsApp'],
-                ['jenisBantuan', 'Jenis Bantuan'],
-                ['idPpks', 'ID PPKS (wajib)'],
-              ] as Array<[keyof GoogleFormUtamaPrefillEntries, string]>).map(([key, label]) => (
-                <label key={key} className="block text-[11px] text-sky-100">
-                  {label}
+            <form onSubmit={handleSavePin} className="space-y-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <label className="block text-[11px] font-semibold text-sky-100">
+                  {pinConfigured ? 'PIN baru' : 'Buat PIN'}
                   <input
-                    type="text"
+                    type="password"
                     inputMode="numeric"
-                    autoComplete="off"
-                    value={formData.googleFormUtamaPrefillEntries?.[key] || ''}
-                    onChange={(event) => setFormData({
-                      ...formData,
-                      googleFormUtamaPrefillEntries: {
-                        namaLengkap: '',
-                        nik: '',
-                        usia: '',
-                        jenisKelamin: '',
-                        kotaDomisili: '',
-                        noHpWa: '',
-                        jenisBantuan: '',
-                        idPpks: '',
-                        ...(formData.googleFormUtamaPrefillEntries || {}),
-                        [key]: event.target.value.replace(/^entry\./i, '').replace(/\D/g, ''),
-                      },
-                    })}
-                    placeholder="Nomor entry angka"
-                    className="mt-1 w-full rounded-lg border border-sky-400/25 bg-black/60 p-2 font-mono text-white"
+                    autoComplete="new-password"
+                    pattern="[0-9]{4}"
+                    maxLength={4}
+                    minLength={4}
+                    value={newPin}
+                    onChange={(event) => setNewPin(event.target.value.replace(/\D/g, '').slice(0, 4))}
+                    placeholder="4 angka"
+                    aria-label="PIN baru empat angka"
+                    className="mt-1.5 w-full rounded-xl border border-sky-300/20 bg-black/35 px-3 py-3 text-center text-xl tracking-[0.35em] text-white outline-none focus:border-sky-300 focus:ring-2 focus:ring-sky-300/20"
+                    required
                   />
                 </label>
-              ))}
-            </div>
-          </div>
+                <label className="block text-[11px] font-semibold text-sky-100">
+                  Konfirmasi PIN
+                  <input
+                    type="password"
+                    inputMode="numeric"
+                    autoComplete="new-password"
+                    pattern="[0-9]{4}"
+                    maxLength={4}
+                    minLength={4}
+                    value={confirmPin}
+                    onChange={(event) => setConfirmPin(event.target.value.replace(/\D/g, '').slice(0, 4))}
+                    placeholder="Ulangi PIN"
+                    aria-label="Konfirmasi PIN empat angka"
+                    className="mt-1.5 w-full rounded-xl border border-sky-300/20 bg-black/35 px-3 py-3 text-center text-xl tracking-[0.35em] text-white outline-none focus:border-sky-300 focus:ring-2 focus:ring-sky-300/20"
+                    required
+                  />
+                </label>
+              </div>
 
-          <div className="pt-3 flex items-center justify-end gap-2">
+              <button
+                type="submit"
+                disabled={pinBusy || newPin.length !== 4 || confirmPin.length !== 4}
+                className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-sky-300 px-4 py-3 text-sm font-bold text-sky-950 transition hover:bg-sky-200 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {pinBusy ? <RefreshCw className="h-4 w-4 animate-spin" /> : <LockKeyhole className="h-4 w-4" />}
+                {pinBusy ? 'Menyimpan PIN…' : pinConfigured ? 'Simpan PIN baru' : 'Daftarkan PIN'}
+              </button>
+            </form>
+
+            {pinMessage && (
+              <p
+                role="status"
+                className={'mt-3 flex items-start gap-2 rounded-xl border p-3 text-xs leading-relaxed ' + (
+                  pinMessageType === 'success'
+                    ? 'border-emerald-300/20 bg-emerald-950/35 text-emerald-100'
+                    : 'border-rose-300/20 bg-rose-950/35 text-rose-100'
+                )}
+              >
+                {pinMessageType === 'success' ? <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" /> : <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />}
+                <span>{pinMessage}</span>
+              </p>
+            )}
+          </section>
+
+          <section className="rounded-2xl border border-emerald-300/20 bg-emerald-950/20 p-4">
+            <div className="mb-3 flex items-start gap-3">
+              <div className="rounded-xl border border-emerald-300/20 bg-emerald-300/10 p-2.5 text-emerald-100">
+                <Fingerprint className="h-5 w-5" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h3 className="text-sm font-bold text-emerald-100">Fingerprint</h3>
+                  <span className="text-neutral-500">/</span>
+                  <ScanFace className="h-4 w-4 text-sky-200" />
+                  <h3 className="text-sm font-bold text-sky-100">Face Unlock</h3>
+                </div>
+                <p className="mt-1 text-[11px] leading-relaxed text-neutral-300">
+                  Perangkat atau browser memilih metode yang didukung. SIPANDU tidak membaca atau menyimpan citra wajah maupun sidik jari.
+                </p>
+              </div>
+              {biometricEnabled && <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-300" />}
+            </div>
+
+            <div role="status" className="mb-3 rounded-xl border border-white/10 bg-black/25 p-3 text-[11px] leading-relaxed text-neutral-300">
+              {biometricDiagnostics}
+            </div>
+
+            {!pinConfigured && !biometricEnabled && (
+              <p className="mb-3 flex items-start gap-2 rounded-xl border border-amber-300/20 bg-amber-950/25 p-3 text-[11px] leading-relaxed text-amber-100">
+                <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+                Daftarkan PIN 4 angka di atas sebelum mengaktifkan biometrik. PIN menjadi cadangan bila verifikasi biometrik gagal.
+              </p>
+            )}
+
             <button
               type="button"
-              onClick={onClose}
-              className="px-4 py-2 rounded-lg bg-black/60 text-neutral-300 font-medium"
+              disabled={biometricBusy || (!biometricEnabled && (!pinConfigured || !biometricIsAvailable))}
+              onClick={() => void handleBiometricToggle()}
+              className={'inline-flex w-full items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-bold transition disabled:cursor-not-allowed disabled:opacity-50 ' + (
+                biometricEnabled
+                  ? 'border border-rose-300/25 bg-rose-950/35 text-rose-100 hover:bg-rose-900/40'
+                  : 'bg-emerald-300 text-emerald-950 hover:bg-emerald-200'
+              )}
             >
-              Batal
+              {biometricBusy
+                ? <RefreshCw className="h-4 w-4 animate-spin" />
+                : biometricEnabled
+                  ? <ShieldCheck className="h-4 w-4" />
+                  : <Fingerprint className="h-4 w-4" />}
+              {biometricBusy
+                ? 'Memproses…'
+                : biometricEnabled
+                  ? 'Nonaktifkan biometrik'
+                  : 'Daftarkan biometrik perangkat'}
             </button>
-            <button
-              type="submit"
-              className="px-5 py-2 rounded-lg bg-emerald-700 hover:bg-emerald-600 text-white font-bold uppercase tracking-wider flex items-center gap-1.5 shadow-md"
-            >
-              {saved ? <Check className="w-4 h-4 text-emerald-300" /> : <Save className="w-4 h-4" />}
-              <span>{saved ? 'Tersimpan!' : 'Simpan Konfigurasi'}</span>
-            </button>
-          </div>
-        </form>
-      </div>
+          </section>
+
+          <p className="px-1 text-[10px] leading-relaxed text-neutral-500">
+            PIN dan biometrik hanya membuka kunci lokal. Sesi akun resmi SIPANDU dan izin Firebase tetap berlaku. Jika sesi akun berakhir, Anda perlu masuk kembali dengan akun resmi.
+          </p>
+        </div>
+      </section>
     </div>
   );
 };
