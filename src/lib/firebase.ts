@@ -1,6 +1,6 @@
 import { initializeApp, getApps } from 'firebase/app';
 import { Capacitor } from '@capacitor/core';
-import { GoogleSignIn } from '@capawesome/capacitor-google-sign-in';
+import { SocialLogin } from '@capgo/capacitor-social-login';
 import {
   getFirestore,
   doc,
@@ -322,8 +322,18 @@ export const googleSignIn = async (): Promise<{
   if (Capacitor.isNativePlatform()) {
     try {
       if (!nativeGoogleSignInInitialized) {
-        await GoogleSignIn.initialize({
-          clientId: firebaseConfig.oAuthClientId,
+        await SocialLogin.initialize({
+          google: {
+            webClientId: firebaseConfig.oAuthClientId,
+            mode: 'online',
+          },
+        });
+        nativeGoogleSignInInitialized = true;
+      }
+
+      const nativeResponse: any = await SocialLogin.login({
+        provider: 'google',
+        options: {
           scopes: [
             'email',
             'profile',
@@ -333,30 +343,33 @@ export const googleSignIn = async (): Promise<{
             'https://www.googleapis.com/auth/forms.body',
             'https://www.googleapis.com/auth/forms.responses.readonly',
           ],
-        });
-        nativeGoogleSignInInitialized = true;
-      }
-
-      const nativeResult = await GoogleSignIn.signIn();
-      const selectedEmail = nativeResult.email?.trim();
+          forceRefreshToken: true,
+        },
+      });
+      const nativeResult = nativeResponse?.result;
+      const selectedEmail = nativeResult?.profile?.email?.trim();
       if (!selectedEmail || selectedEmail.toLowerCase() !== GOOGLE_WORKSPACE_EMAIL.toLowerCase()) {
-        try { await GoogleSignIn.signOut(); } catch { /* keep the account mismatch as the main error */ }
+        try { await SocialLogin.logout({ provider: 'google' }); } catch { /* keep the account mismatch as the main error */ }
         cacheWorkspaceToken(null);
         throw new Error(
           `Pilih akun Google ${GOOGLE_WORKSPACE_EMAIL}. Akun yang dipilih: ${selectedEmail || 'email tidak tersedia'}.`
         );
       }
-      if (!nativeResult.idToken) {
+      const idToken = nativeResult?.idToken;
+      const accessToken = typeof nativeResult?.accessToken === 'string'
+        ? nativeResult.accessToken
+        : nativeResult?.accessToken?.token;
+      if (!idToken) {
         throw new Error('Google Sign-In native tidak mengembalikan ID token. Periksa Web OAuth Client ID pada Firebase/Google Cloud.');
       }
-      if (!nativeResult.accessToken) {
+      if (!accessToken) {
         throw new Error('Login berhasil, tetapi token Google API tidak tersedia. Ulangi persetujuan akses Drive, Sheets, dan Forms.');
       }
 
-      const firebaseCredential = GoogleAuthProvider.credential(nativeResult.idToken);
+      const firebaseCredential = GoogleAuthProvider.credential(idToken);
       const userCredential = await signInWithCredential(workspaceAuth, firebaseCredential);
-      cacheWorkspaceToken(nativeResult.accessToken);
-      return { user: userCredential.user, accessToken: nativeResult.accessToken };
+      cacheWorkspaceToken(accessToken);
+      return { user: userCredential.user, accessToken };
     } catch (error: any) {
       cacheWorkspaceToken(null);
       const message = error?.message || String(error);
@@ -526,7 +539,7 @@ export const invalidateAccessToken = (): void => {
 export const googleLogout = async () => {
   try {
     if (Capacitor.isNativePlatform()) {
-      try { await GoogleSignIn.signOut(); } catch { /* Firebase session cleanup must still run */ }
+      try { await SocialLogin.logout({ provider: 'google' }); } catch { /* Firebase session cleanup must still run */ }
     }
     await signOut(workspaceAuth);
   } finally {
