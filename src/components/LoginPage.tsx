@@ -1,5 +1,5 @@
 import React, { useRef, useState } from 'react';
-import { signInWithEmailAndPassword } from 'firebase/auth';
+import { onAuthStateChanged, signInWithEmailAndPassword, type User as FirebaseUser } from 'firebase/auth';
 import { auth } from '../lib/firebase';
 import { authenticateBiometricLock, isAppPinConfigured, isBiometricLockEnabled, verifyAppPin } from '../lib/biometricLock';
 import { Lock, User, Eye, EyeOff, Fingerprint } from 'lucide-react';
@@ -13,6 +13,8 @@ interface LoginPageProps {
 
 export const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
   const [email, setEmail] = useState('');
+  const [restoredUser, setRestoredUser] = useState<FirebaseUser | null>(auth.currentUser);
+  const [authReady, setAuthReady] = useState(false);
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
@@ -21,9 +23,25 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
   const [quickPin, setQuickPin] = useState('');
   const [forcePasswordLogin, setForcePasswordLogin] = useState(false);
   const formRef = useRef<HTMLFormElement>(null);
+  const quickUnlockUser = restoredUser || auth.currentUser;
+  const quickUnlockActive = Boolean(quickUnlockUser && isBiometricLockEnabled(quickUnlockUser.uid) && !forcePasswordLogin);
+
+  React.useEffect(() => {
+    // Wait for Firebase to restore its persisted session before deciding whether
+    // the first tap should open biometric unlock or submit the password form.
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      setRestoredUser(user);
+      setAuthReady(true);
+    });
+    return unsubscribe;
+  }, []);
 
   const handlePrimaryAction = async () => {
-    const currentUser = auth.currentUser;
+    if (!authReady) {
+      setErrorMsg('Memulihkan sesi SIPANDU. Tunggu sebentar lalu tekan Masuk sekali lagi.');
+      return;
+    }
+    const currentUser = restoredUser || auth.currentUser;
     // On a registered account, the primary action always opens Android's native
     // biometric prompt first. Password entry remains an explicit fallback.
     if (currentUser && isBiometricLockEnabled(currentUser.uid) && !forcePasswordLogin) {
@@ -46,7 +64,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
 
   const handleQuickPin = async (e: React.FormEvent) => {
     e.preventDefault();
-    const currentUser = auth.currentUser;
+    const currentUser = restoredUser || auth.currentUser;
     if (!currentUser || !isAppPinConfigured(currentUser.uid)) {
       setErrorMsg('Sesi akun tidak tersedia untuk membuka dengan PIN. Masuk menggunakan email dan kata sandi.');
       return;
@@ -181,13 +199,14 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
                 </div>
                 <input
                   id="sipandu-email"
-                  type="email"
+                  type={quickUnlockActive ? 'text' : 'email'}
                   autoComplete="username"
-                  value={email}
+                  value={quickUnlockActive ? '••••••••••••' : email}
+                  readOnly={quickUnlockActive}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="nama@instansi.go.id"
                   className="w-full rounded-lg border border-white/90 bg-white/55 py-3 pl-9 pr-3 text-sm text-slate-800 placeholder-slate-600/80 shadow-sm outline-none transition focus:border-teal-700 focus:bg-white/75 focus:ring-2 focus:ring-teal-700/25"
-                  required
+                  required={!quickUnlockActive}
                 />
               </div>
             </div>
@@ -205,38 +224,39 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
                 </div>
                 <input
                   id="sipandu-password"
-                  type={showPassword ? 'text' : 'password'}
+                  type={quickUnlockActive ? 'text' : (showPassword ? 'text' : 'password')}
                   autoComplete="current-password"
-                  value={password}
+                  value={quickUnlockActive ? '••••••' : password}
+                  readOnly={quickUnlockActive}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="Masukkan kata sandi"
                   className="w-full rounded-lg border border-white/90 bg-white/55 py-3 pl-9 pr-9 text-sm text-slate-800 placeholder-slate-600/80 shadow-sm outline-none transition focus:border-teal-700 focus:bg-white/75 focus:ring-2 focus:ring-teal-700/25"
-                  required
+                  required={!quickUnlockActive}
                 />
-                <button
+                {!quickUnlockActive && <button
                   type="button"
                   aria-label={showPassword ? 'Sembunyikan kata sandi' : 'Tampilkan kata sandi'}
                   onClick={() => setShowPassword(!showPassword)}
                   className="absolute inset-y-0 right-0 flex items-center pr-3 text-slate-600 transition hover:text-teal-800"
                 >
                   {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                </button>
+                </button>}
               </div>
             </div>
 
             <button
               type="button"
               onClick={() => void handlePrimaryAction()}
-              disabled={isSubmitting}
+              disabled={isSubmitting || !authReady}
               aria-label="Masuk Aplikasi dengan sidik jari jika tersedia, atau email dan kata sandi"
               className="mt-1 flex w-full items-center justify-center gap-2 rounded-xl border border-teal-700/70 bg-teal-700 px-3 py-3 text-sm font-bold uppercase tracking-wide text-white shadow-[0_6px_18px_rgba(15,118,110,0.28)] transition hover:bg-teal-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
             >
-              <span>{isSubmitting ? 'Memeriksa akun…' : 'Masuk Aplikasi'}</span>
+              <span>{!authReady ? 'Memulihkan sesi…' : (isSubmitting ? 'Memeriksa akun…' : (quickUnlockActive ? 'Buka dengan fingerprint' : 'Masuk Aplikasi'))}</span>
               <Fingerprint className="h-5 w-5" aria-hidden="true" />
             </button>
           </form>
 
-          {auth.currentUser && isBiometricLockEnabled(auth.currentUser.uid) && !forcePasswordLogin && (
+          {quickUnlockUser && isBiometricLockEnabled(quickUnlockUser.uid) && !forcePasswordLogin && (
             <button
               type="button"
               onClick={() => { setForcePasswordLogin(true); setErrorMsg(''); }}
@@ -245,7 +265,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
               Gunakan email dan kata sandi
             </button>
           )}
-          {forcePasswordLogin && auth.currentUser && isBiometricLockEnabled(auth.currentUser.uid) && (
+          {forcePasswordLogin && quickUnlockUser && isBiometricLockEnabled(quickUnlockUser.uid) && (
             <button
               type="button"
               onClick={() => { setForcePasswordLogin(false); setErrorMsg(''); }}
@@ -256,7 +276,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
           )}
 
           {/* Buka cepat stays within the existing login card; no separate biometric page. */}
-          {auth.currentUser && isAppPinConfigured(auth.currentUser.uid) && (
+          {quickUnlockUser && isAppPinConfigured(quickUnlockUser.uid) && (
             <form
               onSubmit={(event) => void handleQuickPin(event)}
               className="mt-3 rounded-xl border border-white/55 bg-white/30 p-2.5"
