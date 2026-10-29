@@ -84,7 +84,7 @@ export const StageOneRespondentPage: React.FC = () => {
   if (successId) return (
     <main className="min-h-screen bg-[#07130b] px-4 py-10 text-white">
       <section className="mx-auto max-w-xl rounded-2xl border border-emerald-500/40 bg-[#102517] p-6 shadow-2xl sm:p-8">
-        <div className="mb-4 flex justify-center"><img src={publicAssetUrl('uploads/sipandu-logo.png')} alt="Logo SIPANDU" className="h-20 w-auto object-contain" /></div>
+        <div className="mb-4 flex justify-center"><img src={publicAssetUrl('uploads/logo-kemsos.webp')} alt="Logo Kementerian Sosial Republik Indonesia" className="h-20 w-auto object-contain" /></div>
         <div className="mb-4 flex justify-center"><span className="rounded-full border border-emerald-300/40 bg-emerald-900/60 px-4 py-3 text-emerald-200">✓</span></div>
         <h1 className="text-center text-2xl font-black">Asesmen Tahap Awal Terkirim</h1>
         <p className="mt-3 text-center text-sm leading-relaxed text-emerald-100">Terima kasih sudah berpartisipasi dalam program bantuan Atensi dari Kementerian Sosial RI. Data anda akan kami simpan dan terjamin kerahasiaannya. Petugas kami akan memberikan link asesmen berikutnya kepada anda untuk verifikasi lebih lanjut. Mohon untuk tetap melanjutkan tahap selanjutnya. Terima kasih atas partisipasinya. Salam hangat, Deny Arifin M.S - DRSKPNO</p>
@@ -98,10 +98,10 @@ export const StageOneRespondentPage: React.FC = () => {
     <main className="min-h-screen bg-[#07130b] px-4 py-6 text-white sm:py-10">
       <section className="mx-auto max-w-2xl rounded-2xl border border-rose-500/35 bg-[#0c1b10] p-4 shadow-[0_0_28px_rgba(244,63,94,0.12)] sm:p-7">
         <header className="mb-6 border-b border-rose-500/25 pb-5 text-center">
-          <img src={publicAssetUrl('uploads/sipandu-logo.png')} alt="Logo SIPANDU" className="mx-auto mb-3 h-16 w-auto object-contain" />
+          <img src={publicAssetUrl('uploads/logo-kemsos.webp')} alt="Logo Kementerian Sosial Republik Indonesia" className="mx-auto mb-3 h-16 w-auto object-contain" />
           <p className="mb-2 inline-flex rounded border border-emerald-400/50 bg-emerald-950 px-3 py-1 text-[10px] font-bold tracking-wider text-emerald-200">KEMENSOS RI • ASESMEN TAHAP AWAL</p>
           <h1 className="text-xl font-black leading-snug sm:text-2xl">Formulir Asesmen Tahap Awal</h1>
-          <p className="mt-2 text-xs leading-relaxed text-neutral-300 sm:text-sm">Silakan isi pertanyaan berikut dengan data yang benar. Formulir ini merupakan bagian dari aplikasi SIPANDU, bukan Google Form.</p>
+          <p className="mt-2 text-xs leading-relaxed text-neutral-300 sm:text-sm">Mohon mengisi seluruh pertanyaan di bawah ini dengan data yang valid dan dapat dipertanggungjawabkan. Pengisian formulir ini merupakan tahap awal asesmen program bantuan Kementerian Sosial; petugas kami akan menghubungi Anda kembali untuk tahapan selanjutnya</p>
         </header>
         {error && <div role="alert" className="mb-4 rounded-lg border border-rose-400/50 bg-rose-950/60 p-3 text-xs leading-relaxed text-rose-100">{error}</div>}
         <form onSubmit={handleSubmit} className="space-y-4">
