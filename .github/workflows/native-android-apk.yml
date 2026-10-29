@@ -183,7 +183,7 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-      - name: Configure persistent or first-install release signing key
+      - name: Require persistent Android release signing key
         if: github.event_name != 'pull_request'
         shell: bash
         env:
@@ -193,32 +193,20 @@ jobs:
           SIPANDU_RELEASE_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD || secrets.SIPANDU_RELEASE_KEY_PASSWORD }}
         run: |
           set -euo pipefail
-          KEYSTORE_PATH="$RUNNER_TEMP/sipandu-release.jks"
-          if [ -n "$SIPANDU_RELEASE_KEYSTORE_BASE64" ] && [ -n "$SIPANDU_RELEASE_STORE_PASSWORD" ] && [ -n "$SIPANDU_RELEASE_KEY_ALIAS" ] && [ -n "$SIPANDU_RELEASE_KEY_PASSWORD" ]; then
-            printf '%s' "$SIPANDU_RELEASE_KEYSTORE_BASE64" | base64 --decode > "$KEYSTORE_PATH"
-            echo "Using the configured persistent SIPANDU release signing key."
-            echo "SIPANDU_SIGNING_MODE=persistent" >> "$GITHUB_ENV"
-          else
-            KEYSTORE_PASSWORD="$(openssl rand -hex 24)"
-            KEY_ALIAS="sipandu-release"
-            keytool -genkeypair -v \
-              -keystore "$KEYSTORE_PATH" \
-              -storetype JKS \
-              -storepass "$KEYSTORE_PASSWORD" \
-              -keypass "$KEYSTORE_PASSWORD" \
-              -alias "$KEY_ALIAS" \
-              -keyalg RSA -keysize 4096 -validity 10000 \
-              -dname "CN=SIPANDU ODHIV, OU=Release, O=SIPANDU, L=Medan, ST=Sumatera Utara, C=ID"
-            echo "::warning::Persistent signing secrets are not configured. This APK can be installed, but future updates may not install over it until the same keystore is saved in GitHub Actions secrets."
-            echo "SIPANDU_SIGNING_MODE=temporary" >> "$GITHUB_ENV"
-            echo "SIPANDU_RELEASE_STORE_PASSWORD=$KEYSTORE_PASSWORD" >> "$GITHUB_ENV"
-            echo "SIPANDU_RELEASE_KEY_ALIAS=$KEY_ALIAS" >> "$GITHUB_ENV"
-            echo "SIPANDU_RELEASE_KEY_PASSWORD=$KEYSTORE_PASSWORD" >> "$GITHUB_ENV"
+          if [ -z "$SIPANDU_RELEASE_KEYSTORE_BASE64" ] || [ -z "$SIPANDU_RELEASE_STORE_PASSWORD" ] || [ -z "$SIPANDU_RELEASE_KEY_ALIAS" ] || [ -z "$SIPANDU_RELEASE_KEY_PASSWORD" ]; then
+            echo "::error::Release APK blocked: configure a persistent Android signing keystore in GitHub Actions secrets before publishing."
+            echo "::error::Required names: ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS, ANDROID_KEY_PASSWORD (or the matching SIPANDU_RELEASE_* aliases)."
+            echo "::error::A randomly generated signing key changes the APK SHA-1 and can break Google Sign-In with DEVELOPER_ERROR."
+            exit 1
           fi
+          KEYSTORE_PATH="$RUNNER_TEMP/sipandu-release.jks"
+          printf '%s' "$SIPANDU_RELEASE_KEYSTORE_BASE64" | base64 --decode > "$KEYSTORE_PATH"
+          test -s "$KEYSTORE_PATH"
+          echo "SIPANDU_SIGNING_MODE=persistent" >> "$GITHUB_ENV"
           echo "SIPANDU_KEYSTORE_PATH=$KEYSTORE_PATH" >> "$GITHUB_ENV"
-          if [ -n "$SIPANDU_RELEASE_STORE_PASSWORD" ]; then echo "SIPANDU_KEYSTORE_PASSWORD=$SIPANDU_RELEASE_STORE_PASSWORD" >> "$GITHUB_ENV"; fi
-          if [ -n "$SIPANDU_RELEASE_KEY_ALIAS" ]; then echo "SIPANDU_KEY_ALIAS=$SIPANDU_RELEASE_KEY_ALIAS" >> "$GITHUB_ENV"; fi
-          if [ -n "$SIPANDU_RELEASE_KEY_PASSWORD" ]; then echo "SIPANDU_KEY_PASSWORD=$SIPANDU_RELEASE_KEY_PASSWORD" >> "$GITHUB_ENV"; fi
+          echo "SIPANDU_KEYSTORE_PASSWORD=$SIPANDU_RELEASE_STORE_PASSWORD" >> "$GITHUB_ENV"
+          echo "SIPANDU_KEY_ALIAS=$SIPANDU_RELEASE_KEY_ALIAS" >> "$GITHUB_ENV"
+          echo "SIPANDU_KEY_PASSWORD=$SIPANDU_RELEASE_KEY_PASSWORD" >> "$GITHUB_ENV"
 
       - name: Configure Android release signing
         if: github.event_name != 'pull_request'
@@ -311,7 +299,17 @@ jobs:
           grep -q "package: name='id.my.sipandu.odhiv'" /tmp/sipandu-release-badging.txt
           grep -q "versionName='$(node -p "require('./package.json').version")'" /tmp/sipandu-release-badging.txt
           grep -q "application-label:'SIPANDU ODHIV'" /tmp/sipandu-release-badging.txt
-          "$APKSIGNER" verify --verbose --print-certs "$APK"
+          "$APKSIGNER" verify --verbose --print-certs "$APK" | tee /tmp/sipandu-release-signing.txt
+          SHA1="$(sed -n 's/.*Signer #1 certificate SHA-1 digest: //p' /tmp/sipandu-release-signing.txt | head -n 1)"
+          test -n "$SHA1" || { echo "::error::Release APK SHA-1 fingerprint could not be extracted."; exit 1; }
+          {
+            echo "### Android Google Sign-In fingerprint"
+            echo
+            echo "- Package: `id.my.sipandu.odhiv`"
+            echo "- Release SHA-1: `$SHA1`"
+            echo "- Register this exact fingerprint in the Android app settings in Firebase and in the Android OAuth client in the same Google Cloud project."
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "Release signing SHA-1 captured for OAuth configuration."
 
       - name: Verify Google scope bridge inside signed release APK bytecode
         if: github.event_name != 'pull_request'
