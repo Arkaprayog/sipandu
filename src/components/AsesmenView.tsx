@@ -739,7 +739,7 @@ export const AsesmenView: React.FC<AsesmenViewProps> = ({
               />
             </div>
           </div>
-        )}}
+        )}
       </div>
 
       {/* 4. DATABASE PPKS ASESMEN TAHAP AWAL (di paling bawah):
