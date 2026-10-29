@@ -75,6 +75,10 @@ googleAuthProvider.addScope('https://www.googleapis.com/auth/forms.responses.rea
 // localStorage) so a page reload in the same tab does not force an immediate
 // reconnect, and discard them conservatively before Google's usual 1-hour expiry.
 const WORKSPACE_TOKEN_STORAGE_KEY = 'sipandu_google_workspace_token_v1';
+// SIPANDU policy: require explicit Google Workspace re-login every 90 days.
+// Store only the authorization timestamp, never a refresh token or secret.
+const WORKSPACE_AUTHORIZED_AT_KEY = 'sipandu_google_workspace_authorized_at_v1';
+export const WORKSPACE_REAUTH_INTERVAL_MS = 90 * 24 * 60 * 60 * 1000;
 const WORKSPACE_TOKEN_TTL_MS = 55 * 60 * 1000;
 // Proactively renew before expiry so the two-minute live-sync and private photos
 // usually continue without a manual "Pulihkan Izin" click.
@@ -83,6 +87,33 @@ const WORKSPACE_TOKEN_REFRESH_RETRY_MS = 5 * 60 * 1000;
 let cachedAccessTokenSavedAt = 0;
 let lastWorkspaceAutoRefreshAttemptAt = 0;
 let workspaceTokenRefreshInFlight: Promise<string | null> | null = null;
+
+function getWorkspaceAuthorizedAt(): number | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = window.localStorage.getItem(WORKSPACE_AUTHORIZED_AT_KEY);
+    if (!raw) return null;
+    const value = Number(raw);
+    return Number.isFinite(value) && value > 0 && value <= Date.now() ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+/** True until a successful explicit Google Workspace login starts a 90-day window. */
+export function isWorkspaceAuthorizationExpired(): boolean {
+  const authorizedAt = getWorkspaceAuthorizedAt();
+  return authorizedAt === null || Date.now() - authorizedAt >= WORKSPACE_REAUTH_INTERVAL_MS;
+}
+
+function markWorkspaceAuthorization(): void {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.setItem(WORKSPACE_AUTHORIZED_AT_KEY, String(Date.now()));
+  } catch {
+    // If persistent storage is unavailable, fail closed on the next session.
+  }
+}
 
 function readStoredWorkspaceToken(): string | null {
   if (typeof window === 'undefined') return null;
@@ -248,6 +279,7 @@ async function finishWorkspaceSignIn(result: import('firebase/auth').UserCredent
     cacheWorkspaceToken(null);
     throw new Error('Google berhasil mengautentikasi identitas, tetapi tidak memberikan access token untuk Drive/Sheets/Forms. Periksa persetujuan OAuth dan scope Google API.');
   }
+  markWorkspaceAuthorization();
   cacheWorkspaceToken(credential.accessToken);
   return { user: result.user, accessToken: credential.accessToken };
 }
@@ -407,6 +439,7 @@ export const googleSignIn = async (): Promise<{
 
       const firebaseCredential = GoogleAuthProvider.credential(idToken);
       const userCredential = await signInWithCredential(workspaceAuth, firebaseCredential);
+      markWorkspaceAuthorization();
       cacheWorkspaceToken(accessToken);
       return { user: userCredential.user, accessToken };
     } catch (error: unknown) {
@@ -524,6 +557,11 @@ export const completeGoogleRedirectSignIn = async (): Promise<{
  * A single in-flight refresh is shared by polling and image requests.
  */
 export const refreshWorkspaceAccessToken = async (force = false): Promise<string | null> => {
+  if (isWorkspaceAuthorizationExpired()) {
+    cacheWorkspaceToken(null);
+    return null;
+  }
+
   // Never start Firebase Web OAuth popups from a native Capacitor app.
   // On Android/iOS, reauthenticateWithPopup can escape the WebView and open
   // Firebase's browser Auth Handler (which may show "The requested action is invalid"),
@@ -572,6 +610,10 @@ export const refreshWorkspaceAccessToken = async (force = false): Promise<string
 };
 
 export const getAccessToken = async (): Promise<string | null> => {
+  if (isWorkspaceAuthorizationExpired()) {
+    cacheWorkspaceToken(null);
+    return null;
+  }
   if (!cachedAccessToken) cachedAccessToken = readStoredWorkspaceToken();
   const age = cachedAccessToken ? Date.now() - cachedAccessTokenSavedAt : WORKSPACE_TOKEN_TTL_MS;
 
