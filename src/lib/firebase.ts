@@ -524,6 +524,18 @@ export const completeGoogleRedirectSignIn = async (): Promise<{
  * A single in-flight refresh is shared by polling and image requests.
  */
 export const refreshWorkspaceAccessToken = async (force = false): Promise<string | null> => {
+  // Never start Firebase Web OAuth popups from a native Capacitor app.
+  // On Android/iOS, reauthenticateWithPopup can escape the WebView and open
+  // Firebase's browser Auth Handler (which may show "The requested action is invalid"),
+  // especially while background sync is refreshing an expiring Google API token.
+  // Native sign-in must be user-initiated through googleSignIn() / SocialLogin.
+  if (Capacitor.isNativePlatform()) {
+    if (!cachedAccessToken) cachedAccessToken = readStoredWorkspaceToken();
+    const nativeTokenAge = cachedAccessToken ? Date.now() - cachedAccessTokenSavedAt : WORKSPACE_TOKEN_TTL_MS;
+    if (cachedAccessToken && nativeTokenAge < WORKSPACE_TOKEN_TTL_MS) return cachedAccessToken;
+    return null;
+  }
+
   if (workspaceTokenRefreshInFlight) return workspaceTokenRefreshInFlight;
 
   const user = workspaceAuth.currentUser;
