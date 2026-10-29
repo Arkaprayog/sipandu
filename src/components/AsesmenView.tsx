@@ -674,7 +674,7 @@ export const AsesmenView: React.FC<AsesmenViewProps> = ({
 
         {/* 2. KONTEN: GOOGLE FORM UTAMA (tautan personal saja) */}
         {activeSubMenu === 'google-form' && (
-          <div className="p-6 md:p-8 rounded-2xl bg-black/50 border border-rose-500/40 space-y-5">
+          <div className="p-5 md:p-7 rounded-2xl bg-black/50 border border-rose-500/40 space-y-5">
             <div className="flex flex-col items-center text-center">
               <div className="p-3 rounded-full bg-emerald-950/80 border border-emerald-500/40">
                 <Link className="w-8 h-8 text-sky-300" />
@@ -682,24 +682,64 @@ export const AsesmenView: React.FC<AsesmenViewProps> = ({
               <h3 className="mt-3 text-lg md:text-xl font-black text-white uppercase tracking-wider">
                 GOOGLE FORM UTAMA
               </h3>
-              <p className="mt-2 max-w-xl text-xs leading-relaxed text-neutral-300">
-                Google Form utama digunakan setelah responden menyelesaikan Asesmen Tahap Awal di SIPANDU. Gunakan tombol WhatsApp pada baris responden di database Tahap Awal untuk membuat tautan khusus dengan data yang sudah dipraisi.
-              </p>
             </div>
-            <div className="rounded-xl border border-sky-400/25 bg-sky-950/20 p-4 text-xs leading-relaxed text-sky-100">
-              <h4 className="font-bold text-sm">Alur pengiriman tautan personal</h4>
-              <ol className="mt-2 list-decimal space-y-2 pl-5 text-neutral-200">
-                <li>Pastikan data responden sudah tersimpan di DATABASE PPKS ASESMEN TAHAP AWAL.</li>
-                <li>Isi entry ID asli untuk pertanyaan Google Form utama pada Pengaturan SIPANDU. Entry ID diperoleh dari Google Forms → menu tiga titik → Dapatkan link yang telah diisi sebelumnya.</li>
-                <li>Tekan tombol WhatsApp pada baris responden. SIPANDU akan menyiapkan tautan utama dengan bidang yang cocok terisi otomatis serta ID PPKS untuk pemadanan respons.</li>
-                <li>Setelah responden mengirim Google Form utama, data pada spreadsheet respons akan dipadankan kembali dengan record SIPANDU menggunakan ID PPKS.</li>
-              </ol>
+
+            <div className="mx-auto w-full max-w-2xl rounded-xl border border-sky-400/25 bg-black/35 p-3 sm:p-4">
+              <label htmlFor="sipandu-google-form-url" className="mb-2 block text-xs font-bold text-sky-200">
+                URL Google Form
+              </label>
+              <div className="flex min-w-0 flex-col gap-2 sm:flex-row">
+                <input
+                  id="sipandu-google-form-url"
+                  type="url"
+                  readOnly
+                  value={GOOGLE_SIPANDU_RESOURCES.formRespondentUrl}
+                  aria-label="URL Google Form Utama"
+                  className="min-w-0 flex-1 rounded-lg border border-white/15 bg-black/50 px-3 py-2.5 text-xs leading-relaxed text-white select-all outline-none focus:border-sky-300"
+                />
+                <div className="flex shrink-0 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => void handleCopyLink(GOOGLE_SIPANDU_RESOURCES.formRespondentUrl, 'Google Form Utama')}
+                    className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-emerald-500/40 bg-emerald-900/80 px-3 py-2.5 text-xs font-bold text-white transition hover:bg-emerald-800 sm:flex-none"
+                  >
+                    <Copy className="h-4 w-4" />
+                    <span>Salin URL</span>
+                  </button>
+                  <a
+                    href={GOOGLE_SIPANDU_RESOURCES.formRespondentUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-sky-400/40 bg-sky-950/80 px-3 py-2.5 text-xs font-bold text-white transition hover:bg-sky-900 sm:flex-none"
+                    aria-label="Buka Google Form Utama di tab baru"
+                  >
+                    <ExternalLink className="h-4 w-4" />
+                    <span>Buka Form</span>
+                  </a>
+                </div>
+              </div>
+              {copyFeedback && (
+                <p role="status" className="mt-2 text-[11px] font-semibold text-emerald-300">
+                  ✓ {copyFeedback} berhasil disalin ke clipboard.
+                </p>
+              )}
+              {copyError && (
+                <p role="alert" className="mt-2 text-[11px] font-semibold text-rose-200">
+                  {copyError}
+                </p>
+              )}
             </div>
-            <div className="rounded-lg border border-amber-400/30 bg-amber-950/20 p-3 text-[11px] leading-relaxed text-amber-100">
-              Tautan umum dan barcode Google Form utama tidak ditampilkan di sini agar responden menerima tautan personal yang sudah terhubung ke data Tahap Awal, bukan formulir tanpa ID PPKS.
+
+            <div className="flex justify-center">
+              <SipanduQRCode
+                value={GOOGLE_SIPANDU_RESOURCES.formRespondentUrl}
+                size={240}
+                label="Barcode Google Form Utama"
+                downloadFileName="barcode-google-form-utama-kemensos.png"
+              />
             </div>
           </div>
-        )}
+        )}}
       </div>
 
       {/* 4. DATABASE PPKS ASESMEN TAHAP AWAL (di paling bawah):
