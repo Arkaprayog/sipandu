@@ -257,7 +257,7 @@ export async function testFirebaseAuthConnection(): Promise<ConnectionCheckResul
  * Validates a Workspace identity and stores its scoped API token.
  * Shared by popup and redirect sign-in flows.
  */
-async function finishWorkspaceSignIn(result: import('firebase/auth').UserCredential): Promise<{
+async function finishWorkspaceSignIn(result: import('firebase/auth').UserCredential, recordAuthorization = true): Promise<{
   user: User;
   accessToken: string;
 }> {
@@ -279,7 +279,7 @@ async function finishWorkspaceSignIn(result: import('firebase/auth').UserCredent
     cacheWorkspaceToken(null);
     throw new Error('Google berhasil mengautentikasi identitas, tetapi tidak memberikan access token untuk Drive/Sheets/Forms. Periksa persetujuan OAuth dan scope Google API.');
   }
-  markWorkspaceAuthorization();
+  if (recordAuthorization) markWorkspaceAuthorization();
   cacheWorkspaceToken(credential.accessToken);
   return { user: result.user, accessToken: credential.accessToken };
 }
@@ -592,7 +592,7 @@ export const refreshWorkspaceAccessToken = async (force = false): Promise<string
 
   const operation = reauthenticateWithPopup(user, buildWorkspaceProvider('none'))
     .then(async (result) => {
-      const refreshed = await finishWorkspaceSignIn(result);
+      const refreshed = await finishWorkspaceSignIn(result, false);
       lastWorkspaceAutoRefreshAttemptAt = 0;
       return refreshed.accessToken;
     })
