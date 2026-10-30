@@ -3,4 +3,4 @@
  * It is independent of the staff dashboard and Google Forms.
  */
 export const STAGE_ONE_RESPONDENT_PORTAL_URL =
-  'https://sipandu.my.id/?mode=asesmen-tahap-awal';
+  'https://arkaprayog.github.io/sipandu/?mode=asesmen-tahap-awal';
