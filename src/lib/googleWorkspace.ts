@@ -778,7 +778,7 @@ function mapRowsToPPKSRecords(rows: string[][], useATENSIColumnPositions = false
 
     const usia = parseSheetNumber(useATENSIColumnPositions ? sourceCell(11) : readCellByAliases(headers, row, ['usia', 'umur', 'umurTahun', 'usiaSaatIni', 'umurSaatIni']), 0);
     const gender = readCellByAliases(headers, row, ['jenisKelamin', 'gender', 'jenisKelaminResponden']);
-    const domisili = readCellByAliases(headers, row, ['kotaDomisili', 'kabupatenKota', 'kotaKabupaten', 'domisili', 'kota', 'kabupaten']);
+    const domisili = useATENSIColumnPositions ? sourceCell(8) : readCellByAliases(headers, row, ['kotaDomisili', 'kabupatenKota', 'kotaKabupaten', 'domisili', 'kota', 'kabupaten']);
     const alamat = useATENSIColumnPositions ? sourceCell(10) : readCellByAliases(headers, row, ['alamatLengkap', 'alamatDomisili', 'alamatResponden', 'alamat']);
     const jenisBantuan = useATENSIColumnPositions ? sourceCell(39) : readCellByAliases(headers, row, ['jenisBantuan', 'bantuanDibutuhkan', 'jenisBantuanAtensi', 'kebutuhanBantuan']);
     const integratedValues: Partial<Record<keyof IntegratedFormData, string | number | boolean>> = {};
@@ -804,19 +804,19 @@ function mapRowsToPPKSRecords(rows: string[][], useATENSIColumnPositions = false
     // question title still maps correctly, while never treating KTP/KK/house
     // attachments as the respondent portrait.
     const fotoDiri = normalizePPKSPhotoSource(
-      readPPKSPhotoSourceByKind(headers, row, 'diri') ||
+      (useATENSIColumnPositions ? sourceCell(4) : '') || readPPKSPhotoSourceByKind(headers, row, 'diri') ||
       readCellByAliases(headers, row, ['fotoDiri', 'fotoDiriPPKS', 'fotoResponden', 'uploadFotoDiri', 'tautanFotoDiri', 'linkFotoDiri', 'fotoDiriCloseUp', 'fotoDiriResponden'])
     );
     const fotoKtp = normalizePPKSPhotoSource(
-      readPPKSPhotoSourceByKind(headers, row, 'ktp') ||
+      (useATENSIColumnPositions ? sourceCell(5) : '') || readPPKSPhotoSourceByKind(headers, row, 'ktp') ||
       readCellByAliases(headers, row, ['fotoKtp', 'fotoKTP', 'uploadFotoKTP', 'dokumenKTP', 'tautanFotoKTP', 'linkFotoKTP', 'fotoKartuIdentitas', 'scanKTP'])
     );
     const fotoKk = normalizePPKSPhotoSource(
-      readPPKSPhotoSourceByKind(headers, row, 'kk') ||
+      (useATENSIColumnPositions ? sourceCell(6) : '') || readPPKSPhotoSourceByKind(headers, row, 'kk') ||
       readCellByAliases(headers, row, ['fotoKk', 'fotoKK', 'uploadFotoKK', 'dokumenKK', 'tautanFotoKK', 'linkFotoKK', 'scanKK'])
     );
     const fotoRumah = normalizePPKSPhotoSource(
-      readPPKSPhotoSourceByKind(headers, row, 'rumah') ||
+      (useATENSIColumnPositions ? sourceCell(7) : '') || readPPKSPhotoSourceByKind(headers, row, 'rumah') ||
       readCellByAliases(headers, row, ['fotoRumah', 'fotoRumahTampakDepan', 'uploadFotoRumah', 'tautanFotoRumah', 'linkFotoRumah', 'fotoDepanRumah', 'fotoTampakDepanRumah'])
     );
     const sourceRecord: PPKSRecord = {
