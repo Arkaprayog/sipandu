@@ -261,9 +261,9 @@ export const AsesmenView: React.FC<AsesmenViewProps> = ({
   };
 
   return (
-    <div className="space-y-8 pb-28 text-white">
+    <div className="workspace-page min-h-full space-y-4 text-white">
       {/* Bingkai Luar: Judul ASESMEN tepat di tengah */}
-      <div className="p-5 md:p-6 rounded-2xl bg-black/40 border border-rose-500/40 shadow-[0_0_22px_rgba(244,63,94,0.18)]">
+      <div className="workspace-panel min-h-full p-3 sm:p-4 md:p-6 rounded-2xl bg-black/25 border border-white/10 shadow-[0_12px_36px_rgba(0,0,0,0.18)]">
         {/* Judul ASESMEN tepat di tengah */}
         <div className="text-center mb-6 pb-4 border-b border-rose-500/25">
           <h2 className="text-xl md:text-2xl font-black text-white tracking-widest uppercase inline-block px-6 py-1.5 rounded-xl bg-emerald-950/90 border border-emerald-500/40 shadow-md">
