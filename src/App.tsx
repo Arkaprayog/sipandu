@@ -217,24 +217,12 @@ function normalizeAppSettings(value: unknown): AppSettings {
     }
   }
 
-  let sourceUrl = saved.googleSpreadsheetSourceUrl?.trim() || '';
-  // Older builds silently defaulted to the Forms response spreadsheet. Clear that
-  // value if it was written by the old automatic default rather than user selection.
-  const wasAutoDefaultSource = saved.googleSpreadsheetSourceName === 'Sumber Respons Google Form SIPANDU';
-  if (sourceUrl.includes('1yA8KemensosODHIVSumut2026_LiveSync') || wasAutoDefaultSource) sourceUrl = '';
-  if (sourceUrl) {
-    try {
-      extractSpreadsheetId(sourceUrl);
-    } catch {
-      sourceUrl = '';
-    }
-  }
-
-  const sourceName = wasAutoDefaultSource ? '' : (saved.googleSpreadsheetSourceName || '');
-  // Default the read-only source to the actual ATENSI Google Forms response
-  // spreadsheet already defined in the project resources. This enables live
-  // dashboard sync after OAuth is authorized, without selecting a write target.
-  const resolvedSourceUrl = sourceUrl || GOOGLE_SIPANDU_RESOURCES.responseSpreadsheetUrl;
+  // SIPANDU ODHIV uses one verified ATENSI response spreadsheet as the
+  // authoritative PPKS roster. Do not let an older device/Firestore setting point
+  // the app back to a previous spreadsheet or a different response tab.
+  const resolvedSourceUrl = GOOGLE_SIPANDU_RESOURCES.responseSpreadsheetUrl;
+  const sourceName = 'Sumber ATENSI SIPANDU';
+  const sourceTab = 'From Responses 1';
 
   return {
     ...initialAppSettings,
@@ -245,7 +233,7 @@ function normalizeAppSettings(value: unknown): AppSettings {
     googleSpreadsheetUrl: databaseUrl,
     googleSpreadsheetSourceUrl: resolvedSourceUrl,
     googleSpreadsheetSourceName: sourceName,
-    googleSpreadsheetSourceTab: saved.googleSpreadsheetSourceTab || '',
+    googleSpreadsheetSourceTab: sourceTab,
   };
 }
 
@@ -832,12 +820,9 @@ function StaffApp() {
   };
 
   const handleSyncGoogleSpreadsheet = async (): Promise<{ records: number; sourceDataRows: number; sourceRowsWithName: number; sampleRecordsFiltered: number; duplicateRowsCollapsed: number; photosRecoveredFromForm: number; photoRecoveryStatus: string; photoRecoveryDetail: string; photoRecoveryDiagnostics: { responseCount: number; responsesWithUploads: number; recordsMatched: number }; photoCounts: { diri: number; ktp: number; kk: number; rumah: number } }> => {
-    const sourceUrl = settings.googleSpreadsheetSourceUrl?.trim() || '';
-    if (!sourceUrl) throw new Error('Spreadsheet sumber belum dipilih. Buka Google Workspace & Cloud Hub → Google Sheets → Cari Spreadsheet Saya, lalu pilih file Anda.');
-    const imported = await importPPKSFromSpreadsheet(
-      sourceUrl,
-      settings.googleSpreadsheetSourceTab?.trim() || undefined
-    );
+    const sourceUrl = GOOGLE_SIPANDU_RESOURCES.responseSpreadsheetUrl;
+    const sourceTab = 'From Responses 1';
+    const imported = await importPPKSFromSpreadsheet(sourceUrl, sourceTab);
     if (!imported.records.length) {
       const headers = (imported.previewRows[0] || []).slice(0, 12).join(' | ');
       throw new Error(
@@ -1103,9 +1088,9 @@ function StaffApp() {
   useEffect(() => {
     if (!authReady || !localCacheReady) return;
 
-    const sourceUrl = settings.googleSpreadsheetSourceUrl?.trim() || '';
-    const sourceTab = settings.googleSpreadsheetSourceTab?.trim() || undefined;
-    if (!isAuthenticated || !sourceUrl) {
+    const sourceUrl = GOOGLE_SIPANDU_RESOURCES.responseSpreadsheetUrl;
+    const sourceTab = 'From Responses 1';
+    if (!isAuthenticated) {
       setLiveSyncState({
         type: 'idle',
         message: isAuthenticated
