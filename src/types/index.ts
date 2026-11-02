@@ -15,6 +15,8 @@ export interface PPKSRecord {
   fotoKtp: string;
   fotoKk?: string;
   fotoRumah?: string;
+  /** Explicit photo uploads made in SIPANDU; source-sheet photos take precedence when present. */
+  manualPhotoOverrides?: { fotoDiri?: string; fotoKtp?: string; fotoKk?: string; fotoRumah?: string };
   statusAsesmen: 'Tahap Awal' | 'Lanjutan' | 'Terintegrasi' | 'Selesai';
   googleFormSync?: boolean;
   integratedForm?: IntegratedFormData;
