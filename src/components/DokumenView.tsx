@@ -104,9 +104,9 @@ export const DokumenView: React.FC<DokumenViewProps> = ({ profile }) => {
   };
 
   return (
-    <div className="space-y-6 pb-28 text-white">
+    <div className="workspace-page min-h-full space-y-4 text-white">
       {/* Bingkai Luar Menu DOKUMEN */}
-      <div className="p-5 md:p-6 rounded-2xl bg-black/40 border border-rose-500/40 shadow-[0_0_24px_rgba(244,63,94,0.18)]">
+      <div className="workspace-panel min-h-full p-3 sm:p-4 md:p-6 rounded-2xl bg-black/25 border border-white/10 shadow-[0_12px_36px_rgba(0,0,0,0.18)]">
         {/* Header Tab: Surat Tugas --->>> Surat Lainnya.. */}
         <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pb-4 mb-6 border-b border-rose-500/25">
           <div className="flex items-center gap-2">
