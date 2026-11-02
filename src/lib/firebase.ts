@@ -810,10 +810,10 @@ export async function replacePPKSCollectionFromSpreadsheet(
         desil: authoritativeProfile.desil,
         // New spreadsheet photo values win; a user-uploaded photo is only a fallback
         // when the corresponding source-sheet upload cell is empty.
-        fotoDiri: normalizePPKSPhotoSource(authoritativeProfile.fotoDiri) || normalizePPKSPhotoSource(normalizedOverrides.fotoDiri) || '',
-        fotoKtp: normalizePPKSPhotoSource(authoritativeProfile.fotoKtp) || normalizePPKSPhotoSource(normalizedOverrides.fotoKtp) || '',
-        fotoKk: normalizePPKSPhotoSource(authoritativeProfile.fotoKk) || normalizePPKSPhotoSource(normalizedOverrides.fotoKk) || '',
-        fotoRumah: normalizePPKSPhotoSource(authoritativeProfile.fotoRumah) || normalizePPKSPhotoSource(normalizedOverrides.fotoRumah) || '',
+        fotoDiri: normalizePPKSPhotoSource(normalizedOverrides.fotoDiri) || normalizePPKSPhotoSource(authoritativeProfile.fotoDiri) || '',
+        fotoKtp: normalizePPKSPhotoSource(normalizedOverrides.fotoKtp) || normalizePPKSPhotoSource(authoritativeProfile.fotoKtp) || '',
+        fotoKk: normalizePPKSPhotoSource(normalizedOverrides.fotoKk) || normalizePPKSPhotoSource(authoritativeProfile.fotoKk) || '',
+        fotoRumah: normalizePPKSPhotoSource(normalizedOverrides.fotoRumah) || normalizePPKSPhotoSource(authoritativeProfile.fotoRumah) || '',
         manualPhotoOverrides: Object.keys(normalizedOverrides).length ? normalizedOverrides : undefined,
         integratedForm: mergeSupplemental(sourceRecord.integratedForm, previous?.integratedForm),
         officialAssessment: mergeSupplemental(sourceRecord.officialAssessment, previous?.officialAssessment),
