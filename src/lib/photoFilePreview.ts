@@ -275,7 +275,12 @@ async function convertRaw(buffer: ArrayBuffer): Promise<Blob> {
     if (!Decoder) throw new Error('Decoder RAW tidak tersedia.');
     const decoder = new Decoder();
     const thumbnail = await decoder.extractThumbnail(buffer);
-    if (thumbnail?.length) return new Blob([thumbnail], { type: 'image/jpeg' });
+    if (thumbnail?.length) {
+      // Copy WASM-owned bytes into a fresh ArrayBuffer accepted by the browser Blob API.
+      const jpegBytes = new Uint8Array(thumbnail.byteLength);
+      jpegBytes.set(thumbnail);
+      return new Blob([jpegBytes.buffer], { type: 'image/jpeg' });
+    }
   } catch (error) {
     throw new Error('Pratinjau RAW gagal dibuat: ' + (error instanceof Error ? error.message : String(error)));
   }
