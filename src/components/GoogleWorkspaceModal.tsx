@@ -390,7 +390,14 @@ export const GoogleWorkspaceModal: React.FC<GoogleWorkspaceModalProps> = ({
   const handleSourceSpreadsheetSelect = (fileId: string) => {
     const file = spreadsheetFiles.find((candidate) => candidate.id === fileId);
     if (!file) return;
-    const url = file.webViewLink || `https://docs.google.com/spreadsheets/d/${file.id}/edit`;
+    if (file.id !== GOOGLE_SIPANDU_RESOURCES.responseSpreadsheetId) {
+      setStatusMessage({
+        type: 'error',
+        text: 'Sumber profil PPKS dikunci ke spreadsheet ATENSI resmi. File lain tidak akan digunakan sebagai sumber roster utama.',
+      });
+      return;
+    }
+    const url = GOOGLE_SIPANDU_RESOURCES.responseSpreadsheetUrl;
     setSourceSpreadsheetUrl(url);
     setSourceSpreadsheetTab('');
     onUpdateSettings({
@@ -406,9 +413,11 @@ export const GoogleWorkspaceModal: React.FC<GoogleWorkspaceModalProps> = ({
     setLoading(true);
     setStatusMessage(null);
     try {
-      const sourceUrl = sourceSpreadsheetUrl.trim();
-      if (!sourceUrl) throw new Error('Pilih atau masukkan URL Google Spreadsheet sumber terlebih dahulu.');
-      const imported = await importPPKSFromSpreadsheet(sourceUrl, sourceSpreadsheetTab || undefined);
+      const sourceUrl = GOOGLE_SIPANDU_RESOURCES.responseSpreadsheetUrl;
+      const sourceTab = 'From Responses 1';
+      setSourceSpreadsheetUrl(sourceUrl);
+      setSourceSpreadsheetTab(sourceTab);
+      const imported = await importPPKSFromSpreadsheet(sourceUrl, sourceTab);
       setSheetRows(imported.previewRows);
       setSourceSpreadsheetTab(imported.selectedTab);
       onUpdateSettings({
@@ -527,20 +536,18 @@ export const GoogleWorkspaceModal: React.FC<GoogleWorkspaceModalProps> = ({
   // URL settings are explicitly saved and locked, so reopening this modal does not
   // require retyping long URLs and accidental edits cannot erase them.
   const saveSourceUrlAndLock = () => {
-    const url = sourceSpreadsheetUrl.trim();
-    try {
-      extractSpreadsheetId(url);
-      if (!url) throw new Error('URL sumber Google Spreadsheet belum diisi.');
-      onUpdateSettings({
-        ...settings,
-        googleSpreadsheetSourceUrl: url,
-        googleSpreadsheetSourceTab: sourceSpreadsheetTab.trim(),
-      });
-      setEditingSourceUrl(false);
-      setStatusMessage({ type: 'success', text: 'URL Spreadsheet sumber tersimpan dan dikunci.' });
-    } catch (error) {
-      setStatusMessage({ type: 'error', text: error instanceof Error ? error.message : 'URL Spreadsheet sumber tidak valid.' });
-    }
+    const url = GOOGLE_SIPANDU_RESOURCES.responseSpreadsheetUrl;
+    const tab = 'From Responses 1';
+    onUpdateSettings({
+      ...settings,
+      googleSpreadsheetSourceUrl: url,
+      googleSpreadsheetSourceName: 'Sumber ATENSI SIPANDU',
+      googleSpreadsheetSourceTab: tab,
+    });
+    setSourceSpreadsheetUrl(url);
+    setSourceSpreadsheetTab(tab);
+    setEditingSourceUrl(false);
+    setStatusMessage({ type: 'success', text: 'Sumber PPKS resmi dikunci ke spreadsheet ATENSI dan tab From Responses 1.' });
   };
 
   const saveTargetUrlAndLock = () => {
