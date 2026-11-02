@@ -31,6 +31,7 @@ import { ensureSIPANDUDatabaseSheet, extractSpreadsheetId, getLinkedSpreadsheetU
 import { GOOGLE_SIPANDU_RESOURCES } from './lib/googleSIPANDUResources';
 import { getLiveSyncRetryDelay, LIVE_SYNC_INTERVAL_MS } from './lib/liveSyncPolicy';
 import { preservePPKSRecordOrder } from './lib/ppksRecordState';
+import { filterStageOneNotificationSubmissions } from './lib/stageOneRespondents';
 import { deduplicatePPKSRecords, parsePPKSTimestamp, samePPKSIdentity, sortPPKSRecordsByName, sortPPKSRecordsByTimestamp } from './lib/ppksData';
 import { normalizePPKSPhotoSource } from './lib/photoSources';
 import { buildGoogleFormsPrefilledUrl, buildWhatsAppMessage, createWhatsAppLink } from './utils/helpers';
@@ -1093,10 +1094,13 @@ function StaffApp() {
             lastUpdatedAt: new Date().toLocaleString('id-ID'),
           });
           const notificationUid = auth.currentUser?.uid || 'default';
+          const publicSubmissions = filterStageOneNotificationSubmissions(
+            records as Array<PPKSRecord & { source?: string }>,
+          );
           void processRespondentSubmissionEvents(
             notificationUid,
-            records.map(({ id, namaLengkap, timestamp }) => ({ id, namaLengkap, timestamp })),
-            records as unknown as Array<Record<string, unknown>>,
+            publicSubmissions.map(({ id, namaLengkap, timestamp }) => ({ id, namaLengkap, timestamp })),
+            publicSubmissions as unknown as Array<Record<string, unknown>>,
             { baselineNamespace: 'native-sipandu-stage-one', notifyNewQuestionnairesOnFirstImport: true },
           ).then(() => {
             if (active) setRespondentNotifications(loadRespondentNotifications(notificationUid));
