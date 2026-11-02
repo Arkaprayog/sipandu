@@ -3,6 +3,7 @@ import { PPKSRecord, AppSettings } from '../types';
 import { uploadPPKSPhotoToDrive, type PPKSPhotoKind } from '../lib/googleWorkspace';
 import { GOOGLE_SIPANDU_RESOURCES } from '../lib/googleSIPANDUResources';
 import { PrivateDriveImage } from './PrivateDriveImage';
+import { isSupportedPhotoFile, PPKS_PHOTO_ACCEPT, MAX_PPKS_PHOTO_FILE_BYTES } from '../lib/photoFilePreview';
 import { deduplicatePPKSRecords, formatPPKSTimestamp, sortPPKSRecordsByName } from '../lib/ppksData';
 import {
   buildGoogleFormsPrefilledUrl,
@@ -142,12 +143,12 @@ export const DatabasePpksView: React.FC<DatabasePpksViewProps> = ({
   const handlePhotoUpload = async (kind: PPKSPhotoKind, file: File | null) => {
     if (!currentPPKS || !file) return;
     setPhotoUploadMessage('');
-    if (!file.type.startsWith('image/')) {
-      setPhotoUploadMessage('Pilih berkas foto berupa JPG, PNG, atau format gambar yang didukung.');
+    if (!isSupportedPhotoFile(file)) {
+      setPhotoUploadMessage('Format tidak didukung. Pilih JPG/JPEG, PNG, GIF, WEBP, BMP, TIFF/TIF, HEIC/HEIF, RAW, PSD, PDF, DOC, atau DOCX.');
       return;
     }
-    if (file.size > 12 * 1024 * 1024) {
-      setPhotoUploadMessage('Ukuran foto maksimal 12 MB. Kompres foto lalu unggah kembali.');
+    if (file.size > MAX_PPKS_PHOTO_FILE_BYTES) {
+      setPhotoUploadMessage('Ukuran berkas maksimal 30 MB.');
       return;
     }
     const fieldByKind = { diri: 'fotoDiri', ktp: 'fotoKtp', kk: 'fotoKk', rumah: 'fotoRumah' } as const;
@@ -183,7 +184,7 @@ export const DatabasePpksView: React.FC<DatabasePpksViewProps> = ({
       {uploadingPhoto === kind ? 'Mengunggah…' : `Upload ${label}`}
       <input
         type="file"
-        accept="image/*"
+        accept={PPKS_PHOTO_ACCEPT}
         className="sr-only"
         disabled={uploadingPhoto !== null}
         onChange={(event) => {
