@@ -1,5 +1,16 @@
 /* Official Form Asesmen Terintegrasi layout; letterhead content is static and locked. */
-.official-assessment-shell { color:#111; }
+.official-assessment-shell {
+  color:#111;
+  /* A horizontal movement inside this form is form navigation/scrolling,
+     never the application's swipe-to-go-back gesture. */
+  touch-action:pan-x pan-y;
+  overscroll-behavior-x:contain;
+}
+.official-page {
+  touch-action:pan-x pan-y;
+  overscroll-behavior-x:contain;
+  -webkit-overflow-scrolling:touch;
+}
 .official-toolbar { color:#f8fafc; }
 
 /* On-screen gallery for the selected respondent's existing PPKS photo records. */
@@ -84,7 +95,16 @@
 .official-signature-line { margin-top:24mm; }
 .official-logo-atensi-text { font-size:8pt; letter-spacing:1px; font-weight:900; color:#263c87; }
 @media (max-width:700px) {
-  .official-page { padding:12px 8px 18px; min-height:0; margin-bottom:14px; overflow-x:auto; }
+  .official-page {
+    padding:12px 8px 18px;
+    min-height:0;
+    margin-bottom:14px;
+    overflow-x:auto;
+    overflow-y:visible;
+    touch-action:pan-x pan-y;
+    overscroll-behavior-x:contain;
+    -webkit-overflow-scrolling:touch;
+  }
   .official-table { min-width:620px; font-size:10px; }
   .official-numbering { width:100%; }
   .official-letterhead { grid-template-columns:18mm 1fr 18mm; }
