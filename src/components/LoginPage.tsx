@@ -1,6 +1,6 @@
 import React, { useRef, useState } from 'react';
 import { onAuthStateChanged, signInWithEmailAndPassword, type User as FirebaseUser } from 'firebase/auth';
-import { auth } from '../lib/firebase';
+import { auth, staffAuthPersistenceReady } from '../lib/firebase';
 import { authenticateBiometricLock, isAppPinConfigured, isBiometricLockEnabled, verifyAppPin } from '../lib/biometricLock';
 import { Lock, User, Eye, EyeOff, Fingerprint } from 'lucide-react';
 import { publicAssetUrl } from '../lib/publicAssets';
@@ -94,6 +94,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
     let timeoutId: number | undefined;
     try {
       // A stalled mobile request must not leave the submit button disabled forever.
+      await staffAuthPersistenceReady;
       const credential = await Promise.race([
         signInWithEmailAndPassword(auth, email.trim(), password),
         new Promise<never>((_, reject) => {
