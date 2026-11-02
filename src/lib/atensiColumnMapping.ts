@@ -34,3 +34,19 @@ export const ATENSI_PHOTO_COLUMN_INDICES = [
   ATENSI_PROFILE_COLUMN_INDEX.fotoKk,
   ATENSI_PROFILE_COLUMN_INDEX.fotoRumah,
 ] as const;
+
+
+/** Reads gender from its dedicated header first, then from an embedded age cell such as "18 Tahun (Laki-laki)". */
+export function readAtensiGender(
+  row: readonly unknown[],
+  explicitGender = '',
+): 'Laki-laki' | 'Perempuan' | '' {
+  const ageCell = readAtensiProfileCell(row, 'usia');
+  const embeddedGender = ageCell.match(/\(([^)]+)\)/)?.[1] || '';
+  const candidates = [String(explicitGender || '').trim(), embeddedGender, ageCell];
+  for (const candidate of candidates) {
+    if (/perempuan|wanita|female/i.test(candidate)) return 'Perempuan';
+    if (/laki[\s-]*laki|pria|male/i.test(candidate)) return 'Laki-laki';
+  }
+  return '';
+}
