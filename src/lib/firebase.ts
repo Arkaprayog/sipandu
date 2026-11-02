@@ -744,7 +744,7 @@ export async function replacePPKSCollectionFromSpreadsheet(
     const matchedOldIds = new Set<string>();
     const planned: Array<{ id: string; data: PPKSRecord }> = [];
 
-    const mergeSupplemental = <T extends Record<string, unknown>>(
+    const mergeSupplemental = <T extends object>(
       current: T | undefined,
       previous: T | undefined,
     ): T | undefined => {
