@@ -120,8 +120,8 @@ export const DatabasePpksView: React.FC<DatabasePpksViewProps> = ({
     return () => window.removeEventListener('sipandu:navigate-back', onAppNavigateBack);
   }, [selectedPPKSId, showWaPreview]);
 
-  // Refresh the visible intervention field when a live spreadsheet sync updates
-  // the selected respondent. This keeps the editor in step with column BE.
+  // Refresh the visible intervention field when the authoritative ATENSI
+  // spreadsheet sync updates the selected respondent (source column AO).
   useEffect(() => {
     if (!currentPPKS) return;
     setEditingIntervensi(currentPPKS.intervensiMental || '');
