@@ -33,6 +33,13 @@ export const Header: React.FC<HeaderProps> = ({
   const [failedProfilePhotoUrls, setFailedProfilePhotoUrls] = useState<string[]>([]);
   const headerPhotoUrl = [profile.photoUrl, accountPhotoUrl]
     .find((url) => Boolean(url) && !failedProfilePhotoUrls.includes(url as string)) || '';
+  const compactPageTitles: Record<string, string> = {
+    'database-ppks': 'DATABASE PPKS',
+    asesmen: 'ASESMEN',
+    'from-asesmen-terintegrasi': 'FORM ASESMEN TERINTEGRASI',
+    dokumen: 'DOKUMEN',
+  };
+  const isCompactDashboard = Boolean(compactPageTitles[activeTab]);
 
   useEffect(() => {
     setFailedProfilePhotoUrls([]);
@@ -55,9 +62,9 @@ export const Header: React.FC<HeaderProps> = ({
   }, []);
 
   return (
-    <header className="app-header-safe-area relative w-full bg-[#112214]/90 border-b border-rose-500/35 shadow-[0_4px_20px_rgba(244,63,94,0.12)] px-3 pb-2 md:px-6 select-none z-20">
-      <div className="max-w-7xl mx-auto flex flex-col md:flex-row md:items-center justify-between gap-2">
-        {/* Left Side: Greeting & Profil Pengguna */}
+    <header className={`app-header-safe-area relative w-full bg-[#112214]/90 border-b border-rose-500/35 shadow-[0_4px_20px_rgba(244,63,94,0.12)] px-3 pb-2 md:px-6 select-none z-20 ${isCompactDashboard ? 'app-header-compact' : ''}`}>
+      <div className={`max-w-7xl mx-auto flex ${isCompactDashboard ? 'flex-row items-center justify-between gap-3' : 'flex-col md:flex-row md:items-center justify-between gap-2'}`}>
+        {!isCompactDashboard ? (
         <div className="flex flex-col gap-1.5">
           {/* Greeting hanya menampilkan salam dan jam live; email akun tidak ditampilkan. */}
           <div className="flex items-center gap-2 text-xs md:text-sm">
@@ -117,12 +124,22 @@ export const Header: React.FC<HeaderProps> = ({
             </div>
           </div>
         </div>
+        ) : (
+          <div className="flex min-w-0 items-center gap-2.5 py-0.5">
+            <span className="h-2 w-2 shrink-0 rounded-full bg-emerald-400 shadow-[0_0_10px_rgba(52,211,153,0.65)]" />
+            <span className="truncate text-[11px] font-extrabold tracking-[0.12em] text-emerald-100 sm:text-xs">
+              {compactPageTitles[activeTab]}
+            </span>
+          </div>
+        )}
 
         {/* Right Side: Logo SIPANDU & 3 Icon (Lonceng Notifikasi, Gear Pengaturan, Pintu Keluar) */}
-        <div className="flex items-center justify-between md:justify-end gap-2 self-end md:self-center">
-          <div className={`hidden lg:block app-header-sipandu-brand ${activeTab === 'beranda' ? 'app-header-sipandu-brand-home' : ''}`}>
-            <SipanduLogo size="sm" />
-          </div>
+        <div className={`flex items-center justify-between md:justify-end gap-2 ${isCompactDashboard ? 'ml-auto self-center' : 'self-end md:self-center'}`}>
+          {!isCompactDashboard && (
+            <div className={`hidden lg:block app-header-sipandu-brand ${activeTab === 'beranda' ? 'app-header-sipandu-brand-home' : ''}`}>
+              <SipanduLogo size="sm" />
+            </div>
+          )}
 
           {/* The 3 icons */}
           <div className="flex items-center gap-1 bg-black/40 p-1 rounded-xl border border-rose-500/35 shadow-[0_0_15px_rgba(244,63,94,0.15)]">
