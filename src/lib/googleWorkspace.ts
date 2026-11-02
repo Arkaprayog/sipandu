@@ -5,6 +5,7 @@ import { deduplicatePPKSRecords, getPPKSNIKCandidates, sortPPKSRecordsByTimestam
 import { classifyPPKSPhotoHeader, normalizePPKSPhotoSource, readPPKSPhotoSourceByKind } from './photoSources';
 import { countSharedPhotoFileIds, googleDriveViewUrl, matchFormPhotoResponseForPPKS, isGoogleFormLinkedToSpreadsheet, type FormPhotoResponseCandidate } from './formPhotoRecovery';
 import { GOOGLE_SIPANDU_RESOURCES } from './googleSIPANDUResources';
+import { ATENSI_PHOTO_COLUMN_INDICES, readAtensiProfileCell } from './atensiColumnMapping';
 import { readInterventionRecommendationFromRow } from './interventionMapping';
 import { isLegacySamplePPKS, isObviousDemoMarker, LEGACY_SAMPLE_PPKS_IDS, LEGACY_SAMPLE_PPKS_NAMES } from '../data/initialData';
 
@@ -690,7 +691,7 @@ function mapRowsToPPKSRecords(rows: string[][], useATENSIColumnPositions = false
   rows.slice(1).forEach((sourceRow, rowIndex) => {
     const row = sourceRow.map((value) => String(value ?? '').trim());
     const sourceCell = (index: number) => String(row[index] ?? '').trim();
-    const namaLengkap = useATENSIColumnPositions ? sourceCell(2) : readRespondentName(headers, row);
+    const namaLengkap = useATENSIColumnPositions ? readAtensiProfileCell(row, 'namaLengkap') : readRespondentName(headers, row);
     // The follow-up Form is prefilled with the original PPKS ID. It may not ask
     // for the respondent's name again, so an exact valid ID is enough to accept
     // that row for merging into its existing stage-one record.
@@ -702,8 +703,8 @@ function mapRowsToPPKSRecords(rows: string[][], useATENSIColumnPositions = false
       : '';
     if (!namaLengkap && !linkedPPKSId) return;
 
-    const timestamp = useATENSIColumnPositions ? sourceCell(0) : readCellByAliases(headers, row, ['timestamp', 'capWaktu', 'waktuPengiriman', 'waktuPengisian', 'tanggalWaktu', 'createTime']);
-    let nik = useATENSIColumnPositions ? normalizeNIKCellValue(sourceCell(3)) : readNIKFromSheetRow(headers, row);
+    const timestamp = useATENSIColumnPositions ? readAtensiProfileCell(row, 'timestamp') : readCellByAliases(headers, row, ['timestamp', 'capWaktu', 'waktuPengiriman', 'waktuPengisian', 'tanggalWaktu', 'createTime']);
+    let nik = useATENSIColumnPositions ? normalizeNIKCellValue(readAtensiProfileCell(row, 'nik')) : readNIKFromSheetRow(headers, row);
     // Google Forms can append helper text/asterisks and may label the NIK as
     // "NIK / No. KTP", "Nomor KTP (16 digit)" or a numbered official-PDF field.
     // Use a second conservative pass over respondent identity headers before
@@ -804,11 +805,11 @@ function mapRowsToPPKSRecords(rows: string[][], useATENSIColumnPositions = false
     }
     seen.add(recordId);
 
-    const usia = parseSheetNumber(useATENSIColumnPositions ? sourceCell(11) : readCellByAliases(headers, row, ['usia', 'umur', 'umurTahun', 'usiaSaatIni', 'umurSaatIni']), 0);
+    const usia = parseSheetNumber(useATENSIColumnPositions ? readAtensiProfileCell(row, 'usia') : readCellByAliases(headers, row, ['usia', 'umur', 'umurTahun', 'usiaSaatIni', 'umurSaatIni']), 0);
     const gender = readCellByAliases(headers, row, ['jenisKelamin', 'gender', 'jenisKelaminResponden']);
-    const domisili = useATENSIColumnPositions ? sourceCell(8) : readCellByAliases(headers, row, ['kotaDomisili', 'kabupatenKota', 'kotaKabupaten', 'domisili', 'kota', 'kabupaten']);
-    const alamat = useATENSIColumnPositions ? sourceCell(10) : readCellByAliases(headers, row, ['alamatLengkap', 'alamatDomisili', 'alamatResponden', 'alamat']);
-    const jenisBantuan = useATENSIColumnPositions ? sourceCell(39) : readCellByAliases(headers, row, ['jenisBantuan', 'bantuanDibutuhkan', 'jenisBantuanAtensi', 'kebutuhanBantuan']);
+    const domisili = useATENSIColumnPositions ? readAtensiProfileCell(row, 'kotaDomisili') : readCellByAliases(headers, row, ['kotaDomisili', 'kabupatenKota', 'kotaKabupaten', 'domisili', 'kota', 'kabupaten']);
+    const alamat = useATENSIColumnPositions ? readAtensiProfileCell(row, 'alamatLengkap') : readCellByAliases(headers, row, ['alamatLengkap', 'alamatDomisili', 'alamatResponden', 'alamat']);
+    const jenisBantuan = useATENSIColumnPositions ? readAtensiProfileCell(row, 'jenisBantuan') : readCellByAliases(headers, row, ['jenisBantuan', 'bantuanDibutuhkan', 'jenisBantuanAtensi', 'kebutuhanBantuan']);
     const integratedValues: Partial<Record<keyof IntegratedFormData, string | number | boolean>> = {};
     const integratedMarkerKeys = new Set<keyof IntegratedFormData>([
       'nomorRegistrasi', 'noBpjs', 'tahunDiagnosa', 'faskesPdpRujukan',
@@ -827,24 +828,24 @@ function mapRowsToPPKSRecords(rows: string[][], useATENSIColumnPositions = false
     const integratedForm = hasIntegratedAssessmentData
       ? (integratedValues as IntegratedFormData)
       : undefined;
-    const desil = parseSheetNumber(useATENSIColumnPositions ? sourceCell(41) : readCellByAliases(headers, row, ['desil', 'desilKemiskinan', 'desilDTKS', 'desilEkonomi']), 0);
+    const desil = parseSheetNumber(useATENSIColumnPositions ? readAtensiProfileCell(row, 'desil') : readCellByAliases(headers, row, ['desil', 'desilKemiskinan', 'desilDTKS', 'desilEkonomi']), 0);
     // Prefer category-aware upload-column detection so a longer Google Forms
     // question title still maps correctly, while never treating KTP/KK/house
     // attachments as the respondent portrait.
     const fotoDiri = normalizePPKSPhotoSource(
-      (useATENSIColumnPositions ? sourceCell(4) : '') || readPPKSPhotoSourceByKind(headers, row, 'diri') ||
+      (useATENSIColumnPositions ? readAtensiProfileCell(row, 'fotoDiri') : '') || readPPKSPhotoSourceByKind(headers, row, 'diri') ||
       readCellByAliases(headers, row, ['fotoDiri', 'fotoDiriPPKS', 'fotoResponden', 'uploadFotoDiri', 'tautanFotoDiri', 'linkFotoDiri', 'fotoDiriCloseUp', 'fotoDiriResponden'])
     );
     const fotoKtp = normalizePPKSPhotoSource(
-      (useATENSIColumnPositions ? sourceCell(5) : '') || readPPKSPhotoSourceByKind(headers, row, 'ktp') ||
+      (useATENSIColumnPositions ? readAtensiProfileCell(row, 'fotoKtp') : '') || readPPKSPhotoSourceByKind(headers, row, 'ktp') ||
       readCellByAliases(headers, row, ['fotoKtp', 'fotoKTP', 'uploadFotoKTP', 'dokumenKTP', 'tautanFotoKTP', 'linkFotoKTP', 'fotoKartuIdentitas', 'scanKTP'])
     );
     const fotoKk = normalizePPKSPhotoSource(
-      (useATENSIColumnPositions ? sourceCell(6) : '') || readPPKSPhotoSourceByKind(headers, row, 'kk') ||
+      (useATENSIColumnPositions ? readAtensiProfileCell(row, 'fotoKk') : '') || readPPKSPhotoSourceByKind(headers, row, 'kk') ||
       readCellByAliases(headers, row, ['fotoKk', 'fotoKK', 'uploadFotoKK', 'dokumenKK', 'tautanFotoKK', 'linkFotoKK', 'scanKK'])
     );
     const fotoRumah = normalizePPKSPhotoSource(
-      (useATENSIColumnPositions ? sourceCell(7) : '') || readPPKSPhotoSourceByKind(headers, row, 'rumah') ||
+      (useATENSIColumnPositions ? readAtensiProfileCell(row, 'fotoRumah') : '') || readPPKSPhotoSourceByKind(headers, row, 'rumah') ||
       readCellByAliases(headers, row, ['fotoRumah', 'fotoRumahTampakDepan', 'uploadFotoRumah', 'tautanFotoRumah', 'linkFotoRumah', 'fotoDepanRumah', 'fotoTampakDepanRumah'])
     );
     const sourceRecord: PPKSRecord = {
@@ -861,7 +862,7 @@ function mapRowsToPPKSRecords(rows: string[][], useATENSIColumnPositions = false
       // The ATENSI response tab uses its explicit AO mapping; other source tabs
       // continue to use the configured BE position with a header-based fallback.
       intervensiMental: useATENSIColumnPositions
-        ? sourceCell(40)
+        ? readAtensiProfileCell(row, 'intervensiMental')
         : (readInterventionRecommendationFromRow(headers, row)
           || readCellByAliases(headers, row, ['intervensiMental', 'kebutuhanIntervensiMental', 'catatanPendamping'])),
       desil,
@@ -1372,7 +1373,7 @@ export async function importPPKSFromSpreadsheet(
   const rows = await readSpreadsheetRichData(
     metadata.spreadsheetId,
     `'${escapedTitle}'!A1:ZZ2000`,
-    useATENSIColumnPositions ? [4, 5, 6, 7] : [],
+    useATENSIColumnPositions ? [...ATENSI_PHOTO_COLUMN_INDICES] : [],
   );
   const headers = rows[0] || [];
   const dataRows = rows.slice(1);
