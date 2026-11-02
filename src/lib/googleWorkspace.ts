@@ -5,6 +5,7 @@ import { deduplicatePPKSRecords, getPPKSNIKCandidates, sortPPKSRecordsByTimestam
 import { classifyPPKSPhotoHeader, normalizePPKSPhotoSource, readPPKSPhotoSourceByKind } from './photoSources';
 import { countSharedPhotoFileIds, googleDriveViewUrl, matchFormPhotoResponseForPPKS, isGoogleFormLinkedToSpreadsheet, type FormPhotoResponseCandidate } from './formPhotoRecovery';
 import { GOOGLE_SIPANDU_RESOURCES } from './googleSIPANDUResources';
+import { getPhotoUploadMimeType, isSupportedPhotoFile, MAX_PPKS_PHOTO_FILE_BYTES } from './photoFilePreview';
 import { ATENSI_PHOTO_COLUMN_INDICES, readAtensiProfileCell } from './atensiColumnMapping';
 import { readInterventionRecommendationFromRow } from './interventionMapping';
 import { isLegacySamplePPKS, isObviousDemoMarker, LEGACY_SAMPLE_PPKS_IDS, LEGACY_SAMPLE_PPKS_NAMES } from '../data/initialData';
@@ -94,8 +95,11 @@ export async function uploadPPKSPhotoToDrive(
   file: File,
   options: { folderId: string; respondentName: string; respondentId: string; photoKind: PPKSPhotoKind }
 ): Promise<string> {
-  if (!file.type.startsWith('image/')) throw new Error('Berkas harus berupa gambar.');
-  if (file.size > 12 * 1024 * 1024) throw new Error('Ukuran foto maksimal 12 MB.');
+  if (!isSupportedPhotoFile(file)) {
+    throw new Error('Format tidak didukung. Pilih JPG/JPEG, PNG, GIF, WEBP, BMP, TIFF/TIF, HEIC/HEIF, RAW, PSD, PDF, DOC, atau DOCX.');
+  }
+  if (file.size > MAX_PPKS_PHOTO_FILE_BYTES) throw new Error('Ukuran berkas maksimal 30 MB.');
+  const uploadMimeType = getPhotoUploadMimeType(file);
   let token = await getAccessToken();
   if (!token) token = await refreshWorkspaceAccessToken();
   token = requireToken(token);
@@ -105,12 +109,12 @@ export async function uploadPPKSPhotoToDrive(
   const boundary = `sipandu_upload_${Date.now()}`;
   const metadata = JSON.stringify({
     name: fileName,
-    mimeType: file.type,
+    mimeType: uploadMimeType,
     parents: [options.folderId],
     description: `Foto PPKS ${options.respondentName}; ID SIPANDU ${options.respondentId}; kategori ${photoLabel}`,
   });
   const body = new Blob([
-    `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${metadata}\r\n--${boundary}\r\nContent-Type: ${file.type}\r\n\r\n`,
+    `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${metadata}\r\n--${boundary}\r\nContent-Type: ${uploadMimeType}\r\n\r\n`,
     await file.arrayBuffer(),
     `\r\n--${boundary}--`,
   ]);
