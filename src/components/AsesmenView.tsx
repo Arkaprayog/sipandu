@@ -6,6 +6,7 @@ import { STAGE_ONE_RESPONDENT_PORTAL_URL } from '../lib/stageOneRespondentPortal
 import { CameraCaptureModal } from './CameraCaptureModal';
 import { PrivateDriveImage } from './PrivateDriveImage';
 import { compressImageForLocalStorage } from '../lib/imageCompression';
+import { PPKS_PHOTO_ACCEPT } from '../lib/photoFilePreview';
 import {
   buildGoogleFormUtamaPrefilledUrl,
   buildWhatsAppMessage,
@@ -104,7 +105,7 @@ export const AsesmenView: React.FC<AsesmenViewProps> = ({
     try {
       // Keeps KTP legible while keeping data URLs below Firestore's document-size
       // limit and preventing mobile localStorage quota failures.
-      const result = await compressImageForLocalStorage(file, 1200, 320 * 1024);
+      const result = await compressImageForLocalStorage(file, 1200, 320 * 1024, file.name);
       if (type === 'fotoDiri') {
         setFotoDiri(result);
         setFotoDiriName(file.name);
@@ -552,7 +553,7 @@ export const AsesmenView: React.FC<AsesmenViewProps> = ({
                     <label className="block text-xs font-bold text-sky-200">
                       FOTO DIRI:
                       <span className="block text-[10px] text-neutral-400 font-normal">
-                        (Bisa live kamera atau pilih foto dari handphone: JPG, PNG, WEBP)
+                        (Bisa live kamera atau pilih foto/dokumen: JPG, PNG, GIF, WEBP, BMP, TIFF, HEIC, RAW, PSD, PDF, DOC, DOCX)
                       </span>
                     </label>
 
@@ -582,7 +583,7 @@ export const AsesmenView: React.FC<AsesmenViewProps> = ({
                         <span>Pilih File</span>
                         <input
                           type="file"
-                          accept="image/jpeg,image/png,image/webp"
+                          accept={PPKS_PHOTO_ACCEPT}
                           onChange={(e) => handleFileUpload(e, 'fotoDiri')}
                           className="hidden"
                         />
@@ -625,7 +626,7 @@ export const AsesmenView: React.FC<AsesmenViewProps> = ({
                         <span>Pilih File</span>
                         <input
                           type="file"
-                          accept="image/jpeg,image/png,image/webp"
+                          accept={PPKS_PHOTO_ACCEPT}
                           onChange={(e) => handleFileUpload(e, 'fotoKtp')}
                           className="hidden"
                         />
