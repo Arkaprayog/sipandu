@@ -6,7 +6,7 @@ import { classifyPPKSPhotoHeader, normalizePPKSPhotoSource, readPPKSPhotoSourceB
 import { countSharedPhotoFileIds, googleDriveViewUrl, matchFormPhotoResponseForPPKS, isGoogleFormLinkedToSpreadsheet, type FormPhotoResponseCandidate } from './formPhotoRecovery';
 import { GOOGLE_SIPANDU_RESOURCES } from './googleSIPANDUResources';
 import { getPhotoUploadMimeType, isSupportedPhotoFile, MAX_PPKS_PHOTO_FILE_BYTES } from './photoFilePreview';
-import { ATENSI_PHOTO_COLUMN_INDICES, readAtensiProfileCell } from './atensiColumnMapping';
+import { ATENSI_PHOTO_COLUMN_INDICES, readAtensiProfileCell, readAtensiGender } from './atensiColumnMapping';
 import { readInterventionRecommendationFromRow } from './interventionMapping';
 import { isLegacySamplePPKS, isObviousDemoMarker, LEGACY_SAMPLE_PPKS_IDS, LEGACY_SAMPLE_PPKS_NAMES } from '../data/initialData';
 
@@ -809,7 +809,8 @@ function mapRowsToPPKSRecords(rows: string[][], useATENSIColumnPositions = false
     seen.add(recordId);
 
     const usia = parseSheetNumber(useATENSIColumnPositions ? readAtensiProfileCell(row, 'usia') : readCellByAliases(headers, row, ['usia', 'umur', 'umurTahun', 'usiaSaatIni', 'umurSaatIni']), 0);
-    const gender = readCellByAliases(headers, row, ['jenisKelamin', 'gender', 'jenisKelaminResponden']);
+    const gender = readCellByAliases(headers, row, ['jenisKelamin', 'gender', 'jenisKelaminResponden']) ||
+      (useATENSIColumnPositions ? readAtensiGender(row) : '');
     const domisili = useATENSIColumnPositions ? readAtensiProfileCell(row, 'kotaDomisili') : readCellByAliases(headers, row, ['kotaDomisili', 'kabupatenKota', 'kotaKabupaten', 'domisili', 'kota', 'kabupaten']);
     const alamat = useATENSIColumnPositions ? readAtensiProfileCell(row, 'alamatLengkap') : readCellByAliases(headers, row, ['alamatLengkap', 'alamatDomisili', 'alamatResponden', 'alamat']);
     const jenisBantuan = useATENSIColumnPositions ? readAtensiProfileCell(row, 'jenisBantuan') : readCellByAliases(headers, row, ['jenisBantuan', 'bantuanDibutuhkan', 'jenisBantuanAtensi', 'kebutuhanBantuan']);
