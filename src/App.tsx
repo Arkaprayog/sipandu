@@ -26,8 +26,7 @@ const SettingsModal = lazyWithRecovery('SettingsModal', () => import('./componen
 const NotificationsModal = lazyWithRecovery('NotificationsModal', () => import('./components/NotificationsModal').then((module) => ({ default: module.NotificationsModal })));
 const GoogleWorkspaceModal = lazyWithRecovery('GoogleWorkspaceModal', () => import('./components/GoogleWorkspaceModal').then((module) => ({ default: module.GoogleWorkspaceModal })));
 import { onAuthStateChanged, signOut, getIdTokenResult } from 'firebase/auth';
-import { auth, getAccessToken, savePPKSToFirestore, replacePPKSCollectionFromSpreadsheet, googleLogout, subscribeToPPKSChanges, saveStageOneIntakeToFirestore, subscribeToStageOneIntake } from './lib/firebase';
-import { isQuickUnlockEnabled } from './lib/biometricLock';
+import { auth, getAccessToken, savePPKSToFirestore, replacePPKSCollectionFromSpreadsheet, googleLogout, subscribeToPPKSChanges, saveStageOneIntakeToFirestore, subscribeToStageOneIntake, staffAuthPersistenceReady } from './lib/firebase';
 import { ensureSIPANDUDatabaseSheet, extractSpreadsheetId, getLinkedSpreadsheetUrlForForm, importPPKSFromSpreadsheet, upsertPPKSInSpreadsheet } from './lib/googleWorkspace';
 import { GOOGLE_SIPANDU_RESOURCES } from './lib/googleSIPANDUResources';
 import { getLiveSyncRetryDelay, LIVE_SYNC_INTERVAL_MS } from './lib/liveSyncPolicy';
@@ -265,15 +264,16 @@ function StaffApp() {
         return;
       }
       try {
-        const token = await getIdTokenResult(user, true);
+        // Do not force a network refresh during every session restore. Firebase
+        // refreshes expired ID tokens when needed; offline failures must not log out.
+        const token = await getIdTokenResult(user);
         if (!active || generation !== authEventGeneration || auth.currentUser?.uid !== user.uid) return;
         const role = token.claims.role;
         if (role !== 'owner' && role !== 'supervisor' && role !== 'pendamping') {
           setIsAuthenticated(false);
           setCurrentUserName('');
           setCurrentUserRole('');
-          setAuthError('Akun berhasil dikenali, tetapi peran resmi belum ditetapkan. Hubungi administrator SIPANDU.');
-          await signOut(auth).catch((error) => console.warn('Gagal menutup sesi tanpa peran SIPANDU:', error));
+          setAuthError('Sesi akun tetap tersimpan. Peran resmi belum terbaca pada token Firebase. Periksa kembali saat jaringan tersedia atau hubungi administrator SIPANDU.');
         } else {
           setIsAuthenticated(true);
           setCurrentUserRole(role);
@@ -285,8 +285,7 @@ function StaffApp() {
         setIsAuthenticated(false);
         setCurrentUserName('');
         setCurrentUserRole('');
-        setAuthError('Sesi tidak dapat diverifikasi. Silakan masuk kembali atau hubungi administrator.');
-        await signOut(auth).catch((signOutError) => console.warn('Gagal menutup sesi yang tidak dapat diverifikasi:', signOutError));
+        setAuthError('Sesi akun tetap tersimpan. Verifikasi sementara gagal, kemungkinan karena jaringan atau Firebase sedang tidak tersedia. Tekan “Coba verifikasi lagi”; aplikasi tidak akan menghapus sesi secara otomatis.');
       } finally {
         if (active && generation === authEventGeneration && (!user || auth.currentUser?.uid === user.uid)) setAuthReady(true);
       }
@@ -589,26 +588,48 @@ function StaffApp() {
   };
 
   const handleLogout = async () => {
-    const currentUser = auth.currentUser;
-    if (!window.confirm(
-      currentUser && isQuickUnlockEnabled(currentUser.uid)
-        ? 'Kunci aplikasi SIPANDU ODHIV sekarang? Sesi akun tetap tersimpan di perangkat ini agar Anda bisa membuka kembali dengan sidik jari/face unlock atau PIN.'
-        : 'Apakah Anda yakin ingin keluar dari aplikasi SIPANDU ODHIV?'
-    )) return;
+    if (!window.confirm('Apakah Anda yakin ingin keluar dari aplikasi SIPANDU ODHIV?')) return;
+    try {
+      // The only normal path that clears the persistent staff session is this
+      // explicit user action on the Keluar button.
+      await signOut(auth);
+      await googleLogout();
+      setIsAuthenticated(false);
+      setCurrentUserName('');
+      setCurrentUserRole('');
+      setAuthError('');
+    } catch (error) {
+      setAuthError('Permintaan keluar belum selesai: ' + (error instanceof Error ? error.message : String(error)));
+    }
+  };
 
-    // A configured quick-unlock method means "Keluar Aplikasi" locks the UI,
-    // not the Firebase account. Keeping Firebase's persisted session allows
-    // the biometric prompt to unlock the same account on the next launch.
-    if (currentUser && isQuickUnlockEnabled(currentUser.uid)) {
-      window.dispatchEvent(new Event('sipandu:lock-app'));
+  const handleRetryStaffAccess = async () => {
+    const user = auth.currentUser;
+    if (!user) {
+      setAuthError('Sesi akun sudah tidak ditemukan. Silakan masuk kembali dengan akun SIPANDU.');
+      setAuthReady(true);
       return;
     }
-
-    // Preserve the original full sign-out when no local quick-unlock method exists.
-    await signOut(auth);
-    await googleLogout();
-    setIsAuthenticated(false);
-    setCurrentUserName('');
+    setAuthReady(false);
+    setAuthError('');
+    try {
+      const token = await getIdTokenResult(user, true);
+      const role = token.claims.role;
+      if (role !== 'owner' && role !== 'supervisor' && role !== 'pendamping') {
+        setIsAuthenticated(false);
+        setAuthError('Sesi tetap tersimpan, tetapi klaim peran owner/supervisor/pendamping belum tersedia. Administrator perlu memperbaiki peran akun.');
+        return;
+      }
+      setCurrentUserRole(role);
+      setCurrentUserName(user.displayName || user.email || '');
+      setIsAuthenticated(true);
+      setLocalCacheReady(false);
+    } catch (error) {
+      setIsAuthenticated(false);
+      setAuthError('Sesi tetap tersimpan. Firebase belum dapat memverifikasi akun: ' + (error instanceof Error ? error.message : String(error)));
+    } finally {
+      setAuthReady(true);
+    }
   };
 
   // A record edit/add is persisted locally first, then pushed to each configured cloud target.
@@ -1246,6 +1267,25 @@ function StaffApp() {
 
   if (isAuthenticated && !localCacheReady) {
     return <div role="status" aria-live="polite" className="min-h-screen flex items-center justify-center bg-[#0a140b] text-emerald-200">Menyiapkan data SIPANDU…</div>;
+  }
+
+  // A signed-in account that cannot currently refresh its role claim stays signed in.
+  // Offer a retry and an explicit manual exit instead of silently signing it out.
+  if (!isAuthenticated && auth.currentUser) {
+    return (
+      <main className="min-h-screen flex items-center justify-center bg-[#0a140b] px-4 py-8 text-white">
+        <section className="w-full max-w-md rounded-2xl border border-amber-400/30 bg-[#112214] p-5 shadow-2xl">
+          <h1 className="text-lg font-extrabold text-amber-100">Sesi SIPANDU masih tersimpan</h1>
+          <p className="mt-2 text-sm leading-relaxed text-neutral-200">{authError || 'Akses akun sedang diperiksa.'}</p>
+          <button type="button" onClick={() => void handleRetryStaffAccess()} className="mt-4 w-full rounded-xl bg-emerald-600 px-4 py-3 text-sm font-bold text-white hover:bg-emerald-500">
+            Coba verifikasi akses lagi
+          </button>
+          <button type="button" onClick={() => void handleLogout()} className="mt-2 w-full rounded-xl border border-rose-400/30 px-4 py-3 text-xs font-semibold text-rose-200 hover:bg-rose-950/40">
+            Keluar dari akun SIPANDU
+          </button>
+        </section>
+      </main>
+    );
   }
 
   // If not logged in, render Part 1: Landing Page / Login
