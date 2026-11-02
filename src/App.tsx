@@ -322,7 +322,7 @@ function StaffApp() {
   const [settings, setSettings] = useState<AppSettings>(initialAppSettings);
 
   const continuationSheetCacheRef = useRef<{ formUrl: string; spreadsheetUrl: string } | null>(null);
-  const firestoreRosterReplacementAttemptedRef = useRef(false);
+  const firestoreRosterReplacementFingerprintRef = useRef('');
   const [cloudSyncNotice, setCloudSyncNotice] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [respondentNotifications, setRespondentNotifications] = useState<RespondentNotification[]>(() => loadRespondentNotifications(auth.currentUser?.uid || 'default'));
   const [notificationPermission, setNotificationPermission] = useState<NotificationPermission | 'unsupported'>(() => getRespondentNotificationPermission());
@@ -565,28 +565,41 @@ function StaffApp() {
     return permission;
   };
 
-  const replaceFirestoreRosterFromSheetOnce = async (
+  const replaceFirestoreRosterFromSheet = async (
     spreadsheetId: string,
     records: PPKSRecord[],
     authoritativeProfileRecords: PPKSRecord[] = records,
   ): Promise<string> => {
-    const marker = `sipandu_ppks_roster_replaced_${spreadsheetId}`;
+    // Fingerprint only (never persist the PPKS data itself) so a later edit to
+    // the same spreadsheet creates a new replacement run. Old builds used one
+    // permanent marker per spreadsheet ID and therefore blocked all later updates.
+    const fingerprintSource = JSON.stringify(records);
+    let fingerprint = 2166136261;
+    for (let index = 0; index < fingerprintSource.length; index += 1) {
+      fingerprint ^= fingerprintSource.charCodeAt(index);
+      fingerprint = Math.imul(fingerprint, 16777619);
+    }
+    const fingerprintKey = (fingerprint >>> 0).toString(16);
+    const marker = `sipandu_ppks_roster_replaced_${spreadsheetId}_${fingerprintKey}`;
     try {
       if (localStorage.getItem(marker) === 'done') {
-        return 'Koleksi Firestore ppks sudah pernah diganti dari spreadsheet ini.';
+        return 'Roster Firestore sudah sesuai dengan versi spreadsheet ini; tidak ada penulisan ulang yang diperlukan.';
       }
     } catch {
-      // Continue with an in-memory once-per-session guard when storage is unavailable.
+      // Continue with an in-memory fingerprint guard when storage is unavailable.
     }
-    if (firestoreRosterReplacementAttemptedRef.current) return '';
-    firestoreRosterReplacementAttemptedRef.current = true;
+    if (firestoreRosterReplacementFingerprintRef.current === fingerprintKey) return '';
+    firestoreRosterReplacementFingerprintRef.current = fingerprintKey;
     try {
       const result = await replacePPKSCollectionFromSpreadsheet(records, authoritativeProfileRecords);
-      try { localStorage.setItem(marker, 'done'); } catch { /* session guard still prevents repeated destructive work */ }
-      return `Koleksi Firestore ppks diganti dari spreadsheet: ${result.created} dibuat, ${result.updated} diperbarui, ${result.deleted} dokumen lama dihapus. Koleksi stageOneIntake tidak disentuh.`;
+      try { localStorage.setItem(marker, 'done'); } catch { /* in-memory guard still avoids duplicate work */ }
+      return `Koleksi Firestore ppks diselaraskan dengan versi spreadsheet terbaru: ${result.created} dibuat, ${result.updated} diperbarui, ${result.deleted} dokumen lama dihapus. Koleksi stageOneIntake tidak disentuh.`;
     } catch (error) {
+      if (firestoreRosterReplacementFingerprintRef.current === fingerprintKey) {
+        firestoreRosterReplacementFingerprintRef.current = '';
+      }
       console.error('SIPANDU could not replace the legacy Firestore PPKS roster:', error);
-      return `Penggantian Firestore belum berhasil: ${error instanceof Error ? error.message : String(error)}. Data tabel tetap memakai spreadsheet sebagai sumber utama.`;
+      return `Penyelarasan Firestore belum berhasil: ${error instanceof Error ? error.message : String(error)}. Data tabel tetap memakai spreadsheet sebagai sumber utama.`;
     }
   };
 
@@ -838,7 +851,7 @@ function StaffApp() {
       googleSpreadsheetSourceName: imported.spreadsheetTitle,
       googleSpreadsheetSourceTab: imported.selectedTab,
     }));
-    const firestoreMessage = await replaceFirestoreRosterFromSheetOnce(imported.spreadsheetId, recordsForSync, imported.records);
+    const firestoreMessage = await replaceFirestoreRosterFromSheet(imported.spreadsheetId, recordsForSync, imported.records);
     const updatedAt = new Date().toLocaleString('id-ID');
     setLiveSyncState({
       type: 'success',
@@ -1158,7 +1171,7 @@ function StaffApp() {
         if (!active) return;
         const recordsForSync = continuation.records;
         setPpksList((current) => reconcileSpreadsheetPPKSRecords(current, recordsForSync, imported.records));
-        const firestoreMessage = await replaceFirestoreRosterFromSheetOnce(imported.spreadsheetId, recordsForSync, imported.records);
+        const firestoreMessage = await replaceFirestoreRosterFromSheet(imported.spreadsheetId, recordsForSync, imported.records);
         setSettings((current) => {
           if (
             current.googleSpreadsheetSourceName === imported.spreadsheetTitle &&
