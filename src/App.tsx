@@ -163,17 +163,22 @@ function mergePPKSRecords(localRecords: PPKSRecord[], cloudRecords: PPKSRecord[]
   return sortPPKSRecordsByTimestamp(deduplicatePPKSRecords(Array.from(merged.values())));
 }
 
-function reconcileSpreadsheetPPKSRecords(localRecords: PPKSRecord[], sourceRecords: PPKSRecord[]): PPKSRecord[] {
-  // The selected spreadsheet is authoritative for every mapped profile field,
-  // including blank cells. Old cache/Firestore values must never fill those cells.
+function reconcileSpreadsheetPPKSRecords(
+  localRecords: PPKSRecord[],
+  sourceRecords: PPKSRecord[],
+  authoritativeProfileRecords: PPKSRecord[] = sourceRecords,
+): PPKSRecord[] {
+  // The selected ATENSI response tab is authoritative for mapped profile fields.
+  // Continuation Form rows may enrich assessment answers, but not these values.
   const uniqueSource = deduplicatePPKSRecords(sourceRecords);
+  const uniqueProfileSource = deduplicatePPKSRecords(authoritativeProfileRecords);
   const merged = mergePPKSRecords(localRecords, uniqueSource);
   const sourceMatched = merged.filter((record) =>
     uniqueSource.some((sourceRecord) => samePPKSIdentity(record, sourceRecord))
   );
   const exactSourceValues = sourceMatched.map((record) => {
-    const source = uniqueSource.find((item) => item.id === record.id)
-      || uniqueSource.find((item) => samePPKSIdentity(item, record));
+    const source = uniqueProfileSource.find((item) => item.id === record.id)
+      || uniqueProfileSource.find((item) => samePPKSIdentity(item, record));
     if (!source) return record;
     const overrides = record.manualPhotoOverrides || {};
     return {
@@ -575,6 +580,7 @@ function StaffApp() {
   const replaceFirestoreRosterFromSheetOnce = async (
     spreadsheetId: string,
     records: PPKSRecord[],
+    authoritativeProfileRecords: PPKSRecord[] = records,
   ): Promise<string> => {
     const marker = `sipandu_ppks_roster_replaced_${spreadsheetId}`;
     try {
@@ -587,7 +593,7 @@ function StaffApp() {
     if (firestoreRosterReplacementAttemptedRef.current) return '';
     firestoreRosterReplacementAttemptedRef.current = true;
     try {
-      const result = await replacePPKSCollectionFromSpreadsheet(records);
+      const result = await replacePPKSCollectionFromSpreadsheet(records, authoritativeProfileRecords);
       try { localStorage.setItem(marker, 'done'); } catch { /* session guard still prevents repeated destructive work */ }
       return `Koleksi Firestore ppks diganti dari spreadsheet: ${result.created} dibuat, ${result.updated} diperbarui, ${result.deleted} dokumen lama dihapus. Koleksi stageOneIntake tidak disentuh.`;
     } catch (error) {
@@ -840,14 +846,14 @@ function StaffApp() {
     }
     const continuation = await mergeContinuationResponses(imported.records);
     const recordsForSync = continuation.records;
-    setPpksList((localRecords) => preservePPKSRecordOrder(localRecords, reconcileSpreadsheetPPKSRecords(localRecords, recordsForSync)));
+    setPpksList((localRecords) => preservePPKSRecordOrder(localRecords, reconcileSpreadsheetPPKSRecords(localRecords, recordsForSync, imported.records)));
     setSettings((current) => ({
       ...current,
       googleSpreadsheetSourceUrl: sourceUrl,
       googleSpreadsheetSourceName: imported.spreadsheetTitle,
       googleSpreadsheetSourceTab: imported.selectedTab,
     }));
-    const firestoreMessage = await replaceFirestoreRosterFromSheetOnce(imported.spreadsheetId, recordsForSync);
+    const firestoreMessage = await replaceFirestoreRosterFromSheetOnce(imported.spreadsheetId, recordsForSync, imported.records);
     const updatedAt = new Date().toLocaleString('id-ID');
     setLiveSyncState({
       type: 'success',
@@ -1166,7 +1172,7 @@ function StaffApp() {
         const continuation = await mergeContinuationResponses(imported.records);
         if (!active) return;
         const recordsForSync = continuation.records;
-        setPpksList((current) => reconcileSpreadsheetPPKSRecords(current, recordsForSync));
+        setPpksList((current) => reconcileSpreadsheetPPKSRecords(current, recordsForSync, imported.records));
         const firestoreMessage = await replaceFirestoreRosterFromSheetOnce(imported.spreadsheetId, recordsForSync);
         setSettings((current) => {
           if (
