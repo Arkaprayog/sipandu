@@ -1173,7 +1173,7 @@ function StaffApp() {
         if (!active) return;
         const recordsForSync = continuation.records;
         setPpksList((current) => reconcileSpreadsheetPPKSRecords(current, recordsForSync, imported.records));
-        const firestoreMessage = await replaceFirestoreRosterFromSheetOnce(imported.spreadsheetId, recordsForSync);
+        const firestoreMessage = await replaceFirestoreRosterFromSheetOnce(imported.spreadsheetId, recordsForSync, imported.records);
         setSettings((current) => {
           if (
             current.googleSpreadsheetSourceName === imported.spreadsheetTitle &&
