@@ -26,7 +26,7 @@ const SettingsModal = lazyWithRecovery('SettingsModal', () => import('./componen
 const NotificationsModal = lazyWithRecovery('NotificationsModal', () => import('./components/NotificationsModal').then((module) => ({ default: module.NotificationsModal })));
 const GoogleWorkspaceModal = lazyWithRecovery('GoogleWorkspaceModal', () => import('./components/GoogleWorkspaceModal').then((module) => ({ default: module.GoogleWorkspaceModal })));
 import { onAuthStateChanged, signOut, getIdTokenResult } from 'firebase/auth';
-import { auth, getAccessToken, savePPKSToFirestore, googleLogout, subscribeToPPKSChanges, saveStageOneIntakeToFirestore, subscribeToStageOneIntake } from './lib/firebase';
+import { auth, getAccessToken, savePPKSToFirestore, replacePPKSCollectionFromSpreadsheet, googleLogout, subscribeToPPKSChanges, saveStageOneIntakeToFirestore, subscribeToStageOneIntake } from './lib/firebase';
 import { isQuickUnlockEnabled } from './lib/biometricLock';
 import { ensureSIPANDUDatabaseSheet, extractSpreadsheetId, getLinkedSpreadsheetUrlForForm, importPPKSFromSpreadsheet, upsertPPKSInSpreadsheet } from './lib/googleWorkspace';
 import { GOOGLE_SIPANDU_RESOURCES } from './lib/googleSIPANDUResources';
@@ -164,14 +164,37 @@ function mergePPKSRecords(localRecords: PPKSRecord[], cloudRecords: PPKSRecord[]
 }
 
 function reconcileSpreadsheetPPKSRecords(localRecords: PPKSRecord[], sourceRecords: PPKSRecord[]): PPKSRecord[] {
-  // The selected spreadsheet is the master roster. Reuse local/cloud details only
-  // for people still present in that source; do not keep obsolete cache-only rows.
+  // The selected spreadsheet is authoritative for every mapped profile field,
+  // including blank cells. Old cache/Firestore values must never fill those cells.
   const uniqueSource = deduplicatePPKSRecords(sourceRecords);
   const merged = mergePPKSRecords(localRecords, uniqueSource);
   const sourceMatched = merged.filter((record) =>
     uniqueSource.some((sourceRecord) => samePPKSIdentity(record, sourceRecord))
   );
-  return sortPPKSRecordsByName(deduplicatePPKSRecords(sourceMatched));
+  const exactSourceValues = sourceMatched.map((record) => {
+    const source = uniqueSource.find((item) => item.id === record.id)
+      || uniqueSource.find((item) => samePPKSIdentity(item, record));
+    if (!source) return record;
+    const overrides = record.manualPhotoOverrides || {};
+    return {
+      ...record,
+      timestamp: source.timestamp,
+      namaLengkap: source.namaLengkap,
+      nik: source.nik,
+      usia: source.usia,
+      alamatLengkap: source.alamatLengkap,
+      kotaDomisili: source.kotaDomisili,
+      noHpWa: source.noHpWa,
+      jenisBantuan: source.jenisBantuan,
+      intervensiMental: source.intervensiMental,
+      desil: source.desil,
+      fotoDiri: normalizePPKSPhotoSource(source.fotoDiri) || normalizePPKSPhotoSource(overrides.fotoDiri) || '',
+      fotoKtp: normalizePPKSPhotoSource(source.fotoKtp) || normalizePPKSPhotoSource(overrides.fotoKtp) || '',
+      fotoKk: normalizePPKSPhotoSource(source.fotoKk) || normalizePPKSPhotoSource(overrides.fotoKk) || '',
+      fotoRumah: normalizePPKSPhotoSource(source.fotoRumah) || normalizePPKSPhotoSource(overrides.fotoRumah) || '',
+    };
+  });
+  return sortPPKSRecordsByName(deduplicatePPKSRecords(exactSourceValues));
 }
 
 function normalizeAppSettings(value: unknown): AppSettings {
@@ -306,6 +329,7 @@ function StaffApp() {
   const [settings, setSettings] = useState<AppSettings>(initialAppSettings);
 
   const continuationSheetCacheRef = useRef<{ formUrl: string; spreadsheetUrl: string } | null>(null);
+  const firestoreRosterReplacementAttemptedRef = useRef(false);
   const [cloudSyncNotice, setCloudSyncNotice] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [respondentNotifications, setRespondentNotifications] = useState<RespondentNotification[]>(() => loadRespondentNotifications(auth.currentUser?.uid || 'default'));
   const [notificationPermission, setNotificationPermission] = useState<NotificationPermission | 'unsupported'>(() => getRespondentNotificationPermission());
@@ -546,6 +570,30 @@ function StaffApp() {
     const permission = await enableRespondentNotifications();
     setNotificationPermission(permission);
     return permission;
+  };
+
+  const replaceFirestoreRosterFromSheetOnce = async (
+    spreadsheetId: string,
+    records: PPKSRecord[],
+  ): Promise<string> => {
+    const marker = `sipandu_ppks_roster_replaced_${spreadsheetId}`;
+    try {
+      if (localStorage.getItem(marker) === 'done') {
+        return 'Koleksi Firestore ppks sudah pernah diganti dari spreadsheet ini.';
+      }
+    } catch {
+      // Continue with an in-memory once-per-session guard when storage is unavailable.
+    }
+    if (firestoreRosterReplacementAttemptedRef.current) return '';
+    firestoreRosterReplacementAttemptedRef.current = true;
+    try {
+      const result = await replacePPKSCollectionFromSpreadsheet(records);
+      try { localStorage.setItem(marker, 'done'); } catch { /* session guard still prevents repeated destructive work */ }
+      return `Koleksi Firestore ppks diganti dari spreadsheet: ${result.created} dibuat, ${result.updated} diperbarui, ${result.deleted} dokumen lama dihapus. Koleksi stageOneIntake tidak disentuh.`;
+    } catch (error) {
+      console.error('SIPANDU could not replace the legacy Firestore PPKS roster:', error);
+      return `Penggantian Firestore belum berhasil: ${error instanceof Error ? error.message : String(error)}. Data tabel tetap memakai spreadsheet sebagai sumber utama.`;
+    }
   };
 
   // Auth Handlers
@@ -799,11 +847,11 @@ function StaffApp() {
       googleSpreadsheetSourceName: imported.spreadsheetTitle,
       googleSpreadsheetSourceTab: imported.selectedTab,
     }));
+    const firestoreMessage = await replaceFirestoreRosterFromSheetOnce(imported.spreadsheetId, recordsForSync);
     const updatedAt = new Date().toLocaleString('id-ID');
-    const firestoreMessage = 'Firestore tidak dihapus atau direkonsiliasi oleh tombol sinkronisasi. Penghapusan data harus menjadi tindakan administrasi terpisah dan disengaja.';
     setLiveSyncState({
       type: 'success',
-      message: `Sumber “${imported.spreadsheetTitle}” → “${imported.selectedTab}”: ${imported.sourceDataRows} baris data, ${recordsForSync.length} PPKS unik dimuat, ${imported.duplicateRowsCollapsed} duplikat spreadsheet digabung, ${imported.sampleRecordsFiltered} contoh disaring. Hasil kolom BE terpetakan: ${imported.recordsWithInterventionRecommendation}/${imported.records.length} responden. Respons Form lanjutan dipadankan: ${continuation.matchedResponses}. ${continuation.warning ? continuation.warning + ' ' : ''}Foto sumber: diri ${imported.photoCounts.diri}/${imported.records.length}, KTP ${imported.photoCounts.ktp}/${imported.records.length}, KK ${imported.photoCounts.kk}/${imported.records.length}, rumah ${imported.photoCounts.rumah}/${imported.records.length}; tautan dipulihkan dari Forms: ${imported.photosRecoveredFromForm}; status pemulihan: ${imported.photoRecoveryStatus} — ${imported.photoRecoveryDetail} ${firestoreMessage} NIK terpetakan ${imported.recordsWithNIK}/${imported.records.length}. Sinkronisasi otomatis setiap 5 menit saat dashboard terbuka dan izin Google masih berlaku.`,
+      message: `Sumber “${imported.spreadsheetTitle}” → “${imported.selectedTab}”: ${imported.sourceDataRows} baris data, ${recordsForSync.length} PPKS unik dimuat, ${imported.duplicateRowsCollapsed} duplikat spreadsheet digabung, ${imported.sampleRecordsFiltered} contoh disaring. Intervensi & rekomendasi mengikuti pemetaan kolom spreadsheet: ${imported.recordsWithInterventionRecommendation}/${imported.records.length} responden terisi. Respons Form lanjutan dipadankan: ${continuation.matchedResponses}. ${continuation.warning ? continuation.warning + ' ' : ''}Foto sumber: diri ${imported.photoCounts.diri}/${imported.records.length}, KTP ${imported.photoCounts.ktp}/${imported.records.length}, KK ${imported.photoCounts.kk}/${imported.records.length}, rumah ${imported.photoCounts.rumah}/${imported.records.length}; tautan dipulihkan dari Forms: ${imported.photosRecoveredFromForm}; status pemulihan: ${imported.photoRecoveryStatus} — ${imported.photoRecoveryDetail}. ${firestoreMessage} NIK terpetakan ${imported.recordsWithNIK}/${imported.records.length}. Sinkronisasi otomatis setiap 5 menit saat dashboard terbuka dan izin Google masih berlaku.`,
       lastUpdatedAt: updatedAt,
     });
     return {
@@ -878,17 +926,46 @@ function StaffApp() {
           if (!active) return;
           retryCount = 0;
           setPpksList((currentRecords) => {
-            const knownIds = new Set(currentRecords.map((record) => record.id));
-            const recordsFromCurrentRoster = cloudRecords.filter((record) => knownIds.has(record.id));
-            return recordsFromCurrentRoster.length
-              ? preservePPKSRecordOrder(currentRecords, mergePPKSRecords(currentRecords, recordsFromCurrentRoster))
-              : currentRecords;
+            const cloudById = new Map(cloudRecords.map((record) => [record.id, record]));
+            return currentRecords.map((current) => {
+              const cloud = cloudById.get(current.id);
+              if (!cloud) return current;
+              const manualPhotoOverrides = {
+                ...(current.manualPhotoOverrides || {}),
+                ...(cloud.manualPhotoOverrides || {}),
+              };
+              const mergeNonEmpty = <T extends object>(previous: T | undefined, incoming: T | undefined): T | undefined => {
+                const merged = {
+                  ...(previous || {}),
+                  ...Object.fromEntries(Object.entries(incoming || {}).filter(([, value]) =>
+                    value !== '' && value !== undefined && value !== null
+                  )),
+                };
+                return Object.keys(merged).length ? merged as T : undefined;
+              };
+              return {
+                ...current,
+                // Only explicitly uploaded photo overrides may fill blank source cells.
+                // Legacy Firestore profile fields never replace the spreadsheet values.
+                manualPhotoOverrides,
+                fotoDiri: normalizePPKSPhotoSource(current.fotoDiri) || normalizePPKSPhotoSource(manualPhotoOverrides.fotoDiri) || '',
+                fotoKtp: normalizePPKSPhotoSource(current.fotoKtp) || normalizePPKSPhotoSource(manualPhotoOverrides.fotoKtp) || '',
+                fotoKk: normalizePPKSPhotoSource(current.fotoKk) || normalizePPKSPhotoSource(manualPhotoOverrides.fotoKk) || '',
+                fotoRumah: normalizePPKSPhotoSource(current.fotoRumah) || normalizePPKSPhotoSource(manualPhotoOverrides.fotoRumah) || '',
+                integratedForm: mergeNonEmpty(current.integratedForm, cloud.integratedForm),
+                officialAssessment: mergeNonEmpty(current.officialAssessment, cloud.officialAssessment),
+                formAsesmenTerintegrasi: mergeNonEmpty(current.formAsesmenTerintegrasi, cloud.formAsesmenTerintegrasi),
+                statusAsesmen: current.statusAsesmen === 'Tahap Awal' && cloud.statusAsesmen !== 'Tahap Awal'
+                  ? cloud.statusAsesmen
+                  : current.statusAsesmen,
+              };
+            });
           });
           setFirestoreRealtimeState({
             type: info.fromCache ? 'paused' : 'connected',
             message: info.fromCache
               ? `Data realtime memakai cache lokal sementara; perubahan cloud diterapkan ketika server tersambung (${cloudRecords.length} dokumen terbaca).`
-              : `Realtime Firestore aktif — perubahan antarperangkat diterapkan otomatis (${cloudRecords.length} dokumen cloud terbaca).`,
+              : `Realtime Firestore aktif — hanya data asesmen tambahan dan unggahan foto SIPANDU yang dipertahankan (${cloudRecords.length} dokumen terbaca); profil utama tetap mengikuti spreadsheet.`,
             lastUpdatedAt: new Date().toLocaleString('id-ID'),
           });
         }, (error) => {
@@ -1090,6 +1167,7 @@ function StaffApp() {
         if (!active) return;
         const recordsForSync = continuation.records;
         setPpksList((current) => reconcileSpreadsheetPPKSRecords(current, recordsForSync));
+        const firestoreMessage = await replaceFirestoreRosterFromSheetOnce(imported.spreadsheetId, recordsForSync);
         setSettings((current) => {
           if (
             current.googleSpreadsheetSourceName === imported.spreadsheetTitle &&
@@ -1105,7 +1183,7 @@ function StaffApp() {
         failedAttempts = 0;
         setLiveSyncState({
           type: 'success',
-          message: `LIVE SYNC aktif berulang — “${imported.spreadsheetTitle}” → “${imported.selectedTab}”: ${recordsForSync.length} PPKS unik dimuat dari ${imported.sourceDataRows} baris tahap awal; ${imported.duplicateRowsCollapsed} duplikat digabung; ${imported.sampleRecordsFiltered} contoh disaring; hasil kolom BE terpetakan: ${imported.recordsWithInterventionRecommendation}/${imported.records.length} responden; respons Google Form lanjutan yang dipadankan: ${continuation.matchedResponses}. ${continuation.warning ? continuation.warning + ' ' : ''}Foto diri ${imported.photoCounts.diri}/${imported.records.length}, KTP ${imported.photoCounts.ktp}/${imported.records.length}, KK ${imported.photoCounts.kk}/${imported.records.length}, rumah ${imported.photoCounts.rumah}/${imported.records.length}; tautan Forms dipulihkan: ${imported.photosRecoveredFromForm} (${imported.photoRecoveryStatus}); diagnosis: ${imported.photoRecoveryDetail}. Firestore tidak dihapus secara otomatis.`,
+          message: `LIVE SYNC aktif berulang — “${imported.spreadsheetTitle}” → “${imported.selectedTab}”: ${recordsForSync.length} PPKS unik dimuat dari ${imported.sourceDataRows} baris tahap awal; ${imported.duplicateRowsCollapsed} duplikat digabung; ${imported.sampleRecordsFiltered} contoh disaring; intervensi & rekomendasi terpetakan dari kolom spreadsheet yang ditetapkan: ${imported.recordsWithInterventionRecommendation}/${imported.records.length} responden; respons Google Form lanjutan yang dipadankan: ${continuation.matchedResponses}. ${continuation.warning ? continuation.warning + ' ' : ''}Foto diri ${imported.photoCounts.diri}/${imported.records.length}, KTP ${imported.photoCounts.ktp}/${imported.records.length}, KK ${imported.photoCounts.kk}/${imported.records.length}, rumah ${imported.photoCounts.rumah}/${imported.records.length}; tautan Forms dipulihkan: ${imported.photosRecoveredFromForm} (${imported.photoRecoveryStatus}); diagnosis: ${imported.photoRecoveryDetail}. ${firestoreMessage}`,
           lastUpdatedAt: new Date().toLocaleString('id-ID'),
         });
       } catch (error) {
