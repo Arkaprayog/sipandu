@@ -26,7 +26,7 @@ const SettingsModal = lazyWithRecovery('SettingsModal', () => import('./componen
 const NotificationsModal = lazyWithRecovery('NotificationsModal', () => import('./components/NotificationsModal').then((module) => ({ default: module.NotificationsModal })));
 const GoogleWorkspaceModal = lazyWithRecovery('GoogleWorkspaceModal', () => import('./components/GoogleWorkspaceModal').then((module) => ({ default: module.GoogleWorkspaceModal })));
 import { onAuthStateChanged, signOut, getIdTokenResult } from 'firebase/auth';
-import { auth, getAccessToken, savePPKSToFirestore, replacePPKSCollectionFromSpreadsheet, googleLogout, subscribeToPPKSChanges, saveStageOneIntakeToFirestore, subscribeToStageOneIntake, staffAuthPersistenceReady } from './lib/firebase';
+import { auth, getAccessToken, savePPKSToFirestore, replacePPKSCollectionFromSpreadsheet, googleLogout, subscribeToPPKSChanges, saveStageOneIntakeToFirestore, subscribeToStageOneIntake, staffAuthPersistenceReady, isWorkspaceAccountConnected, invalidateAccessToken } from './lib/firebase';
 import { ensureSIPANDUDatabaseSheet, extractSpreadsheetId, getLinkedSpreadsheetUrlForForm, importPPKSFromSpreadsheet, upsertPPKSInSpreadsheet } from './lib/googleWorkspace';
 import { GOOGLE_SIPANDU_RESOURCES } from './lib/googleSIPANDUResources';
 import { getLiveSyncRetryDelay, LIVE_SYNC_INTERVAL_MS } from './lib/liveSyncPolicy';
@@ -37,8 +37,11 @@ import { buildGoogleFormsPrefilledUrl, buildWhatsAppMessage, createWhatsAppLink 
 import {
   enableRespondentNotifications,
   getRespondentNotificationPermission,
+  refreshRespondentNotificationPermission,
   loadRespondentNotifications,
   markRespondentNotificationsRead,
+  notifyWorkspaceReconnectRequired,
+  resolveWorkspaceReconnectNotifications,
   processRespondentSubmissionEvents,
   type RespondentNotification,
 } from './lib/respondentNotifications';
@@ -536,15 +539,38 @@ function StaffApp() {
 
   useEffect(() => {
     if (!isAuthenticated) return;
+    let active = true;
     const uid = auth.currentUser?.uid || 'default';
     setRespondentNotifications(loadRespondentNotifications(uid));
     setNotificationPermission(getRespondentNotificationPermission());
+
+    const refreshPermission = () => {
+      void refreshRespondentNotificationPermission().then((permission) => {
+        if (active) setNotificationPermission(permission);
+      });
+    };
     const onNotificationHistoryUpdated = (event: Event) => {
       const eventUid = (event as CustomEvent<{ uid?: string }>).detail?.uid || '';
       if (eventUid === uid) setRespondentNotifications(loadRespondentNotifications(uid));
     };
+    const onWorkspaceTokenUpdated = (event: Event) => {
+      const connected = (event as CustomEvent<{ connected?: boolean }>).detail?.connected === true;
+      if (!connected) return;
+      setRespondentNotifications(resolveWorkspaceReconnectNotifications(uid));
+    };
     window.addEventListener('sipandu-respondent-notifications-updated', onNotificationHistoryUpdated);
-    return () => window.removeEventListener('sipandu-respondent-notifications-updated', onNotificationHistoryUpdated);
+    window.addEventListener('sipandu-workspace-token-updated', onWorkspaceTokenUpdated);
+    window.addEventListener('focus', refreshPermission);
+    document.addEventListener('visibilitychange', refreshPermission);
+    refreshPermission();
+
+    return () => {
+      active = false;
+      window.removeEventListener('sipandu-respondent-notifications-updated', onNotificationHistoryUpdated);
+      window.removeEventListener('sipandu-workspace-token-updated', onWorkspaceTokenUpdated);
+      window.removeEventListener('focus', refreshPermission);
+      document.removeEventListener('visibilitychange', refreshPermission);
+    };
   }, [isAuthenticated, currentUserRole]);
 
   useEffect(() => {
@@ -832,6 +858,24 @@ function StaffApp() {
     }
   };
 
+  const processGoogleFormNotifications = async (
+    questionnaireRecords: PPKSRecord[],
+    assessmentRecords: PPKSRecord[],
+  ) => {
+    const uid = auth.currentUser?.uid || 'default';
+    await processRespondentSubmissionEvents(
+      uid,
+      questionnaireRecords.map((record) => ({
+        id: record.id,
+        namaLengkap: record.namaLengkap,
+        timestamp: record.timestamp,
+      })),
+      assessmentRecords as unknown as Array<Record<string, unknown>>,
+      { baselineNamespace: 'google-forms-atensi-main' },
+    );
+    setRespondentNotifications(loadRespondentNotifications(uid));
+  };
+
   const handleSyncGoogleSpreadsheet = async (): Promise<{ records: number; sourceDataRows: number; sourceRowsWithName: number; sampleRecordsFiltered: number; duplicateRowsCollapsed: number; photosRecoveredFromForm: number; photoRecoveryStatus: string; photoRecoveryDetail: string; photoRecoveryDiagnostics: { responseCount: number; responsesWithUploads: number; recordsMatched: number }; photoCounts: { diri: number; ktp: number; kk: number; rumah: number } }> => {
     const sourceUrl = GOOGLE_SIPANDU_RESOURCES.responseSpreadsheetUrl;
     const sourceTab = 'From Responses 1';
@@ -843,6 +887,7 @@ function StaffApp() {
       );
     }
     const continuation = await mergeContinuationResponses(imported.records);
+    await processGoogleFormNotifications(imported.records, continuation.records);
     const recordsForSync = continuation.records;
     setPpksList((localRecords) => preservePPKSRecordOrder(localRecords, reconcileSpreadsheetPPKSRecords(localRecords, recordsForSync, imported.records)));
     setSettings((current) => ({
@@ -1150,6 +1195,11 @@ function StaffApp() {
         const token = await getAccessToken();
         if (!active) return;
         if (!token) {
+          if (isWorkspaceAccountConnected()) {
+            const uid = auth.currentUser?.uid || 'default';
+            await notifyWorkspaceReconnectRequired(uid);
+            if (active) setRespondentNotifications(loadRespondentNotifications(uid));
+          }
           failedAttempts += 1;
           nextDelay = getLiveSyncRetryDelay(failedAttempts);
           setLiveSyncState({
@@ -1169,6 +1219,7 @@ function StaffApp() {
 
         const continuation = await mergeContinuationResponses(imported.records);
         if (!active) return;
+        await processGoogleFormNotifications(imported.records, continuation.records);
         const recordsForSync = continuation.records;
         setPpksList((current) => reconcileSpreadsheetPPKSRecords(current, recordsForSync, imported.records));
         const firestoreMessage = await replaceFirestoreRosterFromSheet(imported.spreadsheetId, recordsForSync, imported.records);
@@ -1195,6 +1246,15 @@ function StaffApp() {
         failedAttempts += 1;
         nextDelay = getLiveSyncRetryDelay(failedAttempts);
         const detail = error instanceof Error ? error.message : String(error);
+        if (
+          isWorkspaceAccountConnected() &&
+          /401|invalid_grant|token.{0,30}(expired|invalid)|unauthori[sz]ed/i.test(detail)
+        ) {
+          invalidateAccessToken();
+          const uid = auth.currentUser?.uid || 'default';
+          await notifyWorkspaceReconnectRequired(uid);
+          if (active) setRespondentNotifications(loadRespondentNotifications(uid));
+        }
         console.error('SIPANDU continuous Google Workspace live sync failed; retry scheduled:', error);
         setLiveSyncState({
           type: 'error',
