@@ -652,7 +652,7 @@ const INTEGRATED_SHEET_FIELDS: Array<{
   { key: 'supervisorKemensos', aliases: ['supervisorKemensos', 'namaSupervisor'] },
 ];
 
-function mapRowsToPPKSRecords(rows: string[][]): PPKSRecord[] {
+function mapRowsToPPKSRecords(rows: string[][], useATENSIColumnPositions = false): PPKSRecord[] {
   if (rows.length < 2) return [];
   const headers = rows[0].map((value) => String(value ?? '').trim());
   if (!headers.some(Boolean)) return [];
@@ -661,7 +661,8 @@ function mapRowsToPPKSRecords(rows: string[][]): PPKSRecord[] {
 
   rows.slice(1).forEach((sourceRow, rowIndex) => {
     const row = sourceRow.map((value) => String(value ?? '').trim());
-    const namaLengkap = readRespondentName(headers, row);
+    const sourceCell = (index: number) => String(row[index] ?? '').trim();
+    const namaLengkap = useATENSIColumnPositions ? sourceCell(2) : readRespondentName(headers, row);
     // The follow-up Form is prefilled with the original PPKS ID. It may not ask
     // for the respondent's name again, so an exact valid ID is enough to accept
     // that row for merging into its existing stage-one record.
@@ -673,8 +674,8 @@ function mapRowsToPPKSRecords(rows: string[][]): PPKSRecord[] {
       : '';
     if (!namaLengkap && !linkedPPKSId) return;
 
-    const timestamp = readCellByAliases(headers, row, ['timestamp', 'capWaktu', 'waktuPengiriman', 'waktuPengisian', 'tanggalWaktu', 'createTime']);
-    let nik = readNIKFromSheetRow(headers, row);
+    const timestamp = useATENSIColumnPositions ? sourceCell(0) : readCellByAliases(headers, row, ['timestamp', 'capWaktu', 'waktuPengiriman', 'waktuPengisian', 'tanggalWaktu', 'createTime']);
+    let nik = useATENSIColumnPositions ? normalizeNIKCellValue(sourceCell(3)) : readNIKFromSheetRow(headers, row);
     // Google Forms can append helper text/asterisks and may label the NIK as
     // "NIK / No. KTP", "Nomor KTP (16 digit)" or a numbered official-PDF field.
     // Use a second conservative pass over respondent identity headers before
@@ -775,11 +776,11 @@ function mapRowsToPPKSRecords(rows: string[][]): PPKSRecord[] {
     }
     seen.add(recordId);
 
-    const usia = parseSheetNumber(readCellByAliases(headers, row, ['usia', 'umur', 'umurTahun', 'usiaSaatIni', 'umurSaatIni']), 0);
+    const usia = parseSheetNumber(useATENSIColumnPositions ? sourceCell(11) : readCellByAliases(headers, row, ['usia', 'umur', 'umurTahun', 'usiaSaatIni', 'umurSaatIni']), 0);
     const gender = readCellByAliases(headers, row, ['jenisKelamin', 'gender', 'jenisKelaminResponden']);
     const domisili = readCellByAliases(headers, row, ['kotaDomisili', 'kabupatenKota', 'kotaKabupaten', 'domisili', 'kota', 'kabupaten']);
-    const alamat = readCellByAliases(headers, row, ['alamatLengkap', 'alamatDomisili', 'alamatResponden', 'alamat']);
-    const jenisBantuan = readCellByAliases(headers, row, ['jenisBantuan', 'bantuanDibutuhkan', 'jenisBantuanAtensi', 'kebutuhanBantuan']);
+    const alamat = useATENSIColumnPositions ? sourceCell(10) : readCellByAliases(headers, row, ['alamatLengkap', 'alamatDomisili', 'alamatResponden', 'alamat']);
+    const jenisBantuan = useATENSIColumnPositions ? sourceCell(39) : readCellByAliases(headers, row, ['jenisBantuan', 'bantuanDibutuhkan', 'jenisBantuanAtensi', 'kebutuhanBantuan']);
     const integratedValues: Partial<Record<keyof IntegratedFormData, string | number | boolean>> = {};
     const integratedMarkerKeys = new Set<keyof IntegratedFormData>([
       'nomorRegistrasi', 'noBpjs', 'tahunDiagnosa', 'faskesPdpRujukan',
@@ -798,7 +799,7 @@ function mapRowsToPPKSRecords(rows: string[][]): PPKSRecord[] {
     const integratedForm = hasIntegratedAssessmentData
       ? (integratedValues as IntegratedFormData)
       : undefined;
-    const desil = parseSheetNumber(readCellByAliases(headers, row, ['desil', 'desilKemiskinan', 'desilDTKS', 'desilEkonomi']), 0);
+    const desil = parseSheetNumber(useATENSIColumnPositions ? sourceCell(41) : readCellByAliases(headers, row, ['desil', 'desilKemiskinan', 'desilDTKS', 'desilEkonomi']), 0);
     // Prefer category-aware upload-column detection so a longer Google Forms
     // question title still maps correctly, while never treating KTP/KK/house
     // attachments as the respondent portrait.
@@ -827,12 +828,14 @@ function mapRowsToPPKSRecords(rows: string[][]): PPKSRecord[] {
       jenisKelamin: /perempuan|wanita/i.test(gender) ? 'Perempuan' : 'Laki-laki',
       kotaDomisili: domisili,
       alamatLengkap: alamat,
-      noHpWa: readCellByAliases(headers, row, ['noHPWA', 'nomorHPWA', 'noWhatsApp', 'nomorTelepon', 'telepon', 'hp']),
+      noHpWa: useATENSIColumnPositions ? sourceCell(13) : readCellByAliases(headers, row, ['noHPWA', 'nomorHPWA', 'noWhatsApp', 'nomorTelepon', 'telepon', 'hp']),
       jenisBantuan,
       // Pull the result from Google Sheets column BE for both historical rows
       // and future Form submissions. Blank BE cells may fall back to the column title.
-      intervensiMental: readInterventionRecommendationFromRow(headers, row)
-        || readCellByAliases(headers, row, ['intervensiMental', 'kebutuhanIntervensiMental', 'catatanPendamping']),
+      intervensiMental: useATENSIColumnPositions
+        ? sourceCell(40)
+        : (readInterventionRecommendationFromRow(headers, row)
+          || readCellByAliases(headers, row, ['intervensiMental', 'kebutuhanIntervensiMental', 'catatanPendamping'])),
       desil,
       fotoDiri,
       fotoKtp,
@@ -1328,8 +1331,22 @@ export async function importPPKSFromSpreadsheet(
   const rows = await readSpreadsheetRichData(metadata.spreadsheetId, `'${escapedTitle}'!A1:ZZ2000`);
   const headers = rows[0] || [];
   const dataRows = rows.slice(1);
-  const sourceRowsWithName = dataRows.filter((row) => Boolean(readRespondentName(headers, row))).length;
-  const allMappedRecords = mapRowsToPPKSRecords(rows);
+  const isKnownATENSIResponseSheet =
+    metadata.spreadsheetId === GOOGLE_SIPANDU_RESOURCES.responseSpreadsheetId ||
+    (
+      normalizeSheetHeader(metadata.title).includes('asesmenprogramasistensirehabilitasisosial') &&
+      normalizeSheetHeader(metadata.title).includes('responses') &&
+      normalizeSheetHeader(selectedTab).includes('fromresponses')
+    );
+  // For the owner's exact ATENSI response tab, column positions are authoritative.
+  // Other spreadsheets retain the existing header-based mapping.
+  const useATENSIColumnPositions =
+    isKnownATENSIResponseSheet &&
+    normalizeSheetHeader(selectedTab) === normalizeSheetHeader('From Responses 1');
+  const sourceRowsWithName = dataRows.filter((row) =>
+    Boolean(useATENSIColumnPositions ? String(row[2] ?? '').trim() : readRespondentName(headers, row))
+  ).length;
+  const allMappedRecords = mapRowsToPPKSRecords(rows, useATENSIColumnPositions);
   const recordsAfterSampleFilter = allMappedRecords.filter((record) => !isLegacySamplePPKS(record));
   let records = sortPPKSRecordsByTimestamp(deduplicatePPKSRecords(recordsAfterSampleFilter));
   const sampleRecordsFiltered = allMappedRecords.length - recordsAfterSampleFilter.length;
@@ -1339,15 +1356,6 @@ export async function importPPKSFromSpreadsheet(
   let photoRecoveryDetail = 'Sumber ini tidak dikenali sebagai spreadsheet respons ATENSI; pemulihan Google Forms tidak dijalankan.';
   let photoRecoveryDiagnostics = { responseCount: 0, responsesWithUploads: 0, recordsMatched: 0 };
 
-  const normalizedSpreadsheetTitle = normalizeSheetHeader(metadata.title);
-  const normalizedSelectedTab = normalizeSheetHeader(selectedTab);
-  const isKnownATENSIResponseSheet =
-    metadata.spreadsheetId === GOOGLE_SIPANDU_RESOURCES.responseSpreadsheetId ||
-    (
-      normalizedSpreadsheetTitle.includes('asesmenprogramasistensirehabilitasisosial') &&
-      normalizedSpreadsheetTitle.includes('responses') &&
-      normalizedSelectedTab.includes('formresponses')
-    );
   if (isKnownATENSIResponseSheet) {
     const hasMissingPhoto = records.some((record) =>
       !normalizePPKSPhotoSource(record.fotoDiri) ||
