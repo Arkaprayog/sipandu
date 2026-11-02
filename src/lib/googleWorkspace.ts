@@ -85,7 +85,7 @@ async function googleJson<T>(url: string, init: RequestInit = {}): Promise<T> {
 export type PPKSPhotoKind = 'diri' | 'ktp' | 'kk' | 'rumah';
 
 /**
- * Upload a missing respondent photo into the configured SIPANDU Drive folder.
+ * Upload a missing or replacement respondent photo into the configured SIPANDU Drive folder.
  * The returned Drive URL is then stored on the PPKS record so the existing
  * cloud-sync pipeline can persist it to the configured SIPANDU database sheet.
  */
@@ -95,7 +95,9 @@ export async function uploadPPKSPhotoToDrive(
 ): Promise<string> {
   if (!file.type.startsWith('image/')) throw new Error('Berkas harus berupa gambar.');
   if (file.size > 12 * 1024 * 1024) throw new Error('Ukuran foto maksimal 12 MB.');
-  const token = requireToken(await getAccessToken());
+  let token = await getAccessToken();
+  if (!token) token = await refreshWorkspaceAccessToken();
+  token = requireToken(token);
   const safeName = options.respondentName.replace(/[^\p{L}\p{N} _.-]/gu, '').trim().slice(0, 70) || 'PPKS';
   const photoLabel = { diri: 'Foto-Diri', ktp: 'Foto-KTP', kk: 'Foto-KK', rumah: 'Foto-Rumah' }[options.photoKind];
   const fileName = `SIPANDU_${safeName}_${photoLabel}_${options.respondentId}_${Date.now()}${file.name.match(/\.[a-zA-Z0-9]{2,5}$/)?.[0] || '.jpg'}`;
@@ -111,14 +113,37 @@ export async function uploadPPKSPhotoToDrive(
     await file.arrayBuffer(),
     `\r\n--${boundary}--`,
   ]);
-  const response = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,webViewLink', {
+  const uploadUrl = 'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&supportsAllDrives=true&fields=id,name,webViewLink';
+  const sendUpload = (accessToken: string) => fetch(uploadUrl, {
     method: 'POST',
-    headers: { Authorization: `Bearer ${token}`, 'Content-Type': `multipart/related; boundary=${boundary}` },
+    headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': `multipart/related; boundary=${boundary}` },
     body,
   });
+  let response = await sendUpload(token);
+  if (response.status === 401) {
+    invalidateAccessToken();
+    const refreshed = await refreshWorkspaceAccessToken(true);
+    if (refreshed) {
+      token = refreshed;
+      response = await sendUpload(token);
+    }
+  }
   if (!response.ok) {
-    const data = await response.json().catch(() => ({})) as { error?: { message?: string } };
-    throw new Error(data.error?.message || `Google Drive menolak unggahan (HTTP ${response.status}). Periksa izin Drive dan folder SIPANDU.`);
+    const data = await response.json().catch(() => ({})) as {
+      error?: { message?: string; errors?: Array<{ reason?: string }> };
+    };
+    const message = data.error?.message || `HTTP ${response.status}`;
+    const reason = data.error?.errors?.[0]?.reason || '';
+    if (response.status === 401) {
+      throw new Error('Token Google Drive kedaluwarsa atau ditolak. SIPANDU sudah mencoba refresh otomatis; pulihkan izin Google API satu kali bila masalah berulang.');
+    }
+    if (response.status === 403 && /insufficient|scope/i.test(`${reason} ${message}`)) {
+      throw new Error(`Izin OAuth untuk mengunggah ke Google Drive belum mencukupi (HTTP 403): ${message}. Otorisasi ulang scope Drive.`);
+    }
+    if (response.status === 403) {
+      throw new Error(`Akun Google tidak memiliki izin menambahkan file ke folder Drive SIPANDU (HTTP 403): ${message}. Periksa akses editor folder dan dukungan Shared Drive.`);
+    }
+    throw new Error(`Google Drive menolak unggahan (HTTP ${response.status}): ${message}`);
   }
   const uploaded = await response.json() as { id?: string; webViewLink?: string };
   if (!uploaded.id) throw new Error('Google Drive tidak mengembalikan ID file setelah unggahan.');
