@@ -4,6 +4,7 @@ import {
   ATENSI_PHOTO_COLUMN_INDICES,
   ATENSI_PROFILE_COLUMN_INDEX,
   readAtensiProfileCell,
+  readAtensiGender,
 } from './atensiColumnMapping';
 
 test('ATENSI profile mapping uses the requested spreadsheet columns', () => {
@@ -47,4 +48,15 @@ test('ATENSI cell reader maps AO recommendation and other profile fields without
 test('ATENSI cell reader returns blank for an empty or missing source cell', () => {
   assert.equal(readAtensiProfileCell([], 'intervensiMental'), '');
   assert.equal(readAtensiProfileCell(['a', 'b', ''], 'namaLengkap'), '');
+});
+
+
+test('reads gender from the age response when the form combines both in column L', () => {
+  const row = Array.from({ length: 42 }, () => '');
+  row[11] = '18 Tahun (Laki-laki)';
+  assert.equal(readAtensiGender(row), 'Laki-laki');
+  row[11] = '22 Tahun (Perempuan)';
+  assert.equal(readAtensiGender(row), 'Perempuan');
+  assert.equal(readAtensiGender(row, 'Perempuan'), 'Perempuan');
+  assert.equal(readAtensiGender(row, 'Laki-laki'), 'Laki-laki');
 });
