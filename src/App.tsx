@@ -1259,8 +1259,15 @@ function StaffApp() {
   }
 
   // Part 2: DASHBOARD
+  const isImmersiveDashboard = [
+    'database-ppks',
+    'asesmen',
+    'from-asesmen-terintegrasi',
+    'dokumen',
+  ].includes(activeTab);
+
   return (
-    <div className="sipandu-navigation-shell min-h-screen w-full bg-[#0a140b] text-white flex flex-col justify-between selection:bg-emerald-600 selection:text-white overflow-x-hidden relative">
+    <div className={`sipandu-navigation-shell min-h-screen w-full bg-[#0a140b] text-white flex flex-col justify-between selection:bg-emerald-600 selection:text-white overflow-x-hidden relative ${isImmersiveDashboard ? 'h-[100dvh] min-h-[100dvh] overflow-hidden' : ''}`}>
       {/* Background ambient lighting: deep moss green with subtle black vignetting and crimson outline aura */}
       <div className="fixed inset-0 bg-radial-[at_top_right] from-[#17301b]/80 via-[#0a140b] to-[#040905] pointer-events-none" />
       <div className="fixed -top-40 -left-40 w-96 h-96 rounded-full bg-rose-600/10 blur-3xl pointer-events-none" />
@@ -1287,7 +1294,9 @@ function StaffApp() {
       </div>
 
       {/* Main Dashboard Content Area */}
-      <main className="relative z-10 flex-1 max-w-7xl w-full mx-auto p-4 md:p-6 pb-28">
+      <main className={isImmersiveDashboard
+        ? 'relative z-10 flex-1 min-h-0 w-full max-w-none mx-0 overflow-y-auto overscroll-y-contain px-3 pt-3 pb-[calc(5.75rem+env(safe-area-inset-bottom,0px))] md:px-6 md:pt-5'
+        : 'relative z-10 flex-1 max-w-7xl w-full mx-auto p-4 md:p-6 pb-28'}>
         {cloudSyncNotice && (
           <div role="status" aria-live="polite" className={`mb-4 rounded-xl border p-3 text-xs break-words ${cloudSyncNotice.type === 'success' ? 'border-emerald-500/40 bg-emerald-950/70 text-emerald-100' : 'border-amber-500/50 bg-amber-950/80 text-amber-100'}`}>
             <div className="flex items-start justify-between gap-3">
