@@ -1,7 +1,8 @@
 import { Capacitor } from '@capacitor/core';
 import { LocalNotifications } from '@capacitor/local-notifications';
+import { getSafeSystemNotificationContent, workspaceReconnectNotificationId } from './notificationPolicy';
 
-export type RespondentNotificationKind = 'kuisioner' | 'asesmen';
+export type RespondentNotificationKind = 'kuisioner' | 'asesmen' | 'workspace';
 
 export interface RespondentNotification {
   id: string;
@@ -23,7 +24,21 @@ interface NotificationBaseline {
 const HISTORY_LIMIT = 50;
 const HISTORY_KEY = 'sipandu_respondent_notifications_v1';
 const BASELINE_KEY = 'sipandu_respondent_notification_baseline_v1';
+const NATIVE_NOTIFICATION_CHANNEL_ID = 'sipandu-respondent-updates-v2';
 let notificationAudioContext: AudioContext | null = null;
+
+async function ensureNativeNotificationChannel(): Promise<void> {
+  if (!Capacitor.isNativePlatform() || Capacitor.getPlatform() !== 'android') return;
+  await LocalNotifications.createChannel({
+    id: NATIVE_NOTIFICATION_CHANNEL_ID,
+    name: 'Pemberitahuan SIPANDU',
+    description: 'Respons Google Form, asesmen baru, dan koneksi Google Workspace',
+    importance: 5,
+    sound: 'sipandu_notification.wav',
+    vibration: true,
+    visibility: 1,
+  });
+}
 
 function scopedKey(key: string, uid: string): string {
   return `${key}:${uid || 'default'}`;
@@ -44,7 +59,7 @@ function safeWrite(key: string, value: unknown): void {
 
 export function loadRespondentNotifications(uid: string): RespondentNotification[] {
   return safeRead<RespondentNotification[]>(scopedKey(HISTORY_KEY, uid), [])
-    .filter((item) => item && (item.kind === 'kuisioner' || item.kind === 'asesmen'))
+    .filter((item) => item && (item.kind === 'kuisioner' || item.kind === 'asesmen' || item.kind === 'workspace'))
     .slice(0, HISTORY_LIMIT);
 }
 
@@ -63,8 +78,36 @@ export function markRespondentNotificationsRead(uid: string): RespondentNotifica
 
 export function getRespondentNotificationPermission(): NotificationPermission | 'unsupported' {
   if (Capacitor.isNativePlatform()) {
-    const saved = window.localStorage.getItem('sipandu_native_notification_permission');
-    return saved === 'granted' || saved === 'denied' || saved === 'default' ? saved : 'default';
+    try {
+      const saved = window.localStorage.getItem('sipandu_native_notification_permission');
+      return saved === 'granted' || saved === 'denied' || saved === 'default' ? saved : 'default';
+    } catch {
+      return 'default';
+    }
+  }
+  return typeof window !== 'undefined' && 'Notification' in window
+    ? Notification.permission
+    : 'unsupported';
+}
+
+/** Re-read the real operating-system/browser permission; do not trust a stale local flag. */
+export async function refreshRespondentNotificationPermission(): Promise<NotificationPermission | 'unsupported'> {
+  if (Capacitor.isNativePlatform()) {
+    try {
+      const status = await LocalNotifications.checkPermissions();
+      const mapped: NotificationPermission = status.display === 'granted'
+        ? 'granted'
+        : status.display === 'denied' ? 'denied' : 'default';
+      try { window.localStorage.setItem('sipandu_native_notification_permission', mapped); } catch { /* OS permission remains authoritative. */ }
+      if (mapped === 'granted') {
+        try { await ensureNativeNotificationChannel(); }
+        catch (error) { console.warn('SIPANDU could not verify its Android notification channel:', error); }
+      }
+      return mapped;
+    } catch (error) {
+      console.warn('SIPANDU could not check native notification permission:', error);
+      return 'unsupported';
+    }
   }
   return typeof window !== 'undefined' && 'Notification' in window
     ? Notification.permission
@@ -79,17 +122,9 @@ export async function enableRespondentNotifications(): Promise<NotificationPermi
       const mapped: NotificationPermission = permission.display === 'granted'
         ? 'granted'
         : permission.display === 'denied' ? 'denied' : 'default';
-      window.localStorage.setItem('sipandu_native_notification_permission', mapped);
+      try { window.localStorage.setItem('sipandu_native_notification_permission', mapped); } catch { /* Native permission result remains authoritative. */ }
       if (mapped !== 'granted') return mapped;
-      await LocalNotifications.createChannel({
-        id: 'sipandu-respondent-updates',
-        name: 'Pemberitahuan Responden SIPANDU',
-        description: 'Respons baru kuisioner dan pembaruan asesmen',
-        importance: 5,
-        sound: 'default',
-        vibration: true,
-        visibility: 1,
-      });
+      await ensureNativeNotificationChannel();
       return 'granted';
     } catch (error) {
       console.warn('SIPANDU native notification permission setup failed:', error);
@@ -103,6 +138,7 @@ export async function enableRespondentNotifications(): Promise<NotificationPermi
   try {
     const serviceWorkerUrl = new URL(`${import.meta.env.BASE_URL}sw.js`, window.location.href);
     await navigator.serviceWorker.register(serviceWorkerUrl, { scope: import.meta.env.BASE_URL });
+    await navigator.serviceWorker.ready;
   } catch (error) {
     console.warn('SIPANDU notification service worker registration failed:', error);
   }
@@ -142,18 +178,20 @@ function playForegroundAlert(): void {
 }
 
 async function showSystemNotification(item: RespondentNotification, uid: string): Promise<void> {
+  if (getRespondentNotificationPermission() !== 'granted') return;
+  const systemContent = getSafeSystemNotificationContent(item.kind);
+
   if (Capacitor.isNativePlatform()) {
-    if (getRespondentNotificationPermission() !== 'granted') return;
     try {
       await LocalNotifications.schedule({
         notifications: [{
           id: Number.parseInt(fingerprint(item.id), 16) % 2147483647,
-          title: item.title,
-          body: item.body,
+          title: systemContent.title,
+          body: systemContent.body,
           schedule: { at: new Date(Date.now() + 250) },
-          sound: 'default',
-          channelId: 'sipandu-respondent-updates',
-          smallIcon: 'ic_launcher',
+          ...(Capacitor.getPlatform() === 'ios' ? { sound: 'default' } : {}),
+          ...(Capacitor.getPlatform() === 'android' ? { channelId: NATIVE_NOTIFICATION_CHANNEL_ID } : {}),
+          smallIcon: 'ic_stat_sipandu',
           largeIcon: 'ic_launcher',
           ongoing: false,
           autoCancel: true,
@@ -165,31 +203,67 @@ async function showSystemNotification(item: RespondentNotification, uid: string)
     }
     return;
   }
-  if (getRespondentNotificationPermission() !== 'granted') return;
 
   const basePath = import.meta.env.BASE_URL || './';
   const options: NotificationOptions & { vibrate?: number[] } = {
-    body: item.body,
+    body: systemContent.body,
     icon: `${basePath}uploads/App%20Icon%20Picture.png`,
     badge: `${basePath}uploads/App%20Icon%20Picture.png`,
     tag: item.id,
+    renotify: true,
+    requireInteraction: true,
     data: { url: basePath, notificationId: item.id, uid },
     vibrate: [250, 120, 250, 120, 450],
   };
 
   try {
-    if ('serviceWorker' in navigator) {
-      const serviceWorkerUrl = new URL(`${import.meta.env.BASE_URL}sw.js`, window.location.href);
-      const registration = await navigator.serviceWorker.register(serviceWorkerUrl, { scope: import.meta.env.BASE_URL });
-      await registration.showNotification(item.title, options);
-    } else {
-      new Notification(item.title, options);
-    }
+    const serviceWorkerUrl = new URL(`${import.meta.env.BASE_URL}sw.js`, window.location.href);
+    await navigator.serviceWorker.register(serviceWorkerUrl, { scope: import.meta.env.BASE_URL });
+    const registration = await navigator.serviceWorker.ready;
+    await registration.showNotification(systemContent.title, options);
     if (document.visibilityState === 'visible') playForegroundAlert();
     try { navigator.vibrate?.([250, 120, 250, 120, 450]); } catch { /* optional device feature */ }
   } catch (error) {
     console.warn('SIPANDU system notification could not be shown:', error);
   }
+}
+
+/** Notify at most once per calendar day while a previously connected Workspace needs reauthorization. */
+export async function notifyWorkspaceReconnectRequired(uid: string): Promise<RespondentNotification | null> {
+  const id = workspaceReconnectNotificationId(new Date());
+  const prior = loadRespondentNotifications(uid);
+  if (prior.some((item) => item.id === id)) return null;
+
+  const item: RespondentNotification = {
+    id,
+    kind: 'workspace',
+    title: 'Google Workspace Perlu Disambungkan Ulang',
+    body: 'Akses Drive, Sheets, atau Forms belum tersedia. Buka Google Workspace & Cloud Hub → Pulihkan Izin Google API.',
+    respondentName: 'Google Workspace',
+    createdAt: new Date().toISOString(),
+    read: false,
+  };
+  const nextHistory = [item, ...prior].slice(0, HISTORY_LIMIT);
+  safeWrite(scopedKey(HISTORY_KEY, uid), nextHistory);
+  notifyHistoryChanged(uid);
+  await showSystemNotification(item, uid);
+  const badgeNavigator = navigator as Navigator & { setAppBadge?: (count?: number) => Promise<void> };
+  try { await badgeNavigator.setAppBadge?.(nextHistory.filter((entry) => !entry.read).length); } catch { /* optional badge */ }
+  return item;
+}
+
+/** Clear the warning state after Google Workspace successfully reconnects. */
+export function resolveWorkspaceReconnectNotifications(uid: string): RespondentNotification[] {
+  const updated = loadRespondentNotifications(uid).map((item) =>
+    item.kind === 'workspace' ? { ...item, read: true } : item
+  );
+  safeWrite(scopedKey(HISTORY_KEY, uid), updated);
+  notifyHistoryChanged(uid);
+  const badgeNavigator = navigator as Navigator & { setAppBadge?: (count?: number) => Promise<void>; clearAppBadge?: () => Promise<void> };
+  const unreadCount = updated.filter((item) => !item.read).length;
+  if (unreadCount > 0) void badgeNavigator.setAppBadge?.(unreadCount).catch(() => undefined);
+  else void badgeNavigator.clearAppBadge?.().catch(() => undefined);
+  return updated;
 }
 
 function meaningfulAssessmentSignature(record: Record<string, unknown>): string {
