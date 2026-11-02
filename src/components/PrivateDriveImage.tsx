@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ImageOff, LoaderCircle } from 'lucide-react';
+import { ExternalLink, FileImage, ImageOff, LoaderCircle } from 'lucide-react';
 import { getAccessToken, invalidateAccessToken, refreshWorkspaceAccessToken } from '../lib/firebase';
+import { createPhotoPreviewBlob, detectPhotoFileFormat, MAX_PPKS_PHOTO_FILE_BYTES } from '../lib/photoFilePreview';
 
 interface PrivateDriveImageProps {
   source?: string | null;
@@ -17,21 +18,6 @@ function firstLink(value: string): string {
   return (url?.[0] || trimmed).replace(/[)\]}>.,]+$/, '');
 }
 
-function inferImageMimeType(buffer: ArrayBuffer): string {
-  const bytes = new Uint8Array(buffer);
-  if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return 'image/jpeg';
-  if (bytes.length >= 8 && bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47) return 'image/png';
-  if (bytes.length >= 6 && String.fromCharCode(...bytes.slice(0, 6)).startsWith('GIF8')) return 'image/gif';
-  if (bytes.length >= 12 && String.fromCharCode(...bytes.slice(0, 4)) === 'RIFF' && String.fromCharCode(...bytes.slice(8, 12)) === 'WEBP') return 'image/webp';
-  if (bytes.length >= 2 && String.fromCharCode(...bytes.slice(0, 2)) === 'BM') return 'image/bmp';
-  if (bytes.length >= 12 && String.fromCharCode(...bytes.slice(4, 8)) === 'ftyp') {
-    const brand = String.fromCharCode(...bytes.slice(8, 12)).toLowerCase();
-    if (/(heic|heix|hevc|hevx|mif1|msf1)/.test(brand)) return 'image/heic';
-    if (/(avif|avis)/.test(brand)) return 'image/avif';
-  }
-  return '';
-}
-
 function driveFileId(value: string): string | null {
   const source = firstLink(value);
   const pathMatch = source.match(/\/(?:file\/)?d\/([a-zA-Z0-9_-]{15,})/);
@@ -43,11 +29,28 @@ function driveFileId(value: string): string | null {
   if (/^[a-zA-Z0-9_-]{20,}$/.test(source)) return source;
   return null;
 }
-/**
- * Renders public image URLs directly and private Google Drive upload links by
- * fetching their bytes with the authorized Workspace token. No fake person/photo
- * is substituted when a real respondent photo is missing or inaccessible.
- */
+
+function fileNameFromUrl(value: string): string {
+  try {
+    const url = new URL(value);
+    const last = url.pathname.split('/').filter(Boolean).pop() || '';
+    return decodeURIComponent(last) || 'photo';
+  } catch {
+    return 'photo';
+  }
+}
+
+function formatTitle(fileName: string, mimeType: string, bytes: ArrayBuffer): string {
+  const format = detectPhotoFileFormat(fileName, mimeType, bytes);
+  const labels: Record<string, string> = {
+    jpeg: 'JPG', png: 'PNG', gif: 'GIF', webp: 'WEBP', bmp: 'BMP',
+    tiff: 'TIFF', heic: 'HEIC / HEIF', psd: 'PSD', raw: 'RAW',
+    pdf: 'PDF • halaman pertama', doc: 'DOC • foto/isi dokumen',
+    docx: 'DOCX • foto/isi dokumen',
+  };
+  return format ? labels[format] || 'PRATINJAU' : 'PRATINJAU';
+}
+
 export const PrivateDriveImage: React.FC<PrivateDriveImageProps> = ({
   source,
   alt,
@@ -59,10 +62,14 @@ export const PrivateDriveImage: React.FC<PrivateDriveImageProps> = ({
   const [imageUrl, setImageUrl] = useState('');
   const [status, setStatus] = useState<'idle' | 'loading' | 'ready' | 'missing' | 'error'>('idle');
   const [errorText, setErrorText] = useState('');
+  const [formatLabel, setFormatLabel] = useState('');
   const [workspaceTokenRevision, setWorkspaceTokenRevision] = useState(0);
 
   const cleanedSource = source ? firstLink(String(source)) : '';
   const driveId = cleanedSource ? driveFileId(cleanedSource) : null;
+  const originalFileUrl = driveId
+    ? 'https://drive.google.com/file/d/' + driveId + '/view'
+    : (/^https?:\/\//i.test(cleanedSource) ? cleanedSource : '');
 
   useEffect(() => {
     const onTokenUpdated = () => setWorkspaceTokenRevision((revision) => revision + 1);
@@ -92,6 +99,7 @@ export const PrivateDriveImage: React.FC<PrivateDriveImageProps> = ({
     let objectUrl = '';
     setImageUrl('');
     setErrorText('');
+    setFormatLabel('');
 
     if (!cleanedSource) {
       setStatus('missing');
@@ -99,65 +107,91 @@ export const PrivateDriveImage: React.FC<PrivateDriveImageProps> = ({
     }
     if (!shouldLoad) return () => { active = false; };
 
-    if (!driveId && /^(https?:|data:image\/)/i.test(cleanedSource)) {
-      setImageUrl(cleanedSource);
-      setStatus('ready');
-      return () => { active = false; };
-    }
-    if (!driveId) {
-      setStatus('error');
-      setErrorText('Kolom foto tidak berisi URL gambar atau ID file Google Drive.');
-      return () => { active = false; };
-    }
-
     setStatus('loading');
     void (async () => {
       try {
-        let token = await getAccessToken();
-        if (!token) token = await refreshWorkspaceAccessToken();
-        if (!token) throw new Error('SIPANDU mencoba memulihkan token Google secara otomatis tetapi sesi Workspace tidak dapat diperbarui. Buka Koneksi Akun hanya bila foto tetap tidak tampil.');
-        const mediaUrl = `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(driveId)}?alt=media`;
-        let response = await fetch(mediaUrl, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (response.status === 401) {
-          invalidateAccessToken();
-          const refreshedToken = await refreshWorkspaceAccessToken(true);
-          if (refreshedToken) {
-            token = refreshedToken;
-            response = await fetch(mediaUrl, {
-              headers: { Authorization: `Bearer ${token}` },
-            });
+        let fileBlob: Blob;
+        let fileName = fileNameFromUrl(cleanedSource);
+        let mimeType = '';
+
+        if (driveId) {
+          let token = await getAccessToken();
+          if (!token) token = await refreshWorkspaceAccessToken();
+          if (!token) throw new Error('Sesi Google Workspace belum tersedia untuk membaca file foto privat.');
+
+          const driveRequest = async (url: string) => {
+            let response = await fetch(url, { headers: { Authorization: 'Bearer ' + token } });
+            if (response.status === 401) {
+              invalidateAccessToken();
+              const refreshed = await refreshWorkspaceAccessToken(true);
+              if (refreshed) {
+                token = refreshed;
+                response = await fetch(url, { headers: { Authorization: 'Bearer ' + token } });
+              }
+            }
+            return response;
+          };
+
+          const metadataResponse = await driveRequest(
+            'https://www.googleapis.com/drive/v3/files/' + encodeURIComponent(driveId) + '?fields=id,name,mimeType,size'
+          );
+          if (!metadataResponse.ok) {
+            const payload = await metadataResponse.json().catch(() => ({}));
+            const message = (payload as { error?: { message?: string } }).error?.message;
+            if (metadataResponse.status === 401) throw new Error('Token Google Drive ditolak setelah percobaan pemulihan otomatis.');
+            if (metadataResponse.status === 403) throw new Error('Akun Workspace tidak memiliki izin membaca file ini. Periksa akses file pada Google Drive.');
+            throw new Error(message || 'Metadata file Google Drive tidak dapat dibaca (HTTP ' + metadataResponse.status + ').');
+          }
+          const metadata = await metadataResponse.json() as { name?: string; mimeType?: string; size?: string };
+          fileName = metadata.name || fileName;
+          mimeType = metadata.mimeType || '';
+          const remoteSize = Number(metadata.size || 0);
+          if (remoteSize > MAX_PPKS_PHOTO_FILE_BYTES) {
+            throw new Error('Ukuran file lebih dari 30 MB. File tidak diproses agar memori ponsel tetap aman.');
+          }
+
+          const mediaResponse = await driveRequest(
+            'https://www.googleapis.com/drive/v3/files/' + encodeURIComponent(driveId) + '?alt=media'
+          );
+          if (!mediaResponse.ok) {
+            const payload = await mediaResponse.json().catch(() => ({}));
+            const message = (payload as { error?: { message?: string } }).error?.message;
+            if (mediaResponse.status === 401) throw new Error('Token Google Drive ditolak setelah percobaan pemulihan otomatis.');
+            if (mediaResponse.status === 403) throw new Error('Akun Workspace tidak memiliki izin membaca isi file. Periksa akses file pada Google Drive.');
+            throw new Error(message || 'Isi file Google Drive tidak dapat diunduh (HTTP ' + mediaResponse.status + ').');
+          }
+          fileBlob = await mediaResponse.blob();
+          if (!mimeType) mimeType = fileBlob.type;
+        } else {
+          try {
+            const directResponse = await fetch(cleanedSource);
+            if (!directResponse.ok) throw new Error('HTTP ' + directResponse.status);
+            fileBlob = await directResponse.blob();
+            mimeType = fileBlob.type;
+          } catch {
+            if (/^(https?:\/\/|data:image\/)/i.test(cleanedSource)) {
+              if (!active) return;
+              setImageUrl(cleanedSource);
+              setFormatLabel('Gambar eksternal');
+              setStatus('ready');
+              return;
+            }
+            throw new Error('Tautan sumber tidak dapat dibaca.');
+          }
+          if (fileBlob.size > MAX_PPKS_PHOTO_FILE_BYTES) {
+            throw new Error('Ukuran file lebih dari 30 MB. File tidak diproses agar memori ponsel tetap aman.');
           }
         }
-        if (!response.ok) {
-          const payload = await response.json().catch(() => ({}));
-          const message = (payload as { error?: { message?: string } }).error?.message;
-          if (response.status === 401) {
-            throw new Error('Token Google Drive ditolak setelah refresh otomatis. Foto akan dicoba kembali saat token tersedia.');
-          }
-          if (response.status === 403) {
-            throw new Error(`Tidak ada izin membaca file foto di Google Drive (HTTP 403). Pastikan akun Workspace memiliki akses ke file tersebut. ${message || ''}`.trim());
-          }
-          throw new Error(message || `Google Drive menolak akses foto (HTTP ${response.status}).`);
-        }
-        const downloadedBlob = await response.blob();
-        let blob = downloadedBlob;
-        if (!blob.type.startsWith('image/')) {
-          // Some Drive uploads return application/octet-stream despite containing
-          // an actual image. Detect common image signatures before rejecting them.
-          const bytes = await downloadedBlob.arrayBuffer();
-          const inferredMime = inferImageMimeType(bytes);
-          if (!inferredMime) {
-            throw new Error('File Drive yang ditautkan bukan file gambar yang bisa ditampilkan.');
-          }
-          blob = new Blob([bytes], { type: inferredMime });
-        }
-        objectUrl = URL.createObjectURL(blob);
+
+        const headerBytes = await fileBlob.slice(0, 32).arrayBuffer();
+        const nextFormatLabel = formatTitle(fileName, mimeType, headerBytes);
+        const previewBlob = await createPhotoPreviewBlob(fileBlob, fileName, mimeType);
+        objectUrl = URL.createObjectURL(previewBlob);
         if (!active) {
           URL.revokeObjectURL(objectUrl);
           return;
         }
+        setFormatLabel(nextFormatLabel);
         setImageUrl(objectUrl);
         setStatus('ready');
       } catch (error) {
@@ -174,27 +208,54 @@ export const PrivateDriveImage: React.FC<PrivateDriveImageProps> = ({
   }, [cleanedSource, driveId, shouldLoad, workspaceTokenRevision]);
 
   return (
-    <div ref={containerRef} className={`relative overflow-hidden rounded-lg bg-black/40 border border-white/15 ${className}`}>
+    <div ref={containerRef} className={'relative overflow-hidden rounded-lg bg-black/40 border border-white/15 ' + className}>
       {status === 'ready' && imageUrl ? (
-        <img
-          src={imageUrl}
-          alt={alt}
-          loading="lazy"
-          className={`h-full w-full ${objectFit === 'contain' ? 'object-contain' : 'object-cover'}`}
-          onError={() => {
-            setStatus('error');
-            setErrorText('Gambar tidak dapat ditampilkan. Periksa format file dan izin akses Google Drive.');
-          }}
-        />
+        <>
+          <img
+            src={imageUrl}
+            alt={alt}
+            loading="lazy"
+            className={'h-full w-full ' + (objectFit === 'contain' ? 'object-contain' : 'object-cover')}
+            onError={() => {
+              setStatus('error');
+              setErrorText('Pratinjau tidak dapat ditampilkan. Periksa apakah file rusak atau formatnya didukung.');
+            }}
+          />
+          {formatLabel && (
+            <span className="absolute left-1.5 top-1.5 max-w-[85%] truncate rounded bg-black/75 px-1.5 py-0.5 text-[8px] font-bold text-white">
+              {formatLabel}
+            </span>
+          )}
+          {originalFileUrl && (
+            <button
+              type="button"
+              title="Buka file asli"
+              aria-label="Buka file asli"
+              onClick={() => window.open(originalFileUrl, '_blank', 'noopener,noreferrer')}
+              className="absolute bottom-1.5 right-1.5 rounded-md border border-white/20 bg-black/75 p-1.5 text-white shadow"
+            >
+              <ExternalLink className="h-3.5 w-3.5" />
+            </button>
+          )}
+        </>
       ) : (
         <div className="flex h-full min-h-24 flex-col items-center justify-center gap-2 px-3 py-4 text-center text-neutral-300">
-          {status === 'loading' ? <LoaderCircle className="h-5 w-5 animate-spin text-sky-300" /> : <ImageOff className="h-5 w-5 text-neutral-500" />}
+          {status === 'loading'
+            ? <LoaderCircle className="h-5 w-5 animate-spin text-sky-300" />
+            : status === 'error'
+              ? <ImageOff className="h-5 w-5 text-rose-300" />
+              : <FileImage className="h-5 w-5 text-neutral-500" />}
           <span className="text-[10px] leading-snug">
-            {status === 'loading' ? 'Memuat foto privat…' :
+            {status === 'loading' ? 'Membaca format dan menyiapkan pratinjau…' :
               status === 'missing' ? 'Foto belum tersedia di sumber data' :
-              status === 'error' ? (errorText || 'Foto tidak dapat ditampilkan') :
-              'Foto dimuat saat terlihat'}
+                status === 'error' ? (errorText || 'File tidak dapat ditampilkan') :
+                  'Pratinjau dimuat saat terlihat'}
           </span>
+          {originalFileUrl && status === 'error' && (
+            <button type="button" onClick={() => window.open(originalFileUrl, '_blank', 'noopener,noreferrer')} className="text-[10px] font-semibold text-sky-200 underline">
+              Buka file asli
+            </button>
+          )}
         </div>
       )}
     </div>
