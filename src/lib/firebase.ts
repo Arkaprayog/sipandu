@@ -721,6 +721,7 @@ export async function savePPKSToFirestore(ppks: PPKSRecord): Promise<true> {
  */
 export async function replacePPKSCollectionFromSpreadsheet(
   records: PPKSRecord[],
+  authoritativeProfileRecords: PPKSRecord[] = records,
 ): Promise<{ created: number; updated: number; deleted: number }> {
   const user = auth.currentUser;
   if (!user) throw new Error('Belum masuk ke Firebase Auth sebagai akun SIPANDU.');
@@ -756,6 +757,11 @@ export async function replacePPKSCollectionFromSpreadsheet(
     };
 
     for (const sourceRecord of records) {
+      const authoritativeProfile = authoritativeProfileRecords.find((candidate) =>
+        candidate.id === sourceRecord.id
+      ) || authoritativeProfileRecords.find((candidate) =>
+        samePPKSIdentity(candidate, sourceRecord)
+      ) || sourceRecord;
       let oldDoc = oldDocs.find((candidate) =>
         candidate.id === sourceRecord.id && !matchedOldIds.has(candidate.id)
       );
@@ -789,12 +795,25 @@ export async function replacePPKSCollectionFromSpreadsheet(
 
       const migrated: PPKSRecord = {
         ...sourceRecord,
-        // New spreadsheet values win; a user-uploaded photo is only a fallback
+        // The selected ATENSI response tab is authoritative for mapped profile
+        // fields; continuation Form data may add assessment answers but cannot
+        // overwrite these columns (especially intervention/recommendation AO).
+        timestamp: authoritativeProfile.timestamp,
+        namaLengkap: authoritativeProfile.namaLengkap,
+        nik: authoritativeProfile.nik,
+        usia: authoritativeProfile.usia,
+        kotaDomisili: authoritativeProfile.kotaDomisili,
+        alamatLengkap: authoritativeProfile.alamatLengkap,
+        noHpWa: authoritativeProfile.noHpWa,
+        jenisBantuan: authoritativeProfile.jenisBantuan,
+        intervensiMental: authoritativeProfile.intervensiMental,
+        desil: authoritativeProfile.desil,
+        // New spreadsheet photo values win; a user-uploaded photo is only a fallback
         // when the corresponding source-sheet upload cell is empty.
-        fotoDiri: normalizePPKSPhotoSource(sourceRecord.fotoDiri) || normalizePPKSPhotoSource(normalizedOverrides.fotoDiri) || '',
-        fotoKtp: normalizePPKSPhotoSource(sourceRecord.fotoKtp) || normalizePPKSPhotoSource(normalizedOverrides.fotoKtp) || '',
-        fotoKk: normalizePPKSPhotoSource(sourceRecord.fotoKk) || normalizePPKSPhotoSource(normalizedOverrides.fotoKk) || '',
-        fotoRumah: normalizePPKSPhotoSource(sourceRecord.fotoRumah) || normalizePPKSPhotoSource(normalizedOverrides.fotoRumah) || '',
+        fotoDiri: normalizePPKSPhotoSource(authoritativeProfile.fotoDiri) || normalizePPKSPhotoSource(normalizedOverrides.fotoDiri) || '',
+        fotoKtp: normalizePPKSPhotoSource(authoritativeProfile.fotoKtp) || normalizePPKSPhotoSource(normalizedOverrides.fotoKtp) || '',
+        fotoKk: normalizePPKSPhotoSource(authoritativeProfile.fotoKk) || normalizePPKSPhotoSource(normalizedOverrides.fotoKk) || '',
+        fotoRumah: normalizePPKSPhotoSource(authoritativeProfile.fotoRumah) || normalizePPKSPhotoSource(normalizedOverrides.fotoRumah) || '',
         manualPhotoOverrides: Object.keys(normalizedOverrides).length ? normalizedOverrides : undefined,
         integratedForm: mergeSupplemental(sourceRecord.integratedForm, previous?.integratedForm),
         officialAssessment: mergeSupplemental(sourceRecord.officialAssessment, previous?.officialAssessment),
