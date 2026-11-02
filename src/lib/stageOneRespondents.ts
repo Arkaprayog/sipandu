@@ -19,3 +19,20 @@ export function filterStageOneLinkResponses(
     return submittedAt !== null && submittedAt >= cutoffMs;
   });
 }
+
+
+/**
+ * Only respondent-submitted public link entries created after the rollout
+ * cutover can trigger a first-import notification. Staff-entered records and
+ * historical rows must never be mistaken for new public submissions.
+ */
+export function filterStageOneNotificationSubmissions(
+  records: readonly (PPKSRecord & { source?: string })[],
+  cutoffMs = STAGE_ONE_FORM_CUTOVER_MS,
+): Array<PPKSRecord & { source?: string }> {
+  return records.filter((record) => {
+    if (record.source !== 'respondent-link') return false;
+    const submittedAt = parsePPKSTimestamp(record.timestamp);
+    return submittedAt !== null && submittedAt >= cutoffMs;
+  });
+}
