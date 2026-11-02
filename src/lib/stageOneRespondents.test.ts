@@ -64,3 +64,28 @@ test('allows a distinct dedicated stage-one Form ID and extracts it safely', () 
   assert.equal(isPrimaryGoogleFormUrl(url), false);
   assert.equal(getGoogleFormIdFromUrl(url), 'STAGE-ONE-DEDICATED-9876543210');
 });
+
+
+test('stage-one notifications include only public respondent-link entries after cutover', async () => {
+  const { filterStageOneNotificationSubmissions } = await import('./stageOneRespondents');
+  const publicLink = record({
+    id: 'public-after-cutover',
+    timestamp: '2026-10-27T11:40:15Z',
+  }) as PPKSRecord & { source?: string };
+  publicLink.source = 'respondent-link';
+
+  const staffEntry = record({
+    id: 'staff-entry-after-cutover',
+    timestamp: '2026-10-27T11:41:15Z',
+  }) as PPKSRecord & { source?: string };
+  staffEntry.source = 'staff-entry';
+
+  const historical = record({
+    id: 'public-before-cutover',
+    timestamp: '2026-10-27T11:40:13Z',
+  }) as PPKSRecord & { source?: string };
+  historical.source = 'respondent-link';
+
+  const result = filterStageOneNotificationSubmissions([publicLink, staffEntry, historical]);
+  assert.deepEqual(result.map((item) => item.id), ['public-after-cutover']);
+});
