@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Capacitor } from '@capacitor/core';
 import {
   Fingerprint,
@@ -10,6 +10,9 @@ import {
   X,
   CheckCircle2,
   AlertCircle,
+  Bell,
+  Image as ImageIcon,
+  FolderOpen,
 } from 'lucide-react';
 import {
   enableBiometricLock,
@@ -20,6 +23,11 @@ import {
   setAppPin,
 } from '../lib/biometricLock';
 import { auth } from '../lib/firebase';
+import {
+  enableRespondentNotifications,
+  getRespondentNotificationPermission,
+  refreshRespondentNotificationPermission,
+} from '../lib/respondentNotifications';
 import { AppSettings } from '../types';
 
 interface SettingsModalProps {
@@ -40,6 +48,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
   const [pinBusy, setPinBusy] = useState(false);
   const [pinMessage, setPinMessage] = useState('');
   const [pinMessageType, setPinMessageType] = useState<'success' | 'error'>('success');
+  const [notificationPermission, setNotificationPermission] = useState<NotificationPermission | 'unsupported'>(getRespondentNotificationPermission());
+  const [notificationBusy, setNotificationBusy] = useState(false);
+  const [notificationMessage, setNotificationMessage] = useState('');
+  const [photoPickerMessage, setPhotoPickerMessage] = useState('Akses foto memakai pemilih Android dan hanya berlaku untuk foto yang dipilih.');
+  const [filePickerMessage, setFilePickerMessage] = useState('Akses dokumen memakai pemilih Android dan hanya berlaku untuk berkas yang dipilih.');
+  const photoPickerRef = useRef<HTMLInputElement | null>(null);
+  const filePickerRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -52,7 +67,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
     setConfirmPin('');
     setPinMessage('');
     setBiometricDiagnostics('Memeriksa dukungan biometrik perangkat…');
+    setNotificationPermission(getRespondentNotificationPermission());
+    setNotificationMessage('');
 
+    void refreshRespondentNotificationPermission().then((permission) => {
+      if (active) setNotificationPermission(permission);
+    });
     void getBiometricDiagnostics()
       .then((result) => {
         if (!active) return;
@@ -83,6 +103,41 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
   const user = auth.currentUser;
   const biometricIsAvailable = biometricDiagnostics.startsWith('Autentikasi biometrik Android tersedia') ||
     biometricDiagnostics.startsWith('WebAuthn tersedia');
+
+  const handleEnableNotifications = async () => {
+    if (notificationBusy) return;
+    setNotificationBusy(true);
+    setNotificationMessage('');
+    try {
+      const result = await enableRespondentNotifications();
+      setNotificationPermission(result);
+      setNotificationMessage(
+        result === 'granted'
+          ? 'Izin notifikasi aktif. Bunyi, getar, banner, dan tampilan lock screen tetap mengikuti pengaturan aplikasi SIPANDU dan kontrol Android/Chrome.'
+          : result === 'denied'
+            ? 'Izin notifikasi ditolak atau diblokir. Aktifkan kembali melalui Pengaturan Android → Aplikasi → SIPANDU/Chrome → Notifikasi.'
+            : 'Notifikasi sistem tidak tersedia pada browser/perangkat ini.'
+      );
+    } catch (error) {
+      setNotificationMessage(error instanceof Error ? error.message : String(error));
+    } finally {
+      setNotificationBusy(false);
+    }
+  };
+
+  const refreshNotificationPermission = async () => {
+    const result = await refreshRespondentNotificationPermission();
+    setNotificationPermission(result);
+    setNotificationMessage(
+      result === 'granted'
+        ? 'Status izin telah diperbarui dari sistem perangkat.'
+        : result === 'denied'
+          ? 'Sistem perangkat saat ini memblokir notifikasi SIPANDU.'
+          : result === 'unsupported'
+            ? 'API notifikasi tidak tersedia pada browser ini.'
+            : 'Izin notifikasi belum diberikan.'
+    );
+  };
 
   const handleBiometricToggle = async () => {
     if (biometricBusy) return;
@@ -171,9 +226,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
             </div>
             <div>
               <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-emerald-300">SIPANDU ODHIV</p>
-              <h2 id="sipandu-biometric-settings-title" className="mt-1 text-lg font-extrabold">Keamanan &amp; Biometrik</h2>
+              <h2 id="sipandu-biometric-settings-title" className="mt-1 text-lg font-extrabold">Perizinan, Keamanan &amp; Biometrik</h2>
               <p className="mt-1 text-xs leading-relaxed text-neutral-400">
-                Pengaturan ini hanya untuk PIN, Fingerprint, dan Face Unlock.
+                Kelola izin notifikasi dan akses file, serta keamanan lokal perangkat.
               </p>
             </div>
           </div>
@@ -188,6 +243,70 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
         </div>
 
         <div className="space-y-4">
+          <section className="rounded-2xl border border-sky-300/20 bg-sky-950/20 p-4">
+            <div className="mb-3 flex items-center gap-2">
+              <Bell className="h-5 w-5 text-sky-200" />
+              <div>
+                <h3 className="text-sm font-bold text-sky-100">Izin Notifikasi</h3>
+                <p className="text-[10px] text-neutral-400">Status langsung dari Android atau browser</p>
+              </div>
+              <span className={'ml-auto rounded-full px-2 py-1 text-[9px] font-bold ' + (notificationPermission === 'granted' ? 'bg-emerald-900/70 text-emerald-200' : notificationPermission === 'denied' ? 'bg-rose-900/70 text-rose-200' : 'bg-amber-900/70 text-amber-100')}>
+                {notificationPermission === 'granted' ? 'AKTIF' : notificationPermission === 'denied' ? 'DIBLOKIR' : notificationPermission === 'unsupported' ? 'TIDAK DIDUKUNG' : 'BELUM AKTIF'}
+              </span>
+            </div>
+            <p className="text-[11px] leading-relaxed text-neutral-300">
+              SIPANDU memakai notifikasi sistem untuk respons Google Form, asesmen tahap awal, dan peringatan Google Workspace. Android mengatur suara, getar, banner, lock screen, serta badge melalui izin dan kanal notifikasi.
+            </p>
+            <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+              <button type="button" onClick={() => void handleEnableNotifications()} disabled={notificationBusy || notificationPermission === 'unsupported'} className="inline-flex items-center justify-center gap-2 rounded-xl bg-sky-300 px-3 py-2.5 text-xs font-bold text-sky-950 disabled:opacity-50">
+                {notificationBusy ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Bell className="h-3.5 w-3.5" />}
+                {notificationBusy ? 'Memeriksa…' : 'Aktifkan / Pulihkan'}
+              </button>
+              <button type="button" onClick={() => void refreshNotificationPermission()} className="inline-flex items-center justify-center gap-2 rounded-xl border border-sky-300/25 px-3 py-2.5 text-xs font-semibold text-sky-100">
+                <RefreshCw className="h-3.5 w-3.5" /> Periksa Status
+              </button>
+            </div>
+            {notificationMessage && <p role="status" className="mt-2 text-[10px] leading-relaxed text-sky-100">{notificationMessage}</p>}
+          </section>
+
+          <section className="rounded-2xl border border-emerald-300/20 bg-emerald-950/15 p-4">
+            <div className="mb-3 flex items-center gap-2">
+              <ImageIcon className="h-5 w-5 text-emerald-200" />
+              <h3 className="text-sm font-bold text-emerald-100">Izin Foto / Galeri</h3>
+            </div>
+            <p className="text-[11px] leading-relaxed text-neutral-300">
+              SIPANDU tidak meminta izin membaca seluruh galeri. Android membuka pemilih foto dan memberi akses hanya pada foto yang Anda pilih. Ini lebih terbatas dan aman daripada izin penyimpanan penuh.
+            </p>
+            <input ref={photoPickerRef} type="file" accept="image/*" className="hidden" onChange={(event) => {
+              const selected = event.currentTarget.files?.[0];
+              if (selected) setPhotoPickerMessage('Pemilih foto berhasil mengembalikan berkas: ' + selected.name + '. Berkas hanya diuji; tidak diunggah atau disimpan.');
+              event.currentTarget.value = '';
+            }} />
+            <button type="button" onClick={() => photoPickerRef.current?.click()} className="mt-3 w-full rounded-xl border border-emerald-300/25 bg-black/20 px-3 py-2.5 text-xs font-bold text-emerald-100">
+              <ImageIcon className="mr-2 inline h-3.5 w-3.5" /> Uji akses foto / galeri
+            </button>
+            <p role="status" className="mt-2 text-[10px] leading-relaxed text-neutral-400">{photoPickerMessage}</p>
+          </section>
+
+          <section className="rounded-2xl border border-violet-300/20 bg-violet-950/15 p-4">
+            <div className="mb-3 flex items-center gap-2">
+              <FolderOpen className="h-5 w-5 text-violet-200" />
+              <h3 className="text-sm font-bold text-violet-100">Izin File / Dokumen</h3>
+            </div>
+            <p className="text-[11px] leading-relaxed text-neutral-300">
+              Untuk PDF, DOC/DOCX, dan dokumen lain, SIPANDU menggunakan pemilih berkas Android. Aplikasi hanya menerima berkas yang Anda pilih dan tidak memindai seluruh penyimpanan.
+            </p>
+            <input ref={filePickerRef} type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.jpg,.jpeg,.png,.webp" className="hidden" onChange={(event) => {
+              const selected = event.currentTarget.files?.[0];
+              if (selected) setFilePickerMessage('Pemilih dokumen berhasil mengembalikan berkas: ' + selected.name + '. Berkas hanya diuji; tidak diunggah atau disimpan.');
+              event.currentTarget.value = '';
+            }} />
+            <button type="button" onClick={() => filePickerRef.current?.click()} className="mt-3 w-full rounded-xl border border-violet-300/25 bg-black/20 px-3 py-2.5 text-xs font-bold text-violet-100">
+              <FolderOpen className="mr-2 inline h-3.5 w-3.5" /> Uji akses file / dokumen
+            </button>
+            <p role="status" className="mt-2 text-[10px] leading-relaxed text-neutral-400">{filePickerMessage}</p>
+          </section>
+
           <section className="rounded-2xl border border-sky-300/20 bg-sky-950/20 p-4">
             <div className="mb-3 flex items-center gap-2">
               <KeyRound className="h-5 w-5 text-sky-200" />
