@@ -857,7 +857,7 @@ function mapRowsToPPKSRecords(rows: string[][], useATENSIColumnPositions = false
       jenisKelamin: /perempuan|wanita/i.test(gender) ? 'Perempuan' : 'Laki-laki',
       kotaDomisili: domisili,
       alamatLengkap: alamat,
-      noHpWa: useATENSIColumnPositions ? sourceCell(13) : readCellByAliases(headers, row, ['noHPWA', 'nomorHPWA', 'noWhatsApp', 'nomorTelepon', 'telepon', 'hp']),
+      noHpWa: useATENSIColumnPositions ? readAtensiProfileCell(row, 'noHpWa') : readCellByAliases(headers, row, ['noHPWA', 'nomorHPWA', 'noWhatsApp', 'nomorTelepon', 'telepon', 'hp']),
       jenisBantuan,
       // The ATENSI response tab uses its explicit AO mapping; other source tabs
       // continue to use the configured BE position with a header-based fallback.
