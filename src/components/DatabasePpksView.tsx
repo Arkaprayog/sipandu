@@ -160,7 +160,14 @@ export const DatabasePpksView: React.FC<DatabasePpksViewProps> = ({
         respondentId: currentPPKS.id,
         photoKind: kind,
       });
-      const updated: PPKSRecord = { ...currentPPKS, [fieldByKind[kind]]: link };
+      const updated: PPKSRecord = {
+        ...currentPPKS,
+        [fieldByKind[kind]]: link,
+        manualPhotoOverrides: {
+          ...(currentPPKS.manualPhotoOverrides || {}),
+          [fieldByKind[kind]]: link,
+        },
+      };
       onUpdatePPKS(updated);
       setPhotoUploadMessage(`${labels[kind]} berhasil diunggah ke Google Drive. Data profil diperbarui dan sinkronisasi Google Sheets dimulai.`);
     } catch (error) {
@@ -303,7 +310,7 @@ export const DatabasePpksView: React.FC<DatabasePpksViewProps> = ({
                   <p className="text-[10px] text-neutral-400">
                     {currentPPKS.fotoDiri ? 'Foto tersedia' : 'Foto belum tersedia pada data sumber'}
                   </p>
-                  {!currentPPKS.fotoDiri && photoUploadControl('diri', 'Foto Diri')}
+                  {photoUploadControl('diri', 'Foto Diri / Ganti')}
                 </div>
 
                 {/* Dokumen lain berada di kolom foto pada profil yang sama, bukan card di bawah Desil. */}
@@ -321,7 +328,7 @@ export const DatabasePpksView: React.FC<DatabasePpksViewProps> = ({
                         className="h-24 w-full"
                         objectFit="contain"
                       />
-                      {!photo.source && photoUploadControl(photo.kind, photo.label)}
+                      {photoUploadControl(photo.kind, `${photo.label} / Ganti`)}
                     </div>
                   ))}
                 </div>
