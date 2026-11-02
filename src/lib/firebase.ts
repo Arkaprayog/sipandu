@@ -32,7 +32,7 @@ import {
 } from 'firebase/auth';
 import firebaseConfig from '../../firebase-applet-config.json';
 import { PPKSRecord, StageOneIntakePayload } from '../types';
-import { deduplicatePPKSRecords, EXPECTED_REAL_PPKS_COUNT, parsePPKSTimestamp } from './ppksData';
+import { deduplicatePPKSRecords, EXPECTED_REAL_PPKS_COUNT, parsePPKSTimestamp, samePPKSIdentity } from './ppksData';
 import { isLegacySamplePPKS } from '../data/initialData';
 import { GOOGLE_WORKSPACE_EMAIL } from './googleSIPANDUResources';
 import { normalizePPKSPhotoSource } from './photoSources';
@@ -708,6 +708,137 @@ export async function savePPKSToFirestore(ppks: PPKSRecord): Promise<true> {
     const firestoreRecord = stripUndefinedForFirestore(ppks) as PPKSRecord;
     await setDoc(doc(db, 'ppks', ppks.id), firestoreRecord, { merge: true });
     return true;
+  } catch (error) {
+    throw new Error(describeConnectionError(error));
+  }
+}
+
+/**
+ * Replace the legacy Firestore PPKS roster with the verified spreadsheet roster.
+ * Spreadsheet fields are authoritative. Only separately stored assessment answers
+ * and explicitly uploaded photo overrides are carried forward for the same person.
+ * The separate stageOneIntake collection is intentionally untouched.
+ */
+export async function replacePPKSCollectionFromSpreadsheet(
+  records: PPKSRecord[],
+): Promise<{ created: number; updated: number; deleted: number }> {
+  const user = auth.currentUser;
+  if (!user) throw new Error('Belum masuk ke Firebase Auth sebagai akun SIPANDU.');
+  const token = await getIdTokenResult(user);
+  const role = token.claims.role;
+  if (role !== 'owner' && role !== 'supervisor') {
+    throw new Error('Penggantian data Firestore hanya diizinkan untuk akun owner atau supervisor SIPANDU.');
+  }
+  if (!Array.isArray(records) || records.length === 0) {
+    throw new Error('Penggantian Firestore dibatalkan: data spreadsheet kosong.');
+  }
+
+  const recordIds = records.map((record) => String(record.id || '').trim());
+  if (recordIds.some((id) => !id) || new Set(recordIds).size !== recordIds.length) {
+    throw new Error('Penggantian Firestore dibatalkan: ID PPKS kosong atau duplikat pada hasil impor.');
+  }
+
+  try {
+    const snapshot = await getDocs(collection(db, 'ppks'));
+    const oldDocs = snapshot.docs;
+    const matchedOldIds = new Set<string>();
+    const planned: Array<{ id: string; data: PPKSRecord }> = [];
+
+    const mergeSupplemental = <T extends Record<string, unknown>>(
+      current: T | undefined,
+      previous: T | undefined,
+    ): T | undefined => {
+      const merged = { ...(previous || {}), ...(current || {}) };
+      const nonEmpty = Object.fromEntries(
+        Object.entries(merged).filter(([, value]) => value !== '' && value !== undefined && value !== null)
+      );
+      return Object.keys(nonEmpty).length ? nonEmpty as T : undefined;
+    };
+
+    for (const sourceRecord of records) {
+      let oldDoc = oldDocs.find((candidate) =>
+        candidate.id === sourceRecord.id && !matchedOldIds.has(candidate.id)
+      );
+
+      if (!oldDoc) {
+        const candidates = oldDocs.filter((candidate) => {
+          if (matchedOldIds.has(candidate.id)) return false;
+          const previousRecord = { ...candidate.data(), id: candidate.id } as PPKSRecord;
+          return samePPKSIdentity(previousRecord, sourceRecord);
+        });
+        if (candidates.length > 1) {
+          throw new Error(
+            `Penggantian Firestore dihentikan demi keamanan: lebih dari satu dokumen lama cocok dengan PPKS “${sourceRecord.namaLengkap}”. Data lama tidak dihapus.`
+          );
+        }
+        oldDoc = candidates[0];
+      }
+
+      const previous = oldDoc
+        ? ({ ...oldDoc.data(), id: oldDoc.id } as Partial<PPKSRecord>)
+        : undefined;
+      if (oldDoc) matchedOldIds.add(oldDoc.id);
+
+      const manualPhotoOverrides = {
+        ...(previous?.manualPhotoOverrides || {}),
+        ...(sourceRecord.manualPhotoOverrides || {}),
+      };
+      const normalizedOverrides = Object.fromEntries(
+        Object.entries(manualPhotoOverrides).filter(([, value]) => Boolean(normalizePPKSPhotoSource(value)))
+      ) as NonNullable<PPKSRecord['manualPhotoOverrides']>;
+
+      const migrated: PPKSRecord = {
+        ...sourceRecord,
+        // New spreadsheet values win; a user-uploaded photo is only a fallback
+        // when the corresponding source-sheet upload cell is empty.
+        fotoDiri: normalizePPKSPhotoSource(sourceRecord.fotoDiri) || normalizePPKSPhotoSource(normalizedOverrides.fotoDiri) || '',
+        fotoKtp: normalizePPKSPhotoSource(sourceRecord.fotoKtp) || normalizePPKSPhotoSource(normalizedOverrides.fotoKtp) || '',
+        fotoKk: normalizePPKSPhotoSource(sourceRecord.fotoKk) || normalizePPKSPhotoSource(normalizedOverrides.fotoKk) || '',
+        fotoRumah: normalizePPKSPhotoSource(sourceRecord.fotoRumah) || normalizePPKSPhotoSource(normalizedOverrides.fotoRumah) || '',
+        manualPhotoOverrides: Object.keys(normalizedOverrides).length ? normalizedOverrides : undefined,
+        integratedForm: mergeSupplemental(sourceRecord.integratedForm, previous?.integratedForm),
+        officialAssessment: mergeSupplemental(sourceRecord.officialAssessment, previous?.officialAssessment),
+        formAsesmenTerintegrasi: mergeSupplemental(
+          sourceRecord.formAsesmenTerintegrasi,
+          previous?.formAsesmenTerintegrasi,
+        ),
+        statusAsesmen:
+          sourceRecord.statusAsesmen === 'Tahap Awal' &&
+          previous?.statusAsesmen &&
+          previous.statusAsesmen !== 'Tahap Awal'
+            ? previous.statusAsesmen
+            : sourceRecord.statusAsesmen,
+      };
+      planned.push({
+        id: sourceRecord.id,
+        data: stripUndefinedForFirestore(migrated) as PPKSRecord,
+      });
+    }
+
+    const newIds = new Set(planned.map((item) => item.id));
+    const staleDocs = oldDocs.filter((candidate) => !newIds.has(candidate.id));
+    const created = planned.filter((item) => !oldDocs.some((candidate) => candidate.id === item.id)).length;
+    const updated = planned.length - created;
+    const operations: Array<
+      | { kind: 'set'; id: string; data: PPKSRecord }
+      | { kind: 'delete'; id: string }
+    > = [
+      ...planned.map((item) => ({ kind: 'set' as const, ...item })),
+      ...staleDocs.map((candidate) => ({ kind: 'delete' as const, id: candidate.id })),
+    ];
+
+    // Firestore limits each write batch to 500 operations; use a margin.
+    for (let offset = 0; offset < operations.length; offset += 400) {
+      const batch = writeBatch(db);
+      for (const operation of operations.slice(offset, offset + 400)) {
+        const reference = doc(db, 'ppks', operation.id);
+        if (operation.kind === 'set') batch.set(reference, operation.data);
+        else batch.delete(reference);
+      }
+      await batch.commit();
+    }
+
+    return { created, updated, deleted: staleDocs.length };
   } catch (error) {
     throw new Error(describeConnectionError(error));
   }
