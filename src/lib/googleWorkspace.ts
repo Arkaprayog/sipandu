@@ -690,7 +690,6 @@ function mapRowsToPPKSRecords(rows: string[][], useATENSIColumnPositions = false
 
   rows.slice(1).forEach((sourceRow, rowIndex) => {
     const row = sourceRow.map((value) => String(value ?? '').trim());
-    const sourceCell = (index: number) => String(row[index] ?? '').trim();
     const namaLengkap = useATENSIColumnPositions ? readAtensiProfileCell(row, 'namaLengkap') : readRespondentName(headers, row);
     // The follow-up Form is prefilled with the original PPKS ID. It may not ask
     // for the respondent's name again, so an exact valid ID is enough to accept
