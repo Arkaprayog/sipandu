@@ -52,6 +52,11 @@ const workspaceApp = getApps().find((candidate) => candidate.name === 'sipandu-w
   || initializeApp(firebaseConfig, 'sipandu-workspace-auth');
 
 export const auth = getAuth(app);
+// Persist the staff account locally across refreshes and Android activity recreation.
+// A normal sign-out is performed only by the explicit Keluar action.
+export const staffAuthPersistenceReady = setPersistence(auth, browserLocalPersistence).catch((error) => {
+  console.warn('SIPANDU could not explicitly set LOCAL auth persistence; Firebase browser default remains in effect:', error);
+});
 export const workspaceAuth = getAuth(workspaceApp);
 
 // Configure Google Auth Provider with Workspace scopes
@@ -155,7 +160,9 @@ function cacheWorkspaceToken(token: string | null, notify = true): void {
     // Keep the current-page session working even when browser storage is blocked.
   }
   // Wake the in-page live-sync worker immediately after authorization is restored.
-  if (notify) window.dispatchEvent(new Event('sipandu-workspace-token-updated'));
+  if (notify) window.dispatchEvent(new CustomEvent('sipandu-workspace-token-updated', {
+    detail: { connected: Boolean(token) },
+  }));
 }
 
 let cachedAccessToken: string | null = readStoredWorkspaceToken();
@@ -178,6 +185,12 @@ export function getWorkspaceGoogleEmail(user: User | null | undefined): string |
   const googleProfile = user.providerData.find((profile) => profile.providerId === 'google.com');
   const providerEmail = googleProfile?.email?.trim();
   return providerEmail || null;
+}
+
+/** True only when the expected Google Workspace identity is already connected. */
+export function isWorkspaceAccountConnected(): boolean {
+  const email = getWorkspaceGoogleEmail(workspaceAuth.currentUser);
+  return Boolean(email && email.toLowerCase() === GOOGLE_WORKSPACE_EMAIL.toLowerCase());
 }
 
 function getErrorParts(error: unknown): { code: string; message: string } {
