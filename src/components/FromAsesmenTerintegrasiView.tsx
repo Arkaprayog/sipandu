@@ -677,8 +677,8 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
   };
 
   return (
-    <div className="official-assessment-shell text-neutral-900">
-      <div className="official-toolbar mb-4 rounded-xl border border-rose-500/30 bg-black/40 p-4">
+    <div className="official-assessment-shell workspace-page min-h-full text-neutral-900">
+      <div className="official-toolbar mb-4 rounded-2xl border border-white/10 bg-black/30 p-3 sm:p-4 shadow-[0_12px_36px_rgba(0,0,0,0.18)]">
         <div className="mb-3 flex items-center gap-2">
           <FileText className="h-5 w-5 text-sky-300" />
           <div>
