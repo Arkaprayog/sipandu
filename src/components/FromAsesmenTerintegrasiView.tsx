@@ -4,6 +4,7 @@ import { PPKSRecord } from '../types';
 import { getAccessToken, invalidateAccessToken, refreshWorkspaceAccessToken } from '../lib/firebase';
 import { formatPPKSTimestamp } from '../lib/ppksData';
 import { publicAssetUrl } from '../lib/publicAssets';
+import { createPhotoPreviewBlob, MAX_PPKS_PHOTO_FILE_BYTES } from '../lib/photoFilePreview';
 import '../officialAssessment.css';
 
 type AnswerValue = string | string[];
@@ -367,29 +368,34 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
     return null;
   };
 
-  const inferPrintImageMime = (buffer: ArrayBuffer): string => {
-    const bytes = new Uint8Array(buffer);
-    if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return 'image/jpeg';
-    if (bytes.length >= 8 && bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47) return 'image/png';
-    if (bytes.length >= 6 && String.fromCharCode(...bytes.slice(0, 6)).startsWith('GIF8')) return 'image/gif';
-    if (bytes.length >= 12 && String.fromCharCode(...bytes.slice(0, 4)) === 'RIFF' && String.fromCharCode(...bytes.slice(8, 12)) === 'WEBP') return 'image/webp';
-    if (bytes.length >= 2 && String.fromCharCode(...bytes.slice(0, 2)) === 'BM') return 'image/bmp';
-    if (bytes.length >= 12 && String.fromCharCode(...bytes.slice(4, 8)) === 'ftyp') {
-      const brand = String.fromCharCode(...bytes.slice(8, 12)).toLowerCase();
-      if (/(heic|heix|hevc|hevx|mif1|msf1)/.test(brand)) return 'image/heic';
-      if (/(avif|avis)/.test(brand)) return 'image/avif';
-    }
-    return '';
-  };
-
   const resolvePhotoForPrint = async (source: string, purpose: 'print' | 'preview' = 'print'): Promise<{ url: string; error: string; temporary: boolean }> => {
     const trimmed = source.trim();
     if (!trimmed) return { url: '', error: 'Foto belum tersedia di sumber data responden.', temporary: false };
 
     const fileId = getDriveFileId(trimmed);
     if (!fileId) {
-      if (/^https?:\/\//i.test(trimmed) || /^data:image\//i.test(trimmed)) {
-        return { url: trimmed, error: '', temporary: false };
+      if (/^data:image\//i.test(trimmed)) {
+        const imageBlob = await fetch(trimmed).then((response) => response.blob());
+        const url = URL.createObjectURL(imageBlob);
+        if (purpose === 'preview') previewObjectUrlsRef.current.push(url);
+        else printObjectUrlsRef.current.push(url);
+        return { url, error: '', temporary: true };
+      }
+      if (/^https?:\/\//i.test(trimmed)) {
+        try {
+          const response = await fetch(trimmed);
+          if (!response.ok) throw new Error('HTTP ' + response.status);
+          const sourceBlob = await response.blob();
+          const previewBlob = await createPhotoPreviewBlob(sourceBlob, trimmed.split('/').pop() || 'photo', sourceBlob.type);
+          const url = URL.createObjectURL(previewBlob);
+          if (purpose === 'preview') previewObjectUrlsRef.current.push(url);
+          else printObjectUrlsRef.current.push(url);
+          return { url, error: '', temporary: true };
+        } catch {
+          // A public direct image URL can still be rendered by the browser even
+          // when its server does not permit cross-origin reads for conversion.
+          return { url: trimmed, error: '', temporary: false };
+        }
       }
       return { url: '', error: 'Kolom sumber tidak berisi URL gambar atau ID file Google Drive yang dikenali.', temporary: false };
     }
@@ -400,16 +406,44 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
       return { url: '', error: 'SIPANDU telah mencoba menyegarkan token otomatis. Hubungkan akun Google Workspace jika foto privat masih tidak dapat dibaca.', temporary: false };
     }
 
-    const mediaUrl = `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?alt=media`;
-    let response = await fetch(mediaUrl, { headers: { Authorization: `Bearer ${token}` } });
-    if (response.status === 401) {
-      invalidateAccessToken();
-      const refreshedToken = await refreshWorkspaceAccessToken();
-      if (refreshedToken) {
-        token = refreshedToken;
-        response = await fetch(mediaUrl, { headers: { Authorization: `Bearer ${token}` } });
+    const authorizedFetch = async (url: string) => {
+      let response = await fetch(url, { headers: { Authorization: 'Bearer ' + token } });
+      if (response.status === 401) {
+        invalidateAccessToken();
+        const refreshedToken = await refreshWorkspaceAccessToken(true);
+        if (refreshedToken) {
+          token = refreshedToken;
+          response = await fetch(url, { headers: { Authorization: 'Bearer ' + token } });
+        }
       }
+      return response;
+    };
+
+    const metadataResponse = await authorizedFetch(
+      'https://www.googleapis.com/drive/v3/files/' + encodeURIComponent(fileId) + '?fields=id,name,mimeType,size'
+    );
+    if (!metadataResponse.ok) {
+      const payload = await metadataResponse.json().catch(() => ({}));
+      const message = (payload as { error?: { message?: string } }).error?.message;
+      return {
+        url: '',
+        error: metadataResponse.status === 401
+          ? 'Token Google ditolak setelah percobaan refresh otomatis.'
+          : metadataResponse.status === 403
+            ? 'Akun Google tidak memiliki izin membaca file ini. Periksa akses file di Drive.'
+            : message || 'Metadata file Google Drive tidak dapat dibaca (HTTP ' + metadataResponse.status + ').',
+        temporary: false,
+      };
     }
+    const metadata = await metadataResponse.json() as { name?: string; mimeType?: string; size?: string };
+    const fileName = metadata.name || 'photo';
+    const mimeType = metadata.mimeType || '';
+    if (Number(metadata.size || 0) > MAX_PPKS_PHOTO_FILE_BYTES) {
+      return { url: '', error: 'Ukuran file lebih dari 30 MB. File tidak diproses agar memori ponsel tetap aman.', temporary: false };
+    }
+
+    const mediaUrl = 'https://www.googleapis.com/drive/v3/files/' + encodeURIComponent(fileId) + '?alt=media';
+    const response = await authorizedFetch(mediaUrl);
     if (!response.ok) {
       const payload = await response.json().catch(() => ({}));
       const message = (payload as { error?: { message?: string } }).error?.message;
@@ -418,22 +452,18 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
         error: response.status === 401
           ? 'Token Google ditolak setelah percobaan refresh otomatis. Coba cetak kembali setelah sinkronisasi token selesai.'
           : response.status === 403
-            ? `Akun Google tidak memiliki izin untuk membuka foto ini. Periksa akses file di Drive. ${message || ''}`.trim()
-            : message || `Google Drive tidak dapat membaca foto (HTTP ${response.status}).`,
+            ? 'Akun Google tidak memiliki izin untuk membuka file ini. Periksa akses file di Drive.'
+            : message || 'Google Drive tidak dapat membaca foto (HTTP ' + response.status + ').',
         temporary: false,
       };
     }
+
     const downloadedBlob = await response.blob();
-    let blob = downloadedBlob;
-    if (!blob.type.startsWith('image/')) {
-      const bytes = await downloadedBlob.arrayBuffer();
-      const inferredMime = inferPrintImageMime(bytes);
-      if (!inferredMime) {
-        return { url: '', error: 'File Drive bukan gambar yang dapat dicetak.', temporary: false };
-      }
-      blob = new Blob([bytes], { type: inferredMime });
+    if (downloadedBlob.size > MAX_PPKS_PHOTO_FILE_BYTES) {
+      return { url: '', error: 'Ukuran file lebih dari 30 MB. File tidak diproses agar memori ponsel tetap aman.', temporary: false };
     }
-    const url = URL.createObjectURL(blob);
+    const previewBlob = await createPhotoPreviewBlob(downloadedBlob, fileName, mimeType || downloadedBlob.type);
+    const url = URL.createObjectURL(previewBlob);
     if (purpose === 'preview') previewObjectUrlsRef.current.push(url);
     else printObjectUrlsRef.current.push(url);
     return { url, error: '', temporary: true };
