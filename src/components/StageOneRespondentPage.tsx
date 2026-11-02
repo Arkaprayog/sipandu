@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import type { StageOneIntakePayload } from '../types';
 import { submitPublicStageOneIntake } from '../lib/firebase';
 import { compressImageForLocalStorage } from '../lib/imageCompression';
+import { PPKS_PHOTO_ACCEPT } from '../lib/photoFilePreview';
 import { publicAssetUrl } from '../lib/publicAssets';
 
 type PhotoField = 'fotoDiri' | 'fotoKtp';
@@ -32,7 +33,7 @@ export const StageOneRespondentPage: React.FC = () => {
     setPhotoBusy(true);
     setError('');
     try {
-      const compressed = await compressImageForLocalStorage(file, 1200, 220 * 1024);
+      const compressed = await compressImageForLocalStorage(file, 1200, 220 * 1024, file.name);
       if (field === 'fotoDiri') setFotoDiri(compressed);
       else setFotoKtp(compressed);
     } catch (photoError) {
@@ -122,7 +123,7 @@ export const StageOneRespondentPage: React.FC = () => {
           <div><label className="mb-1 block text-xs font-bold text-sky-200">No. HP / WhatsApp <span className="text-rose-400">*</span></label><input required type="tel" minLength={8} maxLength={25} autoComplete="tel" value={noHpWa} onChange={(e) => setNoHpWa(e.target.value)} placeholder="08xxxxxxxxxx" className="w-full rounded-lg border border-rose-500/30 bg-black/45 p-3 font-mono text-sm text-white outline-none focus:border-emerald-400" /></div>
           <div><label className="mb-1 block text-xs font-bold text-sky-200">Jenis Bantuan yang Diharapkan <span className="text-rose-400">*</span></label><select required value={jenisBantuan} onChange={(e) => setJenisBantuan(e.target.value)} className="w-full rounded-lg border border-rose-500/30 bg-black/45 p-3 text-sm text-white outline-none focus:border-emerald-400"><option value="">Pilih jenis bantuan</option><option value="BANTUAN KEWIRUSAHAAN">BANTUAN KEWIRUSAHAAN</option><option value="BANTUAN PEMENUHAN NUTRISI">BANTUAN PEMENUHAN NUTRISI</option></select></div>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            {([[ 'fotoDiri', 'Foto Diri *' ], [ 'fotoKtp', 'Foto KTP *' ]] as Array<[PhotoField, string]>).map(([field, label]) => <div key={field} className="rounded-xl border border-rose-500/25 bg-black/35 p-3"><label className="mb-2 block text-xs font-bold text-sky-200">{label} <span className="text-rose-400">(wajib)</span></label><input type="file" accept="image/jpeg,image/png,image/webp" capture={field === 'fotoDiri' ? 'user' : 'environment'} onChange={(e) => void handlePhoto(e, field)} className="w-full text-xs text-neutral-300" />{(field === 'fotoDiri' ? fotoDiri : fotoKtp) ? <p className="mt-2 text-[10px] text-emerald-200">Foto berhasil diproses dan siap dikirim.</p> : <p className="mt-2 text-[10px] text-rose-200">Foto wajib diunggah.</p>}</div>)}
+            {([[ 'fotoDiri', 'Foto Diri *' ], [ 'fotoKtp', 'Foto KTP *' ]] as Array<[PhotoField, string]>).map(([field, label]) => <div key={field} className="rounded-xl border border-rose-500/25 bg-black/35 p-3"><label className="mb-2 block text-xs font-bold text-sky-200">{label} <span className="text-rose-400">(wajib)</span></label><input type="file" accept={PPKS_PHOTO_ACCEPT} capture={field === 'fotoDiri' ? 'user' : 'environment'} onChange={(e) => void handlePhoto(e, field)} className="w-full text-xs text-neutral-300" />{(field === 'fotoDiri' ? fotoDiri : fotoKtp) ? <p className="mt-2 text-[10px] text-emerald-200">Foto berhasil diproses dan siap dikirim.</p> : <p className="mt-2 text-[10px] text-rose-200">Foto wajib diunggah.</p>}</div>)}
           </div>
           {photoBusy && <p role="status" className="text-xs text-sky-200">Mengompres foto…</p>}
           <label className="flex items-start gap-2 rounded-lg border border-emerald-500/25 bg-emerald-950/20 p-3 text-xs leading-relaxed text-emerald-100"><input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} required className="mt-0.5" /><span>Saya memahami data ini digunakan untuk asesmen dan tindak lanjut program, dan hanya dapat diakses petugas yang berwenang.</span></label>
