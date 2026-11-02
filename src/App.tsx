@@ -193,10 +193,10 @@ function reconcileSpreadsheetPPKSRecords(
       jenisBantuan: source.jenisBantuan,
       intervensiMental: source.intervensiMental,
       desil: source.desil,
-      fotoDiri: normalizePPKSPhotoSource(source.fotoDiri) || normalizePPKSPhotoSource(overrides.fotoDiri) || '',
-      fotoKtp: normalizePPKSPhotoSource(source.fotoKtp) || normalizePPKSPhotoSource(overrides.fotoKtp) || '',
-      fotoKk: normalizePPKSPhotoSource(source.fotoKk) || normalizePPKSPhotoSource(overrides.fotoKk) || '',
-      fotoRumah: normalizePPKSPhotoSource(source.fotoRumah) || normalizePPKSPhotoSource(overrides.fotoRumah) || '',
+      fotoDiri: normalizePPKSPhotoSource(overrides.fotoDiri) || normalizePPKSPhotoSource(source.fotoDiri) || '',
+      fotoKtp: normalizePPKSPhotoSource(overrides.fotoKtp) || normalizePPKSPhotoSource(source.fotoKtp) || '',
+      fotoKk: normalizePPKSPhotoSource(overrides.fotoKk) || normalizePPKSPhotoSource(source.fotoKk) || '',
+      fotoRumah: normalizePPKSPhotoSource(overrides.fotoRumah) || normalizePPKSPhotoSource(source.fotoRumah) || '',
     };
   });
   return sortPPKSRecordsByName(deduplicatePPKSRecords(exactSourceValues));
@@ -954,10 +954,10 @@ function StaffApp() {
                 // Only explicitly uploaded photo overrides may fill blank source cells.
                 // Legacy Firestore profile fields never replace the spreadsheet values.
                 manualPhotoOverrides,
-                fotoDiri: normalizePPKSPhotoSource(current.fotoDiri) || normalizePPKSPhotoSource(manualPhotoOverrides.fotoDiri) || '',
-                fotoKtp: normalizePPKSPhotoSource(current.fotoKtp) || normalizePPKSPhotoSource(manualPhotoOverrides.fotoKtp) || '',
-                fotoKk: normalizePPKSPhotoSource(current.fotoKk) || normalizePPKSPhotoSource(manualPhotoOverrides.fotoKk) || '',
-                fotoRumah: normalizePPKSPhotoSource(current.fotoRumah) || normalizePPKSPhotoSource(manualPhotoOverrides.fotoRumah) || '',
+                fotoDiri: normalizePPKSPhotoSource(manualPhotoOverrides.fotoDiri) || normalizePPKSPhotoSource(current.fotoDiri) || '',
+                fotoKtp: normalizePPKSPhotoSource(manualPhotoOverrides.fotoKtp) || normalizePPKSPhotoSource(current.fotoKtp) || '',
+                fotoKk: normalizePPKSPhotoSource(manualPhotoOverrides.fotoKk) || normalizePPKSPhotoSource(current.fotoKk) || '',
+                fotoRumah: normalizePPKSPhotoSource(manualPhotoOverrides.fotoRumah) || normalizePPKSPhotoSource(current.fotoRumah) || '',
                 integratedForm: mergeNonEmpty(current.integratedForm, cloud.integratedForm),
                 officialAssessment: mergeNonEmpty(current.officialAssessment, cloud.officialAssessment),
                 formAsesmenTerintegrasi: mergeNonEmpty(current.formAsesmenTerintegrasi, cloud.formAsesmenTerintegrasi),
