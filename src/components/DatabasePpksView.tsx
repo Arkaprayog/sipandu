@@ -223,9 +223,9 @@ export const DatabasePpksView: React.FC<DatabasePpksViewProps> = ({
   };
 
   return (
-    <div className="space-y-6 pb-28 text-white">
+    <div className="workspace-page min-h-full space-y-4 text-white">
       {/* Bingkai Luar: Judul DATABASE PPKS */}
-      <div className="p-5 md:p-6 rounded-2xl bg-black/40 border border-rose-500/40 shadow-[0_0_22px_rgba(244,63,94,0.18)]">
+      <div className="workspace-panel min-h-full p-3 sm:p-4 md:p-6 rounded-2xl bg-black/25 border border-white/10 shadow-[0_12px_36px_rgba(0,0,0,0.18)]">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 mb-5 border-b border-rose-500/25 pb-4">
           <div>
             <h2 className="text-xl md:text-2xl font-black text-white tracking-wider flex items-center gap-2">
