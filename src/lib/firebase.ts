@@ -733,6 +733,11 @@ export async function replacePPKSCollectionFromSpreadsheet(
   if (!Array.isArray(records) || records.length === 0) {
     throw new Error('Penggantian Firestore dibatalkan: data spreadsheet kosong.');
   }
+  if (records.length !== EXPECTED_REAL_PPKS_COUNT) {
+    throw new Error(
+      `Penggantian Firestore dibatalkan: roster spreadsheet berisi ${records.length} PPKS unik, sedangkan roster terverifikasi saat ini ${EXPECTED_REAL_PPKS_COUNT}. Tidak ada dokumen lama yang dihapus.`
+    );
+  }
 
   const recordIds = records.map((record) => String(record.id || '').trim());
   if (recordIds.some((id) => !id) || new Set(recordIds).size !== recordIds.length) {
@@ -836,13 +841,30 @@ export async function replacePPKSCollectionFromSpreadsheet(
 
     const newIds = new Set(planned.map((item) => item.id));
     const staleDocs = oldDocs.filter((candidate) => !newIds.has(candidate.id));
-    const created = planned.filter((item) => !oldDocs.some((candidate) => candidate.id === item.id)).length;
-    const updated = planned.length - created;
+    const stableValue = (value: unknown): unknown => {
+      if (Array.isArray(value)) return value.map(stableValue);
+      if (value && typeof value === 'object') {
+        return Object.fromEntries(
+          Object.entries(value as Record<string, unknown>)
+            .filter(([, nested]) => nested !== undefined)
+            .sort(([a], [b]) => a.localeCompare(b))
+            .map(([key, nested]) => [key, stableValue(nested)])
+        );
+      }
+      return value;
+    };
+    const changedRecords = planned.filter((item) => {
+      const current = oldDocs.find((candidate) => candidate.id === item.id);
+      if (!current) return true;
+      return JSON.stringify(stableValue(current.data())) !== JSON.stringify(stableValue(item.data));
+    });
+    const created = changedRecords.filter((item) => !oldDocs.some((candidate) => candidate.id === item.id)).length;
+    const updated = changedRecords.length - created;
     const operations: Array<
       | { kind: 'set'; id: string; data: PPKSRecord }
       | { kind: 'delete'; id: string }
     > = [
-      ...planned.map((item) => ({ kind: 'set' as const, ...item })),
+      ...changedRecords.map((item) => ({ kind: 'set' as const, ...item })),
       ...staleDocs.map((candidate) => ({ kind: 'delete' as const, id: candidate.id })),
     ];
 
