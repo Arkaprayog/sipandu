@@ -9,8 +9,8 @@ export const GOOGLE_SIPANDU_RESOURCES = {
   formEditorUrl: 'https://docs.google.com/forms/d/12JJIlBzY9yA5taFIfkQ6r0dJDMEBbEw8ymX7mTUHmYc/edit',
   formRespondentUrl: 'https://docs.google.com/forms/d/12JJIlBzY9yA5taFIfkQ6r0dJDMEBbEw8ymX7mTUHmYc/viewform',
   formId: '12JJIlBzY9yA5taFIfkQ6r0dJDMEBbEw8ymX7mTUHmYc',
-  responseSpreadsheetUrl: 'https://docs.google.com/spreadsheets/d/1ISR8v6QdDVHLjWjjDO5lIjhvEG-Ukt1KSZtfjx817BQ/htmlview',
-  responseSpreadsheetId: '1ISR8v6QdDVHLjWjjDO5lIjhvEG-Ukt1KSZtfjx817BQ',
+  responseSpreadsheetUrl: 'https://docs.google.com/spreadsheets/d/16R7_ov8KN0_AZBBDbqLrvtqnqjMIkfn8Gx9Sj1i9048/htmlview',
+  responseSpreadsheetId: '16R7_ov8KN0_AZBBDbqLrvtqnqjMIkfn8Gx9Sj1i9048',
   driveFolderUrl: 'https://drive.google.com/drive/u/0/mobile/folders/1TtUYxMv9-f5kcGWqYS_5PK7NwYqUvNgMMV0l1BpzoLdkHJAQ7Ucxg0rbqc9Ue19Wo2w85GV1',
   driveFolderId: '1TtUYxMv9-f5kcGWqYS_5PK7NwYqUvNgMMV0l1BpzoLdkHJAQ7Ucxg0rbqc9Ue19Wo2w85GV1',
 } as const;
