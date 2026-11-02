@@ -309,6 +309,7 @@ export async function readSpreadsheetData(spreadsheetIdOrUrl: string, range = 'S
 export async function readSpreadsheetRichData(
   spreadsheetIdOrUrl: string,
   range: string,
+  explicitPhotoColumnIndices: number[] = [],
 ): Promise<string[][]> {
   const id = extractSpreadsheetId(spreadsheetIdOrUrl);
   const params = new URLSearchParams({
@@ -339,7 +340,9 @@ export async function readSpreadsheetRichData(
     String(cell.userEnteredValue?.stringValue || cell.formattedValue || '')
   );
   const normalizedHeaders = headers.map(normalizeSheetHeader);
-  const photoColumns = new Set<number>();
+  const photoColumns = new Set<number>(
+    explicitPhotoColumnIndices.filter((index) => Number.isInteger(index) && index >= 0)
+  );
   const timestampColumns = new Set<number>();
   normalizedHeaders.forEach((header, index) => {
     if (/^(timestamp|capwaktu|waktupengiriman|waktupengisian|tanggalwaktu|tanggaljam|wakturespon|wakturespons|createdtime|lastsubmittedtime)$/.test(header) ||
@@ -1353,9 +1356,6 @@ export async function importPPKSFromSpreadsheet(
   const selectedTab = requestedFromResponsesTab
     || (preferred && metadata.sheetTitles.includes(preferred) ? preferred : (responseTab || metadata.sheetTitles[0]));
   const escapedTitle = selectedTab.replace(/'/g, "''");
-  const rows = await readSpreadsheetRichData(metadata.spreadsheetId, `'${escapedTitle}'!A1:ZZ2000`);
-  const headers = rows[0] || [];
-  const dataRows = rows.slice(1);
   const isKnownATENSIResponseSheet =
     metadata.spreadsheetId === GOOGLE_SIPANDU_RESOURCES.responseSpreadsheetId ||
     (
@@ -1363,11 +1363,19 @@ export async function importPPKSFromSpreadsheet(
       normalizeSheetHeader(metadata.title).includes('responses') &&
       normalizeSheetHeader(selectedTab).includes('fromresponses')
     );
-  // For the owner's exact ATENSI response tab, column positions are authoritative.
-  // Other spreadsheets retain the existing header-based mapping.
+  // For the owner's exact ATENSI response tab, use the known E-H attachment
+  // columns to recover actual Drive hyperlink targets even when Forms shows
+  // a short display label instead of the underlying URL in each cell.
   const useATENSIColumnPositions =
     isKnownATENSIResponseSheet &&
     normalizeSheetHeader(selectedTab) === normalizeSheetHeader('From Responses 1');
+  const rows = await readSpreadsheetRichData(
+    metadata.spreadsheetId,
+    `'${escapedTitle}'!A1:ZZ2000`,
+    useATENSIColumnPositions ? [4, 5, 6, 7] : [],
+  );
+  const headers = rows[0] || [];
+  const dataRows = rows.slice(1);
   const sourceRowsWithName = dataRows.filter((row) =>
     Boolean(useATENSIColumnPositions ? String(row[2] ?? '').trim() : readRespondentName(headers, row))
   ).length;
