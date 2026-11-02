@@ -252,7 +252,10 @@ function StaffApp() {
   useEffect(() => {
     let active = true;
     let authEventGeneration = 0;
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+    let unsubscribe: (() => void) | null = null;
+    void staffAuthPersistenceReady.then(() => {
+      if (!active) return;
+      unsubscribe = onAuthStateChanged(auth, async (user) => {
       const generation = ++authEventGeneration;
       setAuthReady(false);
       setLocalCacheReady(false);
@@ -293,11 +296,12 @@ function StaffApp() {
       } finally {
         if (active && generation === authEventGeneration && (!user || auth.currentUser?.uid === user.uid)) setAuthReady(true);
       }
+      });
     });
     return () => {
       active = false;
       authEventGeneration++;
-      unsubscribe();
+      unsubscribe?.();
     };
   }, []);
 
