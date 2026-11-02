@@ -1,9 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { PPKSRecord, AppSettings } from '../types';
-import { uploadPPKSPhotoToDrive, type PPKSPhotoKind } from '../lib/googleWorkspace';
-import { GOOGLE_SIPANDU_RESOURCES } from '../lib/googleSIPANDUResources';
 import { PrivateDriveImage } from './PrivateDriveImage';
-import { isSupportedPhotoFile, PPKS_PHOTO_ACCEPT, MAX_PPKS_PHOTO_FILE_BYTES } from '../lib/photoFilePreview';
 import { deduplicatePPKSRecords, formatPPKSTimestamp, sortPPKSRecordsByName } from '../lib/ppksData';
 import {
   buildGoogleFormsPrefilledUrl,
@@ -25,8 +22,6 @@ import {
   HelpCircle,
   Clock,
   Sparkles,
-  Upload,
-  Loader2,
 } from 'lucide-react';
 
 interface DatabasePpksViewProps {
@@ -60,8 +55,6 @@ export const DatabasePpksView: React.FC<DatabasePpksViewProps> = ({
   const [editingIntervensi, setEditingIntervensi] = useState<string>('');
   const [saveSuccess, setSaveSuccess] = useState<boolean>(false);
   const [showWaPreview, setShowWaPreview] = useState<boolean>(false);
-  const [uploadingPhoto, setUploadingPhoto] = useState<PPKSPhotoKind | null>(null);
-  const [photoUploadMessage, setPhotoUploadMessage] = useState<string>('');
 
   // Keep the database chooser in the same alphabetical order as the source roster.
   const displayPPKSList = useMemo(
@@ -113,7 +106,6 @@ export const DatabasePpksView: React.FC<DatabasePpksViewProps> = ({
         suppressAutoSelectAfterBackRef.current = true;
         setSelectedPPKSId('');
         setSaveSuccess(false);
-        setPhotoUploadMessage('');
         detail.handled = true;
       }
     };
@@ -139,62 +131,6 @@ export const DatabasePpksView: React.FC<DatabasePpksViewProps> = ({
     setSaveSuccess(true);
     setTimeout(() => setSaveSuccess(false), 3000);
   };
-
-  const handlePhotoUpload = async (kind: PPKSPhotoKind, file: File | null) => {
-    if (!currentPPKS || !file) return;
-    setPhotoUploadMessage('');
-    if (!isSupportedPhotoFile(file)) {
-      setPhotoUploadMessage('Format tidak didukung. Pilih JPG/JPEG, PNG, GIF, WEBP, BMP, TIFF/TIF, HEIC/HEIF, RAW, PSD, PDF, DOC, atau DOCX.');
-      return;
-    }
-    if (file.size > MAX_PPKS_PHOTO_FILE_BYTES) {
-      setPhotoUploadMessage('Ukuran berkas maksimal 30 MB.');
-      return;
-    }
-    const fieldByKind = { diri: 'fotoDiri', ktp: 'fotoKtp', kk: 'fotoKk', rumah: 'fotoRumah' } as const;
-    const labels = { diri: 'Foto Diri', ktp: 'Foto KTP', kk: 'Foto KK', rumah: 'Foto Rumah Tampak Depan' } as const;
-    setUploadingPhoto(kind);
-    try {
-      const link = await uploadPPKSPhotoToDrive(file, {
-        folderId: GOOGLE_SIPANDU_RESOURCES.driveFolderId,
-        respondentName: currentPPKS.namaLengkap,
-        respondentId: currentPPKS.id,
-        photoKind: kind,
-      });
-      const updated: PPKSRecord = {
-        ...currentPPKS,
-        [fieldByKind[kind]]: link,
-        manualPhotoOverrides: {
-          ...(currentPPKS.manualPhotoOverrides || {}),
-          [fieldByKind[kind]]: link,
-        },
-      };
-      onUpdatePPKS(updated);
-      setPhotoUploadMessage(`${labels[kind]} berhasil diunggah ke Google Drive. Data profil diperbarui dan sinkronisasi Google Sheets dimulai.`);
-    } catch (error) {
-      setPhotoUploadMessage(`Unggah ${labels[kind]} gagal: ${error instanceof Error ? error.message : String(error)}`);
-    } finally {
-      setUploadingPhoto(null);
-    }
-  };
-
-  const photoUploadControl = (kind: PPKSPhotoKind, label: string) => (
-    <label className="mt-2 inline-flex w-full cursor-pointer items-center justify-center gap-2 rounded-lg border border-sky-400/40 bg-sky-950/50 px-2 py-2 text-[11px] font-bold text-sky-100 hover:bg-sky-900/60">
-      {uploadingPhoto === kind ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-      {uploadingPhoto === kind ? 'Mengunggah…' : `Upload ${label}`}
-      <input
-        type="file"
-        accept={PPKS_PHOTO_ACCEPT}
-        className="sr-only"
-        disabled={uploadingPhoto !== null}
-        onChange={(event) => {
-          const file = event.currentTarget.files?.[0] || null;
-          event.currentTarget.value = '';
-          void handlePhotoUpload(kind, file);
-        }}
-      />
-    </label>
-  );
 
   const currentWaMessage = currentPPKS
     ? buildWhatsAppMessage(currentPPKS, {
@@ -295,7 +231,7 @@ export const DatabasePpksView: React.FC<DatabasePpksViewProps> = ({
             <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-start">
               {/* Foto Diri PPKS di sebelah kiri */}
               <div className="md:col-span-4 flex flex-col items-center">
-                <div className="relative w-48 h-56 md:w-56 md:h-64 rounded-2xl overflow-hidden border-2 border-rose-500/60 shadow-[0_0_20px_rgba(244,63,94,0.25)] bg-black/70">
+                <div className="relative w-56 h-64 md:w-64 md:h-72 rounded-2xl overflow-hidden border-2 border-rose-500/60 shadow-[0_0_20px_rgba(244,63,94,0.25)] bg-black/70">
                   <PrivateDriveImage
                     source={currentPPKS.fotoDiri}
                     alt={`Foto diri responden ${currentPPKS.namaLengkap}`}
@@ -308,7 +244,6 @@ export const DatabasePpksView: React.FC<DatabasePpksViewProps> = ({
                   <p className="text-[10px] text-neutral-400">
                     {currentPPKS.fotoDiri ? 'Foto tersedia' : 'Foto belum tersedia pada data sumber'}
                   </p>
-                  {photoUploadControl('diri', 'Foto Diri / Ganti')}
                 </div>
 
                 {/* Dokumen lain berada di kolom foto pada profil yang sama, bukan card di bawah Desil. */}
@@ -323,10 +258,9 @@ export const DatabasePpksView: React.FC<DatabasePpksViewProps> = ({
                       <PrivateDriveImage
                         source={photo.source}
                         alt={`${photo.label} — ${currentPPKS.namaLengkap}`}
-                        className="h-24 w-full"
+                        className="h-32 md:h-36 w-full"
                         objectFit="contain"
                       />
-                      {photoUploadControl(photo.kind, `${photo.label} / Ganti`)}
                     </div>
                   ))}
                 </div>
@@ -462,12 +396,6 @@ export const DatabasePpksView: React.FC<DatabasePpksViewProps> = ({
                 </div>
               </div>
             </div>
-
-            {photoUploadMessage && (
-              <div role="status" aria-live="polite" className="mt-4 rounded-lg border border-sky-400/30 bg-sky-950/40 p-3 text-xs text-sky-100">
-                {photoUploadMessage}
-              </div>
-            )}
 
             {/* Dibawah kolom profil: Tombol WHATSAPP, lalu tombol SIMPAN */}
             <div className="mt-8 pt-5 border-t border-rose-500/30 flex flex-col items-center gap-3 max-w-lg mx-auto">
