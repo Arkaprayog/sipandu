@@ -855,8 +855,8 @@ function mapRowsToPPKSRecords(rows: string[][], useATENSIColumnPositions = false
       alamatLengkap: alamat,
       noHpWa: useATENSIColumnPositions ? sourceCell(13) : readCellByAliases(headers, row, ['noHPWA', 'nomorHPWA', 'noWhatsApp', 'nomorTelepon', 'telepon', 'hp']),
       jenisBantuan,
-      // Pull the result from Google Sheets column BE for both historical rows
-      // and future Form submissions. Blank BE cells may fall back to the column title.
+      // The ATENSI response tab uses its explicit AO mapping; other source tabs
+      // continue to use the configured BE position with a header-based fallback.
       intervensiMental: useATENSIColumnPositions
         ? sourceCell(40)
         : (readInterventionRecommendationFromRow(headers, row)
@@ -1324,7 +1324,7 @@ export async function importPPKSFromSpreadsheet(
   photoRecoveryDiagnostics: { responseCount: number; responsesWithUploads: number; recordsMatched: number };
   photoCounts: { diri: number; ktp: number; kk: number; rumah: number };
   records: PPKSRecord[];
-  /** Imported respondent rows with a non-empty intervention/recommendation sourced from column BE. */
+  /** Imported rows with a mapped intervention/recommendation (AO for ATENSI; BE/header fallback for other sources). */
   recordsWithInterventionRecommendation: number;
   recordsWithNIK: number;
   recordsMissingNIK: number;
