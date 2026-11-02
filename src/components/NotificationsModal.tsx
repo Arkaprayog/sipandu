@@ -78,7 +78,7 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
             {permissionLabel}
           </div>
           <p className="mt-1 text-[11px] leading-relaxed text-neutral-300">
-            Notifikasi sistem hanya dibuat untuk respons kuisioner baru atau asesmen responden yang baru diperbarui. Status sinkronisasi, perubahan profil, dan unggah foto tidak membuat notifikasi.
+            Notifikasi dibuat untuk respons Google Form baru, pengisian asesmen tahap awal, pembaruan asesmen, dan saat izin Google Workspace perlu disambungkan ulang. Perubahan profil, unggah foto, serta status sinkronisasi biasa tidak membuat notifikasi.
           </p>
           <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[10px] text-neutral-300">
             <span className="inline-flex items-center gap-1"><Volume2 className="h-3 w-3" /> Bunyi sistem</span>
@@ -91,6 +91,12 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
             </button>
           )}
           {permissionMessage && <p role="status" className="mt-2 text-[11px] leading-relaxed text-sky-100">{permissionMessage}</p>}
+          <p className="mt-2 text-[10px] leading-relaxed text-neutral-400">
+            Privasi: teks notifikasi sistem tidak memuat nama, NIK, nomor telepon, atau rincian kesehatan responden. Detail lengkap hanya terlihat di dalam SIPANDU setelah petugas masuk.
+          </p>
+          <p className="mt-1 text-[10px] leading-relaxed text-neutral-400">
+            Catatan: Google Forms diperiksa oleh live sync saat aplikasi petugas berjalan. Notifikasi Google Form tidak dapat dipastikan terkirim ketika aplikasi benar-benar ditutup; untuk itu diperlukan layanan push server/FCM.
+          </p>
         </div>
 
         <div className="mb-2 flex items-center justify-between gap-3">
