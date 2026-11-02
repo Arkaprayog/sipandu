@@ -1,15 +1,21 @@
-/** Reduce large phone photos before keeping them in browser storage or a Firestore record. */
+import { createPhotoPreviewBlob, isSupportedPhotoFile, MAX_PPKS_PHOTO_FILE_BYTES } from './photoFilePreview';
+
+/** Decode photo/document containers, then compress their visual content for Firestore/browser storage. */
 export async function compressImageForLocalStorage(
   file: Blob,
   maxDimension = 1200,
   maxBytes = 320 * 1024,
+  fileName = 'photo',
 ): Promise<string> {
-  if (!file.type.startsWith('image/')) {
-    throw new Error('Pilih berkas foto dengan format gambar (JPG, PNG, atau format yang didukung browser).');
+  const candidate = file as Blob & { name?: string };
+  const resolvedName = candidate.name || fileName;
+  if (!isSupportedPhotoFile({ name: resolvedName, type: file.type || '', size: file.size })) {
+    throw new Error('Format file tidak didukung. Pilih JPG/JPEG, PNG, GIF, WEBP, BMP, TIFF/TIF, HEIC/HEIF, RAW, PSD, PDF, DOC, atau DOCX.');
   }
-  if (file.size > 20 * 1024 * 1024) {
-    throw new Error('Ukuran foto terlalu besar (lebih dari 20 MB). Pilih foto atau gambar yang lebih kecil.');
+  if (file.size > MAX_PPKS_PHOTO_FILE_BYTES) {
+    throw new Error('Ukuran berkas terlalu besar (maksimal 30 MB). Pilih berkas yang lebih kecil.');
   }
+  const previewBlob = await createPhotoPreviewBlob(file, resolvedName, file.type || '');
 
   let bitmap: ImageBitmap | null = null;
   let objectUrl = '';
@@ -19,7 +25,7 @@ export async function compressImageForLocalStorage(
   try {
     if (typeof createImageBitmap === 'function') {
       try {
-        bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' });
+        bitmap = await createImageBitmap(previewBlob, { imageOrientation: 'from-image' });
         width = bitmap.width;
         height = bitmap.height;
       } catch {
@@ -27,7 +33,7 @@ export async function compressImageForLocalStorage(
       }
     }
     if (!bitmap) {
-      objectUrl = URL.createObjectURL(file);
+      objectUrl = URL.createObjectURL(previewBlob);
       imageElement = await new Promise<HTMLImageElement>((resolve, reject) => {
         const image = new Image();
         image.onload = () => resolve(image);
