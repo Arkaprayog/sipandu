@@ -302,9 +302,6 @@ export const DatabasePpksView: React.FC<DatabasePpksViewProps> = ({
                     className="h-full w-full rounded-none border-0"
                     objectFit="cover"
                   />
-                  <div className="absolute top-2 right-2 px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-900/90 text-white border border-emerald-400">
-                    ID: {currentPPKS.id}
-                  </div>
                 </div>
                 <div className="mt-2 w-full text-center">
                   <span className="text-xs font-bold text-sky-200">Foto Diri Responden</span>
@@ -336,11 +333,16 @@ export const DatabasePpksView: React.FC<DatabasePpksViewProps> = ({
               </div>
 
               {/* Sebelah kanan foto: Tabel data vertikal sesuai urutan diminta */}
-              <div className="md:col-span-8 overflow-hidden rounded-xl border border-rose-500/35 bg-black/40">
-                <table className="w-full text-xs text-left border-collapse">
+              <div className="md:col-span-8 min-w-0 rounded-xl border border-rose-500/35 bg-black/40">
+                <div
+                  className="w-full overflow-x-auto overscroll-x-contain touch-pan-x rounded-xl"
+                  aria-label="Tabel profil PPKS. Geser ke kiri atau kanan untuk melihat seluruh isi."
+                  tabIndex={0}
+                >
+                <table className="w-full min-w-[620px] text-xs text-left border-collapse">
                   <tbody>
                     <tr className="border-b border-rose-500/20 hover:bg-emerald-950/20">
-                      <td className="py-2.5 px-3 font-bold text-sky-200 w-1/3 bg-[#112415]">
+                      <td className="py-2.5 px-3 font-bold text-sky-200 w-[220px] min-w-[220px] bg-[#112415]">
                         Timestamp
                       </td>
                       <td className="py-2.5 px-3 font-mono text-emerald-300">
@@ -349,7 +351,7 @@ export const DatabasePpksView: React.FC<DatabasePpksViewProps> = ({
                     </tr>
 
                     <tr className="border-b border-rose-500/20 hover:bg-emerald-950/20">
-                      <td className="py-2.5 px-3 font-bold text-sky-200 bg-[#112415]">
+                      <td className="py-2.5 px-3 font-bold text-sky-200 w-[220px] min-w-[220px] bg-[#112415]">
                         Nama Lengkap
                       </td>
                       <td className="py-2.5 px-3 font-bold text-white text-sm">
@@ -358,8 +360,8 @@ export const DatabasePpksView: React.FC<DatabasePpksViewProps> = ({
                     </tr>
 
                     <tr className="border-b border-rose-500/20 hover:bg-emerald-950/20">
-                      <td className="py-2.5 px-3 font-bold text-sky-200 bg-[#112415]">
-                        NIK
+                      <td className="py-2.5 px-3 font-bold text-sky-200 w-[220px] min-w-[220px] bg-[#112415]">
+                        NIK KTP
                       </td>
                       <td className="py-2.5 px-3 font-mono text-sky-200 font-semibold tracking-wider break-all">
                         {currentNIK || 'NIK belum terpetakan dari spreadsheet sumber'}
@@ -367,7 +369,7 @@ export const DatabasePpksView: React.FC<DatabasePpksViewProps> = ({
                     </tr>
 
                     <tr className="border-b border-rose-500/20 hover:bg-emerald-950/20">
-                      <td className="py-2.5 px-3 font-bold text-sky-200 bg-[#112415]">
+                      <td className="py-2.5 px-3 font-bold text-sky-200 w-[220px] min-w-[220px] bg-[#112415]">
                         Usia
                       </td>
                       <td className="py-2.5 px-3 text-white">
@@ -376,11 +378,20 @@ export const DatabasePpksView: React.FC<DatabasePpksViewProps> = ({
                     </tr>
 
                     <tr className="border-b border-rose-500/20 hover:bg-emerald-950/20">
-                      <td className="py-2.5 px-3 font-bold text-sky-200 bg-[#112415]">
+                      <td className="py-2.5 px-3 font-bold text-sky-200 w-[220px] min-w-[220px] bg-[#112415]">
                         Alamat Domisili Saat Ini
                       </td>
-                      <td className="py-2.5 px-3 text-neutral-200 leading-snug">
-                        {currentPPKS.alamatLengkap} ({currentPPKS.kotaDomisili})
+                      <td className="py-2.5 px-3 min-w-[380px] text-neutral-200 leading-snug whitespace-pre-wrap break-words">
+                        {currentPPKS.alamatLengkap || 'Alamat belum tersedia pada kolom K sumber'}
+                      </td>
+                    </tr>
+
+                    <tr className="border-b border-rose-500/20 hover:bg-emerald-950/20">
+                      <td className="py-2.5 px-3 font-bold text-sky-200 w-[220px] min-w-[220px] bg-[#112415]">
+                        Kota Domisili Saat Ini
+                      </td>
+                      <td className="py-2.5 px-3 min-w-[380px] text-neutral-200 leading-snug break-words">
+                        {currentPPKS.kotaDomisili || 'Kota/kabupaten belum tersedia pada kolom I sumber'}
                       </td>
                     </tr>
 
@@ -448,6 +459,7 @@ export const DatabasePpksView: React.FC<DatabasePpksViewProps> = ({
                     </tr>
                   </tbody>
                 </table>
+                </div>
               </div>
             </div>
 
