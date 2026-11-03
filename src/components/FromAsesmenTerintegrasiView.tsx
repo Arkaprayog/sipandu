@@ -332,8 +332,8 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
       setStatusMessage({ type: 'error', text: 'Pilih responden PPKS terlebih dahulu. Form tidak disimpan ke data contoh.' });
       return;
     }
-    const nikFromForm = typeof answers.q23 === 'string' ? answers.q23.replace(/\\D/g, '') : '';
-    if (nikFromForm && !/^\\d{16}$/.test(nikFromForm)) {
+    const nikFromForm = typeof answers.q23 === 'string' ? answers.q23.replace(/\D/g, '') : '';
+    if (nikFromForm && !/^\d{16}$/.test(nikFromForm)) {
       setStatusMessage({ type: 'error', text: 'NIK harus terdiri dari 16 digit. Periksa kolom 23 NIK sebelum menyimpan.' });
       return;
     }
