@@ -17,6 +17,15 @@ service cloud.firestore {
       return hasRole('owner') || hasRole('supervisor');
     }
 
+    // Pendamping may save only the independent integrated-assessment answers.
+    // No profile, identity, photo, status, create, or delete permission is granted.
+    function canSaveIntegratedAssessment() {
+      return hasRole('pendamping')
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['formAsesmenTerintegrasi'])
+        && request.resource.data.keys().hasAll(['formAsesmenTerintegrasi'])
+        && request.resource.data.formAsesmenTerintegrasi is map;
+    }
+
     function isValidStageOnePayload() {
       let d = request.resource.data;
       return d.keys().hasAll([
@@ -50,7 +59,8 @@ service cloud.firestore {
 
     match /ppks/{recordId} {
       allow read: if isStaff();
-      allow create, update, delete: if canWritePpks();
+      allow create, delete: if canWritePpks();
+      allow update: if canWritePpks() || canSaveIntegratedAssessment();
     }
 
     // Public submissions may create only a validated stage-one record.
