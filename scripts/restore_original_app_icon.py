@@ -13,7 +13,8 @@ def main() -> None:
     if not SOURCE_B64.is_file():
         raise SystemExit("Arsip ikon asli SIPANDU tidak ditemukan: " + str(SOURCE_B64))
     try:
-        data = b64decode(SOURCE_B64.read_text(encoding="ascii").strip(), validate=True)
+        encoded = "".join(SOURCE_B64.read_text(encoding="ascii").split())
+        data = b64decode(encoded, validate=True)
     except Exception as exc:
         raise SystemExit("Arsip ikon asli SIPANDU rusak: " + str(exc)) from exc
     if len(data) < 1000 or data[:8] != bytes.fromhex("89504e470d0a1a0a"):
