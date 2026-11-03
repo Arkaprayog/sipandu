@@ -235,10 +235,13 @@ export async function testFirestoreConnection(): Promise<ConnectionCheckResult> 
 
     await getDocs(query(collection(db, 'ppks'), limit(1)));
     const canWrite = role === 'owner' || role === 'supervisor';
+    const roleMessage = canWrite
+      ? 'Peran owner/supervisor dapat menjalankan operasi pengelolaan PPKS yang diizinkan Rules.'
+      : 'Profil utama, identitas, foto, dan status PPKS tetap read-only untuk pendamping; hanya field formAsesmenTerintegrasi yang boleh disimpan melalui aturan khusus. Pemeriksaan ini menguji baca, bukan izin tulis.';
     return {
       service: 'Firestore',
       ok: true,
-      message: `Pembacaan server pada koleksi ppks berhasil. Peran: ${role}. ${canWrite ? 'Rules mengizinkan tulis bagi peran ini; operasi simpan tetap harus diuji saat sinkronisasi.' : 'Peran pendamping hanya memiliki akses baca sesuai Firestore Rules dan tidak dapat menulis data PPKS.'}`,
+      message: `Pembacaan server pada koleksi ppks berhasil. Peran: ${role}. ${roleMessage}`,
       checkedAt,
     };
   } catch (error) {
