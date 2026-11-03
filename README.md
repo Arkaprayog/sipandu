@@ -28,11 +28,12 @@ Sistem Informasi & Pendampingan Terpadu untuk pengelolaan Database PPKS ODHIV Su
 ## Sumber identitas/logo aplikasi
 
 - Logo resmi aplikasi adalah **file yang diunggah pemilik proyek**: `public/uploads/sipandu-logo.png`. Jangan menggambar ulang, menghasilkan dengan AI, atau mengganti file tersebut dengan artwork lain.
-- Ikon aplikasi PWA/favicon/iOS dan launcher Android bersumber dari `public/uploads/sipandu-logo.png`; generator hanya mengubah ukuran/penempatan, bukan desain logo.
+- Ikon aplikasi PWA/favicon/iOS, launcher Android, dan notifikasi dipulihkan dari aset asli `public/uploads/App Icon Picture.png` yang dipertahankan persis dalam arsip repositori. Generator hanya menyiapkan ukuran Android/PWA; tidak membuat artwork baru.
+- `public/uploads/sipandu-logo.png` tetap digunakan sebagai logo identitas pada komponen UI, bukan sebagai pengganti ikon launcher asli.
 - Logo halaman login menggunakan file asli `public/uploads/Logo Kemensos Hadir.png`.
 - Logo di tengah QR/barcode menggunakan file asli `public/uploads/logo-kemsos.webp`.
 - Kop `Form Asesmen Terintegrasi` menggunakan `public/uploads/Logo Kemensos.png` dan `public/uploads/ATENSI HD.png` secara langsung.
-- Semua gambar logo berasal dari aset repo. Jangan menggambar ulang, menghasilkan dengan AI, mengambil dari internet, atau mengganti dengan gambar lain. `node scripts/verify-dist.mjs` memeriksa hasil salinan produksi berdasarkan SHA-256.
+- Semua gambar logo berasal dari aset repo. Jangan menggambar ulang, menghasilkan dengan AI, mengambil dari internet, atau mengganti dengan gambar lain. Ikon launcher asli dipulihkan oleh `scripts/restore_original_app_icon.py` dan diverifikasi berdasarkan SHA-256. `node scripts/verify-dist.mjs` memeriksa hasil salinan produksi berdasarkan SHA-256.
 
 ## Menjalankan secara lokal
 
