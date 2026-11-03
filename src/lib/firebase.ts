@@ -10,6 +10,7 @@ import {
   getDocs,
   onSnapshot,
   setDoc,
+  updateDoc,
   deleteDoc,
   writeBatch,
   query,
@@ -722,6 +723,50 @@ export async function savePPKSToFirestore(ppks: PPKSRecord): Promise<true> {
     await setDoc(doc(db, 'ppks', ppks.id), firestoreRecord, { merge: true });
     return true;
   } catch (error) {
+    throw new Error(describeConnectionError(error));
+  }
+}
+
+/**
+ * Save only the independent Form Asesmen Terintegrasi answer map.
+ * Pendamping may update this one field, but remains unable to create, delete,
+ * or modify the spreadsheet-owned PPKS profile and other record fields.
+ */
+export async function saveIntegratedAssessmentToFirestore(
+  ppksId: string,
+  answers: Record<string, string | string[]>,
+): Promise<{ role: SipanduRole }> {
+  const user = auth.currentUser;
+  if (!user) throw new Error('Belum masuk ke Firebase Auth sebagai akun SIPANDU.');
+  if (!ppksId.trim()) throw new Error('ID PPKS kosong. Pilih responden yang valid sebelum menyimpan.');
+  if (!answers || typeof answers !== 'object' || Array.isArray(answers)) {
+    throw new Error('Jawaban Form Asesmen Terintegrasi tidak valid.');
+  }
+
+  const token = await getIdTokenResult(user, true);
+  const role = token.claims.role;
+  if (!VALID_ROLES.includes(role as SipanduRole)) {
+    throw new Error('Custom claim role akun SIPANDU tidak valid. Admin harus menetapkan role tepercaya melalui Firebase Admin SDK.');
+  }
+
+  const payload: Record<string, unknown> = {
+    formAsesmenTerintegrasi: stripUndefinedForFirestore(answers),
+  };
+  // Pendamping is intentionally not allowed to change the main PPKS status.
+  if (role === 'owner' || role === 'supervisor') {
+    payload.statusAsesmen = 'Terintegrasi';
+  }
+
+  try {
+    // updateDoc prevents accidentally creating a partial PPKS document when a
+    // selected spreadsheet record has not yet been synchronized to Firestore.
+    await updateDoc(doc(db, 'ppks', ppksId), payload);
+    return { role: role as SipanduRole };
+  } catch (error) {
+    const { code } = getErrorParts(error);
+    if (code.includes('not-found')) {
+      throw new Error('Data responden belum tersedia pada database Firestore. Minta owner/supervisor menyinkronkan roster PPKS terlebih dahulu, lalu ulangi penyimpanan.');
+    }
     throw new Error(describeConnectionError(error));
   }
 }
