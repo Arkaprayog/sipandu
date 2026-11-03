@@ -167,7 +167,7 @@ export const BerandaView: React.FC<BerandaViewProps> = ({
       {/* Grid: Peta Sumatera Utara & Donut Jenis Kelamin */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
         {/* Peta Sumatera Utara */}
-        <div className="lg:col-span-2 p-3 rounded-2xl bg-black/40 border border-rose-500/35 shadow-[0_0_20px_rgba(244,63,94,0.12)] flex flex-col justify-between">
+        <div className="lg:col-span-3 p-3 rounded-2xl bg-black/40 border border-rose-500/35 shadow-[0_0_20px_rgba(244,63,94,0.12)] flex flex-col justify-between">
           <div className="flex items-center justify-between gap-2 mb-2 border-b border-rose-500/20 pb-2">
             <div className="flex items-center gap-2">
               <MapPin className="w-4 h-4 shrink-0 text-sky-300" />
@@ -185,7 +185,7 @@ export const BerandaView: React.FC<BerandaViewProps> = ({
           </p>
 
           {/* Map Representation (Custom Interactive SVG Map of North Sumatra) */}
-          <div className="relative w-full h-44 sm:h-48 rounded-xl bg-gradient-to-b from-[#142618] to-[#0c160e] border border-emerald-500/30 p-2 overflow-hidden flex flex-col items-center justify-center">
+          <div className="relative w-full h-64 sm:h-80 lg:h-[28rem] min-h-[16rem] landscape:h-[min(62vh,560px)] rounded-xl bg-gradient-to-b from-[#142618] to-[#0c160e] border border-emerald-500/30 p-2 overflow-hidden flex flex-col items-center justify-center">
             {/* Ambient map grid background */}
             <div
               className="absolute inset-0 opacity-15"
@@ -199,7 +199,7 @@ export const BerandaView: React.FC<BerandaViewProps> = ({
             {/* SVG stylized map of North Sumatra */}
             <svg
               viewBox="0 0 700 400"
-              className="w-full h-full max-h-40 sm:max-h-44 drop-shadow-[0_4px_12px_rgba(0,0,0,0.6)]"
+              className="w-full h-full max-h-none drop-shadow-[0_4px_12px_rgba(0,0,0,0.6)]"
             >
               {/* Mainland Sumut silhouette */}
               <path
