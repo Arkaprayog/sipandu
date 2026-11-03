@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Generate Android launcher resources from SIPANDU's uploaded official logo.
 
-The source asset is public/uploads/sipandu-logo.png. No alternate or drawn
-logo is substituted. The artwork is resized with LANCZOS and kept fully visible.
+The source asset is the recovered original public/uploads/App Icon Picture.png.
+No AI, internet image, alternate artwork, or drawn replacement is used.
 """
 from pathlib import Path
 import subprocess
@@ -21,7 +21,8 @@ except ImportError:
     from PIL import Image, ImageDraw, ImageOps
 
 ROOT = Path(__file__).resolve().parents[1]
-SOURCE = ROOT / "public" / "uploads" / "sipandu-logo.png"
+subprocess.check_call([sys.executable, str(ROOT / "scripts" / "restore_original_app_icon.py")])
+SOURCE = ROOT / "public" / "uploads" / "App Icon Picture.png"
 RES = ROOT / "android" / "app" / "src" / "main" / "res"
 BACKGROUND = (3, 21, 64, 255)  # Match supplied SIPANDU ODHIV navy icon
 DENSITIES = (
