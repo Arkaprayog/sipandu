@@ -16,7 +16,7 @@ def main() -> None:
         data = b64decode(SOURCE_B64.read_text(encoding="ascii").strip(), validate=True)
     except Exception as exc:
         raise SystemExit("Arsip ikon asli SIPANDU rusak: " + str(exc)) from exc
-    if len(data) < 1000 or data[:8] != b"\\x89PNG\\r\\n\\x1a\\n":
+    if len(data) < 1000 or data[:8] != bytes.fromhex("89504e470d0a1a0a"):
         raise SystemExit("Arsip ikon asli SIPANDU bukan PNG yang valid.")
     width, height = struct.unpack(">II", data[16:24])
     if width < 64 or height < 64:
