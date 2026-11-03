@@ -15,7 +15,7 @@ interface OfficialField {
 }
 interface OfficialGroup { title?: string; tone?: 'gray' | 'beige' | 'white'; fields: OfficialField[]; }
 interface OfficialPage { groups: OfficialGroup[]; hasLetterhead?: boolean; }
-interface FromAsesmenTerintegrasiViewProps { ppksList: PPKSRecord[]; onUpdatePPKS: (updated: PPKSRecord) => void; }
+interface FromAsesmenTerintegrasiViewProps { ppksList: PPKSRecord[]; onSaveAssessment: (updated: PPKSRecord) => Promise<void>; }
 
 const field = (number: number, label: string, kind: FieldKind = 'text', options?: string[], optional = false): OfficialField => ({
   key: 'q' + number, number, label, kind, options, optional,
@@ -250,10 +250,11 @@ function answersForRecord(record?: PPKSRecord): Record<string, AnswerValue> {
   return values;
 }
 
-export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewProps> = ({ ppksList, onUpdatePPKS }) => {
+export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewProps> = ({ ppksList, onSaveAssessment }) => {
   const [selectedPPKSId, setSelectedPPKSId] = useState<string>(ppksList[0]?.id || '');
   const [answers, setAnswers] = useState<Record<string, AnswerValue>>(() => answersForRecord(ppksList.find((record) => record.id === selectedPPKSId)));
   const [statusMessage, setStatusMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
   const [printPhotoUrls, setPrintPhotoUrls] = useState<Record<string, string>>({});
   const [printPhotoErrors, setPrintPhotoErrors] = useState<Record<string, string>>({});
   const [previewPhotoUrls, setPreviewPhotoUrls] = useState<Record<string, string>>({});
@@ -293,6 +294,7 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
   const currentPPKS = useMemo(() => ppksList.find((record) => record.id === selectedPPKSId), [ppksList, selectedPPKSId]);
 
   const choosePPKS = (id: string) => {
+    if (isSaving) return;
     releasePrintPhotoUrls();
     setPrintPhotoUrls({});
     setPrintPhotoErrors({});
@@ -302,11 +304,13 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
   };
 
   const updateAnswer = (key: string, value: AnswerValue) => {
+    if (isSaving) return;
     setAnswers((current) => ({ ...current, [key]: value }));
     setStatusMessage(null);
   };
 
   const handleReset = () => {
+    if (isSaving) return;
     if (!currentPPKS) {
       setAnswers(emptyAnswers());
       setStatusMessage({ type: 'success', text: 'Formulir kosong. Pilih responden ketika data tersedia.' });
@@ -322,28 +326,46 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
     setStatusMessage({ type: 'success', text: 'Isian asesmen dikosongkan. Tekan Simpan Form agar perubahan tersimpan.' });
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
+    if (isSaving) return;
     if (!currentPPKS) {
       setStatusMessage({ type: 'error', text: 'Pilih responden PPKS terlebih dahulu. Form tidak disimpan ke data contoh.' });
       return;
     }
-    const nikFromForm = typeof answers.q23 === 'string' ? answers.q23.replace(/\D/g, '') : '';
-    if (nikFromForm && !/^\d{16}$/.test(nikFromForm)) {
+    const nikFromForm = typeof answers.q23 === 'string' ? answers.q23.replace(/\\D/g, '') : '';
+    if (nikFromForm && !/^\\d{16}$/.test(nikFromForm)) {
       setStatusMessage({ type: 'error', text: 'NIK harus terdiri dari 16 digit. Periksa kolom 23 NIK sebelum menyimpan.' });
       return;
     }
     const clean: Record<string, AnswerValue> = {};
-    Object.entries(answers).forEach(([key, value]) => { clean[key] = Array.isArray(value) ? value.filter(Boolean) : String(value ?? ''); });
+    Object.entries(answers).forEach(([key, value]) => {
+      clean[key] = Array.isArray(value) ? value.filter(Boolean) : String(value ?? '');
+    });
+
+    // Save only the independent answer field; spreadsheet-owned profile data stays unchanged.
     const updated: PPKSRecord = {
       ...currentPPKS,
-      namaLengkap: (typeof clean.q16 === 'string' && clean.q16.trim()) ? clean.q16.trim() : currentPPKS.namaLengkap,
-      nik: nikFromForm || currentPPKS.nik || '',
       formAsesmenTerintegrasi: clean,
-      statusAsesmen: 'Terintegrasi',
     };
-    onUpdatePPKS(updated);
-    setAnswers(clean);
-    setStatusMessage({ type: 'success', text: 'Jawaban Form Asesmen Terintegrasi resmi tersimpan pada data PPKS.' });
+
+    setIsSaving(true);
+    setStatusMessage(null);
+    try {
+      // The callback resolves only after Firestore confirms the remote write.
+      await onSaveAssessment(updated);
+      setStatusMessage({
+        type: 'success',
+        text: 'Jawaban Form Asesmen Terintegrasi berhasil disimpan ke Firebase Firestore.',
+      });
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      setStatusMessage({
+        type: 'error',
+        text: 'Gagal menyimpan Form Asesmen Terintegrasi ke Firebase: ' + detail,
+      });
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const printablePhotos = [
@@ -730,7 +752,7 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
             Pilih responden PPKS
             <div className="relative mt-1.5">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-400" />
-              <select value={selectedPPKSId} onChange={(event) => choosePPKS(event.target.value)} className="w-full rounded-lg border border-sky-500/30 bg-black/60 py-2.5 pl-9 pr-3 text-sm text-white">
+              <select value={selectedPPKSId} onChange={(event) => choosePPKS(event.target.value)} disabled={isSaving} className="w-full rounded-lg border border-sky-500/30 bg-black/60 py-2.5 pl-9 pr-3 text-sm text-white">
                 {ppksList.map((record) => <option key={record.id} value={record.id}>{formatPPKSTimestamp(record.timestamp)} — {record.namaLengkap || 'Nama belum tersedia'} — NIK {record.nik || 'belum terpetakan'} — {record.kotaDomisili || 'wilayah belum tersedia'}</option>)}
               </select>
             </div>
@@ -747,13 +769,13 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
         )}
 
         <div className="flex flex-wrap gap-2">
-          <button type="button" onClick={handleSave} disabled={!currentPPKS} className="inline-flex items-center gap-2 rounded-lg bg-emerald-700 px-4 py-2 text-xs font-bold text-white disabled:opacity-50">
-            <Save className="h-4 w-4" /> Simpan Form
+          <button type="button" onClick={() => { void handleSave(); }} disabled={!currentPPKS || isSaving} className="inline-flex items-center gap-2 rounded-lg bg-emerald-700 px-4 py-2 text-xs font-bold text-white disabled:opacity-50">
+            <Save className="h-4 w-4" /> {isSaving ? 'Menyimpan…' : 'Simpan Form'}
           </button>
-          <button type="button" onClick={() => { void handlePrint(); }} disabled={preparingPrint || !currentPPKS} className="inline-flex items-center gap-2 rounded-lg border border-sky-400/40 bg-sky-950/50 px-4 py-2 text-xs font-bold text-white disabled:opacity-60">
+          <button type="button" onClick={() => { void handlePrint(); }} disabled={preparingPrint || isSaving || !currentPPKS} className="inline-flex items-center gap-2 rounded-lg border border-sky-400/40 bg-sky-950/50 px-4 py-2 text-xs font-bold text-white disabled:opacity-60">
             <Printer className="h-4 w-4" /> {preparingPrint ? 'Menyiapkan 12 halaman…' : 'Cetak / Simpan PDF'}
           </button>
-          <button type="button" onClick={handleReset} className="inline-flex items-center gap-2 rounded-lg border border-rose-400/40 bg-rose-950/40 px-4 py-2 text-xs font-bold text-white">
+          <button type="button" onClick={handleReset} disabled={isSaving} className="inline-flex items-center gap-2 rounded-lg border border-rose-400/40 bg-rose-950/40 px-4 py-2 text-xs font-bold text-white">
             <RotateCcw className="h-4 w-4" /> Kosongkan Form
           </button>
         </div>
