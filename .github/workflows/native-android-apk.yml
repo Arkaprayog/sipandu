@@ -131,7 +131,7 @@ jobs:
           test -s "$ADAPTIVE"
           grep -q 'ic_launcher_foreground' "$ADAPTIVE"
           sha256sum "$ICON" "$FOREGROUND"
-          echo "Verified Android launcher icon is generated from public/uploads/sipandu-logo.png."
+          echo "Verified Android launcher icon is generated from the recovered original public/uploads/App Icon Picture.png."
 
       - name: Apply package version to Android APK
         shell: bash
