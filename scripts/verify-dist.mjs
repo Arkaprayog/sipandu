@@ -17,6 +17,18 @@ if (!fs.existsSync(indexPath)) {
 const html = fs.readFileSync(indexPath, 'utf8');
 const sha256File = (file) => crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
 
+// The launcher/notification icon must be the exact original project asset recovered
+// from repository history, never the newer profile/UI logo or generated artwork.
+const originalAppIconSource = path.resolve('public', 'uploads', 'App Icon Picture.png');
+const originalAppIconBuilt = path.join(dist, 'uploads', 'App Icon Picture.png');
+if (!fs.existsSync(originalAppIconSource) || !fs.existsSync(originalAppIconBuilt)) {
+  fail('Ikon aplikasi asli App Icon Picture.png harus tersedia pada sumber dan hasil build.');
+} else if (sha256File(originalAppIconSource) !== sha256File(originalAppIconBuilt)) {
+  fail('Ikon aplikasi pada hasil build tidak identik dengan file asli App Icon Picture.png.');
+} else {
+  console.log('Exact original SIPANDU app icon verified (SHA-256: ' + sha256File(originalAppIconBuilt) + ').');
+}
+
 // The app icons must be generated from the uploaded official logo, not an AI substitute.
 const iconChecks = [
   ['icons/sipandu-icon-192.png', '192x192'],
