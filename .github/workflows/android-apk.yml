@@ -13,6 +13,8 @@ on:
       - "scripts/patch_native_google_login.py"
       - "scripts/generate_pwa_icons.py"
       - "scripts/generate_android_icons.py"
+      - "scripts/restore_original_app_icon.py"
+      - "scripts/assets/**"
       - "scripts/generate_android_notification_assets.py"
       - "scripts/verify-dist.mjs"
       - "scripts/verify_apk_native_google_bridge.py"
@@ -93,7 +95,7 @@ jobs:
           test -s "$ADAPTIVE"
           grep -q 'ic_launcher_foreground' "$ADAPTIVE"
           sha256sum "$ICON" "$FOREGROUND"
-          echo "Verified Android launcher assets use public/uploads/sipandu-logo.png."
+          echo "Verified Android launcher assets use the recovered original public/uploads/App Icon Picture.png."
 
       - name: Configure native Google Workspace scope authorization
         run: python3 scripts/patch_native_google_login.py
