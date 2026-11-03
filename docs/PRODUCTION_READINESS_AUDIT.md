@@ -84,7 +84,8 @@ Cakupan tambahan: seluruh pohon repo pada branch `main` (direktori `.github/work
 
 ### Perbaikan terverifikasi di kode
 
-- Identitas ikon aplikasi PWA/favicon/iOS dan launcher Android bersumber dari `public/uploads/sipandu-logo.png`; generator hanya menyesuaikan ukuran/penempatan.
+- Ikon launcher Android, PWA/favicon/iOS, dan ikon notifikasi menggunakan aset aplikasi asli `public/uploads/App Icon Picture.png`, dipulihkan persis dari arsip repo sebelum build. Tidak memakai gambar AI atau internet.
+- `public/uploads/sipandu-logo.png` tetap menjadi logo tampilan UI; aset tersebut tidak lagi menjadi sumber launcher icon.
 - Halaman login memakai file upload `public/uploads/Logo Kemensos Hadir.png`; QR/barcode memakai `public/uploads/logo-kemsos.webp` di tengah.
 - Kop Form Asesmen Terintegrasi memakai dua file upload `public/uploads/Logo Kemensos.png` dan `public/uploads/ATENSI HD.png`; tidak ada lambang yang digambar ulang.
 - Pemeriksa dist membandingkan SHA-256 sumber dan salinan produksi untuk semua file logo di atas agar tidak ada penggantian gambar.
