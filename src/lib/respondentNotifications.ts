@@ -205,7 +205,10 @@ async function showSystemNotification(item: RespondentNotification, uid: string)
   }
 
   const basePath = import.meta.env.BASE_URL || './';
-  const options: NotificationOptions & { vibrate?: number[] } = {
+  const options: NotificationOptions & {
+    vibrate?: number[];
+    renotify?: boolean;
+  } = {
     body: systemContent.body,
     icon: `${basePath}uploads/App%20Icon%20Picture.png`,
     badge: `${basePath}uploads/App%20Icon%20Picture.png`,
