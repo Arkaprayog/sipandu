@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Generate PWA/iOS icons from the official uploaded SIPANDU ODHIV logo.
 
-Source of truth: public/uploads/sipandu-logo.png.
-The uploaded composition is preserved; only pixel dimensions are resized.
+Source of truth: the recovered original public/uploads/App Icon Picture.png.
+No AI, internet image, alternate artwork, or drawn replacement is used.
 """
 from pathlib import Path
 import subprocess
@@ -21,7 +21,8 @@ except ImportError:
     from PIL import Image, ImageOps
 
 ROOT = Path(__file__).resolve().parents[1]
-SOURCE = ROOT / "public" / "uploads" / "sipandu-logo.png"
+subprocess.check_call([sys.executable, str(ROOT / "scripts" / "restore_original_app_icon.py")])
+SOURCE = ROOT / "public" / "uploads" / "App Icon Picture.png"
 OUTPUT = ROOT / "public" / "icons"
 ICONS = {
     "sipandu-icon-192.png": 192,
