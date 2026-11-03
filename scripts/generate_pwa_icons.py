@@ -38,8 +38,8 @@ def main() -> None:
     try:
         with Image.open(SOURCE) as opened:
             width, height = opened.size
-            if width < 512 or height < 512:
-                raise SystemExit(f"Resolusi logo sumber terlalu kecil: {width}x{height}")
+            if width < 64 or height < 64:
+                raise SystemExit(f"Resolusi ikon asli terlalu kecil: {width}x{height}")
             opened.verify()
         with Image.open(SOURCE) as opened:
             artwork = ImageOps.exif_transpose(opened).convert("RGBA")
