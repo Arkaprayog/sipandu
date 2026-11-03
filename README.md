@@ -70,3 +70,11 @@ Lihat [Audit kesiapan produksi v1.0.0](docs/PRODUCTION_READINESS_AUDIT.md). Nomo
 - Dari database Tahap Awal, petugas mengirim tautan Google Form utama dengan jawaban terisi otomatis. Entry ID harus diambil dari tautan prefilled Google Forms asli lalu dikonfigurasi pada Pengaturan SIPANDU (nama, NIK, usia, jenis kelamin, domisili, nomor WA, jenis bantuan, dan ID PPKS); ID tidak ditebak.
 - Respons Google Form utama disinkronkan dari spreadsheet respons yang tertaut dan dipadankan kembali menggunakan ID PPKS.
 - Perubahan `firestore.rules` harus diterapkan ke Firebase aktif secara terpisah; workflow frontend/Cloudflare tidak menerapkan aturan Firestore secara otomatis.
+
+## Penyimpanan Form Asesmen Terintegrasi
+
+- Jawaban formulir disimpan langsung ke field Firestore `ppks/{id}.formAsesmenTerintegrasi`, terpisah dari jawaban impor Google Forms/Sheets.
+- Role `pendamping` hanya dapat memperbarui field tersebut pada dokumen PPKS yang sudah ada. Role ini tetap tidak dapat mengubah profil utama, NIK, foto, status, membuat, atau menghapus dokumen PPKS.
+- Tombol **Simpan Form** menampilkan keberhasilan hanya setelah Firebase mengonfirmasi penulisan. Kegagalan izin, sesi, jaringan, atau dokumen yang belum tersinkron ditampilkan sebagai pesan gagal.
+- Worker Cloudflare `sipandu` hanya menyajikan aset aplikasi; penyimpanan jawaban dilakukan langsung oleh Firebase SDK ke database Firestore bernama yang dikonfigurasi aplikasi.
+- Setelah memeriksa Rules dan mengujinya di emulator, administrator Firebase harus menerapkan aturan ke database target. Dari root repositori, gunakan: `firebase deploy --only firestore:ai-studio-sipanduodhiv-9853-46e1-b6d3-fdbce52371a8 --project gen-lang-client-0197631978`. Deployment Rules akan mengganti aturan aktif database tersebut dengan isi `firestore.rules`; pastikan aturan lain yang dibutuhkan tetap tercakup sebelum deploy.

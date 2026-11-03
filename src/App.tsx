@@ -26,7 +26,7 @@ const SettingsModal = lazyWithRecovery('SettingsModal', () => import('./componen
 const NotificationsModal = lazyWithRecovery('NotificationsModal', () => import('./components/NotificationsModal').then((module) => ({ default: module.NotificationsModal })));
 const GoogleWorkspaceModal = lazyWithRecovery('GoogleWorkspaceModal', () => import('./components/GoogleWorkspaceModal').then((module) => ({ default: module.GoogleWorkspaceModal })));
 import { onAuthStateChanged, signOut, getIdTokenResult } from 'firebase/auth';
-import { auth, getAccessToken, savePPKSToFirestore, replacePPKSCollectionFromSpreadsheet, googleLogout, subscribeToPPKSChanges, saveStageOneIntakeToFirestore, subscribeToStageOneIntake, staffAuthPersistenceReady, isWorkspaceAccountConnected, invalidateAccessToken } from './lib/firebase';
+import { auth, getAccessToken, savePPKSToFirestore, saveIntegratedAssessmentToFirestore, replacePPKSCollectionFromSpreadsheet, googleLogout, subscribeToPPKSChanges, saveStageOneIntakeToFirestore, subscribeToStageOneIntake, staffAuthPersistenceReady, isWorkspaceAccountConnected, invalidateAccessToken } from './lib/firebase';
 import { ensureSIPANDUDatabaseSheet, extractSpreadsheetId, getLinkedSpreadsheetUrlForForm, importPPKSFromSpreadsheet, upsertPPKSInSpreadsheet } from './lib/googleWorkspace';
 import { GOOGLE_SIPANDU_RESOURCES } from './lib/googleSIPANDUResources';
 import { getLiveSyncRetryDelay, LIVE_SYNC_INTERVAL_MS } from './lib/liveSyncPolicy';
@@ -708,6 +708,27 @@ function StaffApp() {
       sortPPKSRecordsByTimestamp(deduplicatePPKSRecords(prev.map((item) => (item.id === updated.id ? updated : item))))
     );
     void persistRecordToCloud(updated);
+  };
+
+  // The standalone integrated assessment is persisted directly to its dedicated
+  // Firestore field. It does not depend on Google Sheets/Workspace write access.
+  const handleSaveIntegratedAssessment = async (updated: PPKSRecord): Promise<void> => {
+    const answers = updated.formAsesmenTerintegrasi;
+    if (!answers) throw new Error('Jawaban asesmen tidak tersedia untuk disimpan.');
+
+    const { role } = await saveIntegratedAssessmentToFirestore(updated.id, answers);
+    setPpksList((prev) => prev.map((record) => {
+      if (record.id !== updated.id) return record;
+      return {
+        ...record,
+        formAsesmenTerintegrasi: answers,
+        ...(role === 'pendamping' ? {} : { statusAsesmen: 'Terintegrasi' as const }),
+      };
+    }));
+    setCloudSyncNotice({
+      type: 'success',
+      text: 'Form Asesmen Terintegrasi tersimpan di Firebase Firestore. Data profil utama tetap mengikuti spreadsheet.',
+    });
   };
 
   const handleAddNewPPKS = (newPPKS: PPKSRecord) => {
@@ -1446,7 +1467,7 @@ function StaffApp() {
           {activeTab === 'from-asesmen-terintegrasi' && (
             <FromAsesmenTerintegrasiView
               ppksList={ppksList}
-              onUpdatePPKS={handleUpdatePPKS}
+              onSaveAssessment={handleSaveIntegratedAssessment}
             />
           )}
 
