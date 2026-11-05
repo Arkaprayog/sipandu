@@ -213,17 +213,26 @@ test('Profil anggota hanya dapat dibaca dan diubah oleh pemilik UID serta tidak 
       unitKerja: 'Sentra Layanan',
       noHp: '',
       photoUrl: '',
+      // Older app builds may have kept additional metadata on this same
+      // UID-owned profile document; unrelated legacy fields must be preserved.
+      legacyProfileFlag: 'preserve-me',
     });
   });
   const legacyContext = environment.authenticatedContext('legacy-member', {
     email: 'legacy@example.test',
     email_verified: true,
   }).firestore();
-  await assertSucceeds(updateDoc(doc(legacyContext, 'userProfiles', 'legacy-member'), {
+  const legacyProfileRef = doc(legacyContext, 'userProfiles', 'legacy-member');
+  await assertSucceeds(updateDoc(legacyProfileRef, {
     email: 'legacy@example.test',
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
     nama: 'Petugas Lama Diperbarui',
+  }));
+  // Legacy fields are preserved but cannot be modified by the profile editor.
+  await assertFails(updateDoc(legacyProfileRef, {
+    legacyProfileFlag: 'tampered',
+    updatedAt: serverTimestamp(),
   }));
 
   await assertFails(updateDoc(ownProfile, {
