@@ -270,7 +270,10 @@ service cloud.firestore {
         && data.unitKerja is string && data.unitKerja.size() <= 160
         && data.noHp is string && data.noHp.size() <= 30
         && data.photoUrl is string && data.photoUrl.size() <= 400000
-        && data.email is string && data.email == request.auth.token.email;
+        // The document path is already locked to request.auth.uid. The profile
+        // email is private metadata, so authorization must not depend on the
+        // optional email claim being present in every Firebase auth provider.
+        && data.email is string && data.email.size() > 0 && data.email.size() <= 254;
       }
       allow read: if isOwnProfile();
       allow create: if isOwnProfile()
