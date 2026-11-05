@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { parseJson } from './index.runtime.js';
+import { missingActivationConfiguration, parseJson } from './index.runtime.js';
 
 function streamedJsonRequest(value: string): Request {
   const bytes = new TextEncoder().encode(value);
@@ -54,4 +54,32 @@ test('rejects malformed JSON and non-object JSON values', async () => {
   });
   assert.equal(await parseJson(malformed), null);
   assert.equal(await parseJson(array), null);
+});
+
+
+test('activation does not require the shared signup code once a pending invitation exists', () => {
+  const env = {
+    FIREBASE_WEB_API_KEY: 'public-web-api-key',
+    FIREBASE_PROJECT_ID: 'gen-lang-client-0197631978',
+    FIREBASE_SERVICE_ACCOUNT_JSON: '{"project_id":"gen-lang-client-0197631978"}',
+    PENDING_REGISTRATIONS: {
+      get: async () => null,
+      put: async () => undefined,
+      delete: async () => undefined,
+    },
+  };
+  assert.deepEqual(missingActivationConfiguration(env), []);
+});
+
+test('activation reports missing Firebase service-account configuration', () => {
+  const env = {
+    FIREBASE_WEB_API_KEY: 'public-web-api-key',
+    FIREBASE_PROJECT_ID: 'gen-lang-client-0197631978',
+    PENDING_REGISTRATIONS: {
+      get: async () => null,
+      put: async () => undefined,
+      delete: async () => undefined,
+    },
+  };
+  assert.deepEqual(missingActivationConfiguration(env), ['FIREBASE_SERVICE_ACCOUNT_JSON']);
 });
