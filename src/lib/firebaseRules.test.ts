@@ -7,7 +7,7 @@ import {
   initializeTestEnvironment,
   type RulesTestEnvironment,
 } from '@firebase/rules-unit-testing';
-import { doc, serverTimestamp, setDoc, updateDoc } from 'firebase/firestore';
+import { doc, getDoc, serverTimestamp, setDoc, updateDoc } from 'firebase/firestore';
 import { getBytes, ref, uploadBytes } from 'firebase/storage';
 
 const PROJECT_ID = 'demo-sipandu-rules';
@@ -166,4 +166,51 @@ test('Firebase Storage membatasi upload PDF ke folder staf yang sedang masuk', a
   const anonymousStorage = environment.unauthenticatedContext().storage();
   const anonymousFile = ref(anonymousStorage, `staff-documents/${PENDAMPING_UID}/document-004/anonymous.pdf`);
   await assertFails(uploadBytes(anonymousFile, pdf, { contentType: 'application/pdf' }));
+});
+
+
+test('Profil anggota hanya dapat dibaca dan diubah oleh pemilik UID serta tidak dapat menetapkan role', async () => {
+  const ownContext = environment.authenticatedContext('member-001', {
+    email: 'member@example.test',
+    email_verified: true,
+  });
+  const ownProfile = doc(ownContext.firestore(), 'userProfiles', 'member-001');
+
+  await assertSucceeds(setDoc(ownProfile, {
+    nama: 'Anggota SIPANDU',
+    nip: '199001012020121001',
+    jabatan: 'Pendamping Sosial',
+    unitKerja: 'Sentra Layanan',
+    noHp: '',
+    photoUrl: '',
+    email: 'member@example.test',
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  }));
+
+  await assertSucceeds(updateDoc(ownProfile, {
+    photoUrl: 'data:image/jpeg;base64,ZmFrZQ==',
+    updatedAt: serverTimestamp(),
+  }));
+  await assertFails(updateDoc(ownProfile, {
+    role: 'owner',
+    updatedAt: serverTimestamp(),
+  }));
+
+  const otherContext = environment.authenticatedContext('member-002', {
+    email: 'other@example.test',
+    email_verified: true,
+  });
+  await assertFails(getDoc(doc(otherContext.firestore(), 'userProfiles', 'member-001')));
+  await assertFails(setDoc(doc(otherContext.firestore(), 'userProfiles', 'member-001'), {
+    nama: 'Tidak boleh',
+    nip: '1',
+    jabatan: 'Uji',
+    unitKerja: 'Uji',
+    noHp: '',
+    photoUrl: '',
+    email: 'member@example.test',
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  }));
 });
