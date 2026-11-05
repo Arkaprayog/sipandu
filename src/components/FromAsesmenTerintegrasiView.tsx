@@ -18,7 +18,7 @@ interface OfficialField {
 }
 interface OfficialGroup { title?: string; tone?: 'gray' | 'beige' | 'white'; fields: OfficialField[]; }
 interface OfficialPage { groups: OfficialGroup[]; hasLetterhead?: boolean; }
-interface FromAsesmenTerintegrasiViewProps { ppksList: PPKSRecord[]; onSaveAssessment: (updated: PPKSRecord) => Promise<void>; }
+interface FromAsesmenTerintegrasiViewProps { ppksList: PPKSRecord[]; onSaveAssessment: (updated: PPKSRecord) => Promise<void>; initialSelectedPPKSId?: string; onBeforePrint?: (updated: PPKSRecord) => Promise<void>; }
 
 const field = (number: number, label: string, kind: FieldKind = 'text', options?: string[], optional = false): OfficialField => ({
   key: 'q' + number, number, label, kind, options, optional,
@@ -253,8 +253,12 @@ function answersForRecord(record?: PPKSRecord): Record<string, AnswerValue> {
   return values;
 }
 
-export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewProps> = ({ ppksList, onSaveAssessment }) => {
-  const [selectedPPKSId, setSelectedPPKSId] = useState<string>(ppksList[0]?.id || '');
+export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewProps> = ({ ppksList, onSaveAssessment, initialSelectedPPKSId, onBeforePrint }) => {
+  const [selectedPPKSId, setSelectedPPKSId] = useState<string>(() =>
+    initialSelectedPPKSId && ppksList.some((record) => record.id === initialSelectedPPKSId)
+      ? initialSelectedPPKSId
+      : ppksList[0]?.id || ''
+  );
   const [answers, setAnswers] = useState<Record<string, AnswerValue>>(() => answersForRecord(ppksList.find((record) => record.id === selectedPPKSId)));
   const [statusMessage, setStatusMessage] = useState<{ type: 'success' | 'error'; text: string; driveUrl?: string } | null>(null);
   const [isSaving, setIsSaving] = useState(false);
@@ -617,6 +621,25 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
     const urls: Record<string, string> = {};
     const errors: Record<string, string> = {};
     try {
+      if (onBeforePrint) {
+        const cleanAnswers: Record<string, string | string[]> = {};
+        Object.entries(answers).forEach(([key, value]) => {
+          cleanAnswers[key] = Array.isArray(value) ? value.filter(Boolean) : String(value ?? '');
+        });
+        const identityOnly = new Set(['q5', 'q15', 'q16', 'q19', 'q23', 'q25']);
+        const hasMeaningfulAnswers = Object.entries(cleanAnswers).some(([key, value]) => {
+          if (identityOnly.has(key.toLowerCase())) return false;
+          return Array.isArray(value)
+            ? value.some((item) => String(item ?? '').trim() !== '')
+            : String(value ?? '').trim() !== '';
+        });
+        if (hasMeaningfulAnswers) {
+          // A printed form is also archived in Firestore, even when the user did not press Save Form first.
+          await onBeforePrint({ ...currentPPKS, formAsesmenTerintegrasi: cleanAnswers });
+          setStatusMessage({ type: 'success', text: 'Form berhasil diarsipkan ke database SIPANDU. Menyiapkan dokumen untuk dicetak…' });
+        }
+      }
+
       // Always prepare all four photo appendices. Missing files get an explicit
       // explanation page instead of a blank sheet.
       await Promise.all(printablePhotos.map(async (photo) => {
