@@ -30,7 +30,7 @@ The Firebase project ID and Web API key are already configured as non-secret Wor
 
 ## Deploy the Worker
 
-From the `registration-worker` directory in a trusted terminal with Wrangler installed:
+From the `registration-worker` directory in a trusted terminal with Wrangler installed. The checked-in `index.runtime.js` is the JavaScript Worker entry point uploaded to Cloudflare; `index.ts` is the typed source reference:
 
 ```sh
 bunx wrangler deploy --config wrangler.jsonc
