@@ -504,7 +504,14 @@ function StaffApp() {
       console.warn('SIPANDU could not read its local PPKS cache:', error);
     }
     try {
-      const raw = localStorage.getItem('sipandu_profile');
+      const userUid = auth.currentUser?.uid || 'anonymous';
+      const profileCacheKey = `sipandu_profile_${userUid}`;
+      let raw = localStorage.getItem(profileCacheKey);
+      // Preserve a one-time migration path for the existing owner/supervisor
+      // profile. Pendamping accounts never inherit another user's browser cache.
+      if (!raw && (currentUserRole === 'owner' || currentUserRole === 'supervisor')) {
+        raw = localStorage.getItem('sipandu_profile');
+      }
       if (raw) {
         const parsed = JSON.parse(raw);
         if (!(parsed?.nama === 'Deny Arifin Martyon S.' && parsed?.nip === '19920315 202012 1 002')) nextProfile = parsed as ProfileUser;
@@ -522,7 +529,7 @@ function StaffApp() {
     setProfile(nextProfile);
     setSettings(nextSettings);
     setLocalCacheReady(true);
-  }, [authReady, isAuthenticated]);
+  }, [authReady, isAuthenticated, currentUserRole]);
 
   // Pull the signed-in member's cloud profile. New members already have this
   // document from registration; existing members are migrated from their local
@@ -539,7 +546,8 @@ function StaffApp() {
       }
       if (currentUserRole === 'owner' || currentUserRole === 'supervisor') {
         try {
-          const raw = localStorage.getItem('sipandu_profile');
+          const raw = localStorage.getItem(`sipandu_profile_${user.uid}`)
+            || localStorage.getItem('sipandu_profile');
           const localProfile = raw ? JSON.parse(raw) as ProfileUser : null;
           if (localProfile?.nama?.trim() && localProfile?.nip?.trim() && user.email) {
             await saveSIPANDUUserProfile(user.uid, localProfile);
@@ -575,8 +583,10 @@ function StaffApp() {
   useEffect(() => {
     if (!isAuthenticated || !localCacheReady) return;
     const timer = window.setTimeout(() => {
-      try { localStorage.setItem('sipandu_profile', JSON.stringify(profile)); }
-      catch (error) { console.error('SIPANDU profile cache could not be persisted:', error); }
+      try {
+        const uid = auth.currentUser?.uid || 'anonymous';
+        localStorage.setItem(`sipandu_profile_${uid}`, JSON.stringify(profile));
+      } catch (error) { console.error('SIPANDU profile cache could not be persisted:', error); }
     }, 250);
     return () => window.clearTimeout(timer);
   }, [profile, localCacheReady, isAuthenticated]);
