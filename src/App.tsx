@@ -26,7 +26,8 @@ const SettingsModal = lazyWithRecovery('SettingsModal', () => import('./componen
 const NotificationsModal = lazyWithRecovery('NotificationsModal', () => import('./components/NotificationsModal').then((module) => ({ default: module.NotificationsModal })));
 const GoogleWorkspaceModal = lazyWithRecovery('GoogleWorkspaceModal', () => import('./components/GoogleWorkspaceModal').then((module) => ({ default: module.GoogleWorkspaceModal })));
 import { onAuthStateChanged, signOut, getIdTokenResult } from 'firebase/auth';
-import { auth, getAccessToken, savePPKSToFirestore, saveIntegratedAssessmentToFirestore, replacePPKSCollectionFromSpreadsheet, googleLogout, subscribeToPPKSChanges, saveStageOneIntakeToFirestore, subscribeToStageOneIntake, staffAuthPersistenceReady, isWorkspaceAccountConnected, invalidateAccessToken } from './lib/firebase';
+import { auth, getAccessToken, savePPKSToFirestore, saveIntegratedAssessmentToFirestore, replacePPKSCollectionFromSpreadsheet, googleLogout, subscribeToPPKSChanges, saveStageOneIntakeToFirestore, subscribeToStageOneIntake, staffAuthPersistenceReady, isWorkspaceAccountConnected, invalidateAccessToken, getSIPANDUUserProfile, saveSIPANDUUserProfile } from './lib/firebase';
+import { activatePendingTeamMember } from './lib/teamRegistration';
 import { ensureSIPANDUDatabaseSheet, extractSpreadsheetId, getLinkedSpreadsheetUrlForForm, importPPKSFromSpreadsheet, upsertPPKSInSpreadsheet } from './lib/googleWorkspace';
 import { GOOGLE_SIPANDU_RESOURCES } from './lib/googleSIPANDUResources';
 import { getLiveSyncRetryDelay, LIVE_SYNC_INTERVAL_MS } from './lib/liveSyncPolicy';
@@ -268,11 +269,28 @@ function StaffApp() {
         return;
       }
       try {
-        // Do not force a network refresh during every session restore. Firebase
-        // refreshes expired ID tokens when needed; offline failures must not log out.
-        const token = await getIdTokenResult(user);
+        if (!user.emailVerified) {
+          setIsAuthenticated(false);
+          setCurrentUserName('');
+          setCurrentUserRole('');
+          setAuthError('Email akun SIPANDU belum diverifikasi. Buka tautan verifikasi yang dikirim ke email, lalu masuk kembali.');
+          return;
+        }
+        // A verified member who registered with the shared team code is activated
+        // on the server. The Worker assigns only the pendamping claim after it
+        // confirms the pending invitation and the verified Firebase identity.
+        let token = await getIdTokenResult(user);
+        let role = token.claims.role;
+        if (role !== 'owner' && role !== 'supervisor' && role !== 'pendamping') {
+          try {
+            await activatePendingTeamMember(user);
+            token = await getIdTokenResult(user, true);
+            role = token.claims.role;
+          } catch (activationError) {
+            console.warn('Aktivasi pendaftaran anggota SIPANDU belum selesai:', activationError);
+          }
+        }
         if (!active || generation !== authEventGeneration || auth.currentUser?.uid !== user.uid) return;
-        const role = token.claims.role;
         if (role !== 'owner' && role !== 'supervisor' && role !== 'pendamping') {
           setIsAuthenticated(false);
           setCurrentUserName('');
@@ -506,6 +524,34 @@ function StaffApp() {
     setLocalCacheReady(true);
   }, [authReady, isAuthenticated]);
 
+  // Pull the signed-in member's cloud profile. New members already have this
+  // document from registration; existing members are migrated from their local
+  // profile once so their current identity is not lost.
+  useEffect(() => {
+    const user = auth.currentUser;
+    if (!isAuthenticated || !localCacheReady || !user) return;
+    let active = true;
+    void getSIPANDUUserProfile(user.uid).then(async (cloudProfile) => {
+      if (!active) return;
+      if (cloudProfile) {
+        setProfile(cloudProfile);
+        return;
+      }
+      try {
+        const raw = localStorage.getItem('sipandu_profile');
+        const localProfile = raw ? JSON.parse(raw) as ProfileUser : null;
+        if (localProfile?.nama?.trim() && localProfile?.nip?.trim() && user.email) {
+          await saveSIPANDUUserProfile(user.uid, localProfile);
+        }
+      } catch (error) {
+        console.warn('Profil SIPANDU belum dapat dimigrasikan ke Firestore:', error);
+      }
+    }).catch((error) => {
+      console.warn('Profil anggota SIPANDU belum dapat dibaca dari Firestore:', error);
+    });
+    return () => { active = false; };
+  }, [isAuthenticated, localCacheReady]);
+
   // Debounce large JSON serialization/writes to reduce synchronous main-thread work.
   // This is a convenience cache and is not a replacement for authenticated server storage.
   useEffect(() => {
@@ -611,8 +657,18 @@ function StaffApp() {
     setAuthReady(false);
     setAuthError('');
     try {
-      const token = await getIdTokenResult(user, true);
-      const role = token.claims.role;
+      if (!user.emailVerified) {
+        setIsAuthenticated(false);
+        setAuthError('Email akun belum diverifikasi. Verifikasi email terlebih dahulu, lalu coba lagi.');
+        return;
+      }
+      let token = await getIdTokenResult(user, true);
+      let role = token.claims.role;
+      if (role !== 'owner' && role !== 'supervisor' && role !== 'pendamping') {
+        await activatePendingTeamMember(user);
+        token = await getIdTokenResult(user, true);
+        role = token.claims.role;
+      }
       if (role !== 'owner' && role !== 'supervisor' && role !== 'pendamping') {
         setIsAuthenticated(false);
         setAuthError('Sesi tetap tersimpan, tetapi klaim peran owner/supervisor/pendamping belum tersedia. Administrator perlu memperbaiki peran akun.');
@@ -1476,7 +1532,14 @@ function StaffApp() {
             isOpen={true}
             onClose={() => setIsEditProfileOpen(false)}
             profile={profile}
-            onSave={(updated) => setProfile(updated)}
+            onSave={(updated) => {
+              setProfile(updated);
+              const uid = auth.currentUser?.uid;
+              if (uid) void saveSIPANDUUserProfile(uid, updated).catch((error) => {
+                console.error('Profil SIPANDU gagal disimpan ke Firestore:', error);
+                setCloudSyncNotice({ type: 'error', text: 'Perubahan profil belum tersimpan ke akun cloud. Periksa koneksi lalu coba simpan kembali.' });
+              });
+            }}
           />
         )}
 
