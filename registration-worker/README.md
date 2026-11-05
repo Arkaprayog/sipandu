@@ -28,6 +28,8 @@ Open Cloudflare Dashboard → Workers & Pages → `sipandu-registration` → Set
 
 The Firebase project ID and Web API key are already configured as non-secret Worker variables. The KV binding is already included in `wrangler.jsonc`.
 
+The shared `TEAM_REGISTRATION_CODE` is checked when a new member registers. Once the Worker has stored that member's pending invitation, the `/activate` endpoint does not need the shared code again; it requires the Firebase service-account secret, Firebase project/API settings, and the KV binding. This lets a member complete email verification even if the shared code has since been rotated or removed. The `/health` endpoint still reports the full service as not ready when any required secret is missing, because new registrations also depend on the shared code.
+
 ## Deploy the Worker
 
 From the `registration-worker` directory in a trusted terminal with Wrangler installed. The checked-in `index.runtime.js` is the JavaScript Worker entry point uploaded to Cloudflare; `index.ts` is the typed source reference:
