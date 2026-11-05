@@ -31,7 +31,8 @@
     "@capacitor/core": "^7.4.3",
     "@capgo/capacitor-social-login": "^7.0.0",
     "@capacitor/local-notifications": "^7.0.0",
-    "@aparajita/capacitor-biometric-auth": "^7.0.0"
+    "@aparajita/capacitor-biometric-auth": "^7.0.0",
+    "@capgo/capacitor-printer": "^7.0.0"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",
