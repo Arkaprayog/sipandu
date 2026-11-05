@@ -319,3 +319,30 @@ body,
     min-height: min(78vh, 760px) !important;
   }
 }
+
+
+/* Light-mode navigation accent: Cornflower Blue active tab and blue navigation outline. */
+.sipandu-navigation-shell[data-sipandu-theme="light"] .app-nav-bar {
+  border-top-color: rgba(100,149,237,.38) !important;
+  box-shadow: 0 -6px 24px rgba(100,149,237,.12) !important;
+}
+
+.sipandu-navigation-shell[data-sipandu-theme="light"] .app-nav-bar button[class*="bg-gradient-to-r"] {
+  background: #6495ED !important;
+  background-image: none !important;
+  border-color: #6495ED !important;
+  color: #FFFFFF !important;
+  box-shadow: 0 0 14px rgba(100,149,237,.28) !important;
+}
+
+.sipandu-navigation-shell[data-sipandu-theme="light"] .app-nav-bar button[class*="bg-gradient-to-r"] span {
+  color: #FFFFFF !important;
+}
+
+.sipandu-navigation-shell[data-sipandu-theme="light"] .app-nav-bar button[class*="text-neutral-300"] {
+  color: #000000 !important;
+}
+
+.sipandu-navigation-shell[data-sipandu-theme="light"] .app-nav-bar button[class*="text-neutral-300"] span {
+  color: #000000 !important;
+}
