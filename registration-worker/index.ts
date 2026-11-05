@@ -120,7 +120,7 @@ async function lookupFirebaseUser(env: Env, idToken: string): Promise<FirebaseUs
 function encodeBase64Url(bytes: Uint8Array): string {
   let binary = '';
   for (const value of bytes) binary += String.fromCharCode(value);
-  return btoa(binary).replace(/=/g, '').replace(/\\+/g, '-').replace(/\\//g, '_');
+  return btoa(binary).replaceAll('=', '').split('+').join('-').split('/').join('_');
 }
 
 function encodeTextBase64Url(value: string): string {
@@ -159,9 +159,12 @@ async function getGoogleAccessToken(env: Env): Promise<string> {
   }));
   const signingInput = `${header}.${claims}`;
   const privateKeyBase64 = serviceAccount.private_key
-    .replace('-----BEGIN PRIVATE KEY-----', '')
-    .replace('-----END PRIVATE KEY-----', '')
-    .replace(/\\s/g, '');
+    .replaceAll('-----BEGIN PRIVATE KEY-----', '')
+    .replaceAll('-----END PRIVATE KEY-----', '')
+    .split('\n').join('')
+    .split('\r').join('')
+    .split('\t').join('')
+    .split(' ').join('');
   const privateKeyDer = Uint8Array.from(atob(privateKeyBase64), (char) => char.charCodeAt(0));
   const privateKey = await crypto.subtle.importKey(
     'pkcs8',
