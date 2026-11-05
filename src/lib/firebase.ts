@@ -8,6 +8,7 @@ import {
   addDoc,
   serverTimestamp,
   getDocs,
+  getDoc,
   onSnapshot,
   setDoc,
   updateDoc,
@@ -749,6 +750,32 @@ export async function savePPKSToFirestore(ppks: PPKSRecord): Promise<true> {
  * Pendamping may update this one field, but remains unable to create, delete,
  * or modify the spreadsheet-owned PPKS profile and other record fields.
  */
+export async function getIntegratedAssessmentBackupMetadata(ppksId: string): Promise<{
+  status: 'complete' | 'failed';
+  error: string;
+  fileId: string;
+  webViewLink: string;
+  savedAt: string;
+} | null> {
+  const user = auth.currentUser;
+  if (!user) throw new Error('Belum masuk ke Firebase Auth.');
+  const token = await getIdTokenResult(user);
+  if (!VALID_ROLES.includes(token.claims.role as SipanduRole)) {
+    throw new Error('Peran akun SIPANDU tidak valid untuk membaca status arsip asesmen.');
+  }
+  const snapshot = await getDoc(doc(db, 'integratedAssessmentBackups', ppksId));
+  if (!snapshot.exists()) return null;
+  const data = snapshot.data();
+  return {
+    status: data.driveBackupStatus === 'complete' ? 'complete' : 'failed',
+    error: String(data.driveBackupError || ''),
+    fileId: String(data.driveFileId || ''),
+    webViewLink: String(data.driveWebViewLink || ''),
+    savedAt: data.savedAt && typeof data.savedAt.toDate === 'function'
+      ? data.savedAt.toDate().toISOString() : '',
+  };
+}
+
 export async function saveIntegratedAssessmentBackupMetadata(
   ppksId: string,
   backup: { status: 'complete' | 'failed'; fileId?: string; webViewLink?: string; error?: string },
