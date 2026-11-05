@@ -90,3 +90,13 @@ Lihat [Audit kesiapan produksi v1.0.0](docs/PRODUCTION_READINESS_AUDIT.md). Nomo
 - Administrator harus mengaktifkan Firebase Storage pada proyek `gen-lang-client-0197631978`, lalu menerapkan kedua aturan dari root repositori:
   `firebase deploy --only firestore:ai-studio-sipanduodhiv-985a0308-7693-46e1-b6d3-fdbce52371a8,storage --project gen-lang-client-0197631978`.
 - Pastikan Storage bucket `gen-lang-client-0197631978.firebasestorage.app` tersedia sebelum menguji upload produksi. Worker Cloudflare hanya menyajikan aset; file disimpan oleh Firebase Storage.
+
+
+## Pendaftaran mandiri anggota SIPANDU
+
+- Halaman login menyediakan tautan teks **Sudah memiliki akun? Buat akun** yang membuka formulir pendaftaran.
+- Pendaftaran memerlukan nama, NIP, jabatan, unit kerja, email, password, konfirmasi password, dan kode pendaftaran tim bersama.
+- Email harus diverifikasi sebelum akun baru diaktifkan. Setelah verifikasi, anggota masuk kembali dengan email dan password.
+- Profil anggota disimpan pada dokumen Firestore pribadi `userProfiles/{uid}`, sehingga nama, NIP, jabatan, dan unit kerja otomatis muncul ketika akun dipakai pada perangkat lain. Foto profil dapat diunggah kemudian; menu Edit Profil tetap tersedia.
+- Role `pendamping` diberikan hanya oleh Worker Cloudflare terpisah setelah memvalidasi undangan dan status email Firebase. Browser tidak dapat mengatur custom claim.
+- Ikuti [panduan konfigurasi Worker pendaftaran](registration-worker/README.md) sebelum mengaktifkan tautan pendaftaran untuk anggota. Worker statis `sipandu` tidak diganti.

@@ -36,7 +36,7 @@ import {
   getIdTokenResult,
 } from 'firebase/auth';
 import firebaseConfig from '../../firebase-applet-config.json';
-import { PPKSRecord, StageOneIntakePayload } from '../types';
+import { PPKSRecord, ProfileUser, StageOneIntakePayload } from '../types';
 import { deduplicatePPKSRecords, EXPECTED_REAL_PPKS_COUNT, parsePPKSTimestamp, samePPKSIdentity } from './ppksData';
 import { isLegacySamplePPKS } from '../data/initialData';
 import { GOOGLE_WORKSPACE_EMAIL } from './googleSIPANDUResources';
@@ -1376,4 +1376,50 @@ export async function reconcilePPKSFirestoreWithSpreadsheet(sourceRecords: PPKSR
   }
 
   return obsoleteDocumentIds.length;
+}
+
+
+// SIPANDU member profile is stored per Firebase UID so it follows the user across devices.
+// Role claims are intentionally excluded from this document and can only be issued server-side.
+export async function createSIPANDUUserProfile(uid: string, email: string, profile: ProfileUser): Promise<void> {
+  if (!uid.trim() || !email.trim()) throw new Error('Identitas akun SIPANDU tidak lengkap.');
+  await setDoc(doc(db, 'userProfiles', uid), {
+    nama: profile.nama.trim(),
+    nip: profile.nip.trim(),
+    jabatan: profile.jabatan.trim(),
+    unitKerja: profile.unitKerja.trim(),
+    noHp: profile.noHp.trim(),
+    photoUrl: profile.photoUrl || '',
+    email: email.trim().toLowerCase(),
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  });
+}
+
+export async function getSIPANDUUserProfile(uid: string): Promise<ProfileUser | null> {
+  if (!uid.trim()) return null;
+  const snapshot = await getDoc(doc(db, 'userProfiles', uid));
+  if (!snapshot.exists()) return null;
+  const data = snapshot.data();
+  return {
+    nama: String(data.nama || ''),
+    nip: String(data.nip || ''),
+    jabatan: String(data.jabatan || ''),
+    unitKerja: String(data.unitKerja || ''),
+    noHp: String(data.noHp || ''),
+    photoUrl: String(data.photoUrl || ''),
+  };
+}
+
+export async function saveSIPANDUUserProfile(uid: string, profile: ProfileUser): Promise<void> {
+  if (!uid.trim()) throw new Error('Akun SIPANDU tidak ditemukan saat menyimpan profil.');
+  await setDoc(doc(db, 'userProfiles', uid), {
+    nama: profile.nama.trim(),
+    nip: profile.nip.trim(),
+    jabatan: profile.jabatan.trim(),
+    unitKerja: profile.unitKerja.trim(),
+    noHp: profile.noHp.trim(),
+    photoUrl: profile.photoUrl || '',
+    updatedAt: serverTimestamp(),
+  }, { merge: true });
 }

@@ -1,0 +1,20 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "sipandu-registration",
+  "main": "index.runtime.js",
+  "compatibility_date": "2026-11-05",
+  "workers_dev": true,
+  "vars": {
+    "FIREBASE_PROJECT_ID": "gen-lang-client-0197631978",
+    "FIREBASE_WEB_API_KEY": "AIzaSyCPQq7qsAXUvpW1LHE_5IB_Xs9drioH-o8"
+  },
+  "kv_namespaces": [
+    {
+      "binding": "PENDING_REGISTRATIONS",
+      "id": "49fbf170f6f6410f9ae787a7cc63ffb9"
+    }
+  ],
+  "secrets": {
+    "required": ["TEAM_REGISTRATION_CODE", "FIREBASE_SERVICE_ACCOUNT_JSON"]
+  }
+}

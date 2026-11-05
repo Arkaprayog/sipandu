@@ -250,6 +250,44 @@ service cloud.firestore {
       allow delete: if canWritePpks();
     }
 
+    // Each staff member can read and maintain only their own profile.
+    // Role claims are never accepted from client-written profile documents.
+    match /userProfiles/{uid} {
+      function isOwnProfile() {
+        return signedIn() && request.auth.uid == uid;
+      }
+      function hasValidProfileShape(data) {
+        return data.keys().hasAll([
+          'nama', 'nip', 'jabatan', 'unitKerja', 'noHp', 'photoUrl', 'email'
+        ])
+        && data.keys().hasOnly([
+          'nama', 'nip', 'jabatan', 'unitKerja', 'noHp', 'photoUrl',
+          'email', 'createdAt', 'updatedAt'
+        ])
+        && data.nama is string && data.nama.size() >= 2 && data.nama.size() <= 120
+        && data.nip is string && data.nip.size() <= 40
+        && data.jabatan is string && data.jabatan.size() <= 120
+        && data.unitKerja is string && data.unitKerja.size() <= 160
+        && data.noHp is string && data.noHp.size() <= 30
+        && data.photoUrl is string && data.photoUrl.size() <= 400000
+        && data.email is string && data.email == request.auth.token.email;
+      }
+      allow read: if isOwnProfile();
+      allow create: if isOwnProfile()
+        && hasValidProfileShape(request.resource.data)
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time;
+      allow update: if isOwnProfile()
+        && hasValidProfileShape(request.resource.data)
+        && request.resource.data.email == resource.data.email
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'nama', 'nip', 'jabatan', 'unitKerja', 'noHp', 'photoUrl', 'updatedAt'
+        ])
+        && request.resource.data.updatedAt == request.time;
+      allow delete: if false;
+    }
+
     // Deny all collections unless a collection-specific policy is added.
     match /{document=**} {
       allow read, write: if false;

@@ -183,7 +183,6 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
                 value={noHp}
                 onChange={(e) => setNoHp(e.target.value)}
                 className="w-full p-2.5 rounded bg-black/60 border border-rose-500/30 text-white font-mono"
-                required
               />
             </div>
           </div>
