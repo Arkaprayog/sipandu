@@ -1,9 +1,15 @@
+interface KVBinding {
+  get(key: string): Promise<string | null>;
+  put(key: string, value: string, options?: { expirationTtl?: number }): Promise<void>;
+  delete(key: string): Promise<void>;
+}
+
 interface Env {
   TEAM_REGISTRATION_CODE?: string;
   FIREBASE_WEB_API_KEY?: string;
   FIREBASE_PROJECT_ID?: string;
   FIREBASE_SERVICE_ACCOUNT_JSON?: string;
-  PENDING_REGISTRATIONS?: KVNamespace;
+  PENDING_REGISTRATIONS?: KVBinding;
 }
 
 interface FirebaseUserLookup {
