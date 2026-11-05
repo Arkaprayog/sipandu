@@ -65,7 +65,7 @@ jobs:
         run: bun install --frozen-lockfile
 
       - name: Install Firebase CLI
-        run: npm install --global firebase-tools@latest
+        run: npm install --global firebase-tools@15.34.2
 
       - name: Run Firestore and Storage Security Rules tests
         run: firebase emulators:exec --project demo-sipandu-rules --only firestore,storage "bun run test:rules:unit"
