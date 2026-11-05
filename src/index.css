@@ -140,3 +140,37 @@ body,
     width: 100%;
   }
 }
+
+
+/* SIPANDU application light theme. Dark mode remains the default. */
+.sipandu-navigation-shell[data-sipandu-theme="light"] { background: #f3f7f4 !important; color: #17251b !important; }
+.sipandu-navigation-shell[data-sipandu-theme="light"] > .fixed.inset-0 { background: radial-gradient(at top right, rgba(220,238,224,.9), #f4f8f5 58%, #eaf1ec) !important; }
+.sipandu-navigation-shell[data-sipandu-theme="light"] .app-header-compact { background: rgba(255,255,255,.94) !important; border-bottom-color: rgba(71,85,72,.16) !important; }
+.sipandu-navigation-shell[data-sipandu-theme="light"] [class*="bg-[#0a140b]"],
+.sipandu-navigation-shell[data-sipandu-theme="light"] [class*="bg-[#0d1b10]"],
+.sipandu-navigation-shell[data-sipandu-theme="light"] [class*="bg-[#0e1d11]"],
+.sipandu-navigation-shell[data-sipandu-theme="light"] [class*="bg-[#112214]"],
+.sipandu-navigation-shell[data-sipandu-theme="light"] [class*="bg-[#152e19]"],
+.sipandu-navigation-shell[data-sipandu-theme="light"] [class*="bg-emerald-950/"],
+.sipandu-navigation-shell[data-sipandu-theme="light"] [class*="bg-sky-950/"],
+.sipandu-navigation-shell[data-sipandu-theme="light"] [class*="bg-violet-950/"],
+.sipandu-navigation-shell[data-sipandu-theme="light"] [class*="bg-rose-950/"],
+.sipandu-navigation-shell[data-sipandu-theme="light"] [class*="bg-amber-950/"] { background-color: #fff !important; }
+.sipandu-navigation-shell[data-sipandu-theme="light"] [class*="bg-black/"]:not(.fixed) { background-color: #f1f5f2 !important; }
+.sipandu-navigation-shell[data-sipandu-theme="light"] [class*="text-white"],
+.sipandu-navigation-shell[data-sipandu-theme="light"] [class*="text-neutral-100"],
+.sipandu-navigation-shell[data-sipandu-theme="light"] [class*="text-neutral-200"],
+.sipandu-navigation-shell[data-sipandu-theme="light"] [class*="text-neutral-300"],
+.sipandu-navigation-shell[data-sipandu-theme="light"] [class*="text-neutral-400"],
+.sipandu-navigation-shell[data-sipandu-theme="light"] [class*="text-neutral-500"] { color: #26372b !important; }
+.sipandu-navigation-shell[data-sipandu-theme="light"] [class*="text-emerald-100"],
+.sipandu-navigation-shell[data-sipandu-theme="light"] [class*="text-sky-100"],
+.sipandu-navigation-shell[data-sipandu-theme="light"] [class*="text-violet-100"],
+.sipandu-navigation-shell[data-sipandu-theme="light"] [class*="text-rose-100"],
+.sipandu-navigation-shell[data-sipandu-theme="light"] [class*="text-amber-100"] { color: #31553b !important; }
+.sipandu-navigation-shell[data-sipandu-theme="light"] [class*="border-white/"],
+.sipandu-navigation-shell[data-sipandu-theme="light"] [class*="border-neutral-"] { border-color: rgba(71,85,72,.18) !important; }
+.sipandu-navigation-shell[data-sipandu-theme="light"] input[class*="bg-black"],
+.sipandu-navigation-shell[data-sipandu-theme="light"] textarea[class*="bg-black"],
+.sipandu-navigation-shell[data-sipandu-theme="light"] select[class*="bg-black"] { background-color: #f8faf8 !important; color: #17251b !important; border-color: #cbd5ce !important; }
+.sipandu-navigation-shell[data-sipandu-theme="light"] .app-nav-bar { background-color: rgba(255,255,255,.96) !important; border-color: rgba(71,85,72,.18) !important; box-shadow: 0 -6px 24px rgba(24,39,27,.08) !important; }
