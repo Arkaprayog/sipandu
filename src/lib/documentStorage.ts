@@ -4,11 +4,13 @@ import {
   deleteDoc,
   doc,
   getDocs,
+  getDoc,
   limit,
   orderBy,
   query,
   serverTimestamp,
   setDoc,
+  updateDoc,
 } from 'firebase/firestore';
 import {
   deleteObject,
@@ -19,7 +21,7 @@ import {
   type UploadTaskSnapshot,
 } from 'firebase/storage';
 import { auth, db } from './firebase';
-import { backupDocumentToCentralDrive } from './googleDriveBackup';
+import { backupDocumentToCentralDrive, deleteCentralDriveFile } from './googleDriveBackup';
 
 export type StaffDocumentCategory = 'surat-tugas' | 'surat-lainnya';
 
@@ -34,7 +36,11 @@ export interface StaffDocumentRecord {
   ownerEmail: string;
   category: StaffDocumentCategory;
   uploadedAt: string;
-  driveBackupError?: string;
+  driveBackupStatus: 'pending' | 'complete' | 'failed';
+  driveBackupError: string;
+  driveFileId: string;
+  driveWebViewLink: string;
+  driveBackupAt: string;
 }
 
 const MAX_DOCUMENT_SIZE = 25 * 1024 * 1024;
@@ -168,14 +174,60 @@ export async function uploadStaffDocument(
       ownerEmail: user.email || '',
       category,
       uploadedAt: serverTimestamp(),
+      driveBackupStatus: 'pending',
+      driveBackupError: '',
+      driveFileId: '',
+      driveWebViewLink: '',
+      driveBackupAt: null,
+      driveBackupUpdatedAt: serverTimestamp(),
     });
 
     onProgress?.(100);
-    let driveBackupError: string | undefined;
+    let driveBackupStatus: StaffDocumentRecord['driveBackupStatus'] = 'failed';
+    let driveBackupError = '';
+    let driveFileId = '';
+    let driveWebViewLink = '';
+    let driveBackupAt = '';
     try {
-      await backupDocumentToCentralDrive(file, category);
+      const driveCopy = await backupDocumentToCentralDrive(file, category);
+      driveFileId = driveCopy.id;
+      driveWebViewLink = driveCopy.webViewLink || '';
+      driveBackupAt = new Date().toISOString();
+      try {
+        await updateDoc(recordRef, {
+          driveBackupStatus: 'complete',
+          driveBackupError: '',
+          driveFileId,
+          driveWebViewLink,
+          driveBackupAt: serverTimestamp(),
+          driveBackupUpdatedAt: serverTimestamp(),
+        });
+        driveBackupStatus = 'complete';
+      } catch (metadataError) {
+        try { await deleteCentralDriveFile(driveFileId); } catch { /* avoid masking metadata failure */ }
+        driveFileId = '';
+        driveWebViewLink = '';
+        driveBackupError = 'File Firebase tersimpan, tetapi status backup Drive gagal dicatat: ' +
+          (metadataError instanceof Error ? metadataError.message : String(metadataError));
+      }
     } catch (driveError) {
       driveBackupError = driveError instanceof Error ? driveError.message : 'Salinan Google Drive gagal dibuat.';
+    }
+
+    if (driveBackupStatus !== 'complete') {
+      try {
+        await updateDoc(recordRef, {
+          driveBackupStatus: 'failed',
+          driveBackupError: driveBackupError.slice(0, 1000),
+          driveFileId: '',
+          driveWebViewLink: '',
+          driveBackupAt: null,
+          driveBackupUpdatedAt: serverTimestamp(),
+        });
+      } catch (statusError) {
+        driveBackupError += ' Status backup belum dapat dicatat di Firestore: ' +
+          (statusError instanceof Error ? statusError.message : String(statusError));
+      }
     }
 
     return {
@@ -189,7 +241,11 @@ export async function uploadStaffDocument(
       ownerEmail: user.email || '',
       category,
       uploadedAt: new Date().toISOString(),
-      ...(driveBackupError ? { driveBackupError } : {}),
+      driveBackupStatus,
+      driveBackupError,
+      driveFileId,
+      driveWebViewLink,
+      driveBackupAt,
     };
   } catch (error) {
     if (uploadCompleted) {
@@ -223,6 +279,13 @@ export async function listStaffDocuments(): Promise<StaffDocumentRecord[]> {
         ownerEmail: String(data.ownerEmail || ''),
         category: data.category === 'surat-lainnya' ? 'surat-lainnya' : 'surat-tugas',
         uploadedAt,
+        driveBackupStatus: data.driveBackupStatus === 'complete' || data.driveBackupStatus === 'failed'
+          ? data.driveBackupStatus : 'pending',
+        driveBackupError: String(data.driveBackupError || ''),
+        driveFileId: String(data.driveFileId || ''),
+        driveWebViewLink: String(data.driveWebViewLink || ''),
+        driveBackupAt: data.driveBackupAt && typeof data.driveBackupAt.toDate === 'function'
+          ? data.driveBackupAt.toDate().toISOString() : '',
       };
     });
   } catch (error) {
@@ -233,6 +296,14 @@ export async function listStaffDocuments(): Promise<StaffDocumentRecord[]> {
 export async function deleteStaffDocument(documentId: string, storagePath: string): Promise<void> {
   await getVerifiedStaff();
   try {
+    const recordRef = doc(db, 'staffDocuments', documentId);
+    const existing = await getDoc(recordRef);
+    if (existing.exists()) {
+      const driveFileId = String(existing.data().driveFileId || '');
+      // Remove the backup first. If Google Drive cannot confirm deletion, keep
+      // the Firebase copy and archive record intact instead of creating orphans.
+      if (driveFileId) await deleteCentralDriveFile(driveFileId);
+    }
     if (storagePath) {
       try {
         await deleteObject(ref(storage, storagePath));
@@ -241,7 +312,7 @@ export async function deleteStaffDocument(documentId: string, storagePath: strin
         if (code !== 'storage/object-not-found') throw error;
       }
     }
-    await deleteDoc(doc(db, 'staffDocuments', documentId));
+    await deleteDoc(recordRef);
   } catch (error) {
     throw explainDocumentError(error);
   }
