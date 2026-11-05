@@ -18,7 +18,7 @@
 }
 
 .frame-silhouette-subtle {
-  border: 1px solid rgba(244, 63, 94, 0.22);
+  border: 1px solid rgba(244, 63, 63, 0.22);
   box-shadow: 0 0 12px -4px rgba(225, 29, 72, 0.10);
 }
 
@@ -31,22 +31,13 @@
     color: #111827 !important;
   }
 
-  /* Cetak hanya isi pratinjau dokumen, bukan dashboard di belakang modal. */
-  body * {
-    visibility: hidden !important;
-  }
+  body * { visibility: hidden !important; }
 
   .print-container,
-  .print-container * {
-    visibility: visible !important;
-  }
+  .print-container * { visibility: visible !important; }
 
-  /* The official assessment uses its own 6-page print layout. Keep it visible
-     despite the generic print-container rule hiding the rest of the application. */
   .official-assessment-shell,
-  .official-assessment-shell * {
-    visibility: visible !important;
-  }
+  .official-assessment-shell * { visibility: visible !important; }
 
   .print-container {
     position: absolute !important;
@@ -59,14 +50,11 @@
     box-shadow: none !important;
   }
 
-  /* Hide app dashboard header, bottom navigation bar, buttons */
   .no-print, nav, header, footer, button, .app-nav-bar, .app-header {
     display: none !important;
   }
 
-  .print-only {
-    display: block !important;
-  }
+  .print-only { display: block !important; }
 
   .page-break {
     page-break-after: always;
@@ -89,9 +77,7 @@
   }
 }
 
-
-/* On the Beranda dashboard, hide the wide SIPANDU brand block in landscape
-   so the workspace actions and dashboard content have more horizontal room. */
+/* On the Beranda dashboard, hide the wide SIPANDU brand block in landscape. */
 @media (orientation: landscape) {
   .app-header-sipandu-brand-home { display: none !important; }
 }
@@ -108,9 +94,7 @@ body,
   overscroll-behavior-x: contain;
 }
 
-
-/* Immersive workspace layout: keep the four work menus edge-to-edge and scroll
-   inside the available viewport instead of pushing the fixed navigation away. */
+/* Immersive workspace layout. */
 .app-header-compact {
   padding-top: calc(env(safe-area-inset-top, 0px) + 0.4rem) !important;
   padding-bottom: 0.45rem !important;
@@ -136,16 +120,56 @@ body,
 }
 
 @media (max-width: 640px) {
-  .app-header-compact .max-w-7xl {
-    width: 100%;
-  }
+  .app-header-compact .max-w-7xl { width: 100%; }
 }
 
+/*
+ * SIPANDU theme tokens.
+ * Dark mode remains the existing Forest Green palette.
+ * Light mode uses Soft Sage & Warm Ivory for a calmer, readable workspace.
+ */
+.sipandu-navigation-shell {
+  --sipandu-bg: #0A140B;
+  --sipandu-surface: #0D1B10;
+  --sipandu-card: #102016;
+  --sipandu-accent: #64D6AE;
+  --sipandu-text: #F4F7F1;
+  --sipandu-muted: #A9B9AA;
+  --sipandu-border: rgba(255,255,255,.12);
+}
 
-/* SIPANDU application light theme. Dark mode remains the default. */
-.sipandu-navigation-shell[data-sipandu-theme="light"] { background: #f3f7f4 !important; color: #17251b !important; }
-.sipandu-navigation-shell[data-sipandu-theme="light"] > .fixed.inset-0 { background: radial-gradient(at top right, rgba(220,238,224,.9), #f4f8f5 58%, #eaf1ec) !important; }
-.sipandu-navigation-shell[data-sipandu-theme="light"] .app-header-compact { background: rgba(255,255,255,.94) !important; border-bottom-color: rgba(71,85,72,.16) !important; }
+.sipandu-navigation-shell[data-sipandu-theme="light"] {
+  --sipandu-bg: #F4F7F1;
+  --sipandu-surface: #E8EFE3;
+  --sipandu-card: #FFFFFF;
+  --sipandu-accent: #355B40;
+  --sipandu-text: #243529;
+  --sipandu-muted: #657665;
+  --sipandu-border: rgba(53,91,64,.16);
+  background: var(--sipandu-bg) !important;
+  color: var(--sipandu-text) !important;
+  color-scheme: light;
+}
+
+/* Warm, low-glare page background and soft sage ambient lighting. */
+.sipandu-navigation-shell[data-sipandu-theme="light"] > .fixed.inset-0 {
+  background: radial-gradient(at top right, #E8EFE3 0%, #F4F7F1 58%, #EAF0E6 100%) !important;
+}
+
+/* Remove dark-mode ambient blobs in light mode; they otherwise tint content unpredictably. */
+.sipandu-navigation-shell[data-sipandu-theme="light"] > .fixed.rounded-full {
+  opacity: 0 !important;
+}
+
+/* Header: pale sage surface with forest-green typography. */
+.sipandu-navigation-shell[data-sipandu-theme="light"] .app-header-compact {
+  background: rgba(232,239,227,.96) !important;
+  color: #243529 !important;
+  border-bottom: 1px solid rgba(53,91,64,.16) !important;
+  box-shadow: 0 6px 20px rgba(36,53,41,.07) !important;
+}
+
+/* Convert dark application surfaces to white or pale sage cards. */
 .sipandu-navigation-shell[data-sipandu-theme="light"] [class*="bg-[#0a140b]"],
 .sipandu-navigation-shell[data-sipandu-theme="light"] [class*="bg-[#0d1b10]"],
 .sipandu-navigation-shell[data-sipandu-theme="light"] [class*="bg-[#0e1d11]"],
@@ -155,22 +179,90 @@ body,
 .sipandu-navigation-shell[data-sipandu-theme="light"] [class*="bg-sky-950/"],
 .sipandu-navigation-shell[data-sipandu-theme="light"] [class*="bg-violet-950/"],
 .sipandu-navigation-shell[data-sipandu-theme="light"] [class*="bg-rose-950/"],
-.sipandu-navigation-shell[data-sipandu-theme="light"] [class*="bg-amber-950/"] { background-color: #fff !important; }
-.sipandu-navigation-shell[data-sipandu-theme="light"] [class*="bg-black/"]:not(.fixed) { background-color: #f1f5f2 !important; }
+.sipandu-navigation-shell[data-sipandu-theme="light"] [class*="bg-amber-950/"] {
+  background-color: #FFFFFF !important;
+  background-image: none;
+}
+
+.sipandu-navigation-shell[data-sipandu-theme="light"] [class*="bg-black/"]:not(.fixed) {
+  background-color: #E8EFE3 !important;
+}
+
+/* Consistent readable text on light surfaces. */
+.sipandu-navigation-shell[data-sipandu-theme="light"] {
+  color: #243529 !important;
+}
+
 .sipandu-navigation-shell[data-sipandu-theme="light"] [class*="text-white"],
 .sipandu-navigation-shell[data-sipandu-theme="light"] [class*="text-neutral-100"],
 .sipandu-navigation-shell[data-sipandu-theme="light"] [class*="text-neutral-200"],
 .sipandu-navigation-shell[data-sipandu-theme="light"] [class*="text-neutral-300"],
 .sipandu-navigation-shell[data-sipandu-theme="light"] [class*="text-neutral-400"],
-.sipandu-navigation-shell[data-sipandu-theme="light"] [class*="text-neutral-500"] { color: #26372b !important; }
+.sipandu-navigation-shell[data-sipandu-theme="light"] [class*="text-neutral-500"] {
+  color: #243529 !important;
+}
+
 .sipandu-navigation-shell[data-sipandu-theme="light"] [class*="text-emerald-100"],
 .sipandu-navigation-shell[data-sipandu-theme="light"] [class*="text-sky-100"],
 .sipandu-navigation-shell[data-sipandu-theme="light"] [class*="text-violet-100"],
 .sipandu-navigation-shell[data-sipandu-theme="light"] [class*="text-rose-100"],
-.sipandu-navigation-shell[data-sipandu-theme="light"] [class*="text-amber-100"] { color: #31553b !important; }
+.sipandu-navigation-shell[data-sipandu-theme="light"] [class*="text-amber-100"] {
+  color: #355B40 !important;
+}
+
+/* Preserve white labels on strong filled action buttons. */
+.sipandu-navigation-shell[data-sipandu-theme="light"] button[class*="bg-emerald-"],
+.sipandu-navigation-shell[data-sipandu-theme="light"] button[class*="bg-[#355b40]"],
+.sipandu-navigation-shell[data-sipandu-theme="light"] button[class*="bg-[#355B40]"] {
+  color: #FFFFFF !important;
+}
+
+/* Borders, dividers, and form controls. */
 .sipandu-navigation-shell[data-sipandu-theme="light"] [class*="border-white/"],
-.sipandu-navigation-shell[data-sipandu-theme="light"] [class*="border-neutral-"] { border-color: rgba(71,85,72,.18) !important; }
+.sipandu-navigation-shell[data-sipandu-theme="light"] [class*="border-neutral-"] {
+  border-color: rgba(53,91,64,.16) !important;
+}
+
+.sipandu-navigation-shell[data-sipandu-theme="light"] input,
+.sipandu-navigation-shell[data-sipandu-theme="light"] textarea,
+.sipandu-navigation-shell[data-sipandu-theme="light"] select {
+  color: #243529;
+}
+
 .sipandu-navigation-shell[data-sipandu-theme="light"] input[class*="bg-black"],
 .sipandu-navigation-shell[data-sipandu-theme="light"] textarea[class*="bg-black"],
-.sipandu-navigation-shell[data-sipandu-theme="light"] select[class*="bg-black"] { background-color: #f8faf8 !important; color: #17251b !important; border-color: #cbd5ce !important; }
-.sipandu-navigation-shell[data-sipandu-theme="light"] .app-nav-bar { background-color: rgba(255,255,255,.96) !important; border-color: rgba(71,85,72,.18) !important; box-shadow: 0 -6px 24px rgba(24,39,27,.08) !important; }
+.sipandu-navigation-shell[data-sipandu-theme="light"] select[class*="bg-black"] {
+  background-color: #FFFFFF !important;
+  color: #243529 !important;
+  border-color: #C8D5C6 !important;
+}
+
+.sipandu-navigation-shell[data-sipandu-theme="light"] input::placeholder,
+.sipandu-navigation-shell[data-sipandu-theme="light"] textarea::placeholder {
+  color: #718071 !important;
+  opacity: 1;
+}
+
+/* Bottom navigation: clean white surface, subtle sage outline. */
+.sipandu-navigation-shell[data-sipandu-theme="light"] .app-nav-bar {
+  background-color: rgba(255,255,255,.97) !important;
+  color: #243529 !important;
+  border-color: rgba(53,91,64,.16) !important;
+  box-shadow: 0 -6px 24px rgba(24,39,27,.08) !important;
+}
+
+/* Keep modal overlays neutral and modal surfaces crisp in light mode. */
+.sipandu-navigation-shell[data-sipandu-theme="light"] [role="dialog"] {
+  color: #243529;
+}
+
+.sipandu-navigation-shell[data-sipandu-theme="light"] [role="dialog"] [class*="bg-[#0d1b10]"],
+.sipandu-navigation-shell[data-sipandu-theme="light"] [role="dialog"] [class*="bg-emerald-950/"],
+.sipandu-navigation-shell[data-sipandu-theme="light"] [role="dialog"] [class*="bg-sky-950/"] {
+  background-color: #FFFFFF !important;
+}
+
+/* Do not alter print colors or document layout when printing from either theme. */
+@media print {
+  .sipandu-navigation-shell { background: #FFFFFF !important; color: #111827 !important; }
+}
