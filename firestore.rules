@@ -290,8 +290,9 @@ service cloud.firestore {
         // may be initialized exactly at request time during the same profile save.
         && (
           ('createdAt' in resource.data
+            && resource.data.createdAt != null
             && request.resource.data.createdAt == resource.data.createdAt)
-          || (!('createdAt' in resource.data)
+          || ((!('createdAt' in resource.data) || resource.data.createdAt == null)
             && request.resource.data.createdAt == request.time)
         )
         && request.resource.data.updatedAt == request.time;
