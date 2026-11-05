@@ -19,7 +19,7 @@ import {
 import {
   getAuth,
   initializeAuth,
-  Auth,
+  type Auth,
   indexedDBLocalPersistence,
   browserLocalPersistence,
   setPersistence,
