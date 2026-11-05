@@ -76,6 +76,31 @@ jobs:
           npx cap add android
           npx cap sync android
 
+      - name: Apply package version to private Android release APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          APP_VERSION="$(node -p "require('./package.json').version")"
+          APP_VERSION_CODE="$(node -e "const p=require('./package.json').version.split('.').map(Number); console.log(p[0]*10000+p[1]*100+p[2])")"
+          GRADLE_FILE="android/app/build.gradle"
+          test -f "$GRADLE_FILE"
+          python3 - "$GRADLE_FILE" "$APP_VERSION" "$APP_VERSION_CODE" <<'PY'
+          from pathlib import Path
+          import re
+          import sys
+
+          path = Path(sys.argv[1])
+          version = sys.argv[2]
+          version_code = sys.argv[3]
+          content = path.read_text()
+          content, code_count = re.subn(r"(?m)^(\\s*versionCode\\s+)\\d+", lambda match: match.group(1) + version_code, content, count=1)
+          content, name_count = re.subn(r'(?m)^(\\s*versionName\\s+")[^"]+(")', lambda match: match.group(1) + version + match.group(2), content, count=1)
+          if code_count != 1 or name_count != 1:
+              raise SystemExit("Could not synchronize Android versionCode/versionName from package.json.")
+          path.write_text(content)
+          PY
+          grep -E 'versionCode|versionName' "$GRADLE_FILE"
+
       - name: Generate SIPANDU notification sound and status-bar icon
         run: python3 scripts/generate_android_notification_assets.py
 
@@ -216,11 +241,20 @@ jobs:
         working-directory: android
         run: ./gradlew --no-daemon assembleRelease
 
-      - name: Verify APK signature
+      - name: Verify private release package, version, and signature
+        shell: bash
         run: |
+          set -euo pipefail
           APK="android/app/build/outputs/apk/release/app-release.apk"
+          BUILD_TOOLS="$ANDROID_HOME/build-tools/$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -1)"
+          APP_VERSION="$(node -p "require('./package.json').version")"
+          APP_VERSION_CODE="$(node -e "const p=require('./package.json').version.split('.').map(Number); console.log(p[0]*10000+p[1]*100+p[2])")"
           test -s "$APK"
-          "$ANDROID_HOME/build-tools/$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -1)/apksigner" verify --verbose --print-certs "$APK"
+          "$BUILD_TOOLS/aapt" dump badging "$APK" | tee /tmp/sipandu-private-release-badging.txt
+          grep -q "package: name='id.my.sipandu.odhiv'" /tmp/sipandu-private-release-badging.txt
+          grep -q "versionCode='$APP_VERSION_CODE'" /tmp/sipandu-private-release-badging.txt
+          grep -q "versionName='$APP_VERSION'" /tmp/sipandu-private-release-badging.txt
+          "$BUILD_TOOLS/apksigner" verify --verbose --print-certs "$APK"
 
       - name: Verify Google scope bridge inside signed APK bytecode
         run: |
