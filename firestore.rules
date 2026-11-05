@@ -178,6 +178,78 @@ service cloud.firestore {
       allow delete: if canWritePpks();
     }
 
+    // Structured letters created from the Dokumen menu are durable records,
+    // not transient React state. Their Drive backup pointer is tracked separately.
+    match /staffLetters/{letterId} {
+      allow read: if isStaff();
+      allow create: if isStaff()
+        && request.resource.data.keys().hasAll([
+          'id', 'nomorSurat', 'judul', 'jenis', 'tanggal', 'petugas',
+          'nipPetugas', 'lokasi', 'status', 'deskripsi',
+          'ownerUid', 'ownerEmail', 'createdAt',
+          'driveBackupStatus', 'driveBackupError', 'driveFileId',
+          'driveWebViewLink', 'driveBackupAt', 'driveBackupUpdatedAt'
+        ])
+        && request.resource.data.keys().hasOnly([
+          'id', 'nomorSurat', 'judul', 'jenis', 'tanggal', 'petugas',
+          'nipPetugas', 'lokasi', 'status', 'deskripsi',
+          'ownerUid', 'ownerEmail', 'createdAt',
+          'driveBackupStatus', 'driveBackupError', 'driveFileId',
+          'driveWebViewLink', 'driveBackupAt', 'driveBackupUpdatedAt'
+        ])
+        && request.resource.data.id == letterId
+        && request.resource.data.nomorSurat is string
+        && request.resource.data.nomorSurat.size() > 0
+        && request.resource.data.nomorSurat.size() <= 120
+        && request.resource.data.judul is string
+        && request.resource.data.judul.size() > 0
+        && request.resource.data.judul.size() <= 180
+        && request.resource.data.jenis in ['Surat Tugas', 'Berita Acara', 'Surat Pernyataan', 'Surat Rujukan', 'Laporan Monev']
+        && request.resource.data.tanggal is string
+        && request.resource.data.tanggal.size() <= 40
+        && request.resource.data.petugas is string
+        && request.resource.data.petugas.size() <= 160
+        && request.resource.data.nipPetugas is string
+        && request.resource.data.nipPetugas.size() <= 40
+        && request.resource.data.lokasi is string
+        && request.resource.data.lokasi.size() <= 240
+        && request.resource.data.status in ['Aktif', 'Selesai', 'Arsip']
+        && request.resource.data.deskripsi is string
+        && request.resource.data.deskripsi.size() > 0
+        && request.resource.data.deskripsi.size() <= 8000
+        && request.resource.data.ownerUid == request.auth.uid
+        && request.resource.data.ownerEmail is string
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.driveBackupStatus == 'pending'
+        && request.resource.data.driveBackupError is string
+        && request.resource.data.driveBackupError.size() <= 1000
+        && request.resource.data.driveFileId == ''
+        && request.resource.data.driveWebViewLink == ''
+        && request.resource.data.driveBackupAt == null
+        && request.resource.data.driveBackupUpdatedAt == request.time;
+      allow update: if isStaff()
+        && (resource.data.ownerUid == request.auth.uid || canWritePpks())
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'driveBackupStatus', 'driveBackupError', 'driveFileId',
+          'driveWebViewLink', 'driveBackupAt', 'driveBackupUpdatedAt'
+        ])
+        && request.resource.data.driveBackupStatus in ['pending', 'complete', 'failed']
+        && request.resource.data.driveBackupError is string
+        && request.resource.data.driveBackupError.size() <= 1000
+        && request.resource.data.driveFileId is string
+        && request.resource.data.driveFileId.size() <= 256
+        && request.resource.data.driveWebViewLink is string
+        && request.resource.data.driveWebViewLink.size() <= 4096
+        && (request.resource.data.driveBackupAt == null
+          || request.resource.data.driveBackupAt is timestamp)
+        && request.resource.data.driveBackupUpdatedAt == request.time
+        && (request.resource.data.driveBackupStatus != 'complete'
+          || (request.resource.data.driveFileId.size() > 0
+            && request.resource.data.driveWebViewLink.size() > 0
+            && request.resource.data.driveBackupAt is timestamp));
+      allow delete: if canWritePpks();
+    }
+
     // Deny all collections unless a collection-specific policy is added.
     match /{document=**} {
       allow read, write: if false;
