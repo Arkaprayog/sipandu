@@ -21,9 +21,9 @@ After the secret is available, re-run the failed **SIPANDU Firebase Security Rul
 The workflow first runs Firestore and Storage emulator tests. The production job then checks that `.firebaserc` and `firebase.json` still point to the exact SIPANDU project/database and runs:
 
 ```bash
-firebase deploy --only firestore --project gen-lang-client-0197631978 --non-interactive
+firebase deploy --only firestore:rules --project gen-lang-client-0197631978 --non-interactive
 ```
 
-The project currently has one Firestore database entry in `firebase.json`, so this publishes the checked-in rules to the named SIPANDU database only. It does not publish Storage Rules or modify Firestore documents.
+The project currently has one Firestore database entry in `firebase.json`, so this publishes the checked-in Firestore Rules to the named SIPANDU database only. It does not publish Storage Rules, indexes, or modify Firestore documents.
 
 A successful workflow deploy step is the evidence that production Rules were published. A successful emulator test alone is not that evidence.
