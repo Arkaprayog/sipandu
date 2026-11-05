@@ -89,7 +89,7 @@ export const SuratTugasEditor: React.FC = () => {
         const padding = 0.4 * scaleX;
         const maxTextWidth = Math.max(1, widthPt - padding * 2);
         const lineHeightFor = (size: number) => size * 1.14;
-        const maxLines = Math.max(1, Math.floor((heightPt - 1) / lineHeightFor(7.5)));
+        const maxLinesAtSize = (size: number) => Math.max(1, Math.floor((heightPt - 1) / lineHeightFor(size)));
         let chosenSize = requestedSize;
         let lines: TextLine[] = [];
 
@@ -102,11 +102,11 @@ export const SuratTugasEditor: React.FC = () => {
             lines = text.split(/\\r?\\n/).flatMap(paragraph =>
               wrapParagraph(paragraph, font, chosenSize, maxTextWidth)
             );
-            if (lines.length <= maxLines) break;
+            if (lines.length <= maxLinesAtSize(chosenSize)) break;
           }
           chosenSize = Math.round((chosenSize - 0.5) * 10) / 10;
         }
-        if (chosenSize < 7.5 || lines.length > maxLines ||
+        if (chosenSize < 7.5 || lines.length > maxLinesAtSize(chosenSize) ||
             (opts.nowrap && font.widthOfTextAtSize(text, chosenSize) > maxTextWidth)) {
           throw new Error('Teks terlalu panjang untuk ruang template PDF: ' + text.slice(0, 55) + '. Ringkas isi kolom lalu coba lagi.');
         }
