@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { PDFDocument, PDFFont, StandardFonts, rgb } from 'pdf-lib';
 import { Download, FileText, RotateCcw } from 'lucide-react';
+import { uploadStaffDocument } from '../lib/documentStorage';
+import { printPdfBlob } from '../lib/printing';
 
 type Fields = {
   nomor: string; tanggal: string; kota: string; pegawai: string; jabatanPegawai: string;
@@ -44,13 +46,15 @@ export const SuratTugasEditor: React.FC = () => {
   const [f, setF] = useState<Fields>(defaults);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
   const update = (key: keyof Fields, value: string) => setF(old => ({ ...old, [key]: value }));
-  const reset = () => { setF(defaults); setError(''); };
+  const reset = () => { setF(defaults); setError(''); setNotice(''); };
 
   const downloadPdf = async () => {
     if (busy) return;
     setBusy(true);
     setError('');
+    setNotice('');
     try {
       // Edit the uploaded PDF itself, not a browser screenshot. This retains the
       // original vector artwork, letterhead, QR signature, signatory and footer.
@@ -76,34 +80,50 @@ export const SuratTugasEditor: React.FC = () => {
         size?: number; bold?: boolean; center?: boolean; nowrap?: boolean;
       }) => {
         const { text, x, top, width, height } = opts;
-        const size = opts.size ?? 11;
+        const requestedSize = opts.size ?? 11;
         const font = opts.bold ? bold : regular;
         const xPt = x * scaleX;
         const topPt = top * scaleY;
         const widthPt = width * scaleX;
         const heightPt = height * scaleY;
-        // White out only the original editable text area. Everything else on the
-        // official PDF page remains vector-identical to the source file.
+        const padding = 0.4 * scaleX;
+        const maxTextWidth = Math.max(1, widthPt - padding * 2);
+        const lineHeightFor = (size: number) => size * 1.14;
+        const maxLines = Math.max(1, Math.floor((heightPt - 1) / lineHeightFor(7.5)));
+        let chosenSize = requestedSize;
+        let lines: TextLine[] = [];
+
+        // Shrink text to fit. Never silently truncate content on an official PDF.
+        while (chosenSize >= 7.5) {
+          if (opts.nowrap) {
+            lines = [{ text }];
+            if (font.widthOfTextAtSize(text, chosenSize) <= maxTextWidth) break;
+          } else {
+            lines = text.split(/\\r?\\n/).flatMap(paragraph =>
+              wrapParagraph(paragraph, font, chosenSize, maxTextWidth)
+            );
+            if (lines.length <= maxLines) break;
+          }
+          chosenSize = Math.round((chosenSize - 0.5) * 10) / 10;
+        }
+        if (chosenSize < 7.5 || lines.length > maxLines ||
+            (opts.nowrap && font.widthOfTextAtSize(text, chosenSize) > maxTextWidth)) {
+          throw new Error('Teks terlalu panjang untuk ruang template PDF: ' + text.slice(0, 55) + '. Ringkas isi kolom lalu coba lagi.');
+        }
+
         page.drawRectangle({
           x: xPt, y: pageHeight - topPt - heightPt, width: widthPt, height: heightPt,
           color: white, opacity: 1,
         });
-        const padding = 0.4 * scaleX;
-        const maxTextWidth = Math.max(1, widthPt - padding * 2);
-        let lines: TextLine[];
-        if (opts.nowrap) {
-          lines = [{ text }];
-        } else {
-          lines = text.split(/\r?\n/).flatMap(paragraph => wrapParagraph(paragraph, font, size, maxTextWidth));
-        }
-        const lineHeight = size * 1.14;
-        const maxLines = Math.max(1, Math.floor((heightPt - 1) / lineHeight));
-        lines = lines.slice(0, maxLines);
+        const lineHeight = lineHeightFor(chosenSize);
         lines.forEach((line, index) => {
-          const textWidth = font.widthOfTextAtSize(line.text, size);
+          const textWidth = font.widthOfTextAtSize(line.text, chosenSize);
           const drawX = opts.center ? xPt + (widthPt - textWidth) / 2 : xPt + padding;
-          const drawY = pageHeight - topPt - size - 0.8 - index * lineHeight;
-          page.drawText(line.text, { x: drawX, y: drawY, size, font, color: rgb(0.07, 0.07, 0.07), maxWidth: maxTextWidth });
+          const drawY = pageHeight - topPt - chosenSize - 0.8 - index * lineHeight;
+          page.drawText(line.text, {
+            x: drawX, y: drawY, size: chosenSize, font,
+            color: rgb(0.07, 0.07, 0.07), maxWidth: maxTextWidth,
+          });
         });
       };
 
@@ -148,15 +168,32 @@ export const SuratTugasEditor: React.FC = () => {
 
       const bytes = await pdf.save();
       const blob = new Blob([bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer], { type: 'application/pdf' });
-      const objectUrl = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      const safeName = f.pegawai.split(/[\/,]/)[0].replace(/[^a-z0-9 -]/gi, '').trim().replace(/\s+/g, '-');
-      link.href = objectUrl;
-      link.download = 'Surat-Tugas-' + (safeName || 'SIPANDU') + '.pdf';
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
+      const safeName = f.pegawai.split(/[\\/,]/)[0].replace(/[^a-z0-9 -]/gi, '').trim().replace(/\\s+/g, '-');
+      const fileName = 'Surat-Tugas-' + (safeName || 'SIPANDU') + '.pdf';
+      const pdfFile = new File([blob], fileName, { type: 'application/pdf' });
+
+      // Persist the generated PDF to Firebase and the central Google Drive archive.
+      const saved = await uploadStaffDocument(pdfFile, 'surat-tugas');
+      setNotice(saved.driveBackupStatus === 'complete'
+        ? 'PDF tersimpan di Firebase dan Google Drive utama SIPANDU.'
+        : 'PDF tersimpan di Firebase, tetapi backup Google Drive belum berhasil: ' + (saved.driveBackupError || 'hubungkan ulang Google Workspace lalu unggah ulang.'));
+
+      try {
+        await printPdfBlob(blob, fileName);
+      } catch (printError) {
+        console.warn('SIPANDU native print unavailable; using PDF open/download fallback:', printError);
+        const objectUrl = URL.createObjectURL(blob);
+        const opened = window.open(objectUrl, '_blank', 'noopener,noreferrer');
+        if (!opened) {
+          const link = document.createElement('a');
+          link.href = objectUrl;
+          link.download = fileName;
+          document.body.appendChild(link);
+          link.click();
+          link.remove();
+        }
+        window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
+      }
     } catch (e) {
       setError('PDF belum dibuat agar tidak menghasilkan dokumen yang salah. ' + (e instanceof Error ? e.message : 'Terjadi kesalahan saat memproses PDF.'));
     } finally {
@@ -185,10 +222,11 @@ export const SuratTugasEditor: React.FC = () => {
       <label className={labelClass + ' md:col-span-2'}>Kalimat penutup<textarea rows={2} className={inputClass} value={f.penutup} onChange={e => update('penutup',e.target.value)} /></label>
     </div>
     <div className="mt-5 flex flex-wrap items-center gap-3">
-      <button type="button" onClick={downloadPdf} disabled={busy} className="inline-flex items-center gap-2 rounded-xl border border-emerald-300/40 bg-emerald-700 px-4 py-3 text-sm font-extrabold text-white hover:bg-emerald-600 disabled:cursor-wait disabled:opacity-60"><Download className="h-5 w-5" /> {busy ? 'Membuat PDF…' : 'Unduh PDF / Cetak'}</button>
+      <button type="button" onClick={downloadPdf} disabled={busy} className="inline-flex items-center gap-2 rounded-xl border border-emerald-300/40 bg-emerald-700 px-4 py-3 text-sm font-extrabold text-white hover:bg-emerald-600 disabled:cursor-wait disabled:opacity-60"><Download className="h-5 w-5" /> {busy ? 'Membuat, menyimpan & mencetak PDF…' : 'Simpan PDF & Cetak'}</button>
       <a href={`${base}uploads/Surat%20Tugas.pdf`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 rounded-xl border border-white/15 bg-black/40 px-4 py-3 text-sm font-semibold text-sky-100 hover:bg-black/60"><FileText className="h-5 w-5" /> Lihat PDF Asli</a>
     </div>
-    <p className="mt-3 text-[11px] leading-relaxed text-sky-100/80">PDF diunduh langsung dengan satu halaman asli. Buka file PDF yang diunduh untuk mencetak atau menyimpannya kembali dari perangkat Android.</p>
+    <p className="mt-3 text-[11px] leading-relaxed text-sky-100/80">PDF disimpan pada arsip Firebase dan Google Drive SIPANDU, lalu dialog cetak perangkat dibuka. Pada PWA, dialog cetak mengikuti browser.</p>
+    {notice && <p role="status" aria-live="polite" className="mt-3 rounded-lg border border-emerald-400/40 bg-emerald-950/40 p-3 text-xs text-emerald-100">{notice}</p>}
     {error && <p role="alert" className="mt-3 rounded-lg border border-red-400/40 bg-red-950/50 p-3 text-sm text-red-100">{error}</p>}
   </section>;
 };
