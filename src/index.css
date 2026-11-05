@@ -308,3 +308,12 @@ body,
 .sipandu-navigation-shell[data-sipandu-theme="light"] .profile-role-badge {
   color: #000000 !important;
 }
+
+
+/* Give the North Sumatra map enough vertical room on wide desktop landscape screens. */
+@media (min-width: 1024px) and (orientation: landscape) {
+  .sumut-map-canvas {
+    height: min(78vh, 760px) !important;
+    min-height: min(78vh, 760px) !important;
+  }
+}
