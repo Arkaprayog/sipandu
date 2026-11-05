@@ -280,3 +280,31 @@ body,
   color: #355B40;
   border-color: rgba(53,91,64,.2);
 }
+
+
+/*
+ * Light-mode typography override requested by the user:
+ * all visible text and icon currentColor are solid black.
+ * Backgrounds and the Forest Green dark theme remain unchanged.
+ */
+.sipandu-navigation-shell[data-sipandu-theme="light"],
+.sipandu-navigation-shell[data-sipandu-theme="light"] * {
+  color: #000000 !important;
+}
+
+.sipandu-navigation-shell[data-sipandu-theme="light"] {
+  --sipandu-text: #000000;
+  --sipandu-muted: #000000;
+  --sipandu-accent: #000000;
+}
+
+.sipandu-navigation-shell[data-sipandu-theme="light"] input::placeholder,
+.sipandu-navigation-shell[data-sipandu-theme="light"] textarea::placeholder,
+.sipandu-navigation-shell[data-sipandu-theme="light"] [contenteditable="true"]::placeholder {
+  color: #000000 !important;
+  opacity: 1 !important;
+}
+
+.sipandu-navigation-shell[data-sipandu-theme="light"] .profile-role-badge {
+  color: #000000 !important;
+}
