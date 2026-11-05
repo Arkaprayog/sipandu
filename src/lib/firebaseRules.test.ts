@@ -232,6 +232,26 @@ test('Profil anggota hanya dapat dibaca dan diubah oleh pemilik UID serta tidak 
     updatedAt: serverTimestamp(),
   }));
 
+  // A valid Firebase UID session may not carry an email custom claim in every
+  // auth provider. UID ownership alone authorizes its private profile document.
+  const noEmailClaimContext = environment.authenticatedContext('member-no-email');
+  const noEmailClaimProfile = doc(noEmailClaimContext.firestore(), 'userProfiles', 'member-no-email');
+  await assertSucceeds(setDoc(noEmailClaimProfile, {
+    nama: 'Anggota Tanpa Email Claim',
+    nip: '199001012020121001',
+    jabatan: 'Pendamping Sosial',
+    unitKerja: 'Sentra Layanan',
+    noHp: '',
+    photoUrl: '',
+    email: 'anggota@example.test',
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  }));
+  await assertSucceeds(updateDoc(noEmailClaimProfile, {
+    nama: 'Profil Diperbarui',
+    updatedAt: serverTimestamp(),
+  }));
+
   const otherContext = environment.authenticatedContext('member-002', {
     email: 'other@example.test',
     email_verified: true,
