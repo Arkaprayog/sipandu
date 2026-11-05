@@ -236,7 +236,7 @@ export default {
     }
 
     const url = new URL(request.url);
-    const path = url.pathname.replace(/\\/$/, '') || '/';
+    const path = url.pathname.length > 1 && url.pathname.endsWith('/') ? url.pathname.slice(0, -1) : url.pathname;
 
     if (path === '/health' && request.method === 'GET') {
       const missing = missingConfiguration(env);
