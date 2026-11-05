@@ -106,7 +106,9 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
           }, LOGIN_TIMEOUT_MS);
         }),
       ]);
-      if (!credential.user.emailVerified) {
+      const signedInToken = await credential.user.getIdTokenResult();
+      const existingStaffRole = signedInToken.claims.role;
+      if (!credential.user.emailVerified && existingStaffRole !== 'owner' && existingStaffRole !== 'supervisor' && existingStaffRole !== 'pendamping') {
         await sendEmailVerification(credential.user);
         await signOut(auth);
         setRegistrationNotice('Email akun belum terverifikasi. Tautan verifikasi baru telah dikirim. Buka email tersebut, verifikasi akun, lalu masuk kembali.');
