@@ -339,7 +339,7 @@ function StaffApp() {
           setIsAuthenticated(false);
           setCurrentUserName('');
           setCurrentUserRole('');
-          setAuthError('Sesi akun tetap tersimpan. Peran resmi belum terbaca pada token Firebase. Periksa kembali saat jaringan tersedia atau hubungi administrator SIPANDU.');
+          setAuthError('Worker aktivasi telah merespons, tetapi klaim peran belum muncul pada token Firebase terbaru. Coba verifikasi lagi; bila tetap terjadi, administrator perlu memeriksa custom claim akun dan log Worker. Sesi akun tetap tersimpan.');
         } else {
           setIsAuthenticated(true);
           setCurrentUserRole(role);
