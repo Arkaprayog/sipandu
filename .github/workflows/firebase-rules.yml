@@ -140,6 +140,5 @@ jobs:
           export GCLOUD_PROJECT="$FIREBASE_PROJECT_ID"
           trap 'rm -f "$KEY_FILE"' EXIT
 
-          # Publish only Firestore Security Rules. Debug mode is enabled temporarily
-          # to capture the exact Firebase Rules API operation rejected by Google.
-          firebase deploy --only firestore:rules --project "$FIREBASE_PROJECT_ID" --non-interactive --debug
+          # Publish only Firestore Security Rules after the credential and target preflight.
+          firebase deploy --only firestore:rules --project "$FIREBASE_PROJECT_ID" --non-interactive
