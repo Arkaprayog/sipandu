@@ -260,10 +260,6 @@ service cloud.firestore {
         return data.keys().hasAll([
           'nama', 'nip', 'jabatan', 'unitKerja', 'noHp', 'photoUrl', 'email'
         ])
-        && data.keys().hasOnly([
-          'nama', 'nip', 'jabatan', 'unitKerja', 'noHp', 'photoUrl',
-          'email', 'createdAt', 'updatedAt'
-        ])
         && data.nama is string && data.nama.size() >= 2 && data.nama.size() <= 120
         && data.nip is string && data.nip.size() <= 40
         && data.jabatan is string && data.jabatan.size() <= 120
@@ -277,6 +273,10 @@ service cloud.firestore {
       }
       allow read: if isOwnProfile();
       allow create: if isOwnProfile()
+        && request.resource.data.keys().hasOnly([
+          'nama', 'nip', 'jabatan', 'unitKerja', 'noHp', 'photoUrl',
+          'email', 'createdAt', 'updatedAt'
+        ])
         && hasValidProfileShape(request.resource.data)
         && request.resource.data.createdAt == request.time
         && request.resource.data.updatedAt == request.time;
