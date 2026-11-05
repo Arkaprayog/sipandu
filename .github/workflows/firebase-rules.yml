@@ -25,7 +25,7 @@ on:
   workflow_dispatch:
     inputs:
       deploy_production:
-        description: "Deploy Firestore Rules to SIPANDU production database after emulator tests"
+        description: "Deploy Firestore and Storage Rules to SIPANDU production after emulator tests"
         required: true
         type: boolean
         default: false
@@ -71,7 +71,7 @@ jobs:
         run: firebase emulators:exec --project demo-sipandu-rules --only firestore,storage "bun run test:rules:unit"
 
   deploy-production:
-    name: Deploy Firestore Rules to production
+    name: Deploy Firestore and Storage Rules to production
     needs: rules-emulator
     if: >-
       (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
@@ -92,7 +92,7 @@ jobs:
       - name: Install pinned Firebase CLI
         run: npm install --global firebase-tools@15.34.2
 
-      - name: Deploy Firestore Rules to the configured SIPANDU database
+      - name: Deploy Firestore and Storage Rules to the configured SIPANDU project
         shell: bash
         env:
           FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
@@ -115,6 +115,9 @@ jobs:
           const expectedProject = 'gen-lang-client-0197631978';
           if (entries.length !== 1 || entries[0].database !== expectedDatabase || entries[0].rules !== 'firestore.rules') {
             throw new Error('Refusing deployment: firebase.json does not target the expected SIPANDU Firestore database and rules file.');
+          }
+          if (config.storage?.rules !== 'storage.rules') {
+            throw new Error('Refusing deployment: firebase.json does not target the expected SIPANDU Storage rules file.');
           }
           const aliases = JSON.parse(fs.readFileSync('.firebaserc', 'utf8'));
           if (aliases.projects?.default !== expectedProject) {
@@ -140,5 +143,5 @@ jobs:
           export GCLOUD_PROJECT="$FIREBASE_PROJECT_ID"
           trap 'rm -f "$KEY_FILE"' EXIT
 
-          # Publish only Firestore Security Rules after the credential and target preflight.
-          firebase deploy --only firestore:rules --project "$FIREBASE_PROJECT_ID" --non-interactive
+          # Publish both Security Rules products after credential and target preflight.
+          firebase deploy --only firestore:rules,storage --project "$FIREBASE_PROJECT_ID" --non-interactive
