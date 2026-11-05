@@ -147,6 +147,8 @@ export interface GoogleFormUtamaPrefillEntries {
 }
 
 export interface AppSettings {
+  /** Visual theme selected for the SIPANDU application. */
+  theme?: 'dark' | 'light';
   /** Legacy setting; Stage-One respondents use a native SIPANDU page. */
   googleFormTahapAwalUrl: string;
   /** Actual numeric entry IDs from Google Forms prefilled-link generation; never guessed. */
