@@ -269,18 +269,18 @@ function StaffApp() {
         return;
       }
       try {
-        if (!user.emailVerified) {
+        // A verified member who registered with the shared team code is activated
+        // on the server. The Worker assigns only the pendamping claim after it
+        // confirms the pending invitation and the verified Firebase identity.
+        let token = await getIdTokenResult(user);
+        let role = token.claims.role;
+        if (role !== 'owner' && role !== 'supervisor' && role !== 'pendamping' && !user.emailVerified) {
           setIsAuthenticated(false);
           setCurrentUserName('');
           setCurrentUserRole('');
           setAuthError('Email akun SIPANDU belum diverifikasi. Buka tautan verifikasi yang dikirim ke email, lalu masuk kembali.');
           return;
         }
-        // A verified member who registered with the shared team code is activated
-        // on the server. The Worker assigns only the pendamping claim after it
-        // confirms the pending invitation and the verified Firebase identity.
-        let token = await getIdTokenResult(user);
-        let role = token.claims.role;
         if (role !== 'owner' && role !== 'supervisor' && role !== 'pendamping') {
           try {
             await activatePendingTeamMember(user);
@@ -657,13 +657,13 @@ function StaffApp() {
     setAuthReady(false);
     setAuthError('');
     try {
-      if (!user.emailVerified) {
+      let token = await getIdTokenResult(user, true);
+      let role = token.claims.role;
+      if (role !== 'owner' && role !== 'supervisor' && role !== 'pendamping' && !user.emailVerified) {
         setIsAuthenticated(false);
         setAuthError('Email akun belum diverifikasi. Verifikasi email terlebih dahulu, lalu coba lagi.');
         return;
       }
-      let token = await getIdTokenResult(user, true);
-      let role = token.claims.role;
       if (role !== 'owner' && role !== 'supervisor' && role !== 'pendamping') {
         await activatePendingTeamMember(user);
         token = await getIdTokenResult(user, true);
