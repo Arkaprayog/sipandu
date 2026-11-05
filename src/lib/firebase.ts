@@ -1382,18 +1382,40 @@ export async function reconcilePPKSFirestoreWithSpreadsheet(sourceRecords: PPKSR
 // SIPANDU member profile is stored per Firebase UID so it follows the user across devices.
 // Role claims are intentionally excluded from this document and can only be issued server-side.
 export async function createSIPANDUUserProfile(uid: string, email: string, profile: ProfileUser): Promise<void> {
-  if (!uid.trim() || !email.trim()) throw new Error('Identitas akun SIPANDU tidak lengkap.');
-  await setDoc(doc(db, 'userProfiles', uid), {
-    nama: profile.nama.trim(),
-    nip: profile.nip.trim(),
-    jabatan: profile.jabatan.trim(),
-    unitKerja: profile.unitKerja.trim(),
-    noHp: profile.noHp.trim(),
-    photoUrl: profile.photoUrl || '',
-    email: email.trim().toLowerCase(),
-    createdAt: serverTimestamp(),
-    updatedAt: serverTimestamp(),
-  });
+  const targetUid = uid.trim();
+  const requestedEmail = email.trim();
+  const user = auth.currentUser;
+  if (!targetUid || !requestedEmail || !user || user.uid !== targetUid) {
+    throw new Error('Identitas atau sesi akun SIPANDU tidak cocok untuk membuat profil.');
+  }
+  const token = await getIdTokenResult(user, true);
+  const authenticatedEmail = String(token.claims.email || user.email || '').trim();
+  if (!authenticatedEmail || authenticatedEmail.toLowerCase() !== requestedEmail.toLowerCase()) {
+    throw new Error('Email pendaftaran tidak cocok dengan identitas Firebase yang sedang masuk.');
+  }
+  try {
+    await setDoc(doc(db, 'userProfiles', targetUid), {
+      nama: profile.nama.trim(),
+      nip: profile.nip.trim(),
+      jabatan: profile.jabatan.trim(),
+      unitKerja: profile.unitKerja.trim(),
+      noHp: profile.noHp.trim(),
+      photoUrl: profile.photoUrl || '',
+      // Use the exact email claim from Firebase Authentication. Firestore Rules
+      // compare this field to request.auth.token.email, which may preserve casing.
+      email: authenticatedEmail,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
+  } catch (error) {
+    const { code } = getErrorParts(error);
+    if (code.includes('permission-denied')) {
+      throw new Error(
+        `Firestore menolak pembuatan profil. Pastikan firestore.rules sudah diterbitkan ke database "${firebaseConfig.firestoreDatabaseId}" pada proyek "${firebaseConfig.projectId}".`
+      );
+    }
+    throw error;
+  }
 }
 
 export async function getSIPANDUUserProfile(uid: string): Promise<ProfileUser | null> {
@@ -1417,9 +1439,11 @@ export async function saveSIPANDUUserProfile(uid: string, profile: ProfileUser):
   if (!targetUid || !user || user.uid !== targetUid) {
     throw new Error('Sesi akun SIPANDU tidak cocok dengan profil yang akan disimpan. Masuk kembali, lalu ulangi.');
   }
-  const token = await getIdTokenResult(user);
-  const email = typeof token.claims.email === 'string' ? token.claims.email : (user.email || '');
-  if (!email.trim()) throw new Error('Email akun Firebase tidak tersedia. Profil belum dapat disimpan dengan aman.');
+  // Refresh the token before a write so a changed Firebase email claim is not
+  // compared against stale profile metadata or an expired cached ID token.
+  const token = await getIdTokenResult(user, true);
+  const email = String(token.claims.email || user.email || '').trim();
+  if (!email) throw new Error('Email akun Firebase tidak tersedia. Profil belum dapat disimpan dengan aman.');
 
   const profileRef = doc(db, 'userProfiles', targetUid);
   const profileFields = {
@@ -1430,19 +1454,43 @@ export async function saveSIPANDUUserProfile(uid: string, profile: ProfileUser):
     noHp: String(profile.noHp || '').trim(),
     photoUrl: String(profile.photoUrl || ''),
   };
-  const existingProfile = await getDoc(profileRef);
-  if (existingProfile.exists()) {
-    if (existingProfile.data().email !== email) {
-      throw new Error('Email pada profil cloud tidak cocok dengan akun yang sedang masuk. Hubungi administrator untuk memperbaiki data profil.');
+
+  try {
+    const existingProfile = await getDoc(profileRef);
+    if (existingProfile.exists()) {
+      const existingData = existingProfile.data();
+      const existingEmail = String(existingData.email || '').trim();
+      if (existingEmail && existingEmail.toLowerCase() !== email.toLowerCase()) {
+        throw new Error('Email pada profil cloud berbeda dengan email akun Firebase. Hubungi administrator untuk memeriksa identitas akun.');
+      }
+
+      // Repair legacy profile metadata safely: email can only be updated to
+      // the authenticated token email; createdAt is backfilled only if absent.
+      const updates = {
+        ...profileFields,
+        email,
+        updatedAt: serverTimestamp(),
+        ...(!existingData.createdAt ? { createdAt: serverTimestamp() } : {}),
+      };
+      await updateDoc(profileRef, updates);
+      return;
     }
-    await updateDoc(profileRef, { ...profileFields, updatedAt: serverTimestamp() });
-    return;
+
+    // First-time creation must satisfy all required fields in firestore.rules.
+    await setDoc(profileRef, {
+      ...profileFields,
+      email,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
+  } catch (error) {
+    if (error instanceof Error && /Email pada profil cloud berbeda/.test(error.message)) throw error;
+    const { code } = getErrorParts(error);
+    if (code.includes('permission-denied')) {
+      throw new Error(
+        `Firestore menolak penyimpanan profil. Periksa apakah firestore.rules terbaru sudah diterbitkan ke database "${firebaseConfig.firestoreDatabaseId}" pada proyek "${firebaseConfig.projectId}". Jangan ubah Rules menjadi publik.`
+      );
+    }
+    throw error;
   }
-  // First-time creation must satisfy all required fields in firestore.rules.
-  await setDoc(profileRef, {
-    ...profileFields,
-    email,
-    createdAt: serverTimestamp(),
-    updatedAt: serverTimestamp(),
-  });
 }
