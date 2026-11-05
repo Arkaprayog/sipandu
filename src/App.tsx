@@ -36,14 +36,10 @@ import { deduplicatePPKSRecords, parsePPKSTimestamp, samePPKSIdentity, sortPPKSR
 import { normalizePPKSPhotoSource } from './lib/photoSources';
 import { buildGoogleFormsPrefilledUrl, buildWhatsAppMessage, createWhatsAppLink } from './utils/helpers';
 import {
-  enableRespondentNotifications,
-  getRespondentNotificationPermission,
-  refreshRespondentNotificationPermission,
   loadRespondentNotifications,
   markRespondentNotificationsRead,
-  notifyWorkspaceReconnectRequired,
-  resolveWorkspaceReconnectNotifications,
   processRespondentSubmissionEvents,
+  notifyIntegratedAssessmentSaved,
   type RespondentNotification,
 } from './lib/respondentNotifications';
 
@@ -237,6 +233,7 @@ function normalizeAppSettings(value: unknown): AppSettings {
     googleSpreadsheetSourceUrl: resolvedSourceUrl,
     googleSpreadsheetSourceName: sourceName,
     googleSpreadsheetSourceTab: sourceTab,
+    theme: saved.theme === 'light' ? 'light' : 'dark',
   };
 }
 
@@ -331,7 +328,6 @@ function StaffApp() {
   const continuationSheetCacheRef = useRef<{ formUrl: string; spreadsheetUrl: string } | null>(null);
   const [cloudSyncNotice, setCloudSyncNotice] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [respondentNotifications, setRespondentNotifications] = useState<RespondentNotification[]>(() => loadRespondentNotifications(auth.currentUser?.uid || 'default'));
-  const [notificationPermission, setNotificationPermission] = useState<NotificationPermission | 'unsupported'>(() => getRespondentNotificationPermission());
   const [liveSyncState, setLiveSyncState] = useState<{
     type: 'idle' | 'success' | 'paused' | 'error';
     message: string;
@@ -544,38 +540,14 @@ function StaffApp() {
 
   useEffect(() => {
     if (!isAuthenticated) return;
-    let active = true;
     const uid = auth.currentUser?.uid || 'default';
     setRespondentNotifications(loadRespondentNotifications(uid));
-    setNotificationPermission(getRespondentNotificationPermission());
-
-    const refreshPermission = () => {
-      void refreshRespondentNotificationPermission().then((permission) => {
-        if (active) setNotificationPermission(permission);
-      });
-    };
     const onNotificationHistoryUpdated = (event: Event) => {
       const eventUid = (event as CustomEvent<{ uid?: string }>).detail?.uid || '';
       if (eventUid === uid) setRespondentNotifications(loadRespondentNotifications(uid));
     };
-    const onWorkspaceTokenUpdated = (event: Event) => {
-      const connected = (event as CustomEvent<{ connected?: boolean }>).detail?.connected === true;
-      if (!connected) return;
-      setRespondentNotifications(resolveWorkspaceReconnectNotifications(uid));
-    };
     window.addEventListener('sipandu-respondent-notifications-updated', onNotificationHistoryUpdated);
-    window.addEventListener('sipandu-workspace-token-updated', onWorkspaceTokenUpdated);
-    window.addEventListener('focus', refreshPermission);
-    document.addEventListener('visibilitychange', refreshPermission);
-    refreshPermission();
-
-    return () => {
-      active = false;
-      window.removeEventListener('sipandu-respondent-notifications-updated', onNotificationHistoryUpdated);
-      window.removeEventListener('sipandu-workspace-token-updated', onWorkspaceTokenUpdated);
-      window.removeEventListener('focus', refreshPermission);
-      document.removeEventListener('visibilitychange', refreshPermission);
-    };
+    return () => window.removeEventListener('sipandu-respondent-notifications-updated', onNotificationHistoryUpdated);
   }, [isAuthenticated, currentUserRole]);
 
   useEffect(() => {
@@ -587,12 +559,6 @@ function StaffApp() {
     if (unreadCount > 0) void badgeNavigator.setAppBadge?.(unreadCount).catch(() => undefined);
     else void badgeNavigator.clearAppBadge?.().catch(() => undefined);
   }, [respondentNotifications]);
-
-  const handleEnableRespondentNotifications = async (): Promise<NotificationPermission | 'unsupported'> => {
-    const permission = await enableRespondentNotifications();
-    setNotificationPermission(permission);
-    return permission;
-  };
 
   const replaceFirestoreRosterFromSheet = async (
     spreadsheetId: string,
@@ -717,6 +683,9 @@ function StaffApp() {
     if (!answers) throw new Error('Jawaban asesmen tidak tersedia untuk disimpan.');
 
     const { role } = await saveIntegratedAssessmentToFirestore(updated.id, answers);
+    const notificationUid = auth.currentUser?.uid || 'default';
+    await notifyIntegratedAssessmentSaved(notificationUid, updated.id, updated.namaLengkap);
+    setRespondentNotifications(loadRespondentNotifications(notificationUid));
     setPpksList((prev) => prev.map((record) => {
       if (record.id !== updated.id) return record;
       return {
@@ -1224,11 +1193,6 @@ function StaffApp() {
         const token = await getAccessToken();
         if (!active) return;
         if (!token) {
-          if (isWorkspaceAccountConnected()) {
-            const uid = auth.currentUser?.uid || 'default';
-            await notifyWorkspaceReconnectRequired(uid);
-            if (active) setRespondentNotifications(loadRespondentNotifications(uid));
-          }
           failedAttempts += 1;
           nextDelay = getLiveSyncRetryDelay(failedAttempts);
           setLiveSyncState({
@@ -1280,9 +1244,6 @@ function StaffApp() {
           /401|invalid_grant|token.{0,30}(expired|invalid)|unauthori[sz]ed/i.test(detail)
         ) {
           invalidateAccessToken();
-          const uid = auth.currentUser?.uid || 'default';
-          await notifyWorkspaceReconnectRequired(uid);
-          if (active) setRespondentNotifications(loadRespondentNotifications(uid));
         }
         console.error('SIPANDU continuous Google Workspace live sync failed; retry scheduled:', error);
         setLiveSyncState({
@@ -1396,7 +1357,7 @@ function StaffApp() {
   ].includes(activeTab);
 
   return (
-    <div className={`sipandu-navigation-shell min-h-screen w-full bg-[#0a140b] text-white flex flex-col justify-between selection:bg-emerald-600 selection:text-white overflow-x-hidden relative ${isImmersiveDashboard ? 'h-[100dvh] min-h-[100dvh] overflow-hidden' : ''}`}>
+    <div data-sipandu-theme={settings.theme === 'light' ? 'light' : 'dark'} className={`sipandu-navigation-shell min-h-screen w-full bg-[#0a140b] text-white flex flex-col justify-between selection:bg-emerald-600 selection:text-white overflow-x-hidden relative ${isImmersiveDashboard ? 'h-[100dvh] min-h-[100dvh] overflow-hidden' : ''}`}>
       {/* Background ambient lighting: deep moss green with subtle black vignetting and crimson outline aura */}
       <div className="fixed inset-0 bg-radial-[at_top_right] from-[#17301b]/80 via-[#0a140b] to-[#040905] pointer-events-none" />
       <div className="fixed -top-40 -left-40 w-96 h-96 rounded-full bg-rose-600/10 blur-3xl pointer-events-none" />
@@ -1507,8 +1468,6 @@ function StaffApp() {
             isOpen={true}
             onClose={() => setIsNotificationsOpen(false)}
             notifications={respondentNotifications}
-            permission={notificationPermission}
-            onEnableNotifications={handleEnableRespondentNotifications}
             onMarkAllRead={() => setRespondentNotifications(markRespondentNotificationsRead(auth.currentUser?.uid || 'default'))}
             followUpReady={Boolean(
               settings.googleFormTahapLanjutanUrl?.trim() &&
