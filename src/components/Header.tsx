@@ -107,11 +107,11 @@ export const Header: React.FC<HeaderProps> = ({
 
             {/* Di samping foto profil (sejajar): nama, NIP, dan unit kerja */}
             <div className="flex flex-col justify-center text-left space-y-0.5">
-              <h2 className="text-sm md:text-base font-bold text-white tracking-wide flex items-center gap-2">
+              <h2 className="text-sm md:text-base font-bold text-white tracking-wide flex flex-wrap items-center gap-2 min-w-0">
                 <span>{profile.nama}</span>
-                {profile.jabatan.includes('Pendamping') && (
-                  <span className="text-[10px] bg-emerald-800/80 text-emerald-200 px-2 py-0.5 rounded border border-emerald-500/40">
-                    Pendamping
+                {String(profile.jabatan || '').trim() && (
+                  <span className="profile-role-badge inline-flex max-w-full items-center rounded-md border px-2 py-0.5 text-[10px] font-semibold leading-snug md:text-[11px]" aria-label={`Jabatan: ${profile.jabatan}`}>
+                    {String(profile.jabatan).trim()}
                   </span>
                 )}
               </h2>
