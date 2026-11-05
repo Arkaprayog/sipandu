@@ -125,9 +125,9 @@ jobs:
           printf '%s' "$FIREBASE_SERVICE_ACCOUNT_JSON" > "$KEY_FILE"
           chmod 600 "$KEY_FILE"
           export GOOGLE_APPLICATION_CREDENTIALS="$KEY_FILE"
+          trap 'rm -f "$KEY_FILE"' EXIT
 
-          # Deploy all Firestore databases declared in firebase.json (currently
-          # exactly one named SIPANDU database). Do not deploy Storage or other services.
-          firebase deploy --only firestore --project "$FIREBASE_PROJECT_ID" --non-interactive
-
-          rm -f "$KEY_FILE"
+          # Publish only Firestore Security Rules (not Storage Rules or indexes).
+          # The project config currently maps the source rules file to the single
+          # named SIPANDU database checked above.
+          firebase deploy --only firestore:rules --project "$FIREBASE_PROJECT_ID" --non-interactive
