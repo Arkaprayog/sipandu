@@ -279,9 +279,12 @@ export async function listStaffDocuments(): Promise<StaffDocumentRecord[]> {
         ownerEmail: String(data.ownerEmail || ''),
         category: data.category === 'surat-lainnya' ? 'surat-lainnya' : 'surat-tugas',
         uploadedAt,
-        driveBackupStatus: data.driveBackupStatus === 'complete' || data.driveBackupStatus === 'failed'
-          ? data.driveBackupStatus : 'pending',
-        driveBackupError: String(data.driveBackupError || ''),
+        driveBackupStatus: data.driveBackupStatus === 'complete' ? 'complete' : 'failed',
+        driveBackupError: String(data.driveBackupError || (
+          data.driveBackupStatus === 'pending'
+            ? 'Backup Google Drive masih menunggu. Pilih ulang file asli untuk mengulang.'
+            : 'Arsip lama belum memiliki status backup Google Drive. Pilih ulang file asli untuk membuat salinan.'
+        )),
         driveFileId: String(data.driveFileId || ''),
         driveWebViewLink: String(data.driveWebViewLink || ''),
         driveBackupAt: data.driveBackupAt && typeof data.driveBackupAt.toDate === 'function'
