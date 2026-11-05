@@ -18,7 +18,7 @@
 }
 
 .frame-silhouette-subtle {
-  border: 1px solid rgba(244, 63, 63, 0.22);
+  border: 1px solid rgba(244, 63, 94, 0.22);
   box-shadow: 0 0 12px -4px rgba(225, 29, 72, 0.10);
 }
 
@@ -265,4 +265,18 @@ body,
 /* Do not alter print colors or document layout when printing from either theme. */
 @media print {
   .sipandu-navigation-shell { background: #FFFFFF !important; color: #111827 !important; }
+}
+
+
+/* Profile job-title chip shown beside the saved staff name. */
+.profile-role-badge {
+  background-color: rgba(100,214,174,.12);
+  color: #64D6AE;
+  border-color: rgba(100,214,174,.3);
+}
+
+.sipandu-navigation-shell[data-sipandu-theme="light"] .profile-role-badge {
+  background-color: #DCE8D8;
+  color: #355B40;
+  border-color: rgba(53,91,64,.2);
 }
