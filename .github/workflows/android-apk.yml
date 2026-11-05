@@ -93,8 +93,8 @@ jobs:
           version = sys.argv[2]
           version_code = sys.argv[3]
           content = path.read_text()
-          content, code_count = re.subn(r"(?m)^(\\s*versionCode\\s+)\\d+", lambda match: match.group(1) + version_code, content, count=1)
-          content, name_count = re.subn(r'(?m)^(\\s*versionName\\s+")[^"]+(")', lambda match: match.group(1) + version + match.group(2), content, count=1)
+          content, code_count = re.subn(r"(?m)^(\s*versionCode\s+)\d+", lambda match: match.group(1) + version_code, content, count=1)
+          content, name_count = re.subn(r'(?m)^(\s*versionName\s+")[^"]+(")', lambda match: match.group(1) + version + match.group(2), content, count=1)
           if code_count != 1 or name_count != 1:
               raise SystemExit("Could not synchronize Android versionCode/versionName from package.json.")
           path.write_text(content)
