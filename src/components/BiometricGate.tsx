@@ -7,7 +7,8 @@ import { LoginPage } from './LoginPage';
 /**
  * When a Firebase session is still active and local quick-unlock is configured,
  * reuse the existing login page instead of creating a separate biometric screen.
- * The login page offers fingerprint/face unlock and PIN fallback within its card.
+ * The login page offers native face/fingerprint authentication, device-credential fallback,
+ * and a legacy app-PIN fallback for users who already configured one.
  */
 export const BiometricGate: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [locked, setLocked] = useState(() => isQuickUnlockEnabled());

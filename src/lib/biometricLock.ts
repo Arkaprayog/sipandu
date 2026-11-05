@@ -151,6 +151,15 @@ function isPlatformAuthenticatorSupported(): boolean {
     typeof PublicKeyCredential !== 'undefined';
 }
 
+async function isPlatformAuthenticatorAvailable(): Promise<boolean> {
+  if (!isPlatformAuthenticatorSupported()) return false;
+  try {
+    return await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
+  } catch {
+    return false;
+  }
+}
+
 export function isAppPinConfigured(userId?: string): boolean {
   try {
     const s = storage();
@@ -192,7 +201,7 @@ export function isPlatformBiometricRegistered(userId?: string): boolean {
  */
 export async function getBiometricDiagnostics(): Promise<BiometricDiagnostics> {
   if (!Capacitor.isNativePlatform()) {
-    const available = isPlatformAuthenticatorSupported();
+    const available = await isPlatformAuthenticatorAvailable();
     return {
       isAvailable: available,
       strongBiometryIsAvailable: available,
@@ -273,10 +282,6 @@ export async function enableBiometricLock(user?: QuickUnlockUser): Promise<void>
   if (!user?.uid) {
     throw new Error('Sesi akun SIPANDU tidak ditemukan. Masuk dengan akun resmi sebelum mendaftarkan biometrik.');
   }
-  if (!isAppPinConfigured(user.uid)) {
-    throw new Error('Daftarkan PIN SIPANDU 4 angka terlebih dahulu. PIN wajib tersedia sebagai cadangan jika biometrik gagal.');
-  }
-
   if (!Capacitor.isNativePlatform()) {
     await registerPlatformAuthenticator(user);
     storage().setItem(BIOMETRIC_USER_KEY, user.uid);
@@ -296,7 +301,7 @@ export async function enableBiometricLock(user?: QuickUnlockUser): Promise<void>
     reason: 'Verifikasi identitas untuk mengaktifkan pengaman SIPANDU ODHIV',
     androidTitle: 'Aktifkan pengaman SIPANDU',
     androidSubtitle: 'Konfirmasi dengan sidik jari atau face unlock',
-    allowDeviceCredential: false,
+    allowDeviceCredential: true,
   });
   storage().setItem(BIOMETRIC_USER_KEY, user.uid);
   storage().setItem(BIOMETRIC_LOCK_KEY, 'true');
@@ -352,7 +357,7 @@ export async function authenticateBiometricLock(userId?: string): Promise<void> 
     reason: 'Buka SIPANDU ODHIV',
     androidTitle: 'Pengaman SIPANDU ODHIV',
     androidSubtitle: 'Gunakan sidik jari atau face unlock',
-    allowDeviceCredential: false,
+    allowDeviceCredential: true,
   });
 }
 
