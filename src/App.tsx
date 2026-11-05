@@ -44,6 +44,30 @@ import {
   type RespondentNotification,
 } from './lib/respondentNotifications';
 
+function describeTeamActivationError(error: unknown): string {
+  const detail = error instanceof Error ? error.message.trim() : String(error ?? '').trim();
+  const missing = [...new Set(
+    detail.match(/TEAM_REGISTRATION_CODE|FIREBASE_SERVICE_ACCOUNT_JSON|FIREBASE_WEB_API_KEY|FIREBASE_PROJECT_ID|PENDING_REGISTRATIONS KV/g) || []
+  )];
+
+  if (missing.length) {
+    return `Email sudah diverifikasi, tetapi layanan belum dapat menerbitkan peran SIPANDU. Konfigurasi Worker yang belum tersedia: ${missing.join(', ')}. Administrator perlu melengkapi secret/binding pada Worker sipandu-registration. Sesi akun tetap tersimpan.`;
+  }
+  if (/PERMISSION_DENIED|firebaseauth\.users\.update|not authorized|insufficient permission/i.test(detail)) {
+    return 'Email sudah diverifikasi, tetapi Firebase menolak penerbitan peran. Administrator perlu memastikan service account Worker memiliki izin IAM firebaseauth.users.update pada proyek Firebase SIPANDU. Sesi akun tetap tersimpan.';
+  }
+  if (/undangan.*(tidak ditemukan|kedaluwarsa)|pending.*(not found|expired)/i.test(detail)) {
+    return 'Email sudah diverifikasi, tetapi undangan pendaftaran tim tidak ditemukan atau telah kedaluwarsa. Minta administrator memulihkan undangan untuk email yang sama; jangan membuat akun baru. Sesi akun tetap tersimpan.';
+  }
+  if (/email belum diverifikasi|not verified/i.test(detail)) {
+    return 'Firebase belum membaca status verifikasi email. Buka kembali tautan verifikasi, lalu masuk dan coba lagi. Sesi akun tetap tersimpan.';
+  }
+  if (/network|fetch|tidak dapat dijangkau|unavailable|timeout/i.test(detail)) {
+    return 'Layanan aktivasi SIPANDU belum dapat dijangkau. Periksa koneksi internet dan coba verifikasi lagi. Sesi akun tetap tersimpan.';
+  }
+  return `Email sudah diverifikasi, tetapi aktivasi peran SIPANDU belum berhasil. ${detail || 'Administrator perlu memeriksa Worker pendaftaran dan Firebase Authentication.'} Sesi akun tetap tersimpan.`;
+}
+
 function isSixteenDigitNIK(value: string): boolean {
   return /^\d{16}$/.test(String(value || '').replace(/\D/g, ''));
 }
@@ -279,7 +303,11 @@ function StaffApp() {
         // A verified member who registered with the shared team code is activated
         // on the server. The Worker assigns only the pendamping claim after it
         // confirms the pending invitation and the verified Firebase identity.
-        let token = await getIdTokenResult(user);
+        // Refresh Firebase's cached user profile and ID token before making
+        // an authorization decision. Email verification may have happened in
+        // another browser/app after this session was first created.
+        await user.reload();
+        let token = await getIdTokenResult(user, true);
         let role = token.claims.role;
         if (role !== 'owner' && role !== 'supervisor' && role !== 'pendamping' && !user.emailVerified) {
           setIsAuthenticated(false);
@@ -295,6 +323,12 @@ function StaffApp() {
             role = token.claims.role;
           } catch (activationError) {
             console.warn('Aktivasi pendaftaran anggota SIPANDU belum selesai:', activationError);
+            if (!active || generation !== authEventGeneration || auth.currentUser?.uid !== user.uid) return;
+            setIsAuthenticated(false);
+            setCurrentUserName('');
+            setCurrentUserRole('');
+            setAuthError(describeTeamActivationError(activationError));
+            return;
           }
         }
         if (!active || generation !== authEventGeneration || auth.currentUser?.uid !== user.uid) return;
@@ -682,6 +716,9 @@ function StaffApp() {
     setAuthReady(false);
     setAuthError('');
     try {
+      // A link may have been opened outside SIPANDU; reload the Firebase user
+      // before checking emailVerified or evaluating trusted role claims.
+      await user.reload();
       let token = await getIdTokenResult(user, true);
       let role = token.claims.role;
       if (role !== 'owner' && role !== 'supervisor' && role !== 'pendamping' && !user.emailVerified) {
@@ -696,7 +733,7 @@ function StaffApp() {
       }
       if (role !== 'owner' && role !== 'supervisor' && role !== 'pendamping') {
         setIsAuthenticated(false);
-        setAuthError('Sesi tetap tersimpan, tetapi klaim peran owner/supervisor/pendamping belum tersedia. Administrator perlu memperbaiki peran akun.');
+        setAuthError('Layanan aktivasi mengembalikan respons, tetapi klaim peran belum muncul pada token terbaru. Tunggu beberapa saat, lalu coba verifikasi lagi. Bila tetap terjadi, administrator perlu memeriksa custom claim akun Firebase.');
         return;
       }
       setCurrentUserRole(role);
@@ -705,7 +742,7 @@ function StaffApp() {
       setLocalCacheReady(false);
     } catch (error) {
       setIsAuthenticated(false);
-      setAuthError('Sesi tetap tersimpan. Firebase belum dapat memverifikasi akun: ' + (error instanceof Error ? error.message : String(error)));
+      setAuthError(describeTeamActivationError(error));
     } finally {
       setAuthReady(true);
     }
