@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { ProfileUser, SuratRecord } from '../types';
-import { ACCEPTED_DOCUMENT_EXTENSIONS, deleteStaffDocument, listStaffDocuments, uploadStaffDocument, type StaffDocumentRecord } from '../lib/documentStorage';
+import { ACCEPTED_DOCUMENT_EXTENSIONS, deleteStaffDocument, listStaffDocuments, retryStaffDocumentDriveBackup, uploadStaffDocument, type StaffDocumentRecord } from '../lib/documentStorage';
 import { printCurrentWebView } from '../lib/printing';
 import { initialSuratList } from '../data/initialData';
 import { KemensosLogo } from './KemensosLogo';
@@ -38,7 +38,10 @@ export const DokumenView: React.FC<DokumenViewProps> = ({ profile }) => {
   const [uploadProgress, setUploadProgress] = useState<number>(0);
   const [uploadError, setUploadError] = useState<string>('');
   const [documentNotice, setDocumentNotice] = useState<string>('');
+  const [retryingDocumentId, setRetryingDocumentId] = useState<string>('');
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const retryFileInputRef = useRef<HTMLInputElement | null>(null);
+  const retryTargetRef = useRef<StaffDocumentRecord | null>(null);
 
   useEffect(() => {
     const onAppNavigateBack = (event: Event) => {
@@ -105,6 +108,33 @@ export const DokumenView: React.FC<DokumenViewProps> = ({ profile }) => {
       setUploading(false);
       setUploadProgress(0);
       if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  const beginDriveBackupRetry = (document: StaffDocumentRecord) => {
+    retryTargetRef.current = document;
+    retryFileInputRef.current?.click();
+  };
+
+  const handleDriveBackupRetryFile = async (file: File | undefined) => {
+    const target = retryTargetRef.current;
+    retryTargetRef.current = null;
+    if (!file || !target) return;
+    setRetryingDocumentId(target.id);
+    setDocumentNotice('');
+    try {
+      const updated = await retryStaffDocumentDriveBackup(target.id, file);
+      setUploadedDocuments((previous) => previous.map((item) => item.id === updated.id ? updated : item));
+      setDocumentNotice(`Salinan “${updated.name}” berhasil dibuat di Google Drive utama SIPANDU.`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setDocumentNotice(`Backup Google Drive gagal diulang: ${message}`);
+      setUploadedDocuments((previous) => previous.map((item) => item.id === target.id
+        ? { ...item, driveBackupStatus: 'failed', driveBackupError: message }
+        : item));
+    } finally {
+      setRetryingDocumentId('');
+      if (retryFileInputRef.current) retryFileInputRef.current.value = '';
     }
   };
 
@@ -274,6 +304,13 @@ export const DokumenView: React.FC<DokumenViewProps> = ({ profile }) => {
             </div>
             <span className="text-[10px] text-sky-200">{visibleDocuments.length} berkas</span>
           </div>
+          <input
+            ref={retryFileInputRef}
+            type="file"
+            accept={ACCEPTED_DOCUMENT_EXTENSIONS}
+            className="hidden"
+            onChange={(event) => { void handleDriveBackupRetryFile(event.currentTarget.files?.[0]); }}
+          />
           {documentsLoading ? (
             <p className="text-xs text-neutral-400">Memuat arsip dokumen...</p>
           ) : visibleDocuments.length === 0 ? (
@@ -295,7 +332,17 @@ export const DokumenView: React.FC<DokumenViewProps> = ({ profile }) => {
                       {document.driveBackupStatus === 'complete' ? 'Backup Google Drive tersimpan' : document.driveBackupStatus === 'failed' ? 'Backup Google Drive belum berhasil' : 'Status backup Google Drive menunggu'}
                     </p>
                     {document.driveBackupStatus === 'failed' && document.driveBackupError && (
-                      <p className="mt-1 text-[10px] text-amber-200/80 break-words">{document.driveBackupError}</p>
+                      <>
+                        <p className="mt-1 text-[10px] text-amber-200/80 break-words">{document.driveBackupError}</p>
+                        <button
+                          type="button"
+                          onClick={() => beginDriveBackupRetry(document)}
+                          disabled={retryingDocumentId === document.id}
+                          className="mt-1 inline-flex items-center gap-1 rounded-md border border-amber-300/30 px-2 py-1 text-[10px] font-bold text-amber-100 disabled:opacity-50"
+                        >
+                          {retryingDocumentId === document.id ? 'Mengulang backup…' : 'Pilih ulang file untuk backup Drive'}
+                        </button>
+                      </>
                     )}
                   </div>
                   {document.driveWebViewLink && document.driveBackupStatus === 'complete' && (
