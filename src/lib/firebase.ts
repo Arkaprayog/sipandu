@@ -1466,12 +1466,12 @@ export async function saveSIPANDUUserProfile(uid: string, profile: ProfileUser):
 
       // Repair legacy profile metadata safely: email can only be updated to
       // the authenticated token email; createdAt is backfilled only if absent.
-      const updates: Record<string, unknown> = {
+      const updates = {
         ...profileFields,
         email,
         updatedAt: serverTimestamp(),
+        ...(!existingData.createdAt ? { createdAt: serverTimestamp() } : {}),
       };
-      if (!existingData.createdAt) updates.createdAt = serverTimestamp();
       await updateDoc(profileRef, updates);
       return;
     }
