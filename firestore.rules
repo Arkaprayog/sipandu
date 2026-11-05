@@ -73,6 +73,51 @@ service cloud.firestore {
       allow update, delete: if canWritePpks();
     }
 
+    // Shared document archive metadata. Binary files live in Firebase Storage;
+    // staff can read the shared archive, while pendamping can delete only their
+    // own uploads. Owner/supervisor can remove any archived file.
+    match /staffDocuments/{documentId} {
+      allow read: if isStaff();
+      allow create: if isStaff()
+        && request.resource.data.keys().hasAll([
+          'name', 'contentType', 'size', 'storagePath', 'downloadUrl',
+          'ownerUid', 'ownerEmail', 'category', 'uploadedAt'
+        ])
+        && request.resource.data.keys().hasOnly([
+          'name', 'contentType', 'size', 'storagePath', 'downloadUrl',
+          'ownerUid', 'ownerEmail', 'category', 'uploadedAt'
+        ])
+        && request.resource.data.name is string
+        && request.resource.data.name.size() > 0
+        && request.resource.data.name.size() <= 255
+        && request.resource.data.contentType in [
+          'application/pdf',
+          'application/msword',
+          'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+          'image/jpeg', 'image/png', 'image/gif', 'image/webp',
+          'image/bmp', 'image/tiff', 'image/heic', 'image/heif'
+        ]
+        && request.resource.data.size is int
+        && request.resource.data.size > 0
+        && request.resource.data.size <= 25 * 1024 * 1024
+        && request.resource.data.ownerUid == request.auth.uid
+        && request.resource.data.ownerEmail is string
+        && request.resource.data.category in ['surat-tugas', 'surat-lainnya']
+        && request.resource.data.storagePath is string
+        && request.resource.data.storagePath.matches(
+          '^staff-documents/' + request.auth.uid + '/' + documentId + '/[^/]+
+  }
+}
+
+        )
+        && request.resource.data.downloadUrl is string
+        && request.resource.data.downloadUrl.size() <= 4096
+        && request.resource.data.uploadedAt == request.time;
+      allow update: if false;
+      allow delete: if isStaff()
+        && (resource.data.ownerUid == request.auth.uid || canWritePpks());
+    }
+
     // Deny all collections unless a collection-specific policy is added.
     match /{document=**} {
       allow read, write: if false;
