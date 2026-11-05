@@ -52,6 +52,17 @@ function missingConfiguration(env) {
   return missing;
 }
 
+ // Activation uses an existing pending invitation, so it must not depend on
+ // the shared registration code remaining configured after signup.
+ export function missingActivationConfiguration(env) {
+   const missing = [];
+   if (!env.FIREBASE_WEB_API_KEY) missing.push('FIREBASE_WEB_API_KEY');
+   if (!env.FIREBASE_PROJECT_ID) missing.push('FIREBASE_PROJECT_ID');
+   if (!env.FIREBASE_SERVICE_ACCOUNT_JSON) missing.push('FIREBASE_SERVICE_ACCOUNT_JSON');
+   if (!env.PENDING_REGISTRATIONS) missing.push('PENDING_REGISTRATIONS KV');
+   return missing;
+ }
+
 const MAX_REQUEST_BODY_BYTES = 12_000;
 export async function parseJson(request) {
   if (!/^application\/json(?:\s*;|$)/i.test(request.headers.get('Content-Type') || '')) return null;
@@ -302,8 +313,13 @@ export default {
     }
 
     if (path === '/activate' && request.method === 'POST') {
-      if (missingConfiguration(env).length) {
-        return jsonResponse({ ok: false, message: 'Layanan aktivasi belum siap dikonfigurasi administrator.' }, 503, origin);
+      const activationMissing = missingActivationConfiguration(env);
+      if (activationMissing.length) {
+        return jsonResponse({
+          ok: false,
+          message: `Layanan aktivasi belum siap. Konfigurasi belum tersedia: ${activationMissing.join(', ')}.`,
+          missing: activationMissing,
+        }, 503, origin);
       }
       const authorization = request.headers.get('Authorization') || '';
       const idToken = authorization.startsWith('Bearer ') ? authorization.slice(7).trim() : '';
