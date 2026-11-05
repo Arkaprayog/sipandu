@@ -73,14 +73,45 @@ function missingConfiguration(env: Env): string[] {
   return missing;
 }
 
-async function parseJson(request: Request): Promise<Record<string, unknown> | null> {
-  const contentLength = Number(request.headers.get('Content-Length') || 0);
-  if (contentLength > 12000) return null;
+const MAX_REQUEST_BODY_BYTES = 12_000;
+export async function parseJson(request: Request): Promise<Record<string, unknown> | null> {
+  if (!/^application\/json(?:\s*;|$)/i.test(request.headers.get('Content-Type') || '')) return null;
+  const contentLengthHeader = request.headers.get('Content-Length');
+  if (contentLengthHeader !== null) {
+    const contentLength = Number(contentLengthHeader);
+    if (!Number.isSafeInteger(contentLength) || contentLength < 0 || contentLength > MAX_REQUEST_BODY_BYTES) return null;
+  }
+  const reader = request.body?.getReader();
+  if (!reader) return null;
+  const chunks: Uint8Array[] = [];
+  let totalBytes = 0;
   try {
-    const value = await request.json() as unknown;
-    return value && typeof value === 'object' && !Array.isArray(value)
-      ? value as Record<string, unknown>
-      : null;
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (!value) continue;
+      totalBytes += value.byteLength;
+      if (totalBytes > MAX_REQUEST_BODY_BYTES) {
+        try { await reader.cancel(); } catch { /* request body rejected */ }
+        return null;
+      }
+      chunks.push(value);
+    }
+  } catch {
+    try { await reader.cancel(); } catch { /* preserve read failure */ }
+    return null;
+  } finally {
+    reader.releaseLock();
+  }
+  const bytes = new Uint8Array(totalBytes);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  try {
+    const value = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes)) as unknown;
+    return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null;
   } catch {
     return null;
   }
@@ -152,7 +183,7 @@ async function getGoogleAccessToken(env: Env): Promise<string> {
   const header = encodeTextBase64Url(JSON.stringify({ alg: 'RS256', typ: 'JWT' }));
   const claims = encodeTextBase64Url(JSON.stringify({
     iss: serviceAccount.client_email,
-    scope: 'https://www.googleapis.com/auth/identitytoolkit https://www.googleapis.com/auth/cloud-platform',
+    scope: 'https://www.googleapis.com/auth/identitytoolkit',
     aud: 'https://oauth2.googleapis.com/token',
     iat: now,
     exp: now + 3600,
