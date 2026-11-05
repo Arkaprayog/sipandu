@@ -1,4 +1,5 @@
 import { getAccessToken, invalidateAccessToken, refreshWorkspaceAccessToken } from './firebase';
+import type { SuratRecord } from '../types';
 
 const DRIVE_API = 'https://www.googleapis.com/drive/v3';
 const ROOT_FOLDER_NAME = 'SIPANDU';
@@ -154,6 +155,18 @@ export async function backupDocumentToCentralDrive(
   const categoryFolder = category === 'surat-tugas' ? 'Surat Tugas' : 'Surat Lainnya';
   const folderId = await ensureFolderPath([ROOT_FOLDER_NAME, DOCUMENTS_FOLDER_NAME, categoryFolder]);
   return uploadMultipart(folderId, safeName(file.name, 'dokumen'), file.type || 'application/octet-stream', file);
+}
+
+/** Archives the structured content of a newly generated letter in the central Drive. */
+export async function backupLetterToCentralDrive(record: SuratRecord): Promise<{ id: string; webViewLink?: string }> {
+  const categoryFolder = record.jenis === 'Surat Tugas' ? 'Surat Tugas' : 'Surat Lainnya';
+  const folderId = await ensureFolderPath([ROOT_FOLDER_NAME, DOCUMENTS_FOLDER_NAME, categoryFolder, 'Surat Dibuat']);
+  const payload = new Blob([JSON.stringify({
+    type: 'SIPANDU Surat',
+    ...record,
+    archivedAt: new Date().toISOString(),
+  }, null, 2)], { type: 'application/json' });
+  return uploadMultipart(folderId, safeName(record.nomorSurat + '-' + record.judul, record.id) + '.json', 'application/json', payload);
 }
 
 /** Writes a portable JSON snapshot of an integrated assessment to the central Drive archive. */
