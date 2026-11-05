@@ -282,9 +282,7 @@ service cloud.firestore {
         && request.resource.data.updatedAt == request.time;
       allow update: if isOwnProfile()
         && hasValidProfileShape(request.resource.data)
-        // Email is immutable to the user except for repairing its casing or
-        // backfilling a missing legacy field; the new value must equal the
-        // authenticated Firebase token email (enforced by hasValidProfileShape).
+        // Email is private metadata on this UID-owned profile document.
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
           'nama', 'nip', 'jabatan', 'unitKerja', 'noHp', 'photoUrl',
           'email', 'createdAt', 'updatedAt'
