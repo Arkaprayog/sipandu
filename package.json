@@ -9,7 +9,8 @@
     "test": "tsx --test src/data/initialData.test.ts src/lib/nikNumeric.test.ts src/lib/ppksData.test.ts src/lib/atensiColumnMapping.test.ts src/lib/photoSources.test.ts src/utils/helpers.test.ts src/utils/whatsappTemplate.test.ts src/lib/lazyImportRecovery.test.ts src/lib/liveSyncPolicy.test.ts src/lib/pinPolicy.test.ts src/lib/ppksRecordState.test.ts src/lib/interventionMapping.test.ts src/lib/stageOneRespondents.test.ts src/lib/photoFilePreview.test.ts src/lib/notificationPolicy.test.ts src/utils/primaryFormPrefill.test.ts",
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
-    "lint": "python3 scripts/generate_surat_tugas_template.py && tsc --noEmit"
+    "lint": "python3 scripts/generate_surat_tugas_template.py && tsc --noEmit",
+    "test:rules:unit": "tsx --test src/lib/firebaseRules.test.ts"
   },
   "dependencies": {
     "@capacitor/app": "^7.0.0",
@@ -44,7 +45,8 @@
     "tsx": "^4.21.0",
     "typescript": "^7.0.2",
     "@types/express": "^4.17.21",
-    "@capacitor/cli": "^7.4.3"
+    "@capacitor/cli": "^7.4.3",
+    "@firebase/rules-unit-testing": "^6.0.0"
   },
   "packageManager": "bun@1.4.4"
 }
