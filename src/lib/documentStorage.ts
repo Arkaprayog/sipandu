@@ -293,6 +293,78 @@ export async function listStaffDocuments(): Promise<StaffDocumentRecord[]> {
   }
 }
 
+export async function retryStaffDocumentDriveBackup(
+  documentId: string,
+  file: File,
+): Promise<StaffDocumentRecord> {
+  const user = await getVerifiedStaff();
+  const recordRef = doc(db, 'staffDocuments', documentId);
+  const snapshot = await getDoc(recordRef);
+  if (!snapshot.exists()) throw new Error('Metadata dokumen tidak ditemukan di Firestore.');
+  const data = snapshot.data();
+  const roleToken = await getIdTokenResult(user);
+  const role = roleToken.claims.role;
+  if (data.ownerUid !== user.uid && role !== 'owner' && role !== 'supervisor') {
+    throw new Error('Anda hanya dapat mengulang backup dokumen yang Anda unggah sendiri.');
+  }
+  if (file.name !== String(data.name || '') || file.size !== Number(data.size || 0)) {
+    throw new Error('File yang dipilih tidak sama dengan file arsip. Pilih file asli dengan nama dan ukuran yang sama.');
+  }
+
+  try {
+    const backup = await backupDocumentToCentralDrive(
+      file,
+      data.category === 'surat-lainnya' ? 'surat-lainnya' : 'surat-tugas',
+    );
+    try {
+      await updateDoc(recordRef, {
+        driveBackupStatus: 'complete',
+        driveBackupError: '',
+        driveFileId: backup.id,
+        driveWebViewLink: backup.webViewLink || '',
+        driveBackupAt: serverTimestamp(),
+        driveBackupUpdatedAt: serverTimestamp(),
+      });
+    } catch (error) {
+      try { await deleteCentralDriveFile(backup.id); } catch { /* preserve Firestore error */ }
+      throw error;
+    }
+    return {
+      id: documentId,
+      name: String(data.name || file.name),
+      contentType: String(data.contentType || file.type || 'application/octet-stream'),
+      size: Number(data.size || file.size),
+      storagePath: String(data.storagePath || ''),
+      downloadUrl: String(data.downloadUrl || ''),
+      ownerUid: String(data.ownerUid || ''),
+      ownerEmail: String(data.ownerEmail || ''),
+      category: data.category === 'surat-lainnya' ? 'surat-lainnya' : 'surat-tugas',
+      uploadedAt: data.uploadedAt && typeof data.uploadedAt.toDate === 'function'
+        ? data.uploadedAt.toDate().toISOString() : '',
+      driveBackupStatus: 'complete',
+      driveBackupError: '',
+      driveFileId: backup.id,
+      driveWebViewLink: backup.webViewLink || '',
+      driveBackupAt: new Date().toISOString(),
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    try {
+      await updateDoc(recordRef, {
+        driveBackupStatus: 'failed',
+        driveBackupError: message.slice(0, 1000),
+        driveFileId: '',
+        driveWebViewLink: '',
+        driveBackupAt: null,
+        driveBackupUpdatedAt: serverTimestamp(),
+      });
+    } catch (statusError) {
+      console.error('SIPANDU could not persist failed Drive retry status:', statusError);
+    }
+    throw new Error(message);
+  }
+}
+
 export async function deleteStaffDocument(documentId: string, storagePath: string): Promise<void> {
   await getVerifiedStaff();
   try {
