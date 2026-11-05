@@ -749,6 +749,35 @@ export async function savePPKSToFirestore(ppks: PPKSRecord): Promise<true> {
  * Pendamping may update this one field, but remains unable to create, delete,
  * or modify the spreadsheet-owned PPKS profile and other record fields.
  */
+export async function saveIntegratedAssessmentBackupMetadata(
+  ppksId: string,
+  backup: { status: 'complete' | 'failed'; fileId?: string; webViewLink?: string; error?: string },
+): Promise<void> {
+  const user = auth.currentUser;
+  if (!user) throw new Error('Belum masuk ke Firebase Auth sebagai akun SIPANDU.');
+  if (!ppksId.trim()) throw new Error('ID PPKS kosong untuk metadata arsip Google Drive.');
+  const token = await getIdTokenResult(user);
+  const role = token.claims.role;
+  if (!VALID_ROLES.includes(role as SipanduRole)) {
+    throw new Error('Peran akun SIPANDU tidak valid untuk mencatat status arsip asesmen.');
+  }
+  const status = backup.status;
+  const fileId = status === 'complete' ? String(backup.fileId || '') : '';
+  const webViewLink = status === 'complete' ? String(backup.webViewLink || '') : '';
+  if (status === 'complete' && (!fileId || !webViewLink)) {
+    throw new Error('Google Drive belum mengembalikan ID dan tautan file untuk arsip asesmen.');
+  }
+  await setDoc(doc(db, 'integratedAssessmentBackups', ppksId), {
+    ppksId,
+    driveBackupStatus: status,
+    driveBackupError: String(backup.error || '').slice(0, 1000),
+    driveFileId: fileId,
+    driveWebViewLink: webViewLink,
+    savedAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  });
+}
+
 export async function saveIntegratedAssessmentToFirestore(
   ppksId: string,
   answers: Record<string, string | string[]>,
