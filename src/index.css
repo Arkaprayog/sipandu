@@ -142,7 +142,7 @@ body,
   --sipandu-bg: #F4F7F1;
   --sipandu-surface: #E8EFE3;
   --sipandu-card: #FFFFFF;
-  --sipandu-accent: #355B40;
+  --sipandu-accent: #6495ED;
   --sipandu-text: #243529;
   --sipandu-muted: #657665;
   --sipandu-border: rgba(53,91,64,.16);
@@ -214,6 +214,8 @@ body,
 .sipandu-navigation-shell[data-sipandu-theme="light"] button[class*="bg-emerald-"],
 .sipandu-navigation-shell[data-sipandu-theme="light"] button[class*="bg-[#355b40]"],
 .sipandu-navigation-shell[data-sipandu-theme="light"] button[class*="bg-[#355B40]"] {
+  background-color: #6495ED !important;
+  border-color: #6495ED !important;
   color: #FFFFFF !important;
 }
 
@@ -295,7 +297,7 @@ body,
 .sipandu-navigation-shell[data-sipandu-theme="light"] {
   --sipandu-text: #000000;
   --sipandu-muted: #000000;
-  --sipandu-accent: #000000;
+  --sipandu-accent: #6495ED;
 }
 
 .sipandu-navigation-shell[data-sipandu-theme="light"] input::placeholder,
