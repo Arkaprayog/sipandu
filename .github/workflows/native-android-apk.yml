@@ -11,7 +11,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: sipandu-native-apk
+  group: sipandu-native-apk-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
