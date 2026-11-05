@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { PPKSRecord } from '../types';
-import { FolderArchive, FileText, Printer, Search, ExternalLink, ClipboardCheck, Clock3 } from 'lucide-react';
+import { FolderArchive, FileText, Printer, Search, ClipboardCheck, Clock3 } from 'lucide-react';
 
 interface DokumenViewProps {
   ppksList: PPKSRecord[];
