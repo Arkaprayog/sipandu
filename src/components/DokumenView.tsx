@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { ProfileUser, SuratRecord } from '../types';
 import { ACCEPTED_DOCUMENT_EXTENSIONS, deleteStaffDocument, listStaffDocuments, retryStaffDocumentDriveBackup, uploadStaffDocument, type StaffDocumentRecord } from '../lib/documentStorage';
 import { printCurrentWebView } from '../lib/printing';
+import { listStaffLettersFromFirestore, saveStaffLetterToFirestore } from '../lib/letterStorage';
 import { initialSuratList } from '../data/initialData';
 import { KemensosLogo } from './KemensosLogo';
 import { SuratTugasEditor } from './SuratTugasEditor';
@@ -38,6 +39,8 @@ export const DokumenView: React.FC<DokumenViewProps> = ({ profile }) => {
   const [uploadProgress, setUploadProgress] = useState<number>(0);
   const [uploadError, setUploadError] = useState<string>('');
   const [documentNotice, setDocumentNotice] = useState<string>('');
+  const [letterDriveLink, setLetterDriveLink] = useState<string>('');
+  const [savingLetter, setSavingLetter] = useState<boolean>(false);
   const [retryingDocumentId, setRetryingDocumentId] = useState<string>('');
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const retryFileInputRef = useRef<HTMLInputElement | null>(null);
@@ -70,6 +73,25 @@ export const DokumenView: React.FC<DokumenViewProps> = ({ profile }) => {
     window.addEventListener('sipandu:navigate-back', onAppNavigateBack);
     return () => window.removeEventListener('sipandu:navigate-back', onAppNavigateBack);
   }, [activeTab, selectedSurat, showCreateModal, showUploadModal]);
+
+  useEffect(() => {
+    let active = true;
+    const loadLetters = async () => {
+      try {
+        const remote = await listStaffLettersFromFirestore();
+        if (!active || remote.length === 0) return;
+        setSuratList((previous) => {
+          const merged = new Map(previous.map((item) => [item.id, item]));
+          remote.forEach((item) => merged.set(item.record.id, item.record));
+          return [...remote.map((item) => item.record), ...Array.from(merged.values()).filter((item) => !remote.some((saved) => saved.record.id === item.id))];
+        });
+      } catch (error) {
+        if (active) setDocumentNotice(error instanceof Error ? error.message : 'Arsip surat Firestore belum dapat dimuat.');
+      }
+    };
+    void loadLetters();
+    return () => { active = false; };
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -169,19 +191,20 @@ export const DokumenView: React.FC<DokumenViewProps> = ({ profile }) => {
   );
   const [newDeskripsi, setNewDeskripsi] = useState<string>('');
 
-  const handleCreateSurat = (e: React.FormEvent) => {
+  const handleCreateSurat = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (savingLetter) return;
     if (!newJudul.trim() || !newLokasi.trim() || !newDeskripsi.trim()) {
-      alert('Isi judul, lokasi, dan uraian dokumen yang sebenarnya sebelum membuat dokumen.');
+      setDocumentNotice('Isi judul, lokasi, dan uraian dokumen sebelum menyimpan surat.');
       return;
     }
     if (!profile.nama.trim() || !profile.nip.trim()) {
-      alert('Lengkapi nama dan NIP petugas di Profil SIPANDU sebelum membuat dokumen resmi.');
+      setDocumentNotice('Lengkapi nama dan NIP petugas di Profil SIPANDU sebelum membuat dokumen resmi.');
       return;
     }
 
     const newRecord: SuratRecord = {
-      id: `SRT-${Date.now()}`,
+      id: `SRT-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       nomorSurat: newNomorSurat,
       judul: newJudul,
       jenis: activeTab === 'surat-tugas' ? 'Surat Tugas' : 'Berita Acara',
@@ -193,11 +216,25 @@ export const DokumenView: React.FC<DokumenViewProps> = ({ profile }) => {
       deskripsi: newDeskripsi.trim(),
     };
 
-    setSuratList([newRecord, ...suratList]);
-    setSelectedSurat(newRecord);
-    setShowCreateModal(false);
-    setNewJudul('');
-    setNewDeskripsi('');
+    setSavingLetter(true);
+    setDocumentNotice('');
+    setLetterDriveLink('');
+    try {
+      const saved = await saveStaffLetterToFirestore(newRecord);
+      setSuratList((previous) => [saved.record, ...previous.filter((item) => item.id !== saved.record.id)]);
+      setSelectedSurat(saved.record);
+      setShowCreateModal(false);
+      setNewJudul('');
+      setNewDeskripsi('');
+      setLetterDriveLink(saved.driveWebViewLink || '');
+      setDocumentNotice(saved.driveBackupStatus === 'complete'
+        ? 'Surat tersimpan di Firestore dan arsip salinan dibuat di Google Drive utama SIPANDU.'
+        : 'Surat aman di Firestore, tetapi backup Google Drive belum berhasil: ' + (saved.driveBackupError || 'hubungkan ulang Google Workspace lalu ulangi.'));
+    } catch (error) {
+      setDocumentNotice(error instanceof Error ? error.message : 'Surat gagal disimpan ke Firestore.');
+    } finally {
+      setSavingLetter(false);
+    }
   };
 
   const handlePrintSurat = async () => {
@@ -291,6 +328,11 @@ export const DokumenView: React.FC<DokumenViewProps> = ({ profile }) => {
         {documentNotice && (
           <div role="status" aria-live="polite" className="rounded-xl border border-sky-400/25 bg-sky-950/40 px-3 py-2 text-xs text-sky-100 break-words">
             {documentNotice}
+            {letterDriveLink && (
+              <a href={letterDriveLink} target="_blank" rel="noopener noreferrer" className="ml-2 font-bold underline underline-offset-2">
+                Buka arsip surat di Google Drive
+              </a>
+            )}
           </div>
         )}
 
@@ -411,7 +453,7 @@ export const DokumenView: React.FC<DokumenViewProps> = ({ profile }) => {
           {/* Surat Preview Card (Official Kop Kementerian Sosial RI) */}
           <div className="lg:col-span-7">
             {selectedSurat ? (
-              <div className="p-6 md:p-8 rounded-2xl bg-white text-neutral-900 border border-neutral-300 shadow-xl space-y-5">
+              <div className="print-container p-6 md:p-8 rounded-2xl bg-white text-neutral-900 border border-neutral-300 shadow-xl space-y-5">
                 {/* Official Kop Surat Kemensos */}
                 <div className="border-b-2 border-neutral-900 pb-3 text-center flex flex-col items-center">
                   <div className="flex items-center gap-3 mb-1">
