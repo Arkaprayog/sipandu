@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { ProfileUser, SuratRecord } from '../types';
 import { ACCEPTED_DOCUMENT_EXTENSIONS, deleteStaffDocument, listStaffDocuments, uploadStaffDocument, type StaffDocumentRecord } from '../lib/documentStorage';
+import { printCurrentWebView } from '../lib/printing';
 import { initialSuratList } from '../data/initialData';
 import { KemensosLogo } from './KemensosLogo';
 import { SuratTugasEditor } from './SuratTugasEditor';
@@ -94,9 +95,9 @@ export const DokumenView: React.FC<DokumenViewProps> = ({ profile }) => {
     try {
       const saved = await uploadStaffDocument(file, activeTab, setUploadProgress);
       setUploadedDocuments((previous) => [saved, ...previous.filter((item) => item.id !== saved.id)]);
-      setDocumentNotice(saved.driveBackupError
-        ? `File “${saved.name}” tersimpan di Firebase, tetapi salinan Google Drive belum berhasil: ${saved.driveBackupError}`
-        : `File “${saved.name}” berhasil disimpan di Firebase SIPANDU dan disalin ke Google Drive utama.`);
+      setDocumentNotice(saved.driveBackupStatus === 'complete'
+        ? `File “${saved.name}” tersimpan di Firebase dan arsip Google Drive utama SIPANDU.`
+        : `File “${saved.name}” aman di Firebase, tetapi backup Google Drive belum berhasil: ${saved.driveBackupError || 'hubungkan ulang Google Workspace lalu unggah ulang file ini.'}`);
       setShowUploadModal(false);
     } catch (error) {
       setUploadError(error instanceof Error ? error.message : 'File gagal disimpan. Silakan coba lagi.');
@@ -169,8 +170,13 @@ export const DokumenView: React.FC<DokumenViewProps> = ({ profile }) => {
     setNewDeskripsi('');
   };
 
-  const handlePrintSurat = () => {
-    window.print();
+  const handlePrintSurat = async () => {
+    try {
+      await printCurrentWebView(selectedSurat ? `SIPANDU - ${selectedSurat.judul}` : 'SIPANDU - Dokumen');
+    } catch (error) {
+      console.warn('SIPANDU printer plugin unavailable; falling back to browser print:', error);
+      window.print();
+    }
   };
 
   return (
@@ -285,13 +291,24 @@ export const DokumenView: React.FC<DokumenViewProps> = ({ profile }) => {
                       {formatDocumentSize(document.size)} · {document.uploadedAt ? new Date(document.uploadedAt).toLocaleString('id-ID') : 'Waktu tersimpan'}
                       {document.ownerEmail ? ` · ${document.ownerEmail}` : ''}
                     </p>
+                    <p className={`mt-1 text-[10px] font-semibold ${document.driveBackupStatus === 'complete' ? 'text-emerald-300' : document.driveBackupStatus === 'failed' ? 'text-amber-300' : 'text-sky-200'}`}>
+                      {document.driveBackupStatus === 'complete' ? 'Backup Google Drive tersimpan' : document.driveBackupStatus === 'failed' ? 'Backup Google Drive belum berhasil' : 'Status backup Google Drive menunggu'}
+                    </p>
+                    {document.driveBackupStatus === 'failed' && document.driveBackupError && (
+                      <p className="mt-1 text-[10px] text-amber-200/80 break-words">{document.driveBackupError}</p>
+                    )}
                   </div>
+                  {document.driveWebViewLink && document.driveBackupStatus === 'complete' && (
+                    <a href={document.driveWebViewLink} target="_blank" rel="noopener noreferrer" aria-label={`Buka salinan Google Drive ${document.name}`} className="rounded-lg p-2 text-emerald-200 hover:bg-emerald-900/50" title="Buka salinan di Google Drive">
+                      <FileCheck2 className="h-4 w-4" />
+                    </a>
+                  )}
                   {document.downloadUrl && (
-                    <a href={document.downloadUrl} target="_blank" rel="noopener noreferrer" aria-label={`Buka ${document.name}`} className="rounded-lg p-2 text-sky-200 hover:bg-sky-900/50">
+                    <a href={document.downloadUrl} target="_blank" rel="noopener noreferrer" aria-label={`Buka ${document.name}`} className="rounded-lg p-2 text-sky-200 hover:bg-sky-900/50" title="Buka file Firebase">
                       <Download className="h-4 w-4" />
                     </a>
                   )}
-                  <button type="button" onClick={() => void handleDeleteDocument(document)} aria-label={`Hapus ${document.name}`} className="rounded-lg p-2 text-rose-300 hover:bg-rose-950/50">
+                  <button type="button" onClick={() => void handleDeleteDocument(document)} aria-label={`Hapus ${document.name}`} className="rounded-lg p-2 text-rose-300 hover:bg-rose-950/50" title="Hapus dari Firebase dan Google Drive">
                     <Trash2 className="h-4 w-4" />
                   </button>
                 </div>
