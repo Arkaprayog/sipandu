@@ -1,0 +1,62 @@
+name: Deploy SIPANDU Registration Worker
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "registration-worker/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sipandu-registration-worker-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Validate and deploy registration Worker
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.4
+
+      - name: Verify Worker entry point and configuration
+        run: |
+          test -f registration-worker/index.runtime.js
+          test -f registration-worker/index.test.ts
+          test -f registration-worker/wrangler.jsonc
+          node --check registration-worker/index.runtime.js
+          node --input-type=module - <<'NODE'
+          import fs from 'node:fs';
+          const config = JSON.parse(fs.readFileSync('registration-worker/wrangler.jsonc', 'utf8'));
+          if (config.name !== 'sipandu-registration') throw new Error('Unexpected Worker name.');
+          if (config.main !== 'index.runtime.js') throw new Error('Unexpected Worker entry point.');
+          const kv = config.kv_namespaces?.find((item) => item.binding === 'PENDING_REGISTRATIONS');
+          if (!kv || kv.id !== '49fbf170f6f6410f9ae787a7cc63ffb9') {
+            throw new Error('The existing PENDING_REGISTRATIONS namespace binding is missing or mismatched.');
+          }
+          console.log('Worker entry point and existing KV binding verified.');
+          NODE
+
+      - name: Install locked dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Run registration Worker tests
+        run: bunx tsx --test registration-worker/index.test.ts
+
+      - name: Deploy Worker with Wrangler configuration
+        uses: cloudflare/wrangler-action@v4
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: "0f751dca493cdf222b4c7cd084647f67"
+          wranglerVersion: "4.136.3"
+          workingDirectory: registration-worker
+          command: deploy --config wrangler.jsonc
