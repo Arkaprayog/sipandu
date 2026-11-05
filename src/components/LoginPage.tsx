@@ -1,9 +1,10 @@
 import React, { useRef, useState } from 'react';
-import { onAuthStateChanged, signInWithEmailAndPassword, type User as FirebaseUser } from 'firebase/auth';
+import { onAuthStateChanged, signInWithEmailAndPassword, sendEmailVerification, signOut, type User as FirebaseUser } from 'firebase/auth';
 import { auth, staffAuthPersistenceReady } from '../lib/firebase';
 import { authenticateBiometricLock, isAppPinConfigured, isBiometricLockEnabled, verifyAppPin } from '../lib/biometricLock';
 import { Lock, User, Eye, EyeOff, Fingerprint } from 'lucide-react';
 import { publicAssetUrl } from '../lib/publicAssets';
+import { RegistrationPage } from './RegistrationPage';
 
 const LOGIN_TIMEOUT_MS = 18_000;
 
@@ -22,6 +23,8 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
   const [logoFailed, setLogoFailed] = useState(false);
   const [quickPin, setQuickPin] = useState('');
   const [forcePasswordLogin, setForcePasswordLogin] = useState(false);
+  const [showRegistration, setShowRegistration] = useState(false);
+  const [registrationNotice, setRegistrationNotice] = useState('');
   const formRef = useRef<HTMLFormElement>(null);
   const quickUnlockUser = restoredUser || auth.currentUser;
   const quickUnlockActive = Boolean(quickUnlockUser && isBiometricLockEnabled(quickUnlockUser.uid) && !forcePasswordLogin);
@@ -103,6 +106,13 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
           }, LOGIN_TIMEOUT_MS);
         }),
       ]);
+      if (!credential.user.emailVerified) {
+        await sendEmailVerification(credential.user);
+        await signOut(auth);
+        setRegistrationNotice('Email akun belum terverifikasi. Tautan verifikasi baru telah dikirim. Buka email tersebut, verifikasi akun, lalu masuk kembali.');
+        setErrorMsg('');
+        return;
+      }
       onLogin(credential.user.displayName || credential.user.email || 'Pengguna SIPANDU');
     } catch (error) {
       const code = (error as { code?: string })?.code;
@@ -126,6 +136,16 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
       setIsSubmitting(false);
     }
   };
+
+  if (showRegistration) {
+    return <RegistrationPage onBack={(registeredEmail, notice) => {
+      if (registeredEmail) setEmail(registeredEmail);
+      setPassword('');
+      setShowRegistration(false);
+      setErrorMsg('');
+      setRegistrationNotice(notice || '');
+    }} />;
+  }
 
   return (
     <div className="relative flex min-h-screen w-full items-center justify-center overflow-x-hidden px-3 py-5 text-slate-800">
@@ -255,7 +275,13 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
               <span>{!authReady ? 'Memulihkan sesi…' : (isSubmitting ? 'Memeriksa akun…' : (quickUnlockActive ? 'Buka dengan fingerprint' : 'Masuk Aplikasi'))}</span>
               <Fingerprint className="h-5 w-5" aria-hidden="true" />
             </button>
+            <p className="mt-2 text-center text-[11px] font-semibold text-black">
+              Sudah memiliki akun?{' '}
+              <a href="#buat-akun" onClick={(event) => { event.preventDefault(); setRegistrationNotice(''); setShowRegistration(true); }} className="underline decoration-black/50 underline-offset-2">Buat akun</a>
+            </p>
           </form>
+
+          {registrationNotice && <p role="status" className="mt-2 rounded-lg border border-emerald-700/30 bg-emerald-50/90 p-2 text-center text-[11px] font-medium text-black">{registrationNotice}</p>}
 
           {quickUnlockUser && isBiometricLockEnabled(quickUnlockUser.uid) && !forcePasswordLogin && (
             <button
