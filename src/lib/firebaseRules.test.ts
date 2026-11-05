@@ -192,6 +192,41 @@ test('Profil anggota hanya dapat dibaca dan diubah oleh pemilik UID serta tidak 
     photoUrl: 'data:image/jpeg;base64,ZmFrZQ==',
     updatedAt: serverTimestamp(),
   }));
+
+  // Firebase may return the email claim with different casing after an
+  // account migration. A profile save may align only the owner's own email
+  // metadata to the exact authenticated claim.
+  const differentlyCasedEmailContext = environment.authenticatedContext('member-001', {
+    email: 'Member@example.test',
+    email_verified: true,
+  });
+  await assertSucceeds(updateDoc(
+    doc(differentlyCasedEmailContext.firestore(), 'userProfiles', 'member-001'),
+    { email: 'Member@example.test', updatedAt: serverTimestamp() },
+  ));
+
+  // Backfill legacy records that predate the cloud-profile timestamps/email.
+  await environment.withSecurityRulesDisabled(async (context) => {
+    await setDoc(doc(context.firestore(), 'userProfiles', 'legacy-member'), {
+      nama: 'Petugas Lama',
+      nip: '199001012020121001',
+      jabatan: 'Pendamping Sosial',
+      unitKerja: 'Sentra Layanan',
+      noHp: '',
+      photoUrl: '',
+    });
+  });
+  const legacyContext = environment.authenticatedContext('legacy-member', {
+    email: 'legacy@example.test',
+    email_verified: true,
+  }).firestore();
+  await assertSucceeds(updateDoc(doc(legacyContext, 'userProfiles', 'legacy-member'), {
+    email: 'legacy@example.test',
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+    nama: 'Petugas Lama Diperbarui',
+  }));
+
   await assertFails(updateDoc(ownProfile, {
     role: 'owner',
     updatedAt: serverTimestamp(),
