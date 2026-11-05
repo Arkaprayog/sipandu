@@ -1,5 +1,6 @@
 const ALLOWED_ORIGINS = new Set([
   'https://sipandu.aryprayoga139.workers.dev',
+  'https://sipanduodhiv.my.id',
   'https://sipandu-registration.aryprayoga139.workers.dev',
   'https://localhost',
   'http://localhost',
