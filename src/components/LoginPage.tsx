@@ -106,7 +106,10 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
           }, LOGIN_TIMEOUT_MS);
         }),
       ]);
-      const signedInToken = await credential.user.getIdTokenResult();
+      // Refresh the cached Firebase profile after password sign-in. This
+      // prevents a recently verified email from being treated as unverified.
+      await credential.user.reload();
+      const signedInToken = await credential.user.getIdTokenResult(true);
       const existingStaffRole = signedInToken.claims.role;
       if (!credential.user.emailVerified && existingStaffRole !== 'owner' && existingStaffRole !== 'supervisor' && existingStaffRole !== 'pendamping') {
         await sendEmailVerification(credential.user);
