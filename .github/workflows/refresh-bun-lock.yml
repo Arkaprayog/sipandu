@@ -2,7 +2,7 @@ name: Refresh Bun lockfile
 
 on:
   push:
-    branches: [main]
+    branches: ['**']
     paths:
       - "package.json"
       - "bun.lock"
@@ -24,7 +24,7 @@ jobs:
       - name: Checkout main
         uses: actions/checkout@v4
         with:
-          ref: main
+          ref: ${{ github.ref }}
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
@@ -55,6 +55,7 @@ jobs:
           git commit -m "fix(deps): sync Bun lockfile with package.json"
           # A normal application commit may land while dependency resolution runs.
           # Rebase our lockfile-only commit onto the latest main instead of losing the update.
-          git fetch origin main
-          git rebase origin/main
-          git push origin HEAD:main
+          branch="${GITHUB_REF_NAME}"
+          git fetch origin "$branch"
+          git rebase "origin/$branch"
+          git push origin HEAD:"$branch"
