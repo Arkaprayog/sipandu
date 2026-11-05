@@ -5,7 +5,7 @@ import { getAccessToken, invalidateAccessToken, refreshWorkspaceAccessToken } fr
 import { formatPPKSTimestamp } from '../lib/ppksData';
 import { publicAssetUrl } from '../lib/publicAssets';
 import { backupAssessmentToCentralDrive, deleteCentralDriveFile } from '../lib/googleDriveBackup';
-import { saveIntegratedAssessmentBackupMetadata } from '../lib/firebase';
+import { getIntegratedAssessmentBackupMetadata, saveIntegratedAssessmentBackupMetadata } from '../lib/firebase';
 import { printCurrentWebView } from '../lib/printing';
 import { createPhotoPreviewBlob, MAX_PPKS_PHOTO_FILE_BYTES } from '../lib/photoFilePreview';
 import '../officialAssessment.css';
@@ -258,6 +258,7 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
   const [answers, setAnswers] = useState<Record<string, AnswerValue>>(() => answersForRecord(ppksList.find((record) => record.id === selectedPPKSId)));
   const [statusMessage, setStatusMessage] = useState<{ type: 'success' | 'error'; text: string; driveUrl?: string } | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [driveArchive, setDriveArchive] = useState<{ status: 'complete' | 'failed'; error: string; fileId: string; webViewLink: string; savedAt: string } | null>(null);
   const [printPhotoUrls, setPrintPhotoUrls] = useState<Record<string, string>>({});
   const [printPhotoErrors, setPrintPhotoErrors] = useState<Record<string, string>>({});
   const [previewPhotoUrls, setPreviewPhotoUrls] = useState<Record<string, string>>({});
@@ -295,6 +296,18 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
   }, [ppksList, selectedPPKSId]);
 
   const currentPPKS = useMemo(() => ppksList.find((record) => record.id === selectedPPKSId), [ppksList, selectedPPKSId]);
+
+  useEffect(() => {
+    let active = true;
+    setDriveArchive(null);
+    if (!currentPPKS) return () => { active = false; };
+    void getIntegratedAssessmentBackupMetadata(currentPPKS.id)
+      .then((metadata) => { if (active) setDriveArchive(metadata); })
+      .catch((error) => {
+        if (active) console.warn('SIPANDU could not load Drive archive status:', error);
+      });
+    return () => { active = false; };
+  }, [currentPPKS?.id]);
 
   const choosePPKS = (id: string) => {
     if (isSaving) return;
@@ -373,6 +386,13 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
             fileId: driveCopy.id,
             webViewLink: driveCopy.webViewLink,
           });
+          setDriveArchive({
+            status: 'complete',
+            error: '',
+            fileId: driveCopy.id,
+            webViewLink: driveCopy.webViewLink || '',
+            savedAt: new Date().toISOString(),
+          });
           setStatusMessage({
             type: 'success',
             text: 'Form Asesmen Terintegrasi tersimpan di Firestore dan arsip Google Drive utama SIPANDU.',
@@ -389,6 +409,13 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
           await saveIntegratedAssessmentBackupMetadata(currentPPKS.id, {
             status: 'failed',
             error: detail,
+          });
+          setDriveArchive({
+            status: 'failed',
+            error: detail,
+            fileId: '',
+            webViewLink: '',
+            savedAt: '',
           });
         } catch (metadataError) {
           console.error('SIPANDU could not record assessment Drive backup failure:', metadataError);
@@ -826,6 +853,15 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
           </button>
         </div>
       </div>
+
+      {driveArchive && (
+        <section className={`mb-3 rounded-lg border p-3 text-xs ${driveArchive.status === 'complete' ? 'border-emerald-500/40 bg-emerald-950/40 text-emerald-100' : 'border-amber-500/40 bg-amber-950/40 text-amber-100'}`} aria-live="polite">
+          <strong>{driveArchive.status === 'complete' ? 'Arsip Google Drive terhubung' : 'Backup Google Drive belum tersedia'}</strong>
+          {driveArchive.savedAt && <span className="ml-2 opacity-80">· {new Date(driveArchive.savedAt).toLocaleString('id-ID')}</span>}
+          {driveArchive.error && <p className="mt-1 break-words">{driveArchive.error}</p>}
+          {driveArchive.webViewLink && <a href={driveArchive.webViewLink} target="_blank" rel="noopener noreferrer" className="ml-2 inline-flex font-bold underline underline-offset-2">Buka arsip Google Drive</a>}
+        </section>
+      )}
 
       {statusMessage && (
         <div role="status" aria-live="polite" className={'official-status mb-3 rounded-lg border p-3 text-xs ' + (statusMessage.type === 'success' ? 'border-emerald-500/40 bg-emerald-950/50 text-emerald-100' : 'border-rose-500/40 bg-rose-950/50 text-rose-100')}>
