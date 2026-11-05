@@ -19,6 +19,7 @@ import {
 import {
   getAuth,
   initializeAuth,
+  Auth,
   indexedDBLocalPersistence,
   browserLocalPersistence,
   setPersistence,
@@ -62,7 +63,7 @@ const staffAuthPersistences = Capacitor.isNativePlatform()
   ? [indexedDBLocalPersistence, browserLocalPersistence]
   : [browserLocalPersistence, indexedDBLocalPersistence];
 
-let staffAuth;
+let staffAuth: Auth;
 try {
   staffAuth = initializeAuth(app, { persistence: staffAuthPersistences });
 } catch (error) {
