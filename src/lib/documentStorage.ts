@@ -19,6 +19,7 @@ import {
   type UploadTaskSnapshot,
 } from 'firebase/storage';
 import { auth, db } from './firebase';
+import { backupDocumentToCentralDrive } from './googleDriveBackup';
 
 export type StaffDocumentCategory = 'surat-tugas' | 'surat-lainnya';
 
@@ -33,6 +34,7 @@ export interface StaffDocumentRecord {
   ownerEmail: string;
   category: StaffDocumentCategory;
   uploadedAt: string;
+  driveBackupError?: string;
 }
 
 const MAX_DOCUMENT_SIZE = 25 * 1024 * 1024;
@@ -169,6 +171,13 @@ export async function uploadStaffDocument(
     });
 
     onProgress?.(100);
+    let driveBackupError: string | undefined;
+    try {
+      await backupDocumentToCentralDrive(file, category);
+    } catch (driveError) {
+      driveBackupError = driveError instanceof Error ? driveError.message : 'Salinan Google Drive gagal dibuat.';
+    }
+
     return {
       id: documentId,
       name: file.name,
@@ -180,6 +189,7 @@ export async function uploadStaffDocument(
       ownerEmail: user.email || '',
       category,
       uploadedAt: new Date().toISOString(),
+      ...(driveBackupError ? { driveBackupError } : {}),
     };
   } catch (error) {
     if (uploadCompleted) {
