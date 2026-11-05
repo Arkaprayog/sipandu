@@ -1,8 +1,11 @@
 {
   "firestore": [
     {
-      "database": "ai-studio-sipanduodhiv-9853-46e1-b6d3-fdbce52371a8",
+      "database": "ai-studio-sipanduodhiv-985a0308-7693-46e1-b6d3-fdbce52371a8",
       "rules": "firestore.rules"
     }
-  ]
+  ],
+  "storage": {
+    "rules": "storage.rules"
+  }
 }
