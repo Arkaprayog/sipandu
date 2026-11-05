@@ -279,11 +279,21 @@ service cloud.firestore {
         && request.resource.data.updatedAt == request.time;
       allow update: if isOwnProfile()
         && hasValidProfileShape(request.resource.data)
-        && request.resource.data.email == resource.data.email
-        && request.resource.data.createdAt == resource.data.createdAt
+        // Email is immutable to the user except for repairing its casing or
+        // backfilling a missing legacy field; the new value must equal the
+        // authenticated Firebase token email (enforced by hasValidProfileShape).
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-          'nama', 'nip', 'jabatan', 'unitKerja', 'noHp', 'photoUrl', 'updatedAt'
+          'nama', 'nip', 'jabatan', 'unitKerja', 'noHp', 'photoUrl',
+          'email', 'createdAt', 'updatedAt'
         ])
+        // Existing creation timestamps are immutable. A missing legacy timestamp
+        // may be initialized exactly at request time during the same profile save.
+        && (
+          ('createdAt' in resource.data
+            && request.resource.data.createdAt == resource.data.createdAt)
+          || (!('createdAt' in resource.data)
+            && request.resource.data.createdAt == request.time)
+        )
         && request.resource.data.updatedAt == request.time;
       allow delete: if false;
     }
