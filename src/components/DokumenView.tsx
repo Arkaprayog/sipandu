@@ -164,11 +164,11 @@ export const DokumenView: React.FC<DokumenViewProps> = ({ profile }) => {
     const link = document.downloadUrl;
     const opened = window.open(link, '_blank', 'noopener,noreferrer');
     if (!opened) {
-      const anchor = document.createElement('a');
+      const anchor = window.document.createElement('a');
       anchor.href = link;
       anchor.download = document.name;
       anchor.rel = 'noopener noreferrer';
-      document.body.appendChild(anchor);
+      window.document.body.appendChild(anchor);
       anchor.click();
       anchor.remove();
     }
