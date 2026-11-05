@@ -4,6 +4,7 @@ import { PPKSRecord } from '../types';
 import { getAccessToken, invalidateAccessToken, refreshWorkspaceAccessToken } from '../lib/firebase';
 import { formatPPKSTimestamp } from '../lib/ppksData';
 import { publicAssetUrl } from '../lib/publicAssets';
+import { backupAssessmentToCentralDrive } from '../lib/googleDriveBackup';
 import { createPhotoPreviewBlob, MAX_PPKS_PHOTO_FILE_BYTES } from '../lib/photoFilePreview';
 import '../officialAssessment.css';
 
@@ -353,10 +354,28 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
     try {
       // The callback resolves only after Firestore confirms the remote write.
       await onSaveAssessment(updated);
-      setStatusMessage({
-        type: 'success',
-        text: 'Jawaban Form Asesmen Terintegrasi berhasil disimpan ke Firebase Firestore.',
-      });
+
+      // Keep a portable archive copy in the central SIPANDU Google Drive.
+      // Firestore remains the application source of truth, so a Drive outage
+      // cannot erase an assessment that has already been committed.
+      try {
+        await backupAssessmentToCentralDrive({
+          ppksId: currentPPKS.id,
+          ppksName: currentPPKS.namaLengkap || currentPPKS.id,
+          nik: currentPPKS.nik || (typeof clean.q23 === 'string' ? clean.q23 : ''),
+          answers: clean,
+        });
+        setStatusMessage({
+          type: 'success',
+          text: 'Form Asesmen Terintegrasi berhasil disimpan ke Firebase Firestore dan salinan arsip dibuat di Google Drive utama SIPANDU.',
+        });
+      } catch (driveError) {
+        const detail = driveError instanceof Error ? driveError.message : String(driveError);
+        setStatusMessage({
+          type: 'success',
+          text: 'Form berhasil disimpan di Firebase Firestore, tetapi salinan Google Drive belum berhasil: ' + detail,
+        });
+      }
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);
       setStatusMessage({
