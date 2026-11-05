@@ -1,4 +1,4 @@
-export type SipanduSystemNotificationKind = 'kuisioner' | 'asesmen' | 'workspace';
+export type SipanduSystemNotificationKind = 'kuisioner' | 'asesmen' | 'terintegrasi' | 'workspace';
 
 export interface SafeSystemNotificationContent {
   title: string;
@@ -23,6 +23,11 @@ export function getSafeSystemNotificationContent(
       return {
         title: 'SIPANDU • Asesmen Diperbarui',
         body: 'Ada pembaruan asesmen responden. Buka SIPANDU untuk meninjau.',
+      };
+    case 'terintegrasi':
+      return {
+        title: 'SIPANDU • Asesmen Tersimpan',
+        body: 'Form Asesmen Terintegrasi berhasil disimpan. Buka SIPANDU untuk melihat detailnya.',
       };
     case 'workspace':
       return {
