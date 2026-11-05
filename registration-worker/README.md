@@ -9,7 +9,7 @@ The registration Worker is separate from the static `sipandu` app Worker. It val
 - KV binding: `PENDING_REGISTRATIONS`
 - KV namespace ID: `49fbf170f6f6410f9ae787a7cc63ffb9`
 
-The KV namespace has already been created. The existing app Worker `sipandu` is not replaced or modified by this configuration.
+The KV namespace has already been created. The existing app Worker `sipandu` is not replaced or modified by this configuration. Registration endpoints accept JSON only and enforce a 12,000-byte streaming body limit, including requests without a `Content-Length` header.
 
 ## Configure Firebase
 

@@ -241,6 +241,7 @@ function normalizeAppSettings(value: unknown): AppSettings {
 function StaffApp() {
   // Firebase Authentication is the source of truth; URL/localStorage flags cannot bypass login.
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [currentUserUid, setCurrentUserUid] = useState(auth.currentUser?.uid || '');
   const [authReady, setAuthReady] = useState(false);
   const [currentUserName, setCurrentUserName] = useState('');
   const [currentUserRole, setCurrentUserRole] = useState('');
@@ -256,6 +257,12 @@ function StaffApp() {
       unsubscribe = onAuthStateChanged(auth, async (user) => {
       const generation = ++authEventGeneration;
       setAuthReady(false);
+      // Hide the previous account while the next Firebase identity is verified.
+      setIsAuthenticated(false);
+      setCurrentUserUid(user?.uid || '');
+      setRespondentNotifications(user ? loadRespondentNotifications(user.uid) : []);
+      setCurrentUserName('');
+      setCurrentUserRole('');
       setLocalCacheReady(false);
       setAuthError('');
       if (!user) {
@@ -601,8 +608,11 @@ function StaffApp() {
   }, [settings, localCacheReady, isAuthenticated]);
 
   useEffect(() => {
-    if (!isAuthenticated) return;
-    const uid = auth.currentUser?.uid || 'default';
+    if (!isAuthenticated || !currentUserUid) {
+      setRespondentNotifications([]);
+      return;
+    }
+    const uid = currentUserUid;
     setRespondentNotifications(loadRespondentNotifications(uid));
     const onNotificationHistoryUpdated = (event: Event) => {
       const eventUid = (event as CustomEvent<{ uid?: string }>).detail?.uid || '';
@@ -610,7 +620,7 @@ function StaffApp() {
     };
     window.addEventListener('sipandu-respondent-notifications-updated', onNotificationHistoryUpdated);
     return () => window.removeEventListener('sipandu-respondent-notifications-updated', onNotificationHistoryUpdated);
-  }, [isAuthenticated, currentUserRole]);
+  }, [isAuthenticated, currentUserUid]);
 
   useEffect(() => {
     const unreadCount = respondentNotifications.filter((item) => !item.read).length;
@@ -1547,13 +1557,18 @@ function StaffApp() {
             isOpen={true}
             onClose={() => setIsEditProfileOpen(false)}
             profile={profile}
-            onSave={(updated) => {
-              setProfile(updated);
+            onSave={async (updated) => {
               const uid = auth.currentUser?.uid;
-              if (uid) void saveSIPANDUUserProfile(uid, updated).catch((error) => {
+              if (!uid) throw new Error('Sesi SIPANDU berakhir. Masuk kembali sebelum menyimpan profil.');
+              try {
+                await saveSIPANDUUserProfile(uid, updated);
+                setProfile(updated);
+                setCloudSyncNotice({ type: 'success', text: 'Profil berhasil disimpan ke akun cloud SIPANDU.' });
+              } catch (error) {
                 console.error('Profil SIPANDU gagal disimpan ke Firestore:', error);
                 setCloudSyncNotice({ type: 'error', text: 'Perubahan profil belum tersimpan ke akun cloud. Periksa koneksi lalu coba simpan kembali.' });
-              });
+                throw error;
+              }
             }}
           />
         )}
@@ -1576,7 +1591,7 @@ function StaffApp() {
             isOpen={true}
             onClose={() => setIsNotificationsOpen(false)}
             notifications={respondentNotifications}
-            onMarkAllRead={() => setRespondentNotifications(markRespondentNotificationsRead(auth.currentUser?.uid || 'default'))}
+            onMarkAllRead={() => setRespondentNotifications(currentUserUid ? markRespondentNotificationsRead(currentUserUid) : [])}
             followUpReady={Boolean(
               settings.googleFormTahapLanjutanUrl?.trim() &&
               /^\d+$/.test(String(settings.googleFormTahapLanjutanIdEntry || '').replace(/^entry\./i, ''))

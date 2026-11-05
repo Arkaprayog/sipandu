@@ -7,7 +7,7 @@ interface EditProfileModalProps {
   isOpen: boolean;
   onClose: () => void;
   profile: ProfileUser;
-  onSave: (updated: ProfileUser) => void;
+  onSave: (updated: ProfileUser) => void | Promise<void>;
 }
 
 export const EditProfileModal: React.FC<EditProfileModalProps> = ({
@@ -25,6 +25,8 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
   const [photoError, setPhotoError] = useState('');
   const [photoPreviewFailed, setPhotoPreviewFailed] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState('');
   
   useEffect(() => {
     if (!isOpen) return;
@@ -37,25 +39,35 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
     setPhotoError('');
     setPhotoPreviewFailed(false);
     setSaved(false);
+    setIsSaving(false);
+    setSaveError('');
   }, [isOpen, profile]);
 
   if (!isOpen) return null;
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    onSave({
-      nama,
-      nip,
-      unitKerja,
-      jabatan,
-      noHp,
-      photoUrl,
-    });
-    setSaved(true);
-    setTimeout(() => {
-      setSaved(false);
-      onClose();
-    }, 700);
+    setSaveError('');
+    setIsSaving(true);
+    try {
+      await onSave({
+        nama: nama.trim(),
+        nip: nip.trim(),
+        unitKerja: unitKerja.trim(),
+        jabatan: jabatan.trim(),
+        noHp: noHp.trim(),
+        photoUrl,
+      });
+      setSaved(true);
+      window.setTimeout(() => {
+        setSaved(false);
+        onClose();
+      }, 700);
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : 'Profil belum berhasil disimpan ke cloud.');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -63,6 +75,7 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
     e.target.value = '';
     if (!file) return;
     setPhotoError('');
+    setSaveError('');
     setSaved(false);
     try {
       const optimized = await compressImageForLocalStorage(file, 640, 260 * 1024);
@@ -79,12 +92,13 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
         <div className="flex items-center justify-between pb-3 mb-4 border-b border-rose-500/30">
           <div className="flex items-center gap-2">
             <User className="w-5 h-5 text-sky-300" />
-            <h3 className="text-base font-bold text-white">Edit Profil Owner Petugas</h3>
+            <h3 className="text-base font-bold text-white">Edit Profil Petugas</h3>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="p-1 rounded text-neutral-400 hover:text-white"
+            disabled={isSaving}
+            className="p-1 rounded text-neutral-400 hover:text-white disabled:opacity-50"
           >
             <X className="w-5 h-5" />
           </button>
@@ -116,6 +130,7 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
                 <input
                   type="file"
                   accept="image/*"
+                  disabled={isSaving}
                   onChange={handlePhotoUpload}
                   className="hidden"
                 />
@@ -128,6 +143,12 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
               <span>{photoError}</span>
             </div>
           )}
+          {saveError && (
+            <div role="alert" className="flex items-start gap-2 rounded-lg border border-rose-400/40 bg-rose-950/40 p-2 text-[11px] text-rose-100">
+              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+              <span>{saveError}</span>
+            </div>
+          )}
           {photoUrl.startsWith('data:image/') && (
             <p className="text-[10px] text-emerald-200">Foto sudah dikompres agar tetap tersimpan di perangkat (maksimal sekitar 320 KB).</p>
           )}
@@ -136,6 +157,8 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
             <label className="block text-sky-200 font-semibold mb-1">Nama Owner / Petugas:</label>
             <input
               type="text"
+              maxLength={120}
+              disabled={isSaving}
               value={nama}
               onChange={(e) => setNama(e.target.value)}
               className="w-full p-2.5 rounded bg-black/60 border border-rose-500/30 text-white font-bold"
@@ -147,6 +170,8 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
             <label className="block text-sky-200 font-semibold mb-1">NIP (Nomor Induk Pegawai):</label>
             <input
               type="text"
+              maxLength={40}
+              disabled={isSaving}
               value={nip}
               onChange={(e) => setNip(e.target.value)}
               className="w-full p-2.5 rounded bg-black/60 border border-rose-500/30 text-white font-mono"
@@ -158,6 +183,8 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
             <label className="block text-sky-200 font-semibold mb-1">Unit Kerja:</label>
             <input
               type="text"
+              maxLength={160}
+              disabled={isSaving}
               value={unitKerja}
               onChange={(e) => setUnitKerja(e.target.value)}
               className="w-full p-2.5 rounded bg-black/60 border border-rose-500/30 text-white"
@@ -170,6 +197,8 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
               <label className="block text-sky-200 font-semibold mb-1">Jabatan:</label>
               <input
                 type="text"
+                maxLength={120}
+                disabled={isSaving}
                 value={jabatan}
                 onChange={(e) => setJabatan(e.target.value)}
                 className="w-full p-2.5 rounded bg-black/60 border border-rose-500/30 text-white"
@@ -180,6 +209,8 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
               <label className="block text-sky-200 font-semibold mb-1">No. HP / WA:</label>
               <input
                 type="text"
+                maxLength={30}
+                disabled={isSaving}
                 value={noHp}
                 onChange={(e) => setNoHp(e.target.value)}
                 className="w-full p-2.5 rounded bg-black/60 border border-rose-500/30 text-white font-mono"
@@ -191,16 +222,18 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 rounded-lg bg-black/60 text-neutral-300 font-medium"
+              disabled={isSaving}
+              className="px-4 py-2 rounded-lg bg-black/60 text-neutral-300 font-medium disabled:opacity-50"
             >
               Batal
             </button>
             <button
               type="submit"
-              className="px-5 py-2 rounded-lg bg-emerald-700 hover:bg-emerald-600 text-white font-bold uppercase tracking-wider flex items-center gap-1.5 shadow-md"
+              disabled={isSaving}
+              className="px-5 py-2 rounded-lg bg-emerald-700 hover:bg-emerald-600 text-white font-bold uppercase tracking-wider flex items-center gap-1.5 shadow-md disabled:cursor-wait disabled:opacity-60"
             >
               {saved ? <Check className="w-4 h-4 text-emerald-300" /> : <Save className="w-4 h-4" />}
-              <span>{saved ? 'Tersimpan!' : 'Simpan Profil'}</span>
+              <span>{isSaving ? 'Menyimpan…' : saved ? 'Tersimpan!' : 'Simpan Profil'}</span>
             </button>
           </div>
         </form>

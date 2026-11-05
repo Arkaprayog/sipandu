@@ -479,7 +479,7 @@ export const googleSignIn = async (): Promise<{
       const message = nativeGoogleErrorMessage(error);
       if (/You CANNOT use scopes without modifying the main activity/i.test(message)) {
         throw new Error(
-          'Login Google native gagal karena MainActivity pada APK yang sedang berjalan tidak memuat bridge izin Google API. Ini bukan kesalahan SHA-1. Tutup aplikasi sepenuhnya lalu pasang ulang APK SIPANDU ODHIV Release v2.1.3 atau versi terbaru dari GitHub Releases. Jika error tetap muncul di versi terbaru, kirim tangkapan layar versi aplikasi pada perangkat agar build yang terpasang dapat dibandingkan dengan APK yang diverifikasi CI.'
+          'Login Google native gagal karena MainActivity pada APK yang sedang berjalan tidak memuat bridge izin Google API. Ini bukan kesalahan SHA-1. Tutup aplikasi sepenuhnya lalu pasang ulang APK SIPANDU ODHIV Release v2.2.1 atau versi terbaru dari GitHub Releases. Jika error tetap muncul di versi terbaru, kirim tangkapan layar versi aplikasi pada perangkat agar build yang terpasang dapat dibandingkan dengan APK yang diverifikasi CI.'
         );
       }
       if (/DEVELOPER_ERROR|status code:?\s*10|\[28444\]/i.test(message)) {
@@ -1412,14 +1412,37 @@ export async function getSIPANDUUserProfile(uid: string): Promise<ProfileUser | 
 }
 
 export async function saveSIPANDUUserProfile(uid: string, profile: ProfileUser): Promise<void> {
-  if (!uid.trim()) throw new Error('Akun SIPANDU tidak ditemukan saat menyimpan profil.');
-  await setDoc(doc(db, 'userProfiles', uid), {
+  const user = auth.currentUser;
+  const targetUid = uid.trim();
+  if (!targetUid || !user || user.uid !== targetUid) {
+    throw new Error('Sesi akun SIPANDU tidak cocok dengan profil yang akan disimpan. Masuk kembali, lalu ulangi.');
+  }
+  const token = await getIdTokenResult(user);
+  const email = typeof token.claims.email === 'string' ? token.claims.email : (user.email || '');
+  if (!email.trim()) throw new Error('Email akun Firebase tidak tersedia. Profil belum dapat disimpan dengan aman.');
+
+  const profileRef = doc(db, 'userProfiles', targetUid);
+  const profileFields = {
     nama: profile.nama.trim(),
     nip: profile.nip.trim(),
     jabatan: profile.jabatan.trim(),
     unitKerja: profile.unitKerja.trim(),
-    noHp: profile.noHp.trim(),
-    photoUrl: profile.photoUrl || '',
+    noHp: String(profile.noHp || '').trim(),
+    photoUrl: String(profile.photoUrl || ''),
+  };
+  const existingProfile = await getDoc(profileRef);
+  if (existingProfile.exists()) {
+    if (existingProfile.data().email !== email) {
+      throw new Error('Email pada profil cloud tidak cocok dengan akun yang sedang masuk. Hubungi administrator untuk memperbaiki data profil.');
+    }
+    await updateDoc(profileRef, { ...profileFields, updatedAt: serverTimestamp() });
+    return;
+  }
+  // First-time creation must satisfy all required fields in firestore.rules.
+  await setDoc(profileRef, {
+    ...profileFields,
+    email,
+    createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
-  }, { merge: true });
+  });
 }

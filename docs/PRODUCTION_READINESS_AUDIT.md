@@ -98,3 +98,27 @@ Cakupan tambahan: seluruh pohon repo pada branch `main` (direktori `.github/work
 - Firestore berisi data pribadi/sensitif. Cache pada `localStorage` masih dapat memuat data dan foto; keamanan tetap memerlukan Rules Firebase aktif, role custom claim dari Admin SDK, serta perangkat/browser yang terlindungi.
 - Uji visual logo pada browser desktop, browser ponsel, instalasi PWA iOS, APK debug, dan APK release harus dilakukan setelah deployment selesai. Pengujian scanner QR dengan kamera nyata juga tetap diperlukan.
 - Tanda silang pada histori workflow lama tidak terhapus; penilaian rilis harus melihat run terbaru pada SHA terbaru, bukan status commit historis.
+
+## Deep repository audit and release hardening — 5 November 2026
+
+Scope: the complete 132-file repository tree on `main`, with focused source review of Firebase Authentication/profile persistence, Firestore profile rules and emulator tests, the team-registration Worker source and deployable runtime, notification history scoping, Android build workflows, app version metadata, Pages/Worker configuration, and official icon-generation paths. This is a source and CI audit, not a penetration test or certification of every live third-party integration.
+
+### Findings fixed for v2.2.1
+
+1. **First-time profile migration failed Firestore create rules.** The previous helper used a merge write without the required `email` and `createdAt` fields when `userProfiles/{uid}` did not exist. The updated helper distinguishes create from update, binds writes to the current UID/email claim, and supplies the complete required create shape.
+2. **Edit Profile showed success before cloud persistence.** The modal now waits for the Firestore write, shows failures in the dialog, blocks duplicate submits, and reports success only after the operation resolves. Field lengths now match the Firestore Rules schema.
+3. **Notification history could remain in the UI after account changes.** The auth listener clears the previous account view immediately and reloads notification state by Firebase UID. Notification subscriptions and mark-read actions are also UID-scoped.
+4. **Registration Worker body cap trusted Content-Length.** Parsing now checks JSON content type and enforces a 12,000-byte limit while streaming the body, including requests without Content-Length. Regression tests exercise the deployed runtime parser.
+5. **The Worker requested a broader OAuth scope than necessary.** Its service-account JWT now requests Identity Toolkit scope only; the documented IAM permission remains narrowly scoped.
+6. **Android version metadata could diverge between workflows.** Both Android workflows now set Gradle versionName/versionCode from package.json. Debug, private release, and signed release APK checks verify both. Package version is bumped to 2.2.1 (versionCode 20201).
+
+### Production prerequisites still separate from code
+
+- The `sipandu-registration` Worker still requires the Cloudflare secrets `TEAM_REGISTRATION_CODE` and `FIREBASE_SERVICE_ACCOUNT_JSON`, added manually through Cloudflare Dashboard. Neither secret is stored in this repository.
+- The updated Firestore Rules require a separate deployment to the named Firebase database. The GitHub workflow runs Emulator tests; it does not deploy production rules.
+- CI and APK signature checks do not replace real-device tests of Google Workspace OAuth, email delivery, private Drive file access, gallery/camera, notifications while the app is closed, or cross-device profile use.
+- The official uploaded SIPANDU app icon remains the Android/PWA launcher artwork source. No AI-generated or internet-sourced replacement is introduced by this audit.
+
+### Release acceptance
+
+The release is considered built only after the latest main-branch runs pass application/unit tests, TypeScript checks, production web build and asset checks, Firestore Rules emulator suite, CodeQL, Android debug metadata/signature checks, Android release metadata/signature checks, and native Google scope bridge verification.
