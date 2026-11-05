@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { ProfileUser, SuratRecord } from '../types';
 import { ACCEPTED_DOCUMENT_EXTENSIONS, deleteStaffDocument, listStaffDocuments, retryStaffDocumentDriveBackup, uploadStaffDocument, type StaffDocumentRecord } from '../lib/documentStorage';
-import { printCurrentWebView } from '../lib/printing';
+import { printCurrentWebView, printSupportedBlob } from '../lib/printing';
 import { listStaffLettersFromFirestore, saveStaffLetterToFirestore } from '../lib/letterStorage';
 import { initialSuratList } from '../data/initialData';
 import { KemensosLogo } from './KemensosLogo';
@@ -157,6 +157,68 @@ export const DokumenView: React.FC<DokumenViewProps> = ({ profile }) => {
     } finally {
       setRetryingDocumentId('');
       if (retryFileInputRef.current) retryFileInputRef.current.value = '';
+    }
+  };
+
+  const openDocumentInViewer = (document: StaffDocumentRecord) => {
+    const link = document.downloadUrl;
+    const opened = window.open(link, '_blank', 'noopener,noreferrer');
+    if (!opened) {
+      const anchor = document.createElement('a');
+      anchor.href = link;
+      anchor.download = document.name;
+      anchor.rel = 'noopener noreferrer';
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+    }
+  };
+
+  const handlePrintUploadedDocument = async (document: StaffDocumentRecord) => {
+    if (!document.downloadUrl) {
+      setDocumentNotice('Tautan file tidak tersedia. File mungkin perlu diunggah ulang.');
+      return;
+    }
+    const extension = document.name.split('.').pop()?.toLowerCase() || '';
+    const printableMime = extension === 'pdf'
+      ? 'application/pdf'
+      : ['jpg', 'jpeg'].includes(extension)
+        ? 'image/jpeg'
+        : extension === 'png'
+          ? 'image/png'
+          : null;
+
+    // Office, HEIC, GIF, TIFF, WEBP, large PDFs/images should open in the
+    // native/browser viewer. Avoid converting large files into base64 in WebView.
+    if (!printableMime || document.size > 5 * 1024 * 1024) {
+      openDocumentInViewer(document);
+      setDocumentNotice(
+        document.size > 5 * 1024 * 1024
+          ? 'File berukuran lebih dari 5 MB. File dibuka di penampil perangkat agar dapat dicetak dari sana.'
+          : 'Format file dibuka melalui penampil perangkat. Gunakan menu Cetak pada penampil dokumen atau browser.',
+      );
+      return;
+    }
+
+    try {
+      setDocumentNotice('Menyiapkan file untuk dialog cetak...');
+      const response = await fetch(document.downloadUrl, { cache: 'no-store' });
+      if (!response.ok) throw new Error('File tidak dapat diambil dari Firebase (HTTP ' + response.status + ').');
+      const blob = await response.blob();
+      if (blob.size > 5 * 1024 * 1024) {
+        openDocumentInViewer(document);
+        setDocumentNotice('File melebihi batas cetak langsung 5 MB. File dibuka di penampil perangkat.');
+        return;
+      }
+      await printSupportedBlob(blob, document.name, printableMime);
+      setDocumentNotice('Dialog cetak perangkat telah dibuka. Pilih printer atau Simpan sebagai PDF.');
+    } catch (error) {
+      console.warn('SIPANDU could not print the archive file directly:', error);
+      openDocumentInViewer(document);
+      setDocumentNotice(
+        'Cetak langsung tidak tersedia pada perangkat ini. File dibuka di penampil dokumen; pilih Cetak dari menu penampil. ' +
+        (error instanceof Error ? error.message : String(error)),
+      );
     }
   };
 
@@ -393,9 +455,14 @@ export const DokumenView: React.FC<DokumenViewProps> = ({ profile }) => {
                     </a>
                   )}
                   {document.downloadUrl && (
-                    <a href={document.downloadUrl} target="_blank" rel="noopener noreferrer" aria-label={`Buka ${document.name}`} className="rounded-lg p-2 text-sky-200 hover:bg-sky-900/50" title="Buka file Firebase">
-                      <Download className="h-4 w-4" />
-                    </a>
+                    <>
+                      <button type="button" onClick={() => void handlePrintUploadedDocument(document)} aria-label={`Cetak ${document.name}`} className="rounded-lg p-2 text-violet-200 hover:bg-violet-900/50" title="Cetak atau buka penampil perangkat">
+                        <Printer className="h-4 w-4" />
+                      </button>
+                      <a href={document.downloadUrl} target="_blank" rel="noopener noreferrer" aria-label={`Buka ${document.name}`} className="rounded-lg p-2 text-sky-200 hover:bg-sky-900/50" title="Buka file Firebase">
+                        <Download className="h-4 w-4" />
+                      </a>
+                    </>
                   )}
                   <button type="button" onClick={() => void handleDeleteDocument(document)} aria-label={`Hapus ${document.name}`} className="rounded-lg p-2 text-rose-300 hover:bg-rose-950/50" title="Hapus dari Firebase dan Google Drive">
                     <Trash2 className="h-4 w-4" />
