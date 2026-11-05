@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { missingActivationConfiguration, parseJson } from './index.runtime.js';
+import worker, { missingActivationConfiguration, parseJson } from './index.runtime.js';
 
 function streamedJsonRequest(value: string): Request {
   const bytes = new TextEncoder().encode(value);
@@ -82,4 +82,24 @@ test('activation reports missing Firebase service-account configuration', () => 
     },
   };
   assert.deepEqual(missingActivationConfiguration(env), ['FIREBASE_SERVICE_ACCOUNT_JSON']);
+});
+
+
+test('allows the configured SIPANDU custom domain to call registration endpoints', async () => {
+  const origin = 'https://sipanduodhiv.my.id';
+  const response = await worker.fetch(new Request('https://sipandu-registration.test/activate', {
+    method: 'OPTIONS',
+    headers: { Origin: origin },
+  }), {});
+  assert.equal(response.status, 204);
+  assert.equal(response.headers.get('Access-Control-Allow-Origin'), origin);
+});
+
+test('rejects untrusted origins at the registration Worker boundary', async () => {
+  const response = await worker.fetch(new Request('https://sipandu-registration.test/activate', {
+    method: 'OPTIONS',
+    headers: { Origin: 'https://untrusted.example' },
+  }), {});
+  assert.equal(response.status, 403);
+  assert.equal(response.headers.get('Access-Control-Allow-Origin'), null);
 });
