@@ -15,7 +15,7 @@ The KV namespace has already been created. The existing app Worker `sipandu` is 
 
 1. Open Google Cloud Console and select Firebase project `gen-lang-client-0197631978`.
 2. Create a dedicated service account for this registration Worker.
-3. Grant only the Firebase Authentication administrative permission required to update Firebase Authentication users' custom claims (Firebase Authentication Admin).
+3. Create a least-privilege custom IAM role that grants only `firebaseauth.users.update`, then grant that role to the service account on the Firebase project. The Identity Toolkit `projects.accounts.update` endpoint requires this permission. Avoid granting project Owner or broad Firebase Admin roles.
 4. Create a JSON key and download it. **Do not commit this file to GitHub, place it in the app, or send it in chat.**
 5. In Firebase Authentication, enable Email/Password sign-in and confirm that the email verification template and sender settings are working.
 
@@ -47,6 +47,17 @@ The `/health` endpoint returns `ready: true` only when both secrets and the KV b
 5. SIPANDU refreshes the Firebase ID token and opens the dashboard. The profile fields are already filled from Firestore; the member can upload a photo. Edit Profile remains available.
 
 The Worker never accepts a role from the browser. Profile documents cannot contain a role field, and Firestore Rules restrict each profile to its matching Firebase UID.
+
+## Deploy the profile Firestore Rules
+
+After reviewing and testing `firestore.rules`, deploy the updated rules to the exact named database configured by SIPANDU:
+
+```sh
+firebase deploy --only firestore:ai-studio-sipanduodhiv-985a0308-7693-46e1-b6d3-fdbce52371a8 --project gen-lang-client-0197631978
+```
+
+This rules deployment is separate from the Cloudflare Worker deployment. Registration cannot save profiles across devices until the matching Firestore Rules are active on the Firebase database.
+
 
 ## Origins
 
