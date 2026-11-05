@@ -2,7 +2,7 @@ import { Capacitor } from '@capacitor/core';
 import { LocalNotifications } from '@capacitor/local-notifications';
 import { getSafeSystemNotificationContent, workspaceReconnectNotificationId } from './notificationPolicy';
 
-export type RespondentNotificationKind = 'kuisioner' | 'asesmen' | 'workspace';
+export type RespondentNotificationKind = 'kuisioner' | 'asesmen' | 'terintegrasi' | 'workspace';
 
 export interface RespondentNotification {
   id: string;
@@ -59,12 +59,34 @@ function safeWrite(key: string, value: unknown): void {
 
 export function loadRespondentNotifications(uid: string): RespondentNotification[] {
   return safeRead<RespondentNotification[]>(scopedKey(HISTORY_KEY, uid), [])
-    .filter((item) => item && (item.kind === 'kuisioner' || item.kind === 'asesmen' || item.kind === 'workspace'))
+    .filter((item) => item && (item.kind === 'kuisioner' || item.kind === 'asesmen' || item.kind === 'terintegrasi'))
     .slice(0, HISTORY_LIMIT);
 }
 
 function notifyHistoryChanged(uid: string): void {
   window.dispatchEvent(new CustomEvent('sipandu-respondent-notifications-updated', { detail: { uid } }));
+}
+
+/** Add an in-app/system event only after the integrated assessment has been saved successfully. */
+export async function notifyIntegratedAssessmentSaved(uid: string, respondentId: string, respondentName: string): Promise<RespondentNotification> {
+  const now = new Date().toISOString();
+  const item: RespondentNotification = {
+    id: `terintegrasi:${respondentId}:${fingerprint(now)}`,
+    kind: 'terintegrasi',
+    title: 'From Asesmen Terintegrasi Berhasil Disimpan',
+    body: `Form Asesmen Terintegrasi milik ${respondentName || 'responden'} berhasil disimpan.`,
+    respondentName: respondentName || 'Responden',
+    respondentId,
+    createdAt: now,
+    read: false,
+  };
+  const history = [item, ...loadRespondentNotifications(uid)].slice(0, HISTORY_LIMIT);
+  safeWrite(scopedKey(HISTORY_KEY, uid), history);
+  notifyHistoryChanged(uid);
+  await showSystemNotification(item, uid);
+  const badgeNavigator = navigator as Navigator & { setAppBadge?: (count?: number) => Promise<void> };
+  try { await badgeNavigator.setAppBadge?.(history.filter((entry) => !entry.read).length); } catch { /* optional badges */ }
+  return item;
 }
 
 export function markRespondentNotificationsRead(uid: string): RespondentNotification[] {
@@ -178,7 +200,8 @@ function playForegroundAlert(): void {
 }
 
 async function showSystemNotification(item: RespondentNotification, uid: string): Promise<void> {
-  if (getRespondentNotificationPermission() !== 'granted') return;
+  // Re-check OS/browser permission without opening an in-app permission prompt.
+  if (await refreshRespondentNotificationPermission() !== 'granted') return;
   const systemContent = getSafeSystemNotificationContent(item.kind);
 
   if (Capacitor.isNativePlatform()) {
@@ -365,8 +388,12 @@ export async function processRespondentSubmissionEvents(
     events.push({
       id: `kuisioner:${id}:${fingerprint(String(record.timestamp || ''))}`,
       kind: 'kuisioner',
-      title: 'Asesmen Tahap Awal — Responden Baru',
-      body: `Responden ${String(record.namaLengkap || 'baru')} telah mengirim Google Form asesmen tahap awal. Tinjau data, lalu siapkan formulir lanjutan melalui WhatsApp.`,
+      title: options.baselineNamespace === 'native-sipandu-stage-one'
+        ? 'Kuisioner Tahap Awal — Responden Baru'
+        : 'Google Form — Responden Baru',
+      body: options.baselineNamespace === 'native-sipandu-stage-one'
+        ? `Responden ${String(record.namaLengkap || 'baru')} telah mengisi kuisioner tahap awal SIPANDU.`
+        : `Responden ${String(record.namaLengkap || 'baru')} baru mengirim Google Form. Tinjau data yang masuk di Database PPKS.`,
       respondentName: String(record.namaLengkap || 'Responden baru'),
       respondentId: id,
       createdAt: now,
