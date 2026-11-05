@@ -94,7 +94,9 @@ export const DokumenView: React.FC<DokumenViewProps> = ({ profile }) => {
     try {
       const saved = await uploadStaffDocument(file, activeTab, setUploadProgress);
       setUploadedDocuments((previous) => [saved, ...previous.filter((item) => item.id !== saved.id)]);
-      setDocumentNotice(`File “${saved.name}” berhasil disimpan ke arsip Firebase SIPANDU.`);
+      setDocumentNotice(saved.driveBackupError
+        ? `File “${saved.name}” tersimpan di Firebase, tetapi salinan Google Drive belum berhasil: ${saved.driveBackupError}`
+        : `File “${saved.name}” berhasil disimpan di Firebase SIPANDU dan disalin ke Google Drive utama.`);
       setShowUploadModal(false);
     } catch (error) {
       setUploadError(error instanceof Error ? error.message : 'File gagal disimpan. Silakan coba lagi.');
