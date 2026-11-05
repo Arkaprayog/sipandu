@@ -193,9 +193,8 @@ test('Profil anggota hanya dapat dibaca dan diubah oleh pemilik UID serta tidak 
     updatedAt: serverTimestamp(),
   }));
 
-  // Firebase may return the email claim with different casing after an
-  // account migration. A profile save may align only the owner's own email
-  // metadata to the exact authenticated claim.
+  // The owner may correct their private email metadata without changing UID
+  // ownership or gaining access to another profile.
   const differentlyCasedEmailContext = environment.authenticatedContext('member-001', {
     email: 'Member@example.test',
     email_verified: true,
