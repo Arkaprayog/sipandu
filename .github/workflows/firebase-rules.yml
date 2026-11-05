@@ -100,7 +100,7 @@ jobs:
         run: |
           set -euo pipefail
           if [ -z "${FIREBASE_SERVICE_ACCOUNT_JSON:-}" ]; then
-            echo "::error::GitHub Actions secret FIREBASE_SERVICE_ACCOUNT_JSON is missing. Add a Firebase service-account JSON key with permission to deploy Firestore Security Rules; never paste it into the repository or chat."
+            echo "::error::GitHub Actions secret FIREBASE_SERVICE_ACCOUNT_JSON is missing. Add a Firebase service-account JSON key; never paste it into the repository or chat."
             exit 1
           fi
 
@@ -111,23 +111,35 @@ jobs:
           const entries = Array.isArray(config.firestore)
             ? config.firestore
             : config.firestore ? [config.firestore] : [];
-          const expected = 'ai-studio-sipanduodhiv-985a0308-7693-46e1-b6d3-fdbce52371a8';
-          if (entries.length !== 1 || entries[0].database !== expected || entries[0].rules !== 'firestore.rules') {
+          const expectedDatabase = 'ai-studio-sipanduodhiv-985a0308-7693-46e1-b6d3-fdbce52371a8';
+          const expectedProject = 'gen-lang-client-0197631978';
+          if (entries.length !== 1 || entries[0].database !== expectedDatabase || entries[0].rules !== 'firestore.rules') {
             throw new Error('Refusing deployment: firebase.json does not target the expected SIPANDU Firestore database and rules file.');
           }
           const aliases = JSON.parse(fs.readFileSync('.firebaserc', 'utf8'));
-          if (aliases.projects?.default !== 'gen-lang-client-0197631978') {
+          if (aliases.projects?.default !== expectedProject) {
             throw new Error('Refusing deployment: .firebaserc default project does not match SIPANDU production.');
           }
+          const credential = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_JSON);
+          if (credential.type !== 'service_account' || !credential.client_email || !credential.private_key) {
+            throw new Error('FIREBASE_SERVICE_ACCOUNT_JSON is not a complete service-account credential.');
+          }
+          if (credential.project_id !== expectedProject ||
+              credential.client_email !== 'sipandu-github-rules@gen-lang-client-0197631978.iam.gserviceaccount.com') {
+            throw new Error('Refusing deployment: service-account project or principal does not match the IAM principal verified for SIPANDU.');
+          }
+          console.log('Preflight OK: target project/database and service-account principal match.');
+          console.log('Credential principal:', credential.client_email);
+          console.log('Credential project:', credential.project_id);
           NODE
 
           KEY_FILE="$RUNNER_TEMP/firebase-service-account.json"
           printf '%s' "$FIREBASE_SERVICE_ACCOUNT_JSON" > "$KEY_FILE"
           chmod 600 "$KEY_FILE"
           export GOOGLE_APPLICATION_CREDENTIALS="$KEY_FILE"
+          export GCLOUD_PROJECT="$FIREBASE_PROJECT_ID"
           trap 'rm -f "$KEY_FILE"' EXIT
 
-          # Publish only Firestore Security Rules (not Storage Rules or indexes).
-          # The project config currently maps the source rules file to the single
-          # named SIPANDU database checked above.
-          firebase deploy --only firestore:rules --project "$FIREBASE_PROJECT_ID" --non-interactive
+          # Publish only Firestore Security Rules. Debug mode is enabled temporarily
+          # to capture the exact Firebase Rules API operation rejected by Google.
+          firebase deploy --only firestore:rules --project "$FIREBASE_PROJECT_ID" --non-interactive --debug
