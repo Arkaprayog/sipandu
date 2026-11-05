@@ -537,20 +537,25 @@ function StaffApp() {
         setProfile(cloudProfile);
         return;
       }
-      try {
-        const raw = localStorage.getItem('sipandu_profile');
-        const localProfile = raw ? JSON.parse(raw) as ProfileUser : null;
-        if (localProfile?.nama?.trim() && localProfile?.nip?.trim() && user.email) {
-          await saveSIPANDUUserProfile(user.uid, localProfile);
+      if (currentUserRole === 'owner' || currentUserRole === 'supervisor') {
+        try {
+          const raw = localStorage.getItem('sipandu_profile');
+          const localProfile = raw ? JSON.parse(raw) as ProfileUser : null;
+          if (localProfile?.nama?.trim() && localProfile?.nip?.trim() && user.email) {
+            await saveSIPANDUUserProfile(user.uid, localProfile);
+          }
+        } catch (error) {
+          console.warn('Profil SIPANDU belum dapat dimigrasikan ke Firestore:', error);
         }
-      } catch (error) {
-        console.warn('Profil SIPANDU belum dapat dimigrasikan ke Firestore:', error);
+      } else {
+        // Do not copy another account's browser-local profile into this UID.
+        setProfile(initialProfileUser);
       }
     }).catch((error) => {
       console.warn('Profil anggota SIPANDU belum dapat dibaca dari Firestore:', error);
     });
     return () => { active = false; };
-  }, [isAuthenticated, localCacheReady]);
+  }, [isAuthenticated, localCacheReady, currentUserRole]);
 
   // Debounce large JSON serialization/writes to reduce synchronous main-thread work.
   // This is a convenience cache and is not a replacement for authenticated server storage.
