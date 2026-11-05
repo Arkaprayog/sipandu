@@ -59,7 +59,7 @@ function safeWrite(key: string, value: unknown): void {
 
 export function loadRespondentNotifications(uid: string): RespondentNotification[] {
   return safeRead<RespondentNotification[]>(scopedKey(HISTORY_KEY, uid), [])
-    .filter((item) => item && (item.kind === 'kuisioner' || item.kind === 'asesmen' || item.kind === 'terintegrasi'))
+    .filter((item) => item && (item.kind === 'kuisioner' || item.kind === 'terintegrasi'))
     .slice(0, HISTORY_LIMIT);
 }
 
