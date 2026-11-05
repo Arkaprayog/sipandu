@@ -4,7 +4,9 @@ import { PPKSRecord } from '../types';
 import { getAccessToken, invalidateAccessToken, refreshWorkspaceAccessToken } from '../lib/firebase';
 import { formatPPKSTimestamp } from '../lib/ppksData';
 import { publicAssetUrl } from '../lib/publicAssets';
-import { backupAssessmentToCentralDrive } from '../lib/googleDriveBackup';
+import { backupAssessmentToCentralDrive, deleteCentralDriveFile } from '../lib/googleDriveBackup';
+import { getIntegratedAssessmentBackupMetadata, saveIntegratedAssessmentBackupMetadata } from '../lib/firebase';
+import { printCurrentWebView } from '../lib/printing';
 import { createPhotoPreviewBlob, MAX_PPKS_PHOTO_FILE_BYTES } from '../lib/photoFilePreview';
 import '../officialAssessment.css';
 
@@ -254,8 +256,9 @@ function answersForRecord(record?: PPKSRecord): Record<string, AnswerValue> {
 export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewProps> = ({ ppksList, onSaveAssessment }) => {
   const [selectedPPKSId, setSelectedPPKSId] = useState<string>(ppksList[0]?.id || '');
   const [answers, setAnswers] = useState<Record<string, AnswerValue>>(() => answersForRecord(ppksList.find((record) => record.id === selectedPPKSId)));
-  const [statusMessage, setStatusMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [statusMessage, setStatusMessage] = useState<{ type: 'success' | 'error'; text: string; driveUrl?: string } | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [driveArchive, setDriveArchive] = useState<{ status: 'complete' | 'failed'; error: string; fileId: string; webViewLink: string; savedAt: string } | null>(null);
   const [printPhotoUrls, setPrintPhotoUrls] = useState<Record<string, string>>({});
   const [printPhotoErrors, setPrintPhotoErrors] = useState<Record<string, string>>({});
   const [previewPhotoUrls, setPreviewPhotoUrls] = useState<Record<string, string>>({});
@@ -293,6 +296,18 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
   }, [ppksList, selectedPPKSId]);
 
   const currentPPKS = useMemo(() => ppksList.find((record) => record.id === selectedPPKSId), [ppksList, selectedPPKSId]);
+
+  useEffect(() => {
+    let active = true;
+    setDriveArchive(null);
+    if (!currentPPKS) return () => { active = false; };
+    void getIntegratedAssessmentBackupMetadata(currentPPKS.id)
+      .then((metadata) => { if (active) setDriveArchive(metadata); })
+      .catch((error) => {
+        if (active) console.warn('SIPANDU could not load Drive archive status:', error);
+      });
+    return () => { active = false; };
+  }, [currentPPKS?.id]);
 
   const choosePPKS = (id: string) => {
     if (isSaving) return;
@@ -359,21 +374,55 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
       // Firestore remains the application source of truth, so a Drive outage
       // cannot erase an assessment that has already been committed.
       try {
-        await backupAssessmentToCentralDrive({
+        const driveCopy = await backupAssessmentToCentralDrive({
           ppksId: currentPPKS.id,
           ppksName: currentPPKS.namaLengkap || currentPPKS.id,
           nik: currentPPKS.nik || (typeof clean.q23 === 'string' ? clean.q23 : ''),
           answers: clean,
         });
-        setStatusMessage({
-          type: 'success',
-          text: 'Form Asesmen Terintegrasi berhasil disimpan ke Firebase Firestore dan salinan arsip dibuat di Google Drive utama SIPANDU.',
-        });
+        try {
+          await saveIntegratedAssessmentBackupMetadata(currentPPKS.id, {
+            status: 'complete',
+            fileId: driveCopy.id,
+            webViewLink: driveCopy.webViewLink,
+          });
+          setDriveArchive({
+            status: 'complete',
+            error: '',
+            fileId: driveCopy.id,
+            webViewLink: driveCopy.webViewLink || '',
+            savedAt: new Date().toISOString(),
+          });
+          setStatusMessage({
+            type: 'success',
+            text: 'Form Asesmen Terintegrasi tersimpan di Firestore dan arsip Google Drive utama SIPANDU.',
+            driveUrl: driveCopy.webViewLink,
+          });
+        } catch (metadataError) {
+          // Do not leave a Drive object that SIPANDU cannot track in Firestore.
+          try { await deleteCentralDriveFile(driveCopy.id); } catch { /* preserve metadata error */ }
+          throw metadataError;
+        }
       } catch (driveError) {
         const detail = driveError instanceof Error ? driveError.message : String(driveError);
+        try {
+          await saveIntegratedAssessmentBackupMetadata(currentPPKS.id, {
+            status: 'failed',
+            error: detail,
+          });
+          setDriveArchive({
+            status: 'failed',
+            error: detail,
+            fileId: '',
+            webViewLink: '',
+            savedAt: '',
+          });
+        } catch (metadataError) {
+          console.error('SIPANDU could not record assessment Drive backup failure:', metadataError);
+        }
         setStatusMessage({
           type: 'success',
-          text: 'Form berhasil disimpan di Firebase Firestore, tetapi salinan Google Drive belum berhasil: ' + detail,
+          text: 'Jawaban aman di Firestore, tetapi backup Google Drive belum berhasil: ' + detail + ' Hubungkan ulang akun Google Workspace lalu simpan lagi untuk membuat arsip baru.',
         });
       }
     } catch (error) {
@@ -674,7 +723,12 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
       }));
 
       setPreparingPrint(false);
-      window.print();
+      try {
+        await printCurrentWebView('SIPANDU - Form Asesmen Terintegrasi');
+      } catch (nativePrintError) {
+        console.warn('SIPANDU native print bridge unavailable; falling back to browser print:', nativePrintError);
+        window.print();
+      }
     } catch (error) {
       document.body.classList.remove('official-assessment-printing');
       document.getElementById('sipandu-official-print-root')?.remove();
@@ -800,10 +854,24 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
         </div>
       </div>
 
+      {driveArchive && (
+        <section className={`mb-3 rounded-lg border p-3 text-xs ${driveArchive.status === 'complete' ? 'border-emerald-500/40 bg-emerald-950/40 text-emerald-100' : 'border-amber-500/40 bg-amber-950/40 text-amber-100'}`} aria-live="polite">
+          <strong>{driveArchive.status === 'complete' ? 'Arsip Google Drive terhubung' : 'Backup Google Drive belum tersedia'}</strong>
+          {driveArchive.savedAt && <span className="ml-2 opacity-80">· {new Date(driveArchive.savedAt).toLocaleString('id-ID')}</span>}
+          {driveArchive.error && <p className="mt-1 break-words">{driveArchive.error}</p>}
+          {driveArchive.webViewLink && <a href={driveArchive.webViewLink} target="_blank" rel="noopener noreferrer" className="ml-2 inline-flex font-bold underline underline-offset-2">Buka arsip Google Drive</a>}
+        </section>
+      )}
+
       {statusMessage && (
         <div role="status" aria-live="polite" className={'official-status mb-3 rounded-lg border p-3 text-xs ' + (statusMessage.type === 'success' ? 'border-emerald-500/40 bg-emerald-950/50 text-emerald-100' : 'border-rose-500/40 bg-rose-950/50 text-rose-100')}>
           {statusMessage.type === 'success' && <CheckCircle2 className="mr-1 inline h-4 w-4 align-middle" />}
           {statusMessage.text}
+          {statusMessage.driveUrl && (
+            <a href={statusMessage.driveUrl} target="_blank" rel="noopener noreferrer" className="ml-2 inline-flex items-center gap-1 font-bold underline underline-offset-2">
+              Buka arsip Google Drive
+            </a>
+          )}
         </div>
       )}
 

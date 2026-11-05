@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { ProfileUser, SuratRecord } from '../types';
-import { ACCEPTED_DOCUMENT_EXTENSIONS, deleteStaffDocument, listStaffDocuments, uploadStaffDocument, type StaffDocumentRecord } from '../lib/documentStorage';
+import { ACCEPTED_DOCUMENT_EXTENSIONS, deleteStaffDocument, listStaffDocuments, retryStaffDocumentDriveBackup, uploadStaffDocument, type StaffDocumentRecord } from '../lib/documentStorage';
+import { printCurrentWebView, printSupportedBlob } from '../lib/printing';
+import { listStaffLettersFromFirestore, saveStaffLetterToFirestore } from '../lib/letterStorage';
 import { initialSuratList } from '../data/initialData';
 import { KemensosLogo } from './KemensosLogo';
 import { SuratTugasEditor } from './SuratTugasEditor';
@@ -37,7 +39,12 @@ export const DokumenView: React.FC<DokumenViewProps> = ({ profile }) => {
   const [uploadProgress, setUploadProgress] = useState<number>(0);
   const [uploadError, setUploadError] = useState<string>('');
   const [documentNotice, setDocumentNotice] = useState<string>('');
+  const [letterDriveLink, setLetterDriveLink] = useState<string>('');
+  const [savingLetter, setSavingLetter] = useState<boolean>(false);
+  const [retryingDocumentId, setRetryingDocumentId] = useState<string>('');
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const retryFileInputRef = useRef<HTMLInputElement | null>(null);
+  const retryTargetRef = useRef<StaffDocumentRecord | null>(null);
 
   useEffect(() => {
     const onAppNavigateBack = (event: Event) => {
@@ -69,6 +76,25 @@ export const DokumenView: React.FC<DokumenViewProps> = ({ profile }) => {
 
   useEffect(() => {
     let active = true;
+    const loadLetters = async () => {
+      try {
+        const remote = await listStaffLettersFromFirestore();
+        if (!active || remote.length === 0) return;
+        setSuratList((previous) => {
+          const merged = new Map(previous.map((item) => [item.id, item]));
+          remote.forEach((item) => merged.set(item.record.id, item.record));
+          return [...remote.map((item) => item.record), ...Array.from(merged.values()).filter((item) => !remote.some((saved) => saved.record.id === item.id))];
+        });
+      } catch (error) {
+        if (active) setDocumentNotice(error instanceof Error ? error.message : 'Arsip surat Firestore belum dapat dimuat.');
+      }
+    };
+    void loadLetters();
+    return () => { active = false; };
+  }, []);
+
+  useEffect(() => {
+    let active = true;
     const loadDocuments = async () => {
       setDocumentsLoading(true);
       try {
@@ -94,9 +120,9 @@ export const DokumenView: React.FC<DokumenViewProps> = ({ profile }) => {
     try {
       const saved = await uploadStaffDocument(file, activeTab, setUploadProgress);
       setUploadedDocuments((previous) => [saved, ...previous.filter((item) => item.id !== saved.id)]);
-      setDocumentNotice(saved.driveBackupError
-        ? `File “${saved.name}” tersimpan di Firebase, tetapi salinan Google Drive belum berhasil: ${saved.driveBackupError}`
-        : `File “${saved.name}” berhasil disimpan di Firebase SIPANDU dan disalin ke Google Drive utama.`);
+      setDocumentNotice(saved.driveBackupStatus === 'complete'
+        ? `File “${saved.name}” tersimpan di Firebase dan arsip Google Drive utama SIPANDU.`
+        : `File “${saved.name}” aman di Firebase, tetapi backup Google Drive belum berhasil: ${saved.driveBackupError || 'hubungkan ulang Google Workspace lalu unggah ulang file ini.'}`);
       setShowUploadModal(false);
     } catch (error) {
       setUploadError(error instanceof Error ? error.message : 'File gagal disimpan. Silakan coba lagi.');
@@ -104,6 +130,95 @@ export const DokumenView: React.FC<DokumenViewProps> = ({ profile }) => {
       setUploading(false);
       setUploadProgress(0);
       if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  const beginDriveBackupRetry = (document: StaffDocumentRecord) => {
+    retryTargetRef.current = document;
+    retryFileInputRef.current?.click();
+  };
+
+  const handleDriveBackupRetryFile = async (file: File | undefined) => {
+    const target = retryTargetRef.current;
+    retryTargetRef.current = null;
+    if (!file || !target) return;
+    setRetryingDocumentId(target.id);
+    setDocumentNotice('');
+    try {
+      const updated = await retryStaffDocumentDriveBackup(target.id, file);
+      setUploadedDocuments((previous) => previous.map((item) => item.id === updated.id ? updated : item));
+      setDocumentNotice(`Salinan “${updated.name}” berhasil dibuat di Google Drive utama SIPANDU.`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setDocumentNotice(`Backup Google Drive gagal diulang: ${message}`);
+      setUploadedDocuments((previous) => previous.map((item) => item.id === target.id
+        ? { ...item, driveBackupStatus: 'failed', driveBackupError: message }
+        : item));
+    } finally {
+      setRetryingDocumentId('');
+      if (retryFileInputRef.current) retryFileInputRef.current.value = '';
+    }
+  };
+
+  const openDocumentInViewer = (document: StaffDocumentRecord) => {
+    const link = document.downloadUrl;
+    const opened = window.open(link, '_blank', 'noopener,noreferrer');
+    if (!opened) {
+      const anchor = window.document.createElement('a');
+      anchor.href = link;
+      anchor.download = document.name;
+      anchor.rel = 'noopener noreferrer';
+      window.document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+    }
+  };
+
+  const handlePrintUploadedDocument = async (document: StaffDocumentRecord) => {
+    if (!document.downloadUrl) {
+      setDocumentNotice('Tautan file tidak tersedia. File mungkin perlu diunggah ulang.');
+      return;
+    }
+    const extension = document.name.split('.').pop()?.toLowerCase() || '';
+    const printableMime = extension === 'pdf'
+      ? 'application/pdf'
+      : ['jpg', 'jpeg'].includes(extension)
+        ? 'image/jpeg'
+        : extension === 'png'
+          ? 'image/png'
+          : null;
+
+    // Office, HEIC, GIF, TIFF, WEBP, large PDFs/images should open in the
+    // native/browser viewer. Avoid converting large files into base64 in WebView.
+    if (!printableMime || document.size > 5 * 1024 * 1024) {
+      openDocumentInViewer(document);
+      setDocumentNotice(
+        document.size > 5 * 1024 * 1024
+          ? 'File berukuran lebih dari 5 MB. File dibuka di penampil perangkat agar dapat dicetak dari sana.'
+          : 'Format file dibuka melalui penampil perangkat. Gunakan menu Cetak pada penampil dokumen atau browser.',
+      );
+      return;
+    }
+
+    try {
+      setDocumentNotice('Menyiapkan file untuk dialog cetak...');
+      const response = await fetch(document.downloadUrl, { cache: 'no-store' });
+      if (!response.ok) throw new Error('File tidak dapat diambil dari Firebase (HTTP ' + response.status + ').');
+      const blob = await response.blob();
+      if (blob.size > 5 * 1024 * 1024) {
+        openDocumentInViewer(document);
+        setDocumentNotice('File melebihi batas cetak langsung 5 MB. File dibuka di penampil perangkat.');
+        return;
+      }
+      await printSupportedBlob(blob, document.name, printableMime);
+      setDocumentNotice('Dialog cetak perangkat telah dibuka. Pilih printer atau Simpan sebagai PDF.');
+    } catch (error) {
+      console.warn('SIPANDU could not print the archive file directly:', error);
+      openDocumentInViewer(document);
+      setDocumentNotice(
+        'Cetak langsung tidak tersedia pada perangkat ini. File dibuka di penampil dokumen; pilih Cetak dari menu penampil. ' +
+        (error instanceof Error ? error.message : String(error)),
+      );
     }
   };
 
@@ -138,19 +253,20 @@ export const DokumenView: React.FC<DokumenViewProps> = ({ profile }) => {
   );
   const [newDeskripsi, setNewDeskripsi] = useState<string>('');
 
-  const handleCreateSurat = (e: React.FormEvent) => {
+  const handleCreateSurat = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (savingLetter) return;
     if (!newJudul.trim() || !newLokasi.trim() || !newDeskripsi.trim()) {
-      alert('Isi judul, lokasi, dan uraian dokumen yang sebenarnya sebelum membuat dokumen.');
+      setDocumentNotice('Isi judul, lokasi, dan uraian dokumen sebelum menyimpan surat.');
       return;
     }
     if (!profile.nama.trim() || !profile.nip.trim()) {
-      alert('Lengkapi nama dan NIP petugas di Profil SIPANDU sebelum membuat dokumen resmi.');
+      setDocumentNotice('Lengkapi nama dan NIP petugas di Profil SIPANDU sebelum membuat dokumen resmi.');
       return;
     }
 
     const newRecord: SuratRecord = {
-      id: `SRT-${Date.now()}`,
+      id: `SRT-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       nomorSurat: newNomorSurat,
       judul: newJudul,
       jenis: activeTab === 'surat-tugas' ? 'Surat Tugas' : 'Berita Acara',
@@ -162,15 +278,34 @@ export const DokumenView: React.FC<DokumenViewProps> = ({ profile }) => {
       deskripsi: newDeskripsi.trim(),
     };
 
-    setSuratList([newRecord, ...suratList]);
-    setSelectedSurat(newRecord);
-    setShowCreateModal(false);
-    setNewJudul('');
-    setNewDeskripsi('');
+    setSavingLetter(true);
+    setDocumentNotice('');
+    setLetterDriveLink('');
+    try {
+      const saved = await saveStaffLetterToFirestore(newRecord);
+      setSuratList((previous) => [saved.record, ...previous.filter((item) => item.id !== saved.record.id)]);
+      setSelectedSurat(saved.record);
+      setShowCreateModal(false);
+      setNewJudul('');
+      setNewDeskripsi('');
+      setLetterDriveLink(saved.driveWebViewLink || '');
+      setDocumentNotice(saved.driveBackupStatus === 'complete'
+        ? 'Surat tersimpan di Firestore dan arsip salinan dibuat di Google Drive utama SIPANDU.'
+        : 'Surat aman di Firestore, tetapi backup Google Drive belum berhasil: ' + (saved.driveBackupError || 'hubungkan ulang Google Workspace lalu ulangi.'));
+    } catch (error) {
+      setDocumentNotice(error instanceof Error ? error.message : 'Surat gagal disimpan ke Firestore.');
+    } finally {
+      setSavingLetter(false);
+    }
   };
 
-  const handlePrintSurat = () => {
-    window.print();
+  const handlePrintSurat = async () => {
+    try {
+      await printCurrentWebView(selectedSurat ? `SIPANDU - ${selectedSurat.judul}` : 'SIPANDU - Dokumen');
+    } catch (error) {
+      console.warn('SIPANDU printer plugin unavailable; falling back to browser print:', error);
+      window.print();
+    }
   };
 
   return (
@@ -255,6 +390,11 @@ export const DokumenView: React.FC<DokumenViewProps> = ({ profile }) => {
         {documentNotice && (
           <div role="status" aria-live="polite" className="rounded-xl border border-sky-400/25 bg-sky-950/40 px-3 py-2 text-xs text-sky-100 break-words">
             {documentNotice}
+            {letterDriveLink && (
+              <a href={letterDriveLink} target="_blank" rel="noopener noreferrer" className="ml-2 font-bold underline underline-offset-2">
+                Buka arsip surat di Google Drive
+              </a>
+            )}
           </div>
         )}
 
@@ -268,6 +408,13 @@ export const DokumenView: React.FC<DokumenViewProps> = ({ profile }) => {
             </div>
             <span className="text-[10px] text-sky-200">{visibleDocuments.length} berkas</span>
           </div>
+          <input
+            ref={retryFileInputRef}
+            type="file"
+            accept={ACCEPTED_DOCUMENT_EXTENSIONS}
+            className="hidden"
+            onChange={(event) => { void handleDriveBackupRetryFile(event.currentTarget.files?.[0]); }}
+          />
           {documentsLoading ? (
             <p className="text-xs text-neutral-400">Memuat arsip dokumen...</p>
           ) : visibleDocuments.length === 0 ? (
@@ -285,13 +432,39 @@ export const DokumenView: React.FC<DokumenViewProps> = ({ profile }) => {
                       {formatDocumentSize(document.size)} · {document.uploadedAt ? new Date(document.uploadedAt).toLocaleString('id-ID') : 'Waktu tersimpan'}
                       {document.ownerEmail ? ` · ${document.ownerEmail}` : ''}
                     </p>
+                    <p className={`mt-1 text-[10px] font-semibold ${document.driveBackupStatus === 'complete' ? 'text-emerald-300' : document.driveBackupStatus === 'failed' ? 'text-amber-300' : 'text-sky-200'}`}>
+                      {document.driveBackupStatus === 'complete' ? 'Backup Google Drive tersimpan' : document.driveBackupStatus === 'failed' ? 'Backup Google Drive belum berhasil' : 'Status backup Google Drive menunggu'}
+                    </p>
+                    {document.driveBackupStatus === 'failed' && document.driveBackupError && (
+                      <>
+                        <p className="mt-1 text-[10px] text-amber-200/80 break-words">{document.driveBackupError}</p>
+                        <button
+                          type="button"
+                          onClick={() => beginDriveBackupRetry(document)}
+                          disabled={retryingDocumentId === document.id}
+                          className="mt-1 inline-flex items-center gap-1 rounded-md border border-amber-300/30 px-2 py-1 text-[10px] font-bold text-amber-100 disabled:opacity-50"
+                        >
+                          {retryingDocumentId === document.id ? 'Mengulang backup…' : 'Pilih ulang file untuk backup Drive'}
+                        </button>
+                      </>
+                    )}
                   </div>
-                  {document.downloadUrl && (
-                    <a href={document.downloadUrl} target="_blank" rel="noopener noreferrer" aria-label={`Buka ${document.name}`} className="rounded-lg p-2 text-sky-200 hover:bg-sky-900/50">
-                      <Download className="h-4 w-4" />
+                  {document.driveWebViewLink && document.driveBackupStatus === 'complete' && (
+                    <a href={document.driveWebViewLink} target="_blank" rel="noopener noreferrer" aria-label={`Buka salinan Google Drive ${document.name}`} className="rounded-lg p-2 text-emerald-200 hover:bg-emerald-900/50" title="Buka salinan di Google Drive">
+                      <FileCheck2 className="h-4 w-4" />
                     </a>
                   )}
-                  <button type="button" onClick={() => void handleDeleteDocument(document)} aria-label={`Hapus ${document.name}`} className="rounded-lg p-2 text-rose-300 hover:bg-rose-950/50">
+                  {document.downloadUrl && (
+                    <>
+                      <button type="button" onClick={() => void handlePrintUploadedDocument(document)} aria-label={`Cetak ${document.name}`} className="rounded-lg p-2 text-violet-200 hover:bg-violet-900/50" title="Cetak atau buka penampil perangkat">
+                        <Printer className="h-4 w-4" />
+                      </button>
+                      <a href={document.downloadUrl} target="_blank" rel="noopener noreferrer" aria-label={`Buka ${document.name}`} className="rounded-lg p-2 text-sky-200 hover:bg-sky-900/50" title="Buka file Firebase">
+                        <Download className="h-4 w-4" />
+                      </a>
+                    </>
+                  )}
+                  <button type="button" onClick={() => void handleDeleteDocument(document)} aria-label={`Hapus ${document.name}`} className="rounded-lg p-2 text-rose-300 hover:bg-rose-950/50" title="Hapus dari Firebase dan Google Drive">
                     <Trash2 className="h-4 w-4" />
                   </button>
                 </div>
@@ -347,7 +520,7 @@ export const DokumenView: React.FC<DokumenViewProps> = ({ profile }) => {
           {/* Surat Preview Card (Official Kop Kementerian Sosial RI) */}
           <div className="lg:col-span-7">
             {selectedSurat ? (
-              <div className="p-6 md:p-8 rounded-2xl bg-white text-neutral-900 border border-neutral-300 shadow-xl space-y-5">
+              <div className="print-container p-6 md:p-8 rounded-2xl bg-white text-neutral-900 border border-neutral-300 shadow-xl space-y-5">
                 {/* Official Kop Surat Kemensos */}
                 <div className="border-b-2 border-neutral-900 pb-3 text-center flex flex-col items-center">
                   <div className="flex items-center gap-3 mb-1">

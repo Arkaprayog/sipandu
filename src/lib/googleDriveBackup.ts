@@ -1,4 +1,5 @@
 import { getAccessToken, invalidateAccessToken, refreshWorkspaceAccessToken } from './firebase';
+import type { SuratRecord } from '../types';
 
 const DRIVE_API = 'https://www.googleapis.com/drive/v3';
 const ROOT_FOLDER_NAME = 'SIPANDU';
@@ -70,26 +71,80 @@ async function uploadMultipart(
   mimeType: string,
   data: Blob,
 ): Promise<{ id: string; webViewLink?: string }> {
-  const boundary = 'sipandu-' + Math.random().toString(36).slice(2);
-  const metadata = JSON.stringify({ name: fileName, parents: [folderId] });
-  const body = new Blob([
-    '--' + boundary + '\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n',
-    metadata,
-    '\r\n--' + boundary + '\r\nContent-Type: ' + mimeType + '\r\n\r\n',
-    data,
-    '\r\n--' + boundary + '--',
-  ], { type: 'multipart/related; boundary=' + boundary });
-
-  const response = await driveFetch('/files?uploadType=multipart&fields=id,name,webViewLink', {
-    method: 'POST',
-    headers: { 'Content-Type': 'multipart/related; boundary=' + boundary },
-    body,
+  const metadata = JSON.stringify({
+    name: fileName,
+    parents: [folderId],
+    appProperties: { sipanduManaged: 'true', sipanduArchive: folderId },
   });
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({}));
-    throw new Error((error as { error?: { message?: string } }).error?.message || 'File gagal disalin ke Google Drive.');
+
+  let uploaded: { id: string; webViewLink?: string };
+  if (data.size > 5 * 1024 * 1024) {
+    // Resumable upload avoids holding a second multipart copy in mobile memory.
+    const session = await driveFetch('/files?uploadType=resumable&fields=id,name,webViewLink', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json; charset=UTF-8',
+        'X-Upload-Content-Type': mimeType,
+        'X-Upload-Content-Length': String(data.size),
+      },
+      body: metadata,
+    });
+    if (!session.ok) {
+      const error = await session.json().catch(() => ({}));
+      throw new Error((error as { error?: { message?: string } }).error?.message || 'Sesi upload Google Drive gagal dibuat.');
+    }
+    const uploadUrl = session.headers.get('Location');
+    if (!uploadUrl) throw new Error('Google Drive tidak mengembalikan alamat sesi upload.');
+    let token = await getAccessToken();
+    if (!token) token = await refreshWorkspaceAccessToken();
+    if (!token) throw new Error('Sesi Google Drive kedaluwarsa. Hubungkan kembali akun Google Workspace, lalu ulangi backup.');
+    let response = await fetch(uploadUrl, {
+      method: 'PUT',
+      headers: { Authorization: 'Bearer ' + token, 'Content-Type': mimeType },
+      body: data,
+    });
+    if (response.status === 401) {
+      invalidateAccessToken();
+      token = await refreshWorkspaceAccessToken(true);
+      if (token) {
+        response = await fetch(uploadUrl, {
+          method: 'PUT',
+          headers: { Authorization: 'Bearer ' + token, 'Content-Type': mimeType },
+          body: data,
+        });
+      }
+    }
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error((error as { error?: { message?: string } }).error?.message || 'Upload resumable Google Drive gagal (HTTP ' + response.status + ').');
+    }
+    uploaded = await response.json() as { id: string; webViewLink?: string };
+  } else {
+    const boundary = 'sipandu-' + Math.random().toString(36).slice(2);
+    const body = new Blob([
+      '--' + boundary + '\\r\\nContent-Type: application/json; charset=UTF-8\\r\\n\\r\\n',
+      metadata,
+      '\\r\\n--' + boundary + '\\r\\nContent-Type: ' + mimeType + '\\r\\n\\r\\n',
+      data,
+      '\\r\\n--' + boundary + '--',
+    ], { type: 'multipart/related; boundary=' + boundary });
+
+    const response = await driveFetch('/files?uploadType=multipart&fields=id,name,webViewLink', {
+      method: 'POST',
+      headers: { 'Content-Type': 'multipart/related; boundary=' + boundary },
+      body,
+    });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error((error as { error?: { message?: string } }).error?.message || 'File gagal disalin ke Google Drive.');
+    }
+    uploaded = await response.json() as { id: string; webViewLink?: string };
   }
-  return await response.json() as { id: string; webViewLink?: string };
+  if (!uploaded.id) throw new Error('Google Drive menerima upload tetapi tidak mengembalikan ID file.');
+  return {
+    ...uploaded,
+    webViewLink: uploaded.webViewLink || 'https://drive.google.com/open?id=' + encodeURIComponent(uploaded.id),
+  };
 }
 
 /** Copies an uploaded staff document to the central SIPANDU Google Drive archive. */
@@ -100,6 +155,18 @@ export async function backupDocumentToCentralDrive(
   const categoryFolder = category === 'surat-tugas' ? 'Surat Tugas' : 'Surat Lainnya';
   const folderId = await ensureFolderPath([ROOT_FOLDER_NAME, DOCUMENTS_FOLDER_NAME, categoryFolder]);
   return uploadMultipart(folderId, safeName(file.name, 'dokumen'), file.type || 'application/octet-stream', file);
+}
+
+/** Archives the structured content of a newly generated letter in the central Drive. */
+export async function backupLetterToCentralDrive(record: SuratRecord): Promise<{ id: string; webViewLink?: string }> {
+  const categoryFolder = record.jenis === 'Surat Tugas' ? 'Surat Tugas' : 'Surat Lainnya';
+  const folderId = await ensureFolderPath([ROOT_FOLDER_NAME, DOCUMENTS_FOLDER_NAME, categoryFolder, 'Surat Dibuat']);
+  const payload = new Blob([JSON.stringify({
+    type: 'SIPANDU Surat',
+    ...record,
+    archivedAt: new Date().toISOString(),
+  }, null, 2)], { type: 'application/json' });
+  return uploadMultipart(folderId, safeName(record.nomorSurat + '-' + record.judul, record.id) + '.json', 'application/json', payload);
 }
 
 /** Writes a portable JSON snapshot of an integrated assessment to the central Drive archive. */
@@ -122,4 +189,15 @@ export async function backupAssessmentToCentralDrive(input: {
   }, null, 2)], { type: 'application/json' });
   const stamp = savedAt.replace(/[:.]/g, '-');
   return uploadMultipart(folderId, 'asesmen-' + stamp + '.json', 'application/json', payload);
+}
+
+/** Deletes a SIPANDU archive copy from the central Google Drive account. */
+export async function deleteCentralDriveFile(fileId: string): Promise<void> {
+  if (!fileId) return;
+  const response = await driveFetch('/files/' + encodeURIComponent(fileId), { method: 'DELETE' });
+  if (response.status === 404) return;
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error((error as { error?: { message?: string } }).error?.message || 'Salinan Google Drive gagal dihapus (HTTP ' + response.status + ').');
+  }
 }

@@ -1,0 +1,62 @@
+name: SIPANDU Firebase Security Rules
+on:
+  push:
+    branches: ['**']
+    paths:
+      - "firestore.rules"
+      - "storage.rules"
+      - "firebase.json"
+      - "src/lib/firebaseRules.test.ts"
+      - "package.json"
+      - "bun.lock"
+      - ".github/workflows/firebase-rules.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "firestore.rules"
+      - "storage.rules"
+      - "firebase.json"
+      - "src/lib/firebaseRules.test.ts"
+      - "package.json"
+      - "bun.lock"
+      - ".github/workflows/firebase-rules.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sipandu-firebase-rules-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  rules-emulator:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Setup Java for Firebase Emulator
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.4
+
+      - name: Install locked dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Install Firebase CLI
+        run: npm install --global firebase-tools@latest
+
+      - name: Run Firestore and Storage Security Rules tests
+        run: firebase emulators:exec --project demo-sipandu-rules --only firestore,storage "bun run test:rules:unit"

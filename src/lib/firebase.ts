@@ -8,6 +8,7 @@ import {
   addDoc,
   serverTimestamp,
   getDocs,
+  getDoc,
   onSnapshot,
   setDoc,
   updateDoc,
@@ -749,6 +750,61 @@ export async function savePPKSToFirestore(ppks: PPKSRecord): Promise<true> {
  * Pendamping may update this one field, but remains unable to create, delete,
  * or modify the spreadsheet-owned PPKS profile and other record fields.
  */
+export async function getIntegratedAssessmentBackupMetadata(ppksId: string): Promise<{
+  status: 'complete' | 'failed';
+  error: string;
+  fileId: string;
+  webViewLink: string;
+  savedAt: string;
+} | null> {
+  const user = auth.currentUser;
+  if (!user) throw new Error('Belum masuk ke Firebase Auth.');
+  const token = await getIdTokenResult(user);
+  if (!VALID_ROLES.includes(token.claims.role as SipanduRole)) {
+    throw new Error('Peran akun SIPANDU tidak valid untuk membaca status arsip asesmen.');
+  }
+  const snapshot = await getDoc(doc(db, 'integratedAssessmentBackups', ppksId));
+  if (!snapshot.exists()) return null;
+  const data = snapshot.data();
+  return {
+    status: data.driveBackupStatus === 'complete' ? 'complete' : 'failed',
+    error: String(data.driveBackupError || ''),
+    fileId: String(data.driveFileId || ''),
+    webViewLink: String(data.driveWebViewLink || ''),
+    savedAt: data.savedAt && typeof data.savedAt.toDate === 'function'
+      ? data.savedAt.toDate().toISOString() : '',
+  };
+}
+
+export async function saveIntegratedAssessmentBackupMetadata(
+  ppksId: string,
+  backup: { status: 'complete' | 'failed'; fileId?: string; webViewLink?: string; error?: string },
+): Promise<void> {
+  const user = auth.currentUser;
+  if (!user) throw new Error('Belum masuk ke Firebase Auth sebagai akun SIPANDU.');
+  if (!ppksId.trim()) throw new Error('ID PPKS kosong untuk metadata arsip Google Drive.');
+  const token = await getIdTokenResult(user);
+  const role = token.claims.role;
+  if (!VALID_ROLES.includes(role as SipanduRole)) {
+    throw new Error('Peran akun SIPANDU tidak valid untuk mencatat status arsip asesmen.');
+  }
+  const status = backup.status;
+  const fileId = status === 'complete' ? String(backup.fileId || '') : '';
+  const webViewLink = status === 'complete' ? String(backup.webViewLink || '') : '';
+  if (status === 'complete' && (!fileId || !webViewLink)) {
+    throw new Error('Google Drive belum mengembalikan ID dan tautan file untuk arsip asesmen.');
+  }
+  await setDoc(doc(db, 'integratedAssessmentBackups', ppksId), {
+    ppksId,
+    driveBackupStatus: status,
+    driveBackupError: String(backup.error || '').slice(0, 1000),
+    driveFileId: fileId,
+    driveWebViewLink: webViewLink,
+    savedAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  });
+}
+
 export async function saveIntegratedAssessmentToFirestore(
   ppksId: string,
   answers: Record<string, string | string[]>,
