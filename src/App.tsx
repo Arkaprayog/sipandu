@@ -711,6 +711,9 @@ function StaffApp() {
       formAsesmenTerintegrasi: answers,
       ...(role === 'pendamping' ? {} : { statusAsesmen: 'Terintegrasi' as const }),
     }));
+    const notificationUid = auth.currentUser?.uid || 'default';
+    await notifyIntegratedAssessmentSaved(notificationUid, updated.id, updated.namaLengkap);
+    setRespondentNotifications(loadRespondentNotifications(notificationUid));
     setCloudSyncNotice({
       type: 'success',
       text: 'Dokumen asesmen berhasil disimpan ke database SIPANDU dan siap dicetak.',
