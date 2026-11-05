@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { ProfileUser, SuratRecord } from '../types';
+import { ACCEPTED_DOCUMENT_EXTENSIONS, deleteStaffDocument, listStaffDocuments, uploadStaffDocument, type StaffDocumentRecord } from '../lib/documentStorage';
 import { initialSuratList } from '../data/initialData';
 import { KemensosLogo } from './KemensosLogo';
 import { SuratTugasEditor } from './SuratTugasEditor';
@@ -16,6 +17,8 @@ import {
   Shield,
   Download,
   Check,
+  Trash2,
+  Loader2,
 } from 'lucide-react';
 
 interface DokumenViewProps {
@@ -28,6 +31,13 @@ export const DokumenView: React.FC<DokumenViewProps> = ({ profile }) => {
   const [selectedSurat, setSelectedSurat] = useState<SuratRecord | null>(initialSuratList[0] || null);
   const [showCreateModal, setShowCreateModal] = useState<boolean>(false);
   const [showUploadModal, setShowUploadModal] = useState<boolean>(false);
+  const [uploadedDocuments, setUploadedDocuments] = useState<StaffDocumentRecord[]>([]);
+  const [documentsLoading, setDocumentsLoading] = useState<boolean>(true);
+  const [uploading, setUploading] = useState<boolean>(false);
+  const [uploadProgress, setUploadProgress] = useState<number>(0);
+  const [uploadError, setUploadError] = useState<string>('');
+  const [documentNotice, setDocumentNotice] = useState<string>('');
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     const onAppNavigateBack = (event: Event) => {
@@ -56,6 +66,64 @@ export const DokumenView: React.FC<DokumenViewProps> = ({ profile }) => {
     window.addEventListener('sipandu:navigate-back', onAppNavigateBack);
     return () => window.removeEventListener('sipandu:navigate-back', onAppNavigateBack);
   }, [activeTab, selectedSurat, showCreateModal, showUploadModal]);
+
+  useEffect(() => {
+    let active = true;
+    const loadDocuments = async () => {
+      setDocumentsLoading(true);
+      try {
+        const items = await listStaffDocuments();
+        if (active) setUploadedDocuments(items);
+      } catch (error) {
+        if (active) {
+          setDocumentNotice(error instanceof Error ? error.message : 'Arsip dokumen belum dapat dimuat.');
+        }
+      } finally {
+        if (active) setDocumentsLoading(false);
+      }
+    };
+    void loadDocuments();
+    return () => { active = false; };
+  }, []);
+
+  const handleUploadFile = async (file: File) => {
+    setUploadError('');
+    setDocumentNotice('');
+    setUploading(true);
+    setUploadProgress(0);
+    try {
+      const saved = await uploadStaffDocument(file, activeTab, setUploadProgress);
+      setUploadedDocuments((previous) => [saved, ...previous.filter((item) => item.id !== saved.id)]);
+      setDocumentNotice(`File “${saved.name}” berhasil disimpan ke arsip Firebase SIPANDU.`);
+      setShowUploadModal(false);
+    } catch (error) {
+      setUploadError(error instanceof Error ? error.message : 'File gagal disimpan. Silakan coba lagi.');
+    } finally {
+      setUploading(false);
+      setUploadProgress(0);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  const handleDeleteDocument = async (document: StaffDocumentRecord) => {
+    if (!window.confirm(`Hapus “${document.name}” dari arsip dokumen SIPANDU?`)) return;
+    setDocumentNotice('');
+    try {
+      await deleteStaffDocument(document.id, document.storagePath);
+      setUploadedDocuments((previous) => previous.filter((item) => item.id !== document.id));
+      setDocumentNotice(`Dokumen “${document.name}” telah dihapus dari arsip.`);
+    } catch (error) {
+      setDocumentNotice(error instanceof Error ? error.message : 'Dokumen gagal dihapus.');
+    }
+  };
+
+  const formatDocumentSize = (bytes: number) => {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+  };
+
+  const visibleDocuments = uploadedDocuments.filter((item) => item.category === activeTab);
 
   // New surat state
   const [newNomorSurat, setNewNomorSurat] = useState<string>(
@@ -181,6 +249,54 @@ export const DokumenView: React.FC<DokumenViewProps> = ({ profile }) => {
         </div>
 
         <SuratTugasEditor />
+
+        {documentNotice && (
+          <div role="status" aria-live="polite" className="rounded-xl border border-sky-400/25 bg-sky-950/40 px-3 py-2 text-xs text-sky-100 break-words">
+            {documentNotice}
+          </div>
+        )}
+
+        {/* Real Firebase Storage archive. Upload confirmation is shown only after both
+            the binary and its Firestore metadata have been committed successfully. */}
+        <section className="rounded-2xl border border-sky-500/25 bg-black/25 p-3 sm:p-4 space-y-3">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <h3 className="text-sm font-bold text-white">Arsip Berkas yang Diunggah</h3>
+              <p className="text-[10px] text-neutral-400">File tersimpan di Firebase Storage dan metadata arsip di Firestore.</p>
+            </div>
+            <span className="text-[10px] text-sky-200">{visibleDocuments.length} berkas</span>
+          </div>
+          {documentsLoading ? (
+            <p className="text-xs text-neutral-400">Memuat arsip dokumen...</p>
+          ) : visibleDocuments.length === 0 ? (
+            <p className="rounded-lg border border-dashed border-white/15 px-3 py-4 text-center text-xs text-neutral-400">
+              Belum ada berkas pada kategori ini. Gunakan tombol Upload Berkas untuk menyimpan dokumen.
+            </p>
+          ) : (
+            <div className="space-y-2">
+              {visibleDocuments.map((document) => (
+                <div key={document.id} className="flex items-center gap-3 rounded-xl border border-white/10 bg-black/30 p-3">
+                  <FileText className="h-5 w-5 shrink-0 text-sky-300" />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-xs font-semibold text-white">{document.name}</p>
+                    <p className="text-[10px] text-neutral-400">
+                      {formatDocumentSize(document.size)} · {document.uploadedAt ? new Date(document.uploadedAt).toLocaleString('id-ID') : 'Waktu tersimpan'}
+                      {document.ownerEmail ? ` · ${document.ownerEmail}` : ''}
+                    </p>
+                  </div>
+                  {document.downloadUrl && (
+                    <a href={document.downloadUrl} target="_blank" rel="noopener noreferrer" aria-label={`Buka ${document.name}`} className="rounded-lg p-2 text-sky-200 hover:bg-sky-900/50">
+                      <Download className="h-4 w-4" />
+                    </a>
+                  )}
+                  <button type="button" onClick={() => void handleDeleteDocument(document)} aria-label={`Hapus ${document.name}`} className="rounded-lg p-2 text-rose-300 hover:bg-rose-950/50">
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
 
         {/* Main Content Grid: Surat List & Surat Preview */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
@@ -426,25 +542,50 @@ export const DokumenView: React.FC<DokumenViewProps> = ({ profile }) => {
               </span>
               <span className="text-[10px] text-neutral-500">Maks. 25 MB</span>
               <input
+                ref={fileInputRef}
                 type="file"
-                accept=".pdf,.doc,.docx,.jpg,.png"
+                accept={ACCEPTED_DOCUMENT_EXTENSIONS}
+                disabled={uploading}
                 onChange={(e) => {
-                  const f = e.target.files?.[0];
-                  if (f) {
-                    alert(`Berkas "${f.name}" berhasil diunggah ke arsip dokumen SIPANDU ODHIV!`);
-                    setShowUploadModal(false);
-                  }
+                  const selectedFile = e.currentTarget.files?.[0];
+                  if (selectedFile) void handleUploadFile(selectedFile);
                 }}
                 className="hidden"
               />
             </label>
 
+            <p className="text-[10px] text-neutral-400">Format: PDF, DOC/DOCX, JPG/JPEG, PNG, GIF, WEBP, BMP, TIFF, HEIC/HEIF · Maks. 25 MB.</p>
+            {uploading && (
+              <div className="space-y-2 text-left">
+                <div className="flex items-center justify-between text-[10px] text-sky-200">
+                  <span className="flex items-center gap-2"><Loader2 className="h-3 w-3 animate-spin" /> Mengunggah dan menyimpan...</span>
+                  <span>{uploadProgress}%</span>
+                </div>
+                <div className="h-2 overflow-hidden rounded-full bg-black/60">
+                  <div className="h-full rounded-full bg-sky-400 transition-all" style={{ width: `${uploadProgress}%` }} />
+                </div>
+              </div>
+            )}
+            {uploadError && (
+              <p role="alert" aria-live="assertive" className="rounded-lg border border-rose-500/30 bg-rose-950/40 p-3 text-left text-xs text-rose-200">
+                {uploadError}
+              </p>
+            )}
             <button
               type="button"
-              onClick={() => setShowUploadModal(false)}
-              className="w-full py-2 rounded-lg bg-neutral-800 text-neutral-300 text-xs font-semibold"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploading}
+              className="w-full rounded-lg bg-sky-700 py-2.5 text-xs font-bold text-white disabled:opacity-50"
             >
-              Tutup
+              {uploading ? 'Sedang mengunggah...' : 'Pilih File dari Perangkat'}
+            </button>
+            <button
+              type="button"
+              onClick={() => { if (!uploading) { setShowUploadModal(false); setUploadError(''); } }}
+              disabled={uploading}
+              className="w-full py-2 rounded-lg bg-neutral-800 text-neutral-300 text-xs font-semibold disabled:opacity-50"
+            >
+              {uploading ? 'Tunggu sampai upload selesai' : 'Tutup'}
             </button>
           </div>
         </div>

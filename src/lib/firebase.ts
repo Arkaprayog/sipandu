@@ -18,6 +18,9 @@ import {
 } from 'firebase/firestore';
 import {
   getAuth,
+  initializeAuth,
+  type Auth,
+  indexedDBLocalPersistence,
   browserLocalPersistence,
   setPersistence,
   signInWithPopup,
@@ -52,12 +55,26 @@ export const db = firebaseConfig.firestoreDatabaseId
 const workspaceApp = getApps().find((candidate) => candidate.name === 'sipandu-workspace-auth')
   || initializeApp(firebaseConfig, 'sipandu-workspace-auth');
 
-export const auth = getAuth(app);
-// Persist the staff account locally across refreshes and Android activity recreation.
-// A normal sign-out is performed only by the explicit Keluar action.
-export const staffAuthPersistenceReady = setPersistence(auth, browserLocalPersistence).catch((error) => {
-  console.warn('SIPANDU could not explicitly set LOCAL auth persistence; Firebase browser default remains in effect:', error);
-});
+// Initialize the staff session with durable browser storage before the first
+// auth-state listener is registered. Android's file picker can background or
+// recreate the Capacitor Activity; IndexedDB persistence is preferred there,
+// with localStorage as a compatibility fallback. The PWA uses localStorage first.
+const staffAuthPersistences = Capacitor.isNativePlatform()
+  ? [indexedDBLocalPersistence, browserLocalPersistence]
+  : [browserLocalPersistence, indexedDBLocalPersistence];
+
+let staffAuth: Auth;
+try {
+  staffAuth = initializeAuth(app, { persistence: staffAuthPersistences });
+} catch (error) {
+  // getAuth returns the existing singleton if another module initialized it first.
+  console.warn('SIPANDU used the existing Firebase Auth instance:', error);
+  staffAuth = getAuth(app);
+}
+export const auth = staffAuth;
+// Auth's own readiness promise prevents the UI from treating the initial storage
+// restore as a signed-out state. Only the explicit Keluar action calls signOut(auth).
+export const staffAuthPersistenceReady = auth.authStateReady();
 export const workspaceAuth = getAuth(workspaceApp);
 
 // Configure Google Auth Provider with Workspace scopes

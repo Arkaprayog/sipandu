@@ -77,4 +77,16 @@ Lihat [Audit kesiapan produksi v1.0.0](docs/PRODUCTION_READINESS_AUDIT.md). Nomo
 - Role `pendamping` hanya dapat memperbarui field tersebut pada dokumen PPKS yang sudah ada. Role ini tetap tidak dapat mengubah profil utama, NIK, foto, status, membuat, atau menghapus dokumen PPKS.
 - Tombol **Simpan Form** menampilkan keberhasilan hanya setelah Firebase mengonfirmasi penulisan. Kegagalan izin, sesi, jaringan, atau dokumen yang belum tersinkron ditampilkan sebagai pesan gagal.
 - Worker Cloudflare `sipandu` hanya menyajikan aset aplikasi; penyimpanan jawaban dilakukan langsung oleh Firebase SDK ke database Firestore bernama yang dikonfigurasi aplikasi.
-- Setelah memeriksa Rules dan mengujinya di emulator, administrator Firebase harus menerapkan aturan ke database target. Dari root repositori, gunakan: `firebase deploy --only firestore:ai-studio-sipanduodhiv-9853-46e1-b6d3-fdbce52371a8 --project gen-lang-client-0197631978`. Deployment Rules akan mengganti aturan aktif database tersebut dengan isi `firestore.rules`; pastikan aturan lain yang dibutuhkan tetap tercakup sebelum deploy.
+- Setelah memeriksa Rules dan mengujinya di emulator, administrator Firebase harus menerapkan aturan ke database target. Dari root repositori, gunakan: `firebase deploy --only firestore:ai-studio-sipanduodhiv-985a0308-7693-46e1-b6d3-fdbce52371a8 --project gen-lang-client-0197631978`. Deployment Rules akan mengganti aturan aktif database tersebut dengan isi `firestore.rules`; pastikan aturan lain yang dibutuhkan tetap tercakup sebelum deploy.
+
+
+## Arsip Dokumen SIPANDU
+
+- **Upload Berkas** menyimpan file asli ke Firebase Storage pada folder `staff-documents/{uid}/{documentId}/` dan membuat metadata di koleksi Firestore `staffDocuments`.
+- Arsip dibagikan kepada akun staf dengan custom claim `role` `owner`, `supervisor`, atau `pendamping`. Pendamping hanya dapat menghapus file miliknya sendiri; owner/supervisor dapat menghapus semua file.
+- Format yang diizinkan: PDF, DOC/DOCX, JPG/JPEG, PNG, GIF, WEBP, BMP, TIFF, HEIC, HEIF. Batas ukuran 25 MB.
+- Keberhasilan baru ditampilkan setelah upload binary dan penyimpanan metadata keduanya berhasil. Jika metadata Firestore gagal disimpan, file Storage yang baru diunggah akan dihapus kembali untuk menghindari file yatim.
+- Firebase Authentication menggunakan IndexedDB persistence pada Android native dengan localStorage sebagai fallback; PWA/browser menggunakan localStorage dengan IndexedDB sebagai fallback. Ini membantu mempertahankan sesi saat pemilih file Android membuat Activity berada di latar belakang atau dibuat ulang.
+- Administrator harus mengaktifkan Firebase Storage pada proyek `gen-lang-client-0197631978`, lalu menerapkan kedua aturan dari root repositori:
+  `firebase deploy --only firestore:ai-studio-sipanduodhiv-985a0308-7693-46e1-b6d3-fdbce52371a8,storage --project gen-lang-client-0197631978`.
+- Pastikan Storage bucket `gen-lang-client-0197631978.firebasestorage.app` tersedia sebelum menguji upload produksi. Worker Cloudflare hanya menyajikan aset; file disimpan oleh Firebase Storage.
