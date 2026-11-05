@@ -618,6 +618,8 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
     setStatusMessage(null);
     releasePrintPhotoUrls();
 
+    const urls: Record<string, string> = {};
+    const errors: Record<string, string> = {};
     try {
       if (onBeforePrint) {
         const cleanAnswers: Record<string, string | string[]> = {};
@@ -638,9 +640,6 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
         }
       }
 
-    const urls: Record<string, string> = {};
-    const errors: Record<string, string> = {};
-    try {
       // Always prepare all four photo appendices. Missing files get an explicit
       // explanation page instead of a blank sheet.
       await Promise.all(printablePhotos.map(async (photo) => {
