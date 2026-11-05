@@ -304,6 +304,7 @@ function StaffApp() {
 
   // App navigation history: every selected bottom-nav menu pushes the previous menu.
   const [activeTab, setActiveTab] = useState<TabKey>('beranda');
+  const [selectedDocumentAssessmentId, setSelectedDocumentAssessmentId] = useState('');
   const tabNavigationHistoryRef = useRef<TabKey[]>([]);
   const navigateToTab = useCallback((tab: TabKey) => {
     if (tab === activeTab) return;
@@ -697,6 +698,22 @@ function StaffApp() {
     setCloudSyncNotice({
       type: 'success',
       text: 'Form Asesmen Terintegrasi tersimpan di Firebase Firestore. Data profil utama tetap mengikuti spreadsheet.',
+    });
+  };
+
+  // Cetak dari arsip juga menyimpan jawaban terbaru, tetapi tidak menggandakan backup Drive.
+  const handleArchiveAssessmentBeforePrint = async (updated: PPKSRecord): Promise<void> => {
+    const answers = updated.formAsesmenTerintegrasi;
+    if (!answers) throw new Error('Jawaban asesmen tidak tersedia untuk diarsipkan.');
+    const { role } = await saveIntegratedAssessmentToFirestore(updated.id, answers);
+    setPpksList((previous) => previous.map((record) => record.id !== updated.id ? record : {
+      ...record,
+      formAsesmenTerintegrasi: answers,
+      ...(role === 'pendamping' ? {} : { statusAsesmen: 'Terintegrasi' as const }),
+    }));
+    setCloudSyncNotice({
+      type: 'success',
+      text: 'Dokumen asesmen berhasil disimpan ke database SIPANDU dan siap dicetak.',
     });
   };
 
@@ -1429,10 +1446,20 @@ function StaffApp() {
             <FromAsesmenTerintegrasiView
               ppksList={ppksList}
               onSaveAssessment={handleSaveIntegratedAssessment}
+              initialSelectedPPKSId={selectedDocumentAssessmentId}
+              onBeforePrint={handleArchiveAssessmentBeforePrint}
             />
           )}
 
-          {activeTab === 'dokumen' && <DokumenView profile={profile} />}
+          {activeTab === 'dokumen' && (
+            <DokumenView
+              ppksList={ppksList}
+              onOpenAssessment={(ppksId) => {
+                setSelectedDocumentAssessmentId(ppksId);
+                navigateToTab('from-asesmen-terintegrasi');
+              }}
+            />
+          )}
         </Suspense>
       </main>
 
