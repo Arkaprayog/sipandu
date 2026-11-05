@@ -13,7 +13,7 @@ interface NotificationsModalProps {
 
 export const NotificationsModal: React.FC<NotificationsModalProps> = ({ isOpen, onClose, notifications, onMarkAllRead, followUpReady, onSendFollowUp }) => {
   if (!isOpen) return null;
-  const respondentEvents = notifications.filter((item) => item.kind === 'kuisioner' || item.kind === 'asesmen' || item.kind === 'terintegrasi');
+  const respondentEvents = notifications.filter((item) => item.kind === 'kuisioner' || item.kind === 'terintegrasi');
   const unreadCount = respondentEvents.filter((item) => !item.read).length;
 
   return (
