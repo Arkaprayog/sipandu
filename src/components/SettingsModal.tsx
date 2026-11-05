@@ -26,7 +26,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, s
     setNewPin('');
     setConfirmPin('');
     setPinMessage('');
-    setActiveTheme(settings.theme === 'light' ? 'light' : 'dark');
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (isOpen) setActiveTheme(settings.theme === 'light' ? 'light' : 'dark');
   }, [isOpen, settings.theme]);
 
   if (!isOpen) return null;
