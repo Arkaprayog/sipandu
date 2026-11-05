@@ -11,6 +11,7 @@ export const initialProfileUser: ProfileUser = {
 };
 
 export const initialAppSettings: AppSettings = {
+  theme: 'dark',
   googleFormTahapAwalUrl: '', // Legacy key; stage-one respondents use the native SIPANDU form.
   googleFormTahapLanjutanUrl: '',
   googleFormTahapLanjutanIdEntry: '',
