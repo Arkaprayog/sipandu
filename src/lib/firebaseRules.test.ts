@@ -193,9 +193,8 @@ test('Profil anggota hanya dapat dibaca dan diubah oleh pemilik UID serta tidak 
     updatedAt: serverTimestamp(),
   }));
 
-  // Firebase may return the email claim with different casing after an
-  // account migration. A profile save may align only the owner's own email
-  // metadata to the exact authenticated claim.
+  // The owner may correct their private email metadata without changing UID
+  // ownership or gaining access to another profile.
   const differentlyCasedEmailContext = environment.authenticatedContext('member-001', {
     email: 'Member@example.test',
     email_verified: true,
@@ -214,21 +213,50 @@ test('Profil anggota hanya dapat dibaca dan diubah oleh pemilik UID serta tidak 
       unitKerja: 'Sentra Layanan',
       noHp: '',
       photoUrl: '',
+      // Older app builds may have kept additional metadata on this same
+      // UID-owned profile document; unrelated legacy fields must be preserved.
+      legacyProfileFlag: 'preserve-me',
     });
   });
   const legacyContext = environment.authenticatedContext('legacy-member', {
     email: 'legacy@example.test',
     email_verified: true,
   }).firestore();
-  await assertSucceeds(updateDoc(doc(legacyContext, 'userProfiles', 'legacy-member'), {
+  const legacyProfileRef = doc(legacyContext, 'userProfiles', 'legacy-member');
+  await assertSucceeds(updateDoc(legacyProfileRef, {
     email: 'legacy@example.test',
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
     nama: 'Petugas Lama Diperbarui',
   }));
+  // Legacy fields are preserved but cannot be modified by the profile editor.
+  await assertFails(updateDoc(legacyProfileRef, {
+    legacyProfileFlag: 'tampered',
+    updatedAt: serverTimestamp(),
+  }));
 
   await assertFails(updateDoc(ownProfile, {
     role: 'owner',
+    updatedAt: serverTimestamp(),
+  }));
+
+  // A valid Firebase UID session may not carry an email custom claim in every
+  // auth provider. UID ownership alone authorizes its private profile document.
+  const noEmailClaimContext = environment.authenticatedContext('member-no-email');
+  const noEmailClaimProfile = doc(noEmailClaimContext.firestore(), 'userProfiles', 'member-no-email');
+  await assertSucceeds(setDoc(noEmailClaimProfile, {
+    nama: 'Anggota Tanpa Email Claim',
+    nip: '199001012020121001',
+    jabatan: 'Pendamping Sosial',
+    unitKerja: 'Sentra Layanan',
+    noHp: '',
+    photoUrl: '',
+    email: 'anggota@example.test',
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  }));
+  await assertSucceeds(updateDoc(noEmailClaimProfile, {
+    nama: 'Profil Diperbarui',
     updatedAt: serverTimestamp(),
   }));
 

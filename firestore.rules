@@ -260,28 +260,29 @@ service cloud.firestore {
         return data.keys().hasAll([
           'nama', 'nip', 'jabatan', 'unitKerja', 'noHp', 'photoUrl', 'email'
         ])
-        && data.keys().hasOnly([
-          'nama', 'nip', 'jabatan', 'unitKerja', 'noHp', 'photoUrl',
-          'email', 'createdAt', 'updatedAt'
-        ])
         && data.nama is string && data.nama.size() >= 2 && data.nama.size() <= 120
         && data.nip is string && data.nip.size() <= 40
         && data.jabatan is string && data.jabatan.size() <= 120
         && data.unitKerja is string && data.unitKerja.size() <= 160
         && data.noHp is string && data.noHp.size() <= 30
         && data.photoUrl is string && data.photoUrl.size() <= 400000
-        && data.email is string && data.email == request.auth.token.email;
+        // The document path is already locked to request.auth.uid. The profile
+        // email is private metadata, so authorization must not depend on the
+        // optional email claim being present in every Firebase auth provider.
+        && data.email is string && data.email.size() > 0 && data.email.size() <= 254;
       }
       allow read: if isOwnProfile();
       allow create: if isOwnProfile()
+        && request.resource.data.keys().hasOnly([
+          'nama', 'nip', 'jabatan', 'unitKerja', 'noHp', 'photoUrl',
+          'email', 'createdAt', 'updatedAt'
+        ])
         && hasValidProfileShape(request.resource.data)
         && request.resource.data.createdAt == request.time
         && request.resource.data.updatedAt == request.time;
       allow update: if isOwnProfile()
         && hasValidProfileShape(request.resource.data)
-        // Email is immutable to the user except for repairing its casing or
-        // backfilling a missing legacy field; the new value must equal the
-        // authenticated Firebase token email (enforced by hasValidProfileShape).
+        // Email is private metadata on this UID-owned profile document.
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
           'nama', 'nip', 'jabatan', 'unitKerja', 'noHp', 'photoUrl',
           'email', 'createdAt', 'updatedAt'

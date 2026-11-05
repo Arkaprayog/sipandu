@@ -6,6 +6,7 @@ on:
       - "firestore.rules"
       - "storage.rules"
       - "firebase.json"
+      - ".firebaserc"
       - "src/lib/firebaseRules.test.ts"
       - "package.json"
       - "bun.lock"
@@ -16,10 +17,18 @@ on:
       - "firestore.rules"
       - "storage.rules"
       - "firebase.json"
+      - ".firebaserc"
       - "src/lib/firebaseRules.test.ts"
       - "package.json"
       - "bun.lock"
       - ".github/workflows/firebase-rules.yml"
+  workflow_dispatch:
+    inputs:
+      deploy_production:
+        description: "Deploy Firestore Rules to SIPANDU production database after emulator tests"
+        required: true
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -56,7 +65,69 @@ jobs:
         run: bun install --frozen-lockfile
 
       - name: Install Firebase CLI
-        run: npm install --global firebase-tools@latest
+        run: npm install --global firebase-tools@15.34.2
 
       - name: Run Firestore and Storage Security Rules tests
         run: firebase emulators:exec --project demo-sipandu-rules --only firestore,storage "bun run test:rules:unit"
+
+  deploy-production:
+    name: Deploy Firestore Rules to production
+    needs: rules-emulator
+    if: >-
+      (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+      (github.event_name == 'workflow_dispatch' && inputs.deploy_production == true)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Install pinned Firebase CLI
+        run: npm install --global firebase-tools@15.34.2
+
+      - name: Deploy Firestore Rules to the configured SIPANDU database
+        shell: bash
+        env:
+          FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+          FIREBASE_PROJECT_ID: gen-lang-client-0197631978
+        run: |
+          set -euo pipefail
+          if [ -z "${FIREBASE_SERVICE_ACCOUNT_JSON:-}" ]; then
+            echo "::error::GitHub Actions secret FIREBASE_SERVICE_ACCOUNT_JSON is missing. Add a Firebase service-account JSON key with permission to deploy Firestore Security Rules; never paste it into the repository or chat."
+            exit 1
+          fi
+
+          # Fail closed if this repository is pointed at another project/database.
+          node --input-type=commonjs - <<'NODE'
+          const fs = require('node:fs');
+          const config = JSON.parse(fs.readFileSync('firebase.json', 'utf8'));
+          const entries = Array.isArray(config.firestore)
+            ? config.firestore
+            : config.firestore ? [config.firestore] : [];
+          const expected = 'ai-studio-sipanduodhiv-985a0308-7693-46e1-b6d3-fdbce52371a8';
+          if (entries.length !== 1 || entries[0].database !== expected || entries[0].rules !== 'firestore.rules') {
+            throw new Error('Refusing deployment: firebase.json does not target the expected SIPANDU Firestore database and rules file.');
+          }
+          const aliases = JSON.parse(fs.readFileSync('.firebaserc', 'utf8'));
+          if (aliases.projects?.default !== 'gen-lang-client-0197631978') {
+            throw new Error('Refusing deployment: .firebaserc default project does not match SIPANDU production.');
+          }
+          NODE
+
+          KEY_FILE="$RUNNER_TEMP/firebase-service-account.json"
+          printf '%s' "$FIREBASE_SERVICE_ACCOUNT_JSON" > "$KEY_FILE"
+          chmod 600 "$KEY_FILE"
+          export GOOGLE_APPLICATION_CREDENTIALS="$KEY_FILE"
+          trap 'rm -f "$KEY_FILE"' EXIT
+
+          # Publish only Firestore Security Rules (not Storage Rules or indexes).
+          # The project config currently maps the source rules file to the single
+          # named SIPANDU database checked above.
+          firebase deploy --only firestore:rules --project "$FIREBASE_PROJECT_ID" --non-interactive
