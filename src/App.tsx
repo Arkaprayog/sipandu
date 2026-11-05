@@ -53,6 +53,9 @@ function describeTeamActivationError(error: unknown): string {
   if (missing.length) {
     return `Email sudah diverifikasi, tetapi layanan belum dapat menerbitkan peran SIPANDU. Konfigurasi Worker yang belum tersedia: ${missing.join(', ')}. Administrator perlu melengkapi secret/binding pada Worker sipandu-registration. Sesi akun tetap tersimpan.`;
   }
+  if (/layanan aktivasi belum siap dikonfigurasi administrator/i.test(detail)) {
+    return 'Email sudah diverifikasi, tetapi Worker pendaftaran belum memiliki kredensial service account Firebase. Administrator perlu memasang secret FIREBASE_SERVICE_ACCOUNT_JSON pada Worker sipandu-registration dan memastikan izin IAM firebaseauth.users.update. Kode TEAM_REGISTRATION_CODE hanya diperlukan untuk pendaftaran baru, bukan untuk mengaktifkan undangan yang sudah tersimpan. Sesi akun tetap tersimpan.';
+  }
   if (/PERMISSION_DENIED|firebaseauth\.users\.update|not authorized|insufficient permission/i.test(detail)) {
     return 'Email sudah diverifikasi, tetapi Firebase menolak penerbitan peran. Administrator perlu memastikan service account Worker memiliki izin IAM firebaseauth.users.update pada proyek Firebase SIPANDU. Sesi akun tetap tersimpan.';
   }
