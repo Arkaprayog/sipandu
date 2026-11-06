@@ -5,6 +5,7 @@ import {
   getCloudOnlyCompletedAssessments,
   hasCompletedIntegratedAnswers,
   mergeIntegratedAssessmentAnswers,
+  isIntegratedAssessmentAnswerKey,
 } from './integratedAssessmentArchive';
 
 function record(id: string, answers: Record<string, string | string[]>): PPKSRecord {
@@ -81,4 +82,23 @@ test('unchanged separate answers preserve roster list and record references', ()
 
   assert.equal(result, records);
   assert.equal(result[0], local);
+});
+
+
+test('the answer key whitelist includes all 91 questions and the five official supplemental fields only', () => {
+  for (let question = 1; question <= 91; question += 1) {
+    assert.equal(isIntegratedAssessmentAnswerKey(`q${question}`), true);
+  }
+  for (const key of [
+    'metaSatker',
+    'metaYear',
+    'metaSequence',
+    'kesimpulanResumeKasus',
+    'rekomendasiCatatanPetugas',
+  ]) {
+    assert.equal(isIntegratedAssessmentAnswerKey(key), true);
+  }
+  for (const key of ['q0', 'q92', 'metaOwner', 'namaLengkap', 'nik', 'statusAsesmen']) {
+    assert.equal(isIntegratedAssessmentAnswerKey(key), false);
+  }
 });
