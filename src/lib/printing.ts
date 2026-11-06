@@ -1,7 +1,5 @@
 import { Printer } from '@capgo/capacitor-printer';
 
-const MAX_BASE64_PRINT_BYTES = 5 * 1024 * 1024;
-
 /** Uses native Android/iOS print UI and the browser print dialog for PWA. */
 export async function printCurrentWebView(name: string): Promise<void> {
   await Printer.printWebView({ name });
@@ -14,9 +12,6 @@ export async function printSupportedBlob(
   mimeType: 'application/pdf' | 'image/jpeg' | 'image/png',
 ): Promise<void> {
   if (blob.size <= 0) throw new Error('File kosong dan tidak dapat dicetak.');
-  if (blob.size > MAX_BASE64_PRINT_BYTES) {
-    throw new Error('File lebih dari 5 MB. Buka/unduh file terlebih dahulu lalu cetak dari penampil perangkat agar memori aplikasi tetap aman.');
-  }
   const bytes = new Uint8Array(await blob.arrayBuffer());
   let binary = '';
   const chunkSize = 0x8000;
@@ -32,9 +27,8 @@ export async function printPdfBlob(blob: Blob, name: string): Promise<void> {
 
 
 /**
- * Print the prepared A4 assessment DOM when a PDF exceeds the safe base64
- * bridge size. The device/browser print dialog can save these pages as PDF
- * without encoding and decoding the entire document in memory.
+ * Print the prepared A4 assessment DOM directly. This avoids a base64-size
+ * restriction and preserves the A4 layout in the native/browser print dialog.
  */
 export async function printPreparedAssessmentWebView(name: string, rootId: string): Promise<void> {
   const root = document.getElementById(rootId);
