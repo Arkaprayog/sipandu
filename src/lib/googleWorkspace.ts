@@ -270,9 +270,11 @@ const SIPANDU_PHOTO_FOLDER_CACHE_KEY = 'sipandu_drive_photo_organization_v1';
 let cachedSIPANDUPhotoFolderIds: SIPANDUPhotoFolderIds | null = null;
 
 async function findOrCreateDriveFolder(name: string, parentId?: string): Promise<{ id: string; created: boolean }> {
-  const parentFilter = parentId ? " and '" + parentId.replace(/'/g, "\\'") + "' in parents" : '';
+  const escapedName = name.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
+  const escapedParentId = parentId ? parentId.replace(/\\/g, "\\\\").replace(/'/g, "\\'") : '';
+  const parentFilter = parentId ? " and '" + escapedParentId + "' in parents" : '';
   const query = new URLSearchParams({
-    q: "mimeType = 'application/vnd.google-apps.folder' and name = '" + name.replace(/'/g, "\\'") + "' and trashed = false" + parentFilter,
+    q: "mimeType = 'application/vnd.google-apps.folder' and name = '" + escapedName + "' and trashed = false" + parentFilter,
     pageSize: '50',
     fields: 'files(id,name,mimeType,parents)',
     supportsAllDrives: 'true',
