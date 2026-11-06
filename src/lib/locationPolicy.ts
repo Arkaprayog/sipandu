@@ -13,7 +13,7 @@ export function normalizeGeolocationError(error: unknown): string {
   const value = error as { code?: string | number; message?: string } | null;
   const code = String(value?.code ?? '').toUpperCase();
   const message = String(value?.message ?? error ?? '');
-  const diagnostic = \`\${code} \${message}\`.toLowerCase();
+  const diagnostic = (code + ' ' + message).toLowerCase();
 
   if (
     diagnostic.includes('os-plug-gloc-0003') ||
@@ -58,6 +58,6 @@ export function normalizeGeolocationError(error: unknown): string {
   }
 
   return message.trim()
-    ? \`Lokasi GPS belum berhasil diperoleh: \${message.trim()}\`
+    ? 'Lokasi GPS belum berhasil diperoleh: ' + message.trim()
     : 'Lokasi GPS belum berhasil diperoleh. Periksa izin lokasi dan layanan GPS, lalu coba lagi.';
 }
