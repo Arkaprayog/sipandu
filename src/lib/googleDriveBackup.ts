@@ -163,26 +163,36 @@ export async function backupLetterToCentralDrive(record: SuratRecord): Promise<{
   return uploadMultipart(folderId, safeName(record.nomorSurat + '-' + record.judul, record.id) + '.json', 'application/json', payload);
 }
 
-/** Writes a portable JSON snapshot of an integrated assessment to the central Drive archive. */
+/**
+ * Uploads the already-rendered official integrated-assessment PDF to the central
+ * Drive archive. Raw answer JSON is intentionally never uploaded by this path.
+ */
 export async function backupAssessmentToCentralDrive(input: {
   ppksId: string;
   ppksName: string;
   nik?: string;
-  answers: Record<string, unknown>;
+  pdf: Blob;
 }): Promise<{ id: string; webViewLink?: string }> {
+  if (!(input.pdf instanceof Blob) || input.pdf.size < 8) {
+    throw new Error('Dokumen PDF asesmen kosong atau tidak valid.');
+  }
+  const header = await input.pdf.slice(0, 5).text();
+  if (header !== '%PDF-') {
+    throw new Error('Arsip Google Drive hanya menerima PDF resmi, bukan JSON atau data mentah.');
+  }
+
   const personFolder = safeName(input.ppksName || input.ppksId, input.ppksId);
   const folderId = await ensureFolderPath([ROOT_FOLDER_NAME, ASSESSMENTS_FOLDER_NAME, personFolder]);
   const savedAt = new Date().toISOString();
-  const payload = new Blob([JSON.stringify({
-    type: 'SIPANDU Form Asesmen Terintegrasi',
-    ppksId: input.ppksId,
-    ppksName: input.ppksName,
-    nik: input.nik || '',
-    savedAt,
-    answers: input.answers,
-  }, null, 2)], { type: 'application/json' });
   const stamp = savedAt.replace(/[:.]/g, '-');
-  return uploadMultipart(folderId, 'asesmen-' + stamp + '.json', 'application/json', payload);
+  const respondent = safeName(input.ppksName || input.ppksId, input.ppksId);
+  const nik = safeName(input.nik || '', 'tanpa-NIK');
+  const fileName = safeName(
+    'Form-Asesmen-Terintegrasi-' + respondent + '-' + nik + '-' + stamp,
+    'Form-Asesmen-Terintegrasi-' + stamp,
+  ) + '.pdf';
+
+  return uploadMultipart(folderId, fileName, 'application/pdf', input.pdf);
 }
 
 /** Deletes a SIPANDU archive copy from the central Google Drive account. */
