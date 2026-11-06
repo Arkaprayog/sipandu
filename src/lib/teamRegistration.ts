@@ -45,6 +45,17 @@ export async function registerPendingTeamMember(user: User, code: string): Promi
   });
 }
 
+export async function restorePendingTeamInvitation(user: User, code: string): Promise<void> {
+  const normalizedCode = code.trim();
+  if (!normalizedCode) throw new Error('Masukkan kode pendaftaran tim dari administrator.');
+  const idToken = await user.getIdToken(true);
+  await requestJson('/restore-invitation', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${idToken}` },
+    body: JSON.stringify({ code: normalizedCode }),
+  });
+}
+
 export async function activatePendingTeamMember(user: User): Promise<void> {
   const idToken = await user.getIdToken();
   await requestJson('/activate', {
