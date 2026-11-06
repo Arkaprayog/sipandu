@@ -6,7 +6,8 @@ import { formatPPKSTimestamp } from '../lib/ppksData';
 import { publicAssetUrl } from '../lib/publicAssets';
 import { backupAssessmentToCentralDrive, deleteCentralDriveFile } from '../lib/googleDriveBackup';
 import { getIntegratedAssessmentBackupMetadata, saveIntegratedAssessmentBackupMetadata } from '../lib/firebase';
-import { printCurrentWebView } from '../lib/printing';
+import { printPdfBlob } from '../lib/printing';
+import { createOfficialAssessmentPdf } from '../lib/assessmentPdf';
 import { createPhotoPreviewBlob, MAX_PPKS_PHOTO_FILE_BYTES } from '../lib/photoFilePreview';
 import '../officialAssessment.css';
 
@@ -346,6 +347,13 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
     setStatusMessage({ type: 'success', text: 'Isian asesmen dikosongkan. Tekan Simpan Form agar perubahan tersimpan.' });
   };
 
+  const printablePhotos = [
+    { key: 'fotoDiri', title: 'FOTO DIRI PPKS (CLOSE-UP)', source: currentPPKS?.fotoDiri || '' },
+    { key: 'fotoKtp', title: 'FOTO KTP', source: currentPPKS?.fotoKtp || '' },
+    { key: 'fotoKk', title: 'FOTO KARTU KELUARGA', source: currentPPKS?.fotoKk || '' },
+    { key: 'fotoRumah', title: 'FOTO RUMAH TAMPAK DEPAN', source: currentPPKS?.fotoRumah || '' },
+  ];
+
   const handleSave = async () => {
     if (isSaving) return;
     if (!currentPPKS) {
@@ -439,13 +447,6 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
       setIsSaving(false);
     }
   };
-
-  const printablePhotos = [
-    { key: 'fotoDiri', title: 'FOTO DIRI PPKS (CLOSE-UP)', source: currentPPKS?.fotoDiri || '' },
-    { key: 'fotoKtp', title: 'FOTO KTP', source: currentPPKS?.fotoKtp || '' },
-    { key: 'fotoKk', title: 'FOTO KARTU KELUARGA', source: currentPPKS?.fotoKk || '' },
-    { key: 'fotoRumah', title: 'FOTO RUMAH TAMPAK DEPAN', source: currentPPKS?.fotoRumah || '' },
-  ];
 
   const getDriveFileId = (value: string): string | null => {
     const trimmed = value.trim();
