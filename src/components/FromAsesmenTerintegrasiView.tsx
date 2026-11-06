@@ -629,7 +629,7 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
       firestoreSaved = true;
 
       // Google Drive receives the same A4 PDF that the user can print, never a JSON snapshot.
-      const archive = await createAndBackupAssessmentPdf(updated, true);
+      const archive = await createAndBackupAssessmentPdf(updated);
       setStatusMessage(archive.backupError
         ? {
             type: 'success',
@@ -848,7 +848,8 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
       }
 
       // The same generated A4 PDF is both uploaded to Drive and sent to the print UI.
-      const archive = await createAndBackupAssessmentPdf(updated);
+      // Keep its rendered A4 pages mounted until the native print dialog has finished.
+      const archive = await createAndBackupAssessmentPdf(updated, true);
       retainedPrintRootId = archive.printRootId;
       if (archive.backupError) {
         setStatusMessage({
