@@ -19,6 +19,7 @@ on:
       - "scripts/verify-dist.mjs"
       - "scripts/verify_apk_native_google_bridge.py"
       - "scripts/patch_social_login_reauth.py"
+      - "scripts/ensure_android_location_permissions.py"
       - ".github/workflows/android-apk.yml"
 
 permissions:
@@ -75,6 +76,7 @@ jobs:
         run: |
           npx cap add android
           npx cap sync android
+          python3 scripts/ensure_android_location_permissions.py
 
       - name: Apply package version to private Android release APK
         shell: bash
