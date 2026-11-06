@@ -1,6 +1,7 @@
 import { getAccessToken, invalidateAccessToken, refreshWorkspaceAccessToken } from './firebase';
 import type { SuratRecord } from '../types';
 import { buildGoogleDriveMultipartBody, buildGoogleDriveRequestUrl } from './googleDriveMultipart';
+import { isManagedIntegratedAssessmentArchiveFile } from './integratedAssessmentArchive';
 
 const ROOT_FOLDER_NAME = 'SIPANDU';
 const DOCUMENTS_FOLDER_NAME = 'Dokumen';
@@ -202,19 +203,54 @@ export async function backupAssessmentToCentralDrive(input: {
     'Form-Asesmen-Terintegrasi-' + stamp,
   ) + '.pdf';
 
-  // Migrate the last tracked SIPANDU JSON/PDF snapshot in-place when it
-  // belongs to this respondent's archive. Unknown files are never overwritten.
-  const replaceExisting = input.existingFileId
+  // Prefer the Firestore-tracked archive. If its pointer is missing or stale,
+  // locate a legacy SIPANDU JSON in this exact respondent folder. The helper
+  // verifies private appProperties before any existing Drive file is replaced.
+  const trackedFileIsReplaceable = input.existingFileId
     ? await isReplaceableAssessmentArchive(input.existingFileId, folderId)
     : false;
+  const replaceFileId = trackedFileIsReplaceable
+    ? input.existingFileId
+    : await findLatestLegacyAssessmentArchive(folderId);
   const uploaded = await uploadMultipart(
     folderId,
     fileName,
     'application/pdf',
     input.pdf,
-    replaceExisting ? input.existingFileId : undefined,
+    replaceFileId,
   );
-  return { ...uploaded, replacedExisting: replaceExisting };
+  return { ...uploaded, replacedExisting: Boolean(replaceFileId) };
+}
+
+async function findLatestLegacyAssessmentArchive(folderId: string): Promise<string | undefined> {
+  try {
+    const escapedFolderId = folderId.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+    const query = encodeURIComponent(
+      "'" + escapedFolderId + "' in parents and trashed = false and mimeType = 'application/json' and name contains 'asesmen-'",
+    );
+    const response = await driveFetch(
+      '/files?q=' + query
+        + '&fields=files(id,name,mimeType,appProperties,trashed,modifiedTime)'
+        + '&orderBy=modifiedTime desc&pageSize=100&supportsAllDrives=true&includeItemsFromAllDrives=true',
+    );
+    if (!response.ok) return undefined;
+    const payload = await response.json() as { files?: Array<{
+      id?: string;
+      name?: string;
+      mimeType?: string;
+      trashed?: boolean;
+      appProperties?: Record<string, string>;
+    }> };
+    const candidates = (payload.files || []).filter((file) =>
+      file.mimeType === 'application/json'
+      && /^asesmen-.*\.json$/i.test(file.name || '')
+      && isManagedIntegratedAssessmentArchiveFile(file, folderId)
+    );
+    return candidates[0]?.id;
+  } catch (error) {
+    console.warn('SIPANDU could not locate the legacy assessment JSON archive; a new PDF will still be uploaded:', error);
+    return undefined;
+  }
 }
 
 async function isReplaceableAssessmentArchive(fileId: string, folderId: string): Promise<boolean> {
@@ -231,14 +267,7 @@ async function isReplaceableAssessmentArchive(fileId: string, folderId: string):
       trashed?: boolean;
       appProperties?: Record<string, string>;
     };
-    if (file.trashed || file.id !== fileId) return false;
-    if (file.appProperties?.sipanduManaged !== 'true'
-      || file.appProperties?.sipanduArchive !== folderId) return false;
-    const isPreviousJson = file.mimeType === 'application/json'
-      && /^asesmen-.*\.json$/i.test(file.name || '');
-    const isPreviousPdf = file.mimeType === 'application/pdf'
-      && /^form-asesmen-terintegrasi-.*\.pdf$/i.test(file.name || '');
-    return isPreviousJson || isPreviousPdf;
+    return file.id === fileId && isManagedIntegratedAssessmentArchiveFile(file, folderId);
   } catch {
     // Never block a new PDF because an old file cannot be inspected.
     return false;

@@ -87,3 +87,32 @@ const INTEGRATED_EXTRA_ANSWER_KEYS = new Set([
 export function isIntegratedAssessmentAnswerKey(key: string): boolean {
   return INTEGRATED_QUESTION_KEY.test(key) || INTEGRATED_EXTRA_ANSWER_KEYS.has(key);
 }
+
+
+export interface IntegratedAssessmentDriveArchiveFile {
+  id?: string;
+  name?: string;
+  mimeType?: string;
+  trashed?: boolean;
+  appProperties?: Record<string, string>;
+}
+
+/**
+ * Accept only a PDF or the old assessment JSON format created by SIPANDU,
+ * and only inside the matching managed respondent folder. This prevents
+ * archive migration from replacing unrelated Google Drive files.
+ */
+export function isManagedIntegratedAssessmentArchiveFile(
+  file: IntegratedAssessmentDriveArchiveFile,
+  folderId: string,
+): boolean {
+  if (!file.id || file.trashed === true || !folderId) return false;
+  if (file.appProperties?.sipanduManaged !== 'true'
+    || file.appProperties?.sipanduArchive !== folderId) return false;
+
+  const isLegacyJson = file.mimeType === 'application/json'
+    && /^asesmen-.*\.json$/i.test(file.name || '');
+  const isPdf = file.mimeType === 'application/pdf'
+    && /^form-asesmen-terintegrasi-.*\.pdf$/i.test(file.name || '');
+  return isLegacyJson || isPdf;
+}

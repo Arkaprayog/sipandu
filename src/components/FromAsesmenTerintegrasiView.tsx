@@ -6,7 +6,7 @@ import { formatPPKSTimestamp } from '../lib/ppksData';
 import { publicAssetUrl } from '../lib/publicAssets';
 import { backupAssessmentToCentralDrive, deleteCentralDriveFile } from '../lib/googleDriveBackup';
 import { getIntegratedAssessmentBackupMetadata, saveIntegratedAssessmentBackupMetadata } from '../lib/firebase';
-import { printPdfBlob } from '../lib/printing';
+import { printPdfBlob, printPreparedAssessmentWebView } from '../lib/printing';
 import { createOfficialAssessmentPdf } from '../lib/assessmentPdf';
 import { createPhotoPreviewBlob, MAX_PPKS_PHOTO_FILE_BYTES } from '../lib/photoFilePreview';
 import '../officialAssessment.css';
@@ -510,24 +510,29 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
     return { root, pages };
   };
 
-  const createAndBackupAssessmentPdf = async (record: PPKSRecord): Promise<{
+  const createAndBackupAssessmentPdf = async (record: PPKSRecord, retainPrintRoot = false): Promise<{
     pdf: Blob;
     fileName: string;
     driveUrl: string;
     backupError: string;
+    printRootId?: string;
   }> => {
     let pdf: Blob;
     let fileName: string;
+    let printRootId: string | undefined;
     setPreparingPrint(true);
     try {
       const prepared = await prepareAssessmentPdfRoot();
       try {
         pdf = await createOfficialAssessmentPdf(prepared.pages, prepared.root.id);
+        if (retainPrintRoot) printRootId = prepared.root.id;
       } finally {
-        prepared.root.remove();
-        releasePrintPhotoUrls();
-        setPrintPhotoUrls({});
-        setPrintPhotoErrors({});
+        if (!printRootId) {
+          prepared.root.remove();
+          releasePrintPhotoUrls();
+          setPrintPhotoUrls({});
+          setPrintPhotoErrors({});
+        }
       }
 
       const safeRespondent = (record.namaLengkap || record.id)
@@ -560,7 +565,7 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
             webViewLink: driveCopy.webViewLink || '',
             savedAt: new Date().toISOString(),
           });
-          return { pdf, fileName, driveUrl: driveCopy.webViewLink || '', backupError: '' };
+          return { pdf, fileName, driveUrl: driveCopy.webViewLink || '', backupError: '', ...(printRootId ? { printRootId } : {}) };
         } catch (metadataError) {
           if (!driveCopy.replacedExisting) {
             try { await deleteCentralDriveFile(driveCopy.id); } catch { /* preserve metadata error */ }
@@ -575,11 +580,14 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
         } catch (metadataError) {
           console.error('SIPANDU could not record assessment PDF backup failure:', metadataError);
         }
-        return { pdf, fileName, driveUrl: '', backupError: detail };
+        return { pdf, fileName, driveUrl: '', backupError: detail, ...(printRootId ? { printRootId } : {}) };
       }
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);
       document.getElementById('sipandu-assessment-pdf-root')?.remove();
+      releasePrintPhotoUrls();
+      setPrintPhotoUrls({});
+      setPrintPhotoErrors({});
       try {
         await saveIntegratedAssessmentBackupMetadata(record.id, { status: 'failed', error: detail });
         setDriveArchive({ status: 'failed', error: detail, fileId: '', webViewLink: '', savedAt: '' });
@@ -621,7 +629,7 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
       firestoreSaved = true;
 
       // Google Drive receives the same A4 PDF that the user can print, never a JSON snapshot.
-      const archive = await createAndBackupAssessmentPdf(updated);
+      const archive = await createAndBackupAssessmentPdf(updated, true);
       setStatusMessage(archive.backupError
         ? {
             type: 'success',
@@ -817,6 +825,7 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
 
     setPreparingPrint(true);
     setStatusMessage(null);
+    let retainedPrintRootId: string | undefined;
     try {
       const cleanAnswers: Record<string, string | string[]> = {};
       Object.entries(answers).forEach(([key, value]) => {
@@ -840,6 +849,7 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
 
       // The same generated A4 PDF is both uploaded to Drive and sent to the print UI.
       const archive = await createAndBackupAssessmentPdf(updated);
+      retainedPrintRootId = archive.printRootId;
       if (archive.backupError) {
         setStatusMessage({
           type: 'success',
@@ -854,9 +864,15 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
       }
 
       try {
-        await printPdfBlob(archive.pdf, archive.fileName);
+        try {
+          await printPdfBlob(archive.pdf, archive.fileName);
+        } catch (base64PrintError) {
+          if (!archive.printRootId) throw base64PrintError;
+          console.info('SIPANDU is using the A4 WebView print route for this assessment PDF:', base64PrintError);
+          await printPreparedAssessmentWebView(archive.fileName, archive.printRootId);
+        }
       } catch (printError) {
-        console.warn('SIPANDU native PDF print is unavailable; downloading the generated PDF instead:', printError);
+        console.warn('SIPANDU print dialog is unavailable; downloading the generated PDF instead:', printError);
         const objectUrl = URL.createObjectURL(archive.pdf);
         const link = document.createElement('a');
         link.href = objectUrl;
@@ -868,7 +884,7 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
         window.setTimeout(() => URL.revokeObjectURL(objectUrl), 120_000);
         setStatusMessage({
           type: 'success',
-          text: 'PDF berhasil dibuat. File diunduh ke perangkat karena dialog cetak tidak tersedia pada perangkat ini.' +
+          text: 'PDF A4 berhasil dibuat. Dialog cetak tidak tersedia, sehingga aplikasi mencoba mengunduh file ke perangkat.' +
             (archive.backupError ? ' Backup Google Drive belum berhasil: ' + archive.backupError : ''),
           ...(archive.driveUrl ? { driveUrl: archive.driveUrl } : {}),
         });
@@ -882,6 +898,12 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
         text: 'Persiapan PDF tidak selesai: ' + (error instanceof Error ? error.message : String(error)) + '. Jawaban yang sudah tersimpan di Firestore tetap aman; coba cetak kembali.',
       });
     } finally {
+      if (retainedPrintRootId) {
+        document.getElementById(retainedPrintRootId)?.remove();
+        releasePrintPhotoUrls();
+        setPrintPhotoUrls({});
+        setPrintPhotoErrors({});
+      }
       setPreparingPrint(false);
     }
   };

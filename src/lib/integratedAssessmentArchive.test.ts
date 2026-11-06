@@ -6,6 +6,7 @@ import {
   hasCompletedIntegratedAnswers,
   mergeIntegratedAssessmentAnswers,
   isIntegratedAssessmentAnswerKey,
+  isManagedIntegratedAssessmentArchiveFile,
 } from './integratedAssessmentArchive';
 
 function record(id: string, answers: Record<string, string | string[]>): PPKSRecord {
@@ -131,4 +132,30 @@ test('supplemental assessment fields survive the Firestore answer overlay', () =
   });
   assert.equal(merged[0].namaLengkap, 'Responden Uji');
   assert.equal(merged[0].nik, '1234567890123456');
+});
+
+
+test('legacy integrated-assessment JSON is migratable only in its SIPANDU-managed respondent folder', () => {
+  const legacyJson = {
+    id: 'drive-file-legacy-json',
+    name: 'asesmen-2026-11-06T15-06-35-123Z.json',
+    mimeType: 'application/json',
+    appProperties: { sipanduManaged: 'true', sipanduArchive: 'person-folder-123' },
+  };
+  assert.equal(isManagedIntegratedAssessmentArchiveFile(legacyJson, 'person-folder-123'), true);
+  assert.equal(isManagedIntegratedAssessmentArchiveFile(legacyJson, 'another-person-folder'), false);
+  assert.equal(isManagedIntegratedAssessmentArchiveFile({ ...legacyJson, appProperties: {} }, 'person-folder-123'), false);
+  assert.equal(isManagedIntegratedAssessmentArchiveFile({ ...legacyJson, name: 'catatan.json' }, 'person-folder-123'), false);
+  assert.equal(isManagedIntegratedAssessmentArchiveFile({ ...legacyJson, trashed: true }, 'person-folder-123'), false);
+});
+
+test('current integrated-assessment PDF archive is migratable but unrelated PDFs are not', () => {
+  const managedPdf = {
+    id: 'drive-file-pdf',
+    name: 'Form-Asesmen-Terintegrasi-Responden-1234567890123456-2026-11-06.pdf',
+    mimeType: 'application/pdf',
+    appProperties: { sipanduManaged: 'true', sipanduArchive: 'person-folder-123' },
+  };
+  assert.equal(isManagedIntegratedAssessmentArchiveFile(managedPdf, 'person-folder-123'), true);
+  assert.equal(isManagedIntegratedAssessmentArchiveFile({ ...managedPdf, name: 'Surat-Tugas.pdf' }, 'person-folder-123'), false);
 });
