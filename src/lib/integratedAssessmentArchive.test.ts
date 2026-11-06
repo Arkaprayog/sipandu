@@ -102,3 +102,33 @@ test('the answer key whitelist includes all 91 questions and the five official s
     assert.equal(isIntegratedAssessmentAnswerKey(key), false);
   }
 });
+
+
+test('supplemental assessment fields survive the Firestore answer overlay', () => {
+  const local = {
+    ...record('sheet-row-supplemental', { q1: 'Tanggal lama' }),
+    namaLengkap: 'Responden Uji',
+    nik: '1234567890123456',
+  } as PPKSRecord;
+  const merged = mergeIntegratedAssessmentAnswers([local], {
+    'sheet-row-supplemental': {
+      q1: 'Tanggal baru',
+      metaSatker: 'Sentra Medan',
+      metaYear: '2026',
+      metaSequence: '004',
+      kesimpulanResumeKasus: 'Kesimpulan asesmen',
+      rekomendasiCatatanPetugas: 'Rekomendasi tindak lanjut',
+    },
+  });
+
+  assert.deepEqual(merged[0].formAsesmenTerintegrasi, {
+    q1: 'Tanggal baru',
+    metaSatker: 'Sentra Medan',
+    metaYear: '2026',
+    metaSequence: '004',
+    kesimpulanResumeKasus: 'Kesimpulan asesmen',
+    rekomendasiCatatanPetugas: 'Rekomendasi tindak lanjut',
+  });
+  assert.equal(merged[0].namaLengkap, 'Responden Uji');
+  assert.equal(merged[0].nik, '1234567890123456');
+});
