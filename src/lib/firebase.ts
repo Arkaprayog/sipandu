@@ -41,6 +41,7 @@ import { deduplicatePPKSRecords, EXPECTED_REAL_PPKS_COUNT, parsePPKSTimestamp, s
 import { isLegacySamplePPKS } from '../data/initialData';
 import { GOOGLE_WORKSPACE_EMAIL } from './googleSIPANDUResources';
 import { normalizePPKSPhotoSource } from './photoSources';
+import { isIntegratedAssessmentAnswerKey } from './integratedAssessmentArchive';
 
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
@@ -818,6 +819,17 @@ export async function saveIntegratedAssessmentToFirestore(
   if (!answers || typeof answers !== 'object' || Array.isArray(answers)) {
     throw new Error('Jawaban Form Asesmen Terintegrasi tidak valid.');
   }
+  const unsupportedKeys = Object.keys(answers).filter((key) => !isIntegratedAssessmentAnswerKey(key));
+  if (unsupportedKeys.length) {
+    throw new Error(
+      'Form Asesmen Terintegrasi berisi field yang tidak dikenal: ' +
+      unsupportedKeys.slice(0, 5).join(', ') +
+      '. Muat ulang formulir terbaru sebelum menyimpan.'
+    );
+  }
+  if (Object.keys(answers).length > 96) {
+    throw new Error('Jumlah field jawaban Form Asesmen Terintegrasi melebihi batas formulir resmi.');
+  }
 
   const token = await getIdTokenResult(user, true);
   const role = token.claims.role;
@@ -914,7 +926,7 @@ export function subscribeToIntegratedAssessmentAnswers(
           if (!answers || typeof answers !== 'object' || Array.isArray(answers)) continue;
           const safeAnswers = Object.fromEntries(
             Object.entries(answers as Record<string, unknown>).filter(([key, value]) =>
-              /^q(?:[1-9]|[1-8][0-9]|9[01])$/.test(key)
+              isIntegratedAssessmentAnswerKey(key)
               && (typeof value === 'string'
                 || (Array.isArray(value) && value.every((entry) => typeof entry === 'string')))
             ),
