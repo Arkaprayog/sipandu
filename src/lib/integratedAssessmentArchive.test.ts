@@ -4,6 +4,7 @@ import type { PPKSRecord } from '../types';
 import {
   getCloudOnlyCompletedAssessments,
   hasCompletedIntegratedAnswers,
+  mergeIntegratedAssessmentAnswers,
 } from './integratedAssessmentArchive';
 
 function record(id: string, answers: Record<string, string | string[]>): PPKSRecord {
@@ -41,4 +42,43 @@ test('cloud-only archive collection does not duplicate a local document', () => 
   const local = record('same-id', { q1: 'Sudah disimpan' });
   const cloud = record('same-id', { q1: 'Sudah disimpan' });
   assert.deepEqual(getCloudOnlyCompletedAssessments([local], [cloud]), []);
+});
+
+
+test('separate Firestore answers overlay the spreadsheet record without changing respondent profile fields', () => {
+  const local = {
+    ...record('sheet-row-12', { q1: 'Jawaban lama', q16: 'Nama sesuai roster' }),
+    namaLengkap: 'Nama Responden',
+    nik: '1234567890123456',
+    alamatLengkap: 'Alamat dari spreadsheet',
+  } as PPKSRecord;
+  const merged = mergeIntegratedAssessmentAnswers([local], {
+    'sheet-row-12': { q1: 'Jawaban terbaru', q2: 'Intervensi' },
+  });
+
+  assert.equal(merged[0].formAsesmenTerintegrasi?.q1, 'Jawaban terbaru');
+  assert.equal(merged[0].formAsesmenTerintegrasi?.q2, 'Intervensi');
+  assert.equal(merged[0].namaLengkap, 'Nama Responden');
+  assert.equal(merged[0].nik, '1234567890123456');
+  assert.equal(merged[0].alamatLengkap, 'Alamat dari spreadsheet');
+});
+
+test('separate answers do not create a partial respondent when the spreadsheet roster does not contain its ID', () => {
+  const local = record('known-record', { q1: 'Ada' });
+  const result = mergeIntegratedAssessmentAnswers([local], {
+    'missing-roster-record': { q1: 'Jawaban tersimpan' },
+  });
+
+  assert.deepEqual(result, [local]);
+});
+
+test('unchanged separate answers preserve roster list and record references', () => {
+  const local = record('same-record', { q1: 'Tetap' });
+  const records = [local];
+  const result = mergeIntegratedAssessmentAnswers(records, {
+    'same-record': { q1: 'Tetap' },
+  });
+
+  assert.equal(result, records);
+  assert.equal(result[0], local);
 });
