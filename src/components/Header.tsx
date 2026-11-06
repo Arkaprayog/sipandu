@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { ProfileUser } from '../types';
 import { getWaktuGreeting } from '../utils/helpers';
-import { Bell, Settings, LogOut, Edit3, ShieldAlert, Cloud, User } from 'lucide-react';
+import { Bell, Settings, LogOut, Edit3, ShieldAlert, Cloud, User, Sunrise, Sun, Sunset, Moon, MapPin, Thermometer } from 'lucide-react';
 import { SipanduLogo } from './SipanduLogo';
 
 interface HeaderProps {
@@ -30,6 +30,8 @@ export const Header: React.FC<HeaderProps> = ({
 }) => {
   const [currentTimeStr, setCurrentTimeStr] = useState<string>('');
   const [greeting, setGreeting] = useState<string>('Pagi');
+  const [locationLabel, setLocationLabel] = useState<string>('');
+  const [temperature, setTemperature] = useState<number | null>(null);
   const [failedProfilePhotoUrls, setFailedProfilePhotoUrls] = useState<string[]>([]);
   const headerPhotoUrl = [profile.photoUrl, accountPhotoUrl]
     .find((url) => Boolean(url) && !failedProfilePhotoUrls.includes(url as string)) || '';
@@ -48,12 +50,17 @@ export const Header: React.FC<HeaderProps> = ({
   useEffect(() => {
     const updateTime = () => {
       const now = new Date();
-      setGreeting(getWaktuGreeting(now));
-      // Format: HH:mm:ss WIB
-      const hours = String(now.getHours()).padStart(2, '0');
-      const minutes = String(now.getMinutes()).padStart(2, '0');
-      const seconds = String(now.getSeconds()).padStart(2, '0');
-      setCurrentTimeStr(`${hours}:${minutes}:${seconds} WIB`);
+      const parts = new Intl.DateTimeFormat('en-GB', {
+        timeZone: 'Asia/Jakarta',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hourCycle: 'h23',
+      }).formatToParts(now);
+      const part = (type: string) => parts.find((item) => item.type === type)?.value || '00';
+      const hour = Number(part('hour'));
+      setGreeting(hour >= 5 && hour < 11 ? 'Pagi' : hour >= 11 && hour < 15 ? 'Siang' : hour >= 15 && hour < 18 ? 'Sore' : 'Malam');
+      setCurrentTimeStr(`${part('hour')}:${part('minute')}:${part('second')} WIB`);
     };
 
     updateTime();
@@ -61,17 +68,98 @@ export const Header: React.FC<HeaderProps> = ({
     return () => clearInterval(interval);
   }, []);
 
+  // Lokasi diminta melalui izin GPS perangkat. Koordinat hanya digunakan untuk
+  // mencari nama wilayah dan suhu saat ini; tidak disimpan ke akun SIPANDU.
+  useEffect(() => {
+    if (!navigator.geolocation) return;
+    let active = true;
+
+    const requestLocationAndWeather = () => {
+      navigator.geolocation.getCurrentPosition(async ({ coords }) => {
+        const latitude = coords.latitude;
+        const longitude = coords.longitude;
+        const query = `latitude=${encodeURIComponent(String(latitude))}&longitude=${encodeURIComponent(String(longitude))}`;
+
+        const [placeResult, weatherResult] = await Promise.allSettled([
+          fetch(`https://api.bigdatacloud.net/data/reverse-geocode-client?${query}&localityLanguage=id`),
+          fetch(`https://api.open-meteo.com/v1/forecast?${query}&current=temperature_2m&timezone=Asia%2FJakarta`),
+        ]);
+
+        if (!active) return;
+
+        if (placeResult.status === 'fulfilled' && placeResult.value.ok) {
+          try {
+            const place = await placeResult.value.json();
+            const administrative = Array.isArray(place.localityInfo?.administrative)
+              ? place.localityInfo.administrative
+              : [];
+            const village = administrative.find((item: any) =>
+              /village|subdistrict|district|desa|kelurahan/i.test(String(item.name || item.description || ''))
+            )?.name;
+            const name = place.locality || place.city || village || place.principalSubdivision || '';
+            if (name) setLocationLabel(String(name));
+          } catch {
+            // Lokasi tetap opsional jika layanan nama wilayah sedang bermasalah.
+          }
+        }
+
+        if (weatherResult.status === 'fulfilled' && weatherResult.value.ok) {
+          try {
+            const weather = await weatherResult.value.json();
+            const value = Number(weather.current?.temperature_2m);
+            if (Number.isFinite(value) && active) setTemperature(value);
+          } catch {
+            // Jam dan lokasi tetap dapat digunakan tanpa data suhu.
+          }
+        }
+      }, () => {
+        // Izin lokasi ditolak/tidak tersedia: jangan menampilkan lokasi atau suhu tebakan.
+      }, {
+        enableHighAccuracy: false,
+        timeout: 12000,
+        maximumAge: 15 * 60 * 1000,
+      });
+    };
+
+    requestLocationAndWeather();
+    const refreshInterval = window.setInterval(requestLocationAndWeather, 30 * 60 * 1000);
+    return () => {
+      active = false;
+      window.clearInterval(refreshInterval);
+    };
+  }, []);
+
   return (
     <header className={`app-header-safe-area relative w-full bg-[#112214]/90 border-b border-rose-500/35 shadow-[0_4px_20px_rgba(244,63,94,0.12)] px-3 pb-2 md:px-6 select-none z-20 ${isCompactDashboard ? 'app-header-compact' : ''}`}>
       <div className={`max-w-7xl mx-auto flex ${isCompactDashboard ? 'flex-row items-center justify-between gap-3' : 'flex-col md:flex-row md:items-center justify-between gap-2'}`}>
         {!isCompactDashboard ? (
         <div className="flex flex-col gap-1.5">
-          {/* Greeting hanya menampilkan salam dan jam live; email akun tidak ditampilkan. */}
-          <div className="flex items-center gap-2 text-xs md:text-sm">
-            <span className="inline-block w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-            <span className="font-semibold text-sky-200">
-              Selamat {greeting} ({currentTimeStr})
-            </span>
+          {/* Salam, jam WIB, lokasi, dan suhu ditampilkan ringkas dalam satu baris. */}
+          <div className="flex min-w-0 items-center gap-1.5 whitespace-nowrap text-[10px] sm:gap-2 sm:text-xs md:text-sm" aria-live="off">
+            {greeting === 'Pagi' ? (
+              <Sunrise className="h-4 w-4 shrink-0 text-amber-300" aria-hidden="true" />
+            ) : greeting === 'Siang' ? (
+              <Sun className="h-4 w-4 shrink-0 text-amber-300" aria-hidden="true" />
+            ) : greeting === 'Sore' ? (
+              <Sunset className="h-4 w-4 shrink-0 text-orange-300" aria-hidden="true" />
+            ) : (
+              <Moon className="h-4 w-4 shrink-0 text-sky-300" aria-hidden="true" />
+            )}
+            <span className="shrink-0 font-semibold text-sky-200">Selamat {greeting}</span>
+            <span className="shrink-0 font-semibold tabular-nums text-sky-200">{currentTimeStr}</span>
+            {locationLabel && (
+              <>
+                <span className="mx-0.5 h-3 w-px shrink-0 bg-white/25" aria-hidden="true" />
+                <MapPin className="h-3 w-3 shrink-0 text-emerald-300" aria-hidden="true" />
+                <span className="max-w-[64px] truncate text-neutral-200 sm:max-w-[110px]" title={locationLabel}>{locationLabel}</span>
+                {temperature !== null && (
+                  <>
+                    <Thermometer className="h-3 w-3 shrink-0 text-orange-300" aria-hidden="true" />
+                    <span className="shrink-0 font-medium tabular-nums text-neutral-200">{Math.round(temperature)}°C</span>
+                  </>
+                )}
+              </>
+            )}
           </div>
 
           {/* Profil pengguna (di pojok kiri atas) */}
