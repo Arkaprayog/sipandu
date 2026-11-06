@@ -1,7 +1,7 @@
 import { getAccessToken, invalidateAccessToken, refreshWorkspaceAccessToken } from './firebase';
 import type { SuratRecord } from '../types';
 import { buildGoogleDriveMultipartBody, buildGoogleDriveRequestUrl } from './googleDriveMultipart';
-import { isManagedIntegratedAssessmentArchiveFile } from './integratedAssessmentArchive';
+import { isIntegratedAssessmentAnswerKey, isManagedIntegratedAssessmentArchiveFile } from './integratedAssessmentArchive';
 
 const ROOT_FOLDER_NAME = 'SIPANDU';
 const DOCUMENTS_FOLDER_NAME = 'Dokumen';
@@ -181,6 +181,8 @@ export async function backupAssessmentToCentralDrive(input: {
   nik?: string;
   fileName: string;
   existingFileId?: string;
+  existingFolderId?: string;
+  requireExistingFileMatch?: boolean;
   pdf: Blob;
 }): Promise<{ id: string; webViewLink?: string; replacedExisting: boolean }> {
   if (!(input.pdf instanceof Blob) || input.pdf.size < 8) {
@@ -192,7 +194,7 @@ export async function backupAssessmentToCentralDrive(input: {
   }
 
   const personFolder = safeName(input.ppksName || input.ppksId, input.ppksId);
-  const folderId = await ensureFolderPath([ROOT_FOLDER_NAME, ASSESSMENTS_FOLDER_NAME, personFolder]);
+  const folderId = input.existingFolderId || await ensureFolderPath([ROOT_FOLDER_NAME, ASSESSMENTS_FOLDER_NAME, personFolder]);
   const savedAt = new Date().toISOString();
   const stamp = savedAt.replace(/[:.]/g, '-');
   const respondent = safeName(input.ppksName || input.ppksId, input.ppksId);
@@ -209,9 +211,14 @@ export async function backupAssessmentToCentralDrive(input: {
   const trackedFileIsReplaceable = input.existingFileId
     ? await isReplaceableAssessmentArchive(input.existingFileId, folderId)
     : false;
+  if (input.requireExistingFileMatch && !trackedFileIsReplaceable) {
+    throw new Error('Arsip lama tidak lolos validasi kepemilikan SIPANDU. File JSON asli tidak diubah.');
+  }
   const replaceFileId = trackedFileIsReplaceable
     ? input.existingFileId
-    : await findLatestLegacyAssessmentArchive(folderId);
+    : input.requireExistingFileMatch
+      ? undefined
+      : await findLatestLegacyAssessmentArchive(folderId);
   const uploaded = await uploadMultipart(
     folderId,
     fileName,
@@ -220,6 +227,128 @@ export async function backupAssessmentToCentralDrive(input: {
     replaceFileId,
   );
   return { ...uploaded, replacedExisting: Boolean(replaceFileId) };
+}
+
+export interface LegacyIntegratedAssessmentDriveArchive {
+  fileId: string;
+  fileName: string;
+  parentFolderId: string;
+  ppksId: string;
+  ppksName: string;
+  nik: string;
+  savedAt: string;
+  answers: Record<string, string | string[]>;
+}
+
+/** Lists old SIPANDU JSON snapshots only inside its assessment root/respondent folders. */
+export async function listLegacyIntegratedAssessmentDriveArchives(): Promise<LegacyIntegratedAssessmentDriveArchive[]> {
+  const assessmentRootId = await ensureFolderPath([ROOT_FOLDER_NAME, ASSESSMENTS_FOLDER_NAME]);
+  const folders: Array<{ id: string; name: string }> = [];
+  let folderPageToken = '';
+  do {
+    const params = new URLSearchParams({
+      q: "'" + assessmentRootId.replace(/'/g, "\\'") + "' in parents and trashed = false and mimeType = 'application/vnd.google-apps.folder'",
+      pageSize: '100',
+      orderBy: 'name',
+      fields: 'nextPageToken,files(id,name,mimeType)',
+      supportsAllDrives: 'true',
+      includeItemsFromAllDrives: 'true',
+    });
+    if (folderPageToken) params.set('pageToken', folderPageToken);
+    const response = await driveFetch('/files?' + params.toString());
+    if (!response.ok) throw new Error('Folder arsip asesmen Google Drive gagal dibaca (HTTP ' + response.status + ').');
+    const page = await response.json() as {
+      files?: Array<{ id: string; name: string; mimeType?: string }>;
+      nextPageToken?: string;
+    };
+    folders.push(...(page.files || []).filter((file) => file.mimeType === 'application/vnd.google-apps.folder'));
+    folderPageToken = page.nextPageToken || '';
+  } while (folderPageToken);
+
+  const archives: LegacyIntegratedAssessmentDriveArchive[] = [];
+  for (const folder of folders) {
+    let pageToken = '';
+    do {
+      const params = new URLSearchParams({
+        q: "'" + folder.id.replace(/'/g, "\\'") + "' in parents and trashed = false and mimeType = 'application/json' and name contains 'asesmen-'",
+        pageSize: '100',
+        orderBy: 'modifiedTime',
+        fields: 'nextPageToken,files(id,name,mimeType,appProperties,trashed,modifiedTime)',
+        supportsAllDrives: 'true',
+        includeItemsFromAllDrives: 'true',
+      });
+      if (pageToken) params.set('pageToken', pageToken);
+      const response = await driveFetch('/files?' + params.toString());
+      if (!response.ok) throw new Error('Arsip JSON pada folder responden gagal diperiksa (HTTP ' + response.status + ').');
+      const page = await response.json() as {
+        files?: Array<{
+          id: string;
+          name: string;
+          mimeType?: string;
+          trashed?: boolean;
+          appProperties?: Record<string, string>;
+        }>;
+        nextPageToken?: string;
+      };
+
+      const eligible = (page.files || []).filter((file) =>
+        isManagedIntegratedAssessmentArchiveFile(file, folder.id)
+      );
+      for (const file of eligible) {
+        try {
+          const contentResponse = await driveFetch('/files/' + encodeURIComponent(file.id) + '?alt=media');
+          if (!contentResponse.ok) throw new Error('Isi arsip gagal dibaca (HTTP ' + contentResponse.status + ').');
+          const payload = await contentResponse.json() as {
+            type?: string;
+            ppksId?: string;
+            ppksName?: string;
+            nik?: string;
+            savedAt?: string;
+            answers?: Record<string, unknown>;
+          };
+          if (payload.type !== 'SIPANDU Form Asesmen Terintegrasi'
+            || typeof payload.ppksId !== 'string'
+            || !payload.ppksId.trim()
+            || !payload.answers
+            || typeof payload.answers !== 'object'
+            || Array.isArray(payload.answers)) continue;
+
+          const answers: Record<string, string | string[]> = {};
+          for (const [key, value] of Object.entries(payload.answers)) {
+            if (!isIntegratedAssessmentAnswerKey(key)) continue;
+            if (typeof value === 'string') answers[key] = value;
+            else if (Array.isArray(value) && value.every((item) => typeof item === 'string')) {
+              answers[key] = value as string[];
+            }
+          }
+          if (!Object.keys(answers).length) continue;
+
+          archives.push({
+            fileId: file.id,
+            fileName: file.name,
+            parentFolderId: folder.id,
+            ppksId: payload.ppksId,
+            ppksName: String(payload.ppksName || folder.name),
+            nik: String(payload.nik || ''),
+            savedAt: String(payload.savedAt || ''),
+            answers,
+          });
+        } catch (error) {
+          console.warn('SIPANDU skipped one legacy assessment archive that could not be parsed:', {
+            fileId: file.id,
+            message: error instanceof Error ? error.message : String(error),
+          });
+        }
+      }
+      pageToken = page.nextPageToken || '';
+    } while (pageToken);
+  }
+
+  return archives.sort((a, b) => {
+    const left = Date.parse(a.savedAt) || 0;
+    const right = Date.parse(b.savedAt) || 0;
+    return left - right || a.fileName.localeCompare(b.fileName);
+  });
 }
 
 async function findLatestLegacyAssessmentArchive(folderId: string): Promise<string | undefined> {
