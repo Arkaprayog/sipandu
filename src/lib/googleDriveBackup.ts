@@ -1,5 +1,6 @@
 import { getAccessToken, invalidateAccessToken, refreshWorkspaceAccessToken } from './firebase';
 import type { SuratRecord } from '../types';
+import { buildGoogleDriveMultipartBody } from './googleDriveMultipart';
 
 const DRIVE_API = 'https://www.googleapis.com/drive/v3';
 const ROOT_FOLDER_NAME = 'SIPANDU';
@@ -121,13 +122,7 @@ async function uploadMultipart(
     uploaded = await response.json() as { id: string; webViewLink?: string };
   } else {
     const boundary = 'sipandu-' + Math.random().toString(36).slice(2);
-    const body = new Blob([
-      '--' + boundary + '\\r\\nContent-Type: application/json; charset=UTF-8\\r\\n\\r\\n',
-      metadata,
-      '\\r\\n--' + boundary + '\\r\\nContent-Type: ' + mimeType + '\\r\\n\\r\\n',
-      data,
-      '\\r\\n--' + boundary + '--',
-    ], { type: 'multipart/related; boundary=' + boundary });
+    const body = buildGoogleDriveMultipartBody(metadata, mimeType, data, boundary);
 
     const response = await driveFetch('/files?uploadType=multipart&fields=id,name,webViewLink', {
       method: 'POST',

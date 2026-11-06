@@ -123,7 +123,7 @@ Scope: the complete 132-file repository tree on `main`, with focused source revi
 
 The release is considered built only after the latest main-branch runs pass application/unit tests, TypeScript checks, production web build and asset checks, Firestore Rules emulator suite, CodeQL, Android debug metadata/signature checks, Android release metadata/signature checks, and native Google scope bridge verification.
 
-## Audit lanjutan dan kesiapan rilis v2.2.7 — 6 November 2026
+## Audit lanjutan dan kesiapan rilis v2.2.8 — 6 November 2026
 
 ### Cakupan dan bukti
 
@@ -143,10 +143,15 @@ Audit memeriksa struktur repo `main`, konfigurasi Capacitor/Wrangler/Firebase, a
 4. **R2 belum dipasang untuk SIPANDU.** Worker `sipandu` adalah Worker static-assets dengan `bindings: []`; belum ada R2 bucket binding atau API upload/download berotorisasi. Audit ini tidak membuat bucket baru karena fitur unggah aktif tidak memerlukannya dan bucket milik aplikasi lain tidak boleh dicampur. Jika kebutuhan upload file staf diaktifkan kembali, implementasikan storage privat terpisah di R2 melalui Worker yang memverifikasi Firebase ID token dan custom role server-side, membatasi object key per UID, ukuran/MIME, serta akses unduh. Jangan mengirim kredensial S3/R2 ke browser atau menampilkan bucket publik untuk data pribadi.
 5. **Aturan dan kode mempunyai batas operasional.** CI hijau membuktikan tes yang dijalankan dan build; bukan bukti login Google Workspace, permission Drive, izin perangkat, notifikasi saat aplikasi benar-benar tertutup, atau uji fisik lintas-perangkat. Cache lokal juga dapat menyimpan data pribadi; perangkat harus dilindungi dan sesi ditutup hanya oleh tindakan logout yang sah.
 
+### Perbaikan tambahan sebelum rilis v2.2.8
+
+- Ditemukan kesalahan pada pembentukan multipart upload Google Drive untuk file <= 5 MiB: source sebelumnya mengirim karakter backslash-r/backslash-n literal, bukan CRLF. Ini dapat menggagalkan backup PDF/JSON kecil meskipun dokumen utama tetap tersimpan di Firestore.
+- Pembentukan multipart dipisahkan ke helper yang menggunakan CRLF sebenarnya, dengan tes regresi untuk header part JSON, MIME file, delimiter penutup, dan ketiadaan escape literal. Jalur resumable upload untuk file lebih besar tidak diubah.
+
 ### Status penerimaan
 
 - Firestore production rules: **berhasil diterapkan**.
 - Firebase Storage production: **tidak diaktifkan, tidak di-deploy, dan tidak dibutuhkan oleh jalur arsip asesmen aktif**.
 - R2 SIPANDU: **belum dikonfigurasi**; tidak ada klaim bahwa migrasi R2 sudah selesai.
-- APK v2.2.7: **dibangun lewat workflow rilis setelah audit ini**; status akhir harus diambil dari run pada commit versi baru.
+- APK v2.2.8: **dibangun dari hasil audit yang mencakup perbaikan multipart Google Drive**; status akhir harus diambil dari run pada commit versi baru.
 - Uji nyata yang masih memerlukan perangkat/akun pemilik: login, refresh tanpa logout, simpan profil, buka arsip asesmen yang sama dari browser dan APK, serta tes cetak/PDF.
