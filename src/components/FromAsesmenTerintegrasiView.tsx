@@ -596,7 +596,7 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
       }
       throw error;
     } finally {
-      setPreparingPrint(false);
+      if (!retainPrintRoot) setPreparingPrint(false);
     }
   };
 
