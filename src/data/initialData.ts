@@ -62,13 +62,23 @@ export function isObviousDemoMarker(value: unknown): boolean {
     /^(?:PPKS|RESPONDEN|RECORD|DATA|ID)[\s_-]*(?:DEMO|SAMPLE|CONTOH|DUMMY|TEST|UJI)[\s_-]*/i.test(text);
 }
 
+/**
+ * Detect retired demo records using their stable ID only. Authoritative
+ * spreadsheet rows must not be discarded because a real person shares a
+ * common name that happened to appear in an older demo roster.
+ */
+export function isLegacySamplePPKSId(value: unknown): boolean {
+  const id = String(value || '').trim();
+  return LEGACY_SAMPLE_PPKS_IDS.has(id) || isObviousDemoMarker(id);
+}
+
 export function isLegacySamplePPKS(record: Pick<PPKSRecord, 'id' | 'namaLengkap'> | null | undefined): boolean {
   if (!record) return false;
   const id = String(record.id || '').trim();
   const name = String(record.namaLengkap || '').trim();
-  if (LEGACY_SAMPLE_PPKS_IDS.has(id)) return true;
+  if (isLegacySamplePPKSId(id)) return true;
   if (LEGACY_SAMPLE_PPKS_NAMES.has(name.toLocaleLowerCase('id-ID'))) return true;
-  return isObviousDemoMarker(id) || isObviousDemoMarker(name);
+  return isObviousDemoMarker(name);
 }
 
 // Start with an empty database; real PPKS records must be entered or loaded from an authorized source.

@@ -1,8 +1,8 @@
 import { PPKSRecord } from '../types';
 import { normalizePPKSPhotoSource } from './photoSources';
 
-/** Guardrail: the verified source roster currently contains 44 real PPKS. Update only when the official roster changes. */
-export const EXPECTED_REAL_PPKS_COUNT = 44;
+/** Guardrail: the owner-confirmed source roster currently contains 46 real PPKS. Update only after verifying the official response tab. */
+export const EXPECTED_REAL_PPKS_COUNT = 46;
 
 /**
  * Parses spreadsheet timestamps without trusting the browser's locale-dependent
@@ -122,16 +122,21 @@ export function samePPKSIdentity(
   const normalizePhone = (value: unknown) => String(value ?? '').replace(/\D/g, '');
   const aNiks = getPPKSNIKCandidates(a);
   const bNiks = getPPKSNIKCandidates(b);
-
-  // A shared validated NIK wins even if a secondary mapped field conflicts.
-  // The prior single-field preference could miss repeated Forms submissions
-  // whenever the selected NIK column differed from the official Q23 answer.
-  if (aNiks.some((nik) => bNiks.includes(nik))) return true;
-  // Conflicting valid NIKs are not merged based only on name/phone.
-  if (aNiks.length && bNiks.length) return false;
-
   const aName = normalizeText(a.namaLengkap);
   const bName = normalizeText(b.namaLengkap);
+
+  // A shared NIK is not sufficient by itself: a mistyped/reused NIK in two
+  // real respondent rows must not collapse two different people. Require the
+  // normalized full names to agree as a second identity signal.
+  if (aNiks.some((nik) => bNiks.includes(nik))) {
+    if (aName && bName) return aName === bName;
+    const aTimestamp = parsePPKSTimestamp(a.timestamp);
+    const bTimestamp = parsePPKSTimestamp(b.timestamp);
+    return aTimestamp !== null && bTimestamp !== null && aTimestamp === bTimestamp;
+  }
+
+  // Conflicting valid NIKs are never merged based only on name/phone.
+  if (aNiks.length && bNiks.length) return false;
   if (!aName || !bName) return a.id === b.id;
   if (aName !== bName) return false;
 

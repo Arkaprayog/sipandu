@@ -1170,7 +1170,7 @@ export async function removeLegacyDemoPPKSFromFirestore(): Promise<number> {
 
 /**
  * Reconcile the Firestore PPKS collection with the verified Google Sheets roster.
- * The current roster is expected to have 44 unique real respondents. A mismatched
+ * The current roster is expected to have 46 unique real respondents. A mismatched
  * or partial import is rejected before any write/delete so a wrong tab cannot
  * accidentally erase the database.
  *
@@ -1191,8 +1191,8 @@ export async function reconcilePPKSFirestoreWithSpreadsheet(sourceRecords: PPKSR
 
   const uniqueSource = deduplicatePPKSRecords(sourceRecords);
   // The source tab may contain repeated Google Forms submissions. Validate the
-  // deduplicated roster count, not the raw row count: 45 rows that resolve to
-  // the 44 verified people are a valid cleanup input, not a reason to abort.
+  // deduplicated roster count, not the raw row count: 47 rows that resolve to
+  // the 46 verified people are a valid cleanup input, not a reason to abort.
   if (uniqueSource.length !== EXPECTED_REAL_PPKS_COUNT) {
     throw new Error(
       'Pembersihan Firestore dibatalkan demi keamanan: roster spreadsheet yang terbaca berisi ' +
@@ -1238,12 +1238,14 @@ export async function reconcilePPKSFirestoreWithSpreadsheet(sourceRecords: PPKSR
   const isMatchingRosterPerson = (stored: typeof documents[number], source: PPKSRecord): boolean => {
     const storedNik = validNIK(stored.record);
     const sourceNik = validNIK(source);
-    // Conflicting verified NIKs are never treated as one person, even if a path
-    // or name happens to be equal.
-    if (storedNik && sourceNik) return storedNik === sourceNik;
-
     const storedName = normalizedName(stored.record.namaLengkap);
     const sourceName = normalizedName(source.namaLengkap);
+    // A duplicated/mistyped NIK with conflicting full names must not merge or
+    // delete two distinct respondent records.
+    if (storedNik && sourceNik) {
+      if (storedNik !== sourceNik) return false;
+      return !storedName || !sourceName || storedName === sourceName;
+    }
     if (stored.documentId === source.id) {
       // A matching path is useful only if the visible names do not conflict.
       return !storedName || !sourceName || storedName === sourceName;

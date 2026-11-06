@@ -61,7 +61,7 @@ test('deduplicates on NIK stored only in official assessment q23 and preserves b
   const second = record({
     id: 'record-q23',
     nik: '',
-    namaLengkap: 'Nama Yang Diperbarui',
+    namaLengkap: 'Nama Lama',
     noHpWa: '082222222222',
     fotoKtp: 'https://example.test/ktp-q23.jpg',
     officialAssessment: { q23: '1271011505920003', q25: 'jawaban baru' },
@@ -107,8 +107,8 @@ test('preserves the original timestamp string received from Google Sheets', () =
   assert.equal(formatPPKSTimestamp(sourceValue), sourceValue);
 });
 
-test('the destructive Firestore reconciliation guard matches the verified 44-person roster', () => {
-  assert.equal(EXPECTED_REAL_PPKS_COUNT, 44);
+test('the destructive Firestore reconciliation guard matches the owner-confirmed 46-person roster', () => {
+  assert.equal(EXPECTED_REAL_PPKS_COUNT, 46);
 });
 
 test('uses official assessment Q23 to identify a duplicate when the secondary NIK field conflicts', () => {
@@ -139,7 +139,7 @@ test('uses official assessment Q23 to identify a duplicate when the secondary NI
   assert.equal(merged[0].fotoKtp, 'https://example.test/ktp.jpg');
 });
 
-test('collapses a 45-row import to the 44 verified unique PPKS', () => {
+test('collapses a 47-row import to the 46 verified unique PPKS when the extra row is a same-name repeat', () => {
   const verified = Array.from({ length: EXPECTED_REAL_PPKS_COUNT }, (_, index) => {
     const nik = String(index + 1).padStart(16, '0');
     return record({
@@ -159,8 +159,58 @@ test('collapses a 45-row import to the 44 verified unique PPKS', () => {
   });
 
   const importedRows = [...verified, duplicate];
-  assert.equal(importedRows.length, 45);
+  assert.equal(importedRows.length, 47);
   const unique = deduplicatePPKSRecords(importedRows);
   assert.equal(unique.length, EXPECTED_REAL_PPKS_COUNT);
   assert.equal(unique.filter((item) => item.officialAssessment?.q24 === 'Data tambahan dari pengiriman ulang').length, 1);
+});
+
+
+test('preserves different respondents when a duplicated or mistyped NIK appears on two distinct rows', () => {
+  const first = record({
+    id: 'sheet-row-10',
+    namaLengkap: 'Responden Pertama',
+    nik: '1271011505920003',
+    noHpWa: '081111111111',
+    timestamp: '2026-10-26T08:00:00',
+    officialAssessment: { q23: '1271011505920003' },
+  });
+  const second = record({
+    id: 'sheet-row-11',
+    namaLengkap: 'Responden Kedua',
+    nik: '1271011505920004',
+    noHpWa: '082222222222',
+    timestamp: '2026-10-26T09:00:00',
+    officialAssessment: { q23: '1271011505920003' },
+  });
+
+  assert.equal(samePPKSIdentity(first, second), false);
+  assert.equal(deduplicatePPKSRecords([first, second]).length, 2);
+});
+
+test('keeps all 46 owner-confirmed respondents when two different people share one NIK', () => {
+  const respondents = Array.from({ length: EXPECTED_REAL_PPKS_COUNT }, (_, index) => {
+    const nik = String(index + 1).padStart(16, '0');
+    return record({
+      id: `sheet-row-${index + 2}`,
+      namaLengkap: `Responden ${index + 1}`,
+      nik,
+      noHpWa: `08123456${String(index).padStart(4, '0')}`,
+      timestamp: `2026-10-26T08:${String(index).padStart(2, '0')}:00`,
+      officialAssessment: { q23: nik },
+    });
+  });
+  const falseNIKCollision: PPKSRecord = {
+    ...respondents[45],
+    id: 'sheet-row-47',
+    namaLengkap: 'Responden Keempat Puluh Enam',
+    nik: respondents[0].nik,
+    noHpWa: '089999999999',
+    timestamp: '2026-10-27T10:00:00',
+    officialAssessment: { q23: respondents[0].nik },
+  };
+
+  const sourceRows = [...respondents.slice(0, 45), falseNIKCollision];
+  assert.equal(sourceRows.length, 46);
+  assert.equal(deduplicatePPKSRecords(sourceRows).length, 46);
 });

@@ -8,7 +8,7 @@ import { GOOGLE_SIPANDU_RESOURCES } from './googleSIPANDUResources';
 import { getPhotoUploadMimeType, isSupportedPhotoFile, MAX_PPKS_PHOTO_FILE_BYTES } from './photoFilePreview';
 import { ATENSI_PHOTO_COLUMN_INDICES, readAtensiProfileCell, readAtensiGender } from './atensiColumnMapping';
 import { readInterventionRecommendationFromRow } from './interventionMapping';
-import { isLegacySamplePPKS, isObviousDemoMarker, LEGACY_SAMPLE_PPKS_IDS, LEGACY_SAMPLE_PPKS_NAMES } from '../data/initialData';
+import { isLegacySamplePPKSId, isObviousDemoMarker, LEGACY_SAMPLE_PPKS_IDS, LEGACY_SAMPLE_PPKS_NAMES } from '../data/initialData';
 
 export interface GoogleDriveFile {
   id: string;
@@ -1385,7 +1385,7 @@ export async function importPPKSFromSpreadsheet(
     Boolean(useATENSIColumnPositions ? String(row[2] ?? '').trim() : readRespondentName(headers, row))
   ).length;
   const allMappedRecords = mapRowsToPPKSRecords(rows, useATENSIColumnPositions);
-  const recordsAfterSampleFilter = allMappedRecords.filter((record) => !isLegacySamplePPKS(record));
+  const recordsAfterSampleFilter = allMappedRecords.filter((record) => !isLegacySamplePPKSId(record.id));
   let records = sortPPKSRecordsByTimestamp(deduplicatePPKSRecords(recordsAfterSampleFilter));
   const sampleRecordsFiltered = allMappedRecords.length - recordsAfterSampleFilter.length;
   const duplicateRowsCollapsed = recordsAfterSampleFilter.length - records.length;
