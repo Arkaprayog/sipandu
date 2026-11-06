@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { ProfileUser } from '../types';
 import { Bell, Settings, LogOut, Edit3, Cloud, User, Sunrise, Sun, Sunset, Moon, MapPin, Thermometer } from 'lucide-react';
 import { SipanduLogo } from './SipanduLogo';
+import { getPreciseDevicePosition } from '../lib/deviceGeolocation';
 
 interface HeaderProps {
   currentUser: string;
@@ -30,7 +31,11 @@ export const Header: React.FC<HeaderProps> = ({
   const [currentTimeStr, setCurrentTimeStr] = useState<string>('');
   const [greeting, setGreeting] = useState<string>('Pagi');
   const [locationStatus, setLocationStatus] = useState<'loading' | 'ready' | 'unavailable'>('loading');
+  const [locationAccuracy, setLocationAccuracy] = useState<number | null>(null);
+  const [locationError, setLocationError] = useState<string>('');
+  const locationRefreshRef = useRef<(() => void) | null>(null);
   const [weatherStatus, setWeatherStatus] = useState<'loading' | 'ready' | 'unavailable'>('loading');
+  const [weatherError, setWeatherError] = useState<string>('');
   const [locationLabel, setLocationLabel] = useState<string>('');
   const [temperature, setTemperature] = useState<number | null>(null);
   const [failedProfilePhotoUrls, setFailedProfilePhotoUrls] = useState<string[]>([]);
@@ -69,39 +74,73 @@ export const Header: React.FC<HeaderProps> = ({
     return () => clearInterval(interval);
   }, []);
 
-  // Lokasi diminta melalui izin GPS perangkat. Koordinat hanya digunakan
-  // untuk mengambil nama wilayah dan suhu saat ini; tidak disimpan ke akun SIPANDU.
+  // Lokasi GPS presisi diminta melalui plugin Capacitor. Pada APK plugin
+  // menggunakan izin native ACCESS_FINE_LOCATION; pada PWA Android/iOS plugin
+  // meneruskan permintaan ke Geolocation browser dengan high accuracy.
   useEffect(() => {
     let active = true;
     let requestInProgress = false;
 
-    const requestLocationAndWeather = () => {
-      if (!active || requestInProgress) return;
-      if (!navigator.geolocation) {
-        setLocationStatus('unavailable');
-        setWeatherStatus('unavailable');
-        return;
-      }
-
-      requestInProgress = true;
-      navigator.geolocation.getCurrentPosition(({ coords }) => {
-        if (!active) {
-          requestInProgress = false;
-          return;
+    const fetchJson = async (url: string, timeoutMs: number): Promise<any> => {
+      const controller = new AbortController();
+      const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
+      try {
+        const response = await fetch(url, { signal: controller.signal });
+        if (!response.ok) {
+          throw new Error('Layanan mengembalikan HTTP ' + response.status + '.');
         }
+        return await response.json();
+      } catch (error) {
+        if (error instanceof Error && error.name === 'AbortError') {
+          throw new Error('Layanan tidak merespons sebelum batas waktu.');
+        }
+        throw error;
+      } finally {
+        window.clearTimeout(timeout);
+      }
+    };
 
-        const query = `latitude=${encodeURIComponent(String(coords.latitude))}&longitude=${encodeURIComponent(String(coords.longitude))}`;
-        const controller = new AbortController();
-        const requestTimeout = window.setTimeout(() => controller.abort(), 15000);
+    const requestLocationAndWeather = async () => {
+      if (!active || requestInProgress) return;
+      requestInProgress = true;
+      setLocationStatus('loading');
+      setWeatherStatus('loading');
+      setLocationError('');
+      setWeatherError('');
 
-        // Nama wilayah dan suhu dimuat secara independen. Kegagalan satu layanan
-        // tidak menyembunyikan hasil dari layanan yang lain.
-        const placeRequest = fetch(
-          `https://api.bigdatacloud.net/data/reverse-geocode-client?${query}&localityLanguage=id`,
-          { signal: controller.signal }
-        ).then(async (response) => {
-          if (!response.ok) throw new Error(`Layanan lokasi HTTP ${response.status}`);
-          const place = await response.json();
+      try {
+        const position = await getPreciseDevicePosition();
+        if (!active) return;
+
+        const latitude = position.coords.latitude;
+        const longitude = position.coords.longitude;
+        const accuracy = position.coords.accuracy;
+        const query = 'latitude=' + encodeURIComponent(String(latitude)) +
+          '&longitude=' + encodeURIComponent(String(longitude));
+
+        // Koordinat GPS adalah hasil lokasi yang valid. Tampilkan segera agar
+        // gangguan reverse-geocoding tidak membuat lokasi ikut hilang.
+        setLocationLabel(latitude.toFixed(5) + ', ' + longitude.toFixed(5));
+        setLocationAccuracy(accuracy);
+        setLocationStatus('ready');
+
+        const results = await Promise.allSettled([
+          fetchJson(
+            'https://api.bigdatacloud.net/data/reverse-geocode-client?' + query + '&localityLanguage=id',
+            12000
+          ),
+          fetchJson(
+            'https://api.open-meteo.com/v1/forecast?' + query + '&current=temperature_2m&timezone=Asia%2FJakarta',
+            15000
+          ),
+        ]);
+
+        if (!active) return;
+        const placeResult = results[0];
+        const weatherResult = results[1];
+
+        if (placeResult.status === 'fulfilled') {
+          const place = placeResult.value;
           const administrative = Array.isArray(place.localityInfo?.administrative)
             ? place.localityInfo.administrative
             : [];
@@ -122,69 +161,72 @@ export const Header: React.FC<HeaderProps> = ({
           const name = candidates.find((candidate) =>
             typeof candidate === 'string' && candidate.trim().length > 0
           );
-          if (!name) throw new Error('Nama wilayah tidak tersedia dari layanan lokasi.');
-          if (active) {
-            setLocationLabel(name.trim());
-            setLocationStatus('ready');
+          if (name) {
+            setLocationLabel(String(name).trim());
+          } else {
+            setLocationError('Nama wilayah belum tersedia; koordinat GPS tetap ditampilkan.');
           }
-        }).catch((error) => {
-          if (active) {
-            setLocationStatus('unavailable');
-            console.warn('SIPANDU: lokasi saat ini belum berhasil dimuat.', error);
-          }
-        });
+        } else {
+          const reason = placeResult.reason;
+          const detail = reason instanceof Error ? reason.message : String(reason);
+          setLocationError('Nama wilayah belum dapat dimuat (' + detail + '); koordinat GPS tetap ditampilkan.');
+          console.warn('SIPANDU: reverse geocoding gagal; koordinat GPS tetap tersedia.', reason);
+        }
 
-        const weatherRequest = fetch(
-          `https://api.open-meteo.com/v1/forecast?${query}&current=temperature_2m&timezone=Asia%2FJakarta`,
-          { signal: controller.signal }
-        ).then(async (response) => {
-          if (!response.ok) throw new Error(`Layanan suhu HTTP ${response.status}`);
-          const weather = await response.json();
+        if (weatherResult.status === 'fulfilled') {
+          const weather = weatherResult.value;
           const rawTemperature = weather.current?.temperature_2m;
           const value = typeof rawTemperature === 'number' ? rawTemperature : Number(rawTemperature);
           if (rawTemperature === null || rawTemperature === undefined || !Number.isFinite(value)) {
-            throw new Error('Data suhu saat ini tidak tersedia.');
-          }
-          if (active) {
+            setWeatherStatus('unavailable');
+            setWeatherError('Layanan cuaca tidak mengembalikan suhu saat ini.');
+          } else {
             setTemperature(value);
             setWeatherStatus('ready');
           }
-        }).catch((error) => {
-          if (active) {
-            setWeatherStatus('unavailable');
-            console.warn('SIPANDU: suhu saat ini belum berhasil dimuat.', error);
-          }
-        });
-
-        void Promise.allSettled([placeRequest, weatherRequest]).finally(() => {
-          window.clearTimeout(requestTimeout);
-          requestInProgress = false;
-        });
-      }, (error) => {
-        requestInProgress = false;
+        } else {
+          const reason = weatherResult.reason;
+          const detail = reason instanceof Error ? reason.message : String(reason);
+          setWeatherStatus('unavailable');
+          setWeatherError('Suhu saat ini belum dapat dimuat: ' + detail);
+          console.warn('SIPANDU: pengambilan suhu gagal.', reason);
+        }
+      } catch (error) {
         if (!active) return;
+        const message = error instanceof Error ? error.message : String(error);
         setLocationStatus('unavailable');
+        setLocationError(message);
         setWeatherStatus('unavailable');
-        console.warn('SIPANDU: posisi GPS belum berhasil diperoleh.', error.message);
-      }, {
-        enableHighAccuracy: false,
-        timeout: 12000,
-        maximumAge: 5 * 60 * 1000,
-      });
+        setWeatherError('Suhu menunggu koordinat GPS yang valid.');
+        console.warn('SIPANDU: lokasi presisi belum berhasil diperoleh.', error);
+      } finally {
+        requestInProgress = false;
+      }
     };
 
-    const refreshWhenOnline = () => requestLocationAndWeather();
+    // Tombol di header memanggil fungsi ini langsung dari sentuhan pengguna,
+    // penting untuk PWA iOS yang dapat membatasi dialog izin tanpa user gesture.
+    locationRefreshRef.current = () => {
+      void requestLocationAndWeather();
+    };
+
+    const refreshWhenOnline = () => {
+      void requestLocationAndWeather();
+    };
     const refreshWhenVisible = () => {
-      if (document.visibilityState === 'visible') requestLocationAndWeather();
+      if (document.visibilityState === 'visible') void requestLocationAndWeather();
     };
 
-    requestLocationAndWeather();
-    const refreshInterval = window.setInterval(requestLocationAndWeather, 30 * 60 * 1000);
+    void requestLocationAndWeather();
+    const refreshInterval = window.setInterval(() => {
+      if (document.visibilityState === 'visible') void requestLocationAndWeather();
+    }, 30 * 60 * 1000);
     window.addEventListener('online', refreshWhenOnline);
     document.addEventListener('visibilitychange', refreshWhenVisible);
 
     return () => {
       active = false;
+      locationRefreshRef.current = null;
       window.clearInterval(refreshInterval);
       window.removeEventListener('online', refreshWhenOnline);
       document.removeEventListener('visibilitychange', refreshWhenVisible);
@@ -212,21 +254,35 @@ export const Header: React.FC<HeaderProps> = ({
             )}
             <span className="shrink-0 font-semibold text-sky-200">Selamat {greeting}</span>
             <span className="shrink-0 font-semibold tabular-nums text-sky-200">{currentTimeStr}</span>
-            <span className="mx-0.5 h-3 w-px shrink-0 bg-white/25" aria-hidden="true" />
-            <MapPin className="h-3 w-3 shrink-0 text-emerald-300" aria-hidden="true" />
-            <span
-              className="max-w-[78px] shrink-0 truncate text-neutral-200 sm:max-w-[110px]"
-              title={locationLabel || (locationStatus === 'loading' ? 'Sedang mencari lokasi' : 'Lokasi tidak tersedia')}
+            <button
+              type="button"
+              onClick={() => locationRefreshRef.current?.()}
+              disabled={locationStatus === 'loading'}
+              className="inline-flex shrink-0 items-center gap-1 rounded-md px-1 py-0.5 text-neutral-200 hover:bg-white/10 disabled:cursor-wait disabled:opacity-75"
+              title={locationError || 'Tekan untuk meminta lokasi GPS presisi terbaru'}
+              aria-label={locationError || 'Perbarui lokasi GPS SIPANDU'}
             >
-              {locationLabel || (locationStatus === 'loading' ? 'Mencari…' : 'Tidak tersedia')}
-            </span>
+              <MapPin className="h-3 w-3 shrink-0 text-emerald-300" aria-hidden="true" />
+              <span className="max-w-[110px] truncate">
+                {locationStatus === 'loading'
+                  ? 'Mencari GPS…'
+                  : locationStatus === 'unavailable'
+                    ? 'Coba lagi'
+                    : locationLabel}
+              </span>
+              {locationStatus === 'ready' && locationAccuracy !== null && (
+                <span className="shrink-0 text-[9px] tabular-nums text-emerald-200/90" title="Perkiraan radius akurasi koordinat GPS">
+                  ±{Math.round(locationAccuracy)}m
+                </span>
+              )}
+            </button>
             <span className="mx-0.5 h-3 w-px shrink-0 bg-white/25" aria-hidden="true" />
             <Thermometer className="h-3 w-3 shrink-0 text-orange-300" aria-hidden="true" />
             <span
               className="shrink-0 font-medium tabular-nums text-neutral-200"
-              title={weatherStatus === 'unavailable' ? 'Data suhu saat ini belum tersedia' : 'Suhu saat ini'}
+              title={weatherError || 'Suhu udara saat ini berdasarkan koordinat lokasi perangkat'}
             >
-              {temperature !== null ? `${Math.round(temperature)}°C` : weatherStatus === 'loading' ? 'Memuat…' : '—°C'}
+              {temperature !== null ? Math.round(temperature) + '°C' : weatherStatus === 'loading' ? 'Memuat…' : '—°C'}
             </span>
           </div>
 
