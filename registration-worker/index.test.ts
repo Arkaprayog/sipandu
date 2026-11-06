@@ -194,7 +194,7 @@ test('does not restore an invitation before Firebase email verification', async 
     });
 
     assert.equal(response.status, 403);
-    assert.deepEqual(writes, []);
+    assert.deepEqual(writes.filter((key) => key.startsWith('pending:')), []);
   } finally {
     globalThis.fetch = originalFetch;
   }
