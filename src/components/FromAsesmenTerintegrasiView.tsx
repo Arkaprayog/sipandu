@@ -532,7 +532,8 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
 
       const safeRespondent = (record.namaLengkap || record.id)
         .normalize('NFKC').replace(/[\\/:*?"<>|]+/g, '_').replace(/\s+/g, '-').slice(0, 80);
-      const safeNik = String(record.nik || '').replace(/\D/g, '') || 'tanpa-NIK';
+      const nikValue = String(record.nik || record.formAsesmenTerintegrasi?.q23 || '');
+      const safeNik = nikValue.replace(/\D/g, '') || 'tanpa-NIK';
       const stamp = new Date().toISOString().replace(/[:.]/g, '-');
       fileName = `Form-Asesmen-Terintegrasi-${safeRespondent}-${safeNik}-${stamp}.pdf`;
 
@@ -540,7 +541,7 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
         const driveCopy = await backupAssessmentToCentralDrive({
           ppksId: record.id,
           ppksName: record.namaLengkap || record.id,
-          nik: record.nik || '',
+          nik: nikValue,
           fileName,
           pdf,
         });
