@@ -166,7 +166,7 @@ body,
 /* Header and panel surfaces use pale sage. */
 .sipandu-navigation-shell[data-sipandu-theme="light"] .app-header-compact {
   background: #E8EFE3 !important;
-  background-color: #000000 !important;
+  background-color: #E8EFE3 !important;
   background-image: none !important;
   color: #000000 !important;
   border-bottom: 1px solid #E8EFE3 !important;
@@ -191,7 +191,7 @@ body,
 
 .sipandu-navigation-shell[data-sipandu-theme="light"] [class*="bg-black/"]:not(.fixed) {
   background: #E8EFE3 !important;
-  background-color: #000000 !important;
+  background-color: #E8EFE3 !important;
   background-image: none !important;
 }
 
@@ -206,7 +206,7 @@ body,
 .sipandu-navigation-shell[data-sipandu-theme="light"] select {
   color: #000000 !important;
   background-color: #FFFFFF !important;
-  border-color: #000000 !important;
+  border-color: #E8EFE3 !important;
 }
 
 .sipandu-navigation-shell[data-sipandu-theme="light"] input::placeholder,
@@ -231,7 +231,7 @@ body,
 /* Bottom navigation surface and active accent use the specified palette. */
 .sipandu-navigation-shell[data-sipandu-theme="light"] .app-nav-bar {
   background: #E8EFE3 !important;
-  background-color: #000000 !important;
+  background-color: #E8EFE3 !important;
   border-top: 1px solid #6495ED !important;
   box-shadow: none !important;
 }
@@ -266,9 +266,9 @@ body,
 
 .sipandu-navigation-shell[data-sipandu-theme="light"] .profile-role-badge {
   background: #E8EFE3 !important;
-  background-color: #000000 !important;
+  background-color: #E8EFE3 !important;
   color: #000000 !important;
-  border-color: #000000 !important;
+  border-color: #E8EFE3 !important;
 }
 
 /* Keep the North Sumatra map spacious on wide desktop landscape screens. */
