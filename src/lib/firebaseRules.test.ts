@@ -58,6 +58,60 @@ test('Pendamping hanya dapat mengubah map Form Asesmen Terintegrasi pada PPKS', 
   }));
 });
 
+test('Pendamping dapat menyimpan jawaban asesmen walau dokumen roster PPKS belum ada', async () => {
+  const firestore = environment.authenticatedContext(PENDAMPING_UID, {
+    role: 'pendamping',
+  }).firestore();
+  const answerDoc = doc(firestore, 'integratedAssessmentAnswers', 'sheet-row-99');
+
+  await assertSucceeds(setDoc(answerDoc, {
+    ppksId: 'sheet-row-99',
+    formAsesmenTerintegrasi: {
+      q1: '2026-11-06',
+      q16: 'Responden dari spreadsheet',
+      q91: 'Jawaban terakhir',
+    },
+    updatedBy: PENDAMPING_UID,
+    updatedAt: serverTimestamp(),
+  }));
+
+  await assertSucceeds(updateDoc(answerDoc, {
+    formAsesmenTerintegrasi: {
+      q1: '2026-11-06',
+      q16: 'Responden dari spreadsheet',
+      q2: 'Jawaban diperbarui',
+    },
+    updatedAt: serverTimestamp(),
+  }));
+
+  await assertFails(setDoc(doc(firestore, 'integratedAssessmentAnswers', 'wrong-id'), {
+    ppksId: 'another-id',
+    formAsesmenTerintegrasi: { q1: '2026-11-06' },
+    updatedBy: PENDAMPING_UID,
+    updatedAt: serverTimestamp(),
+  }));
+
+  await assertFails(updateDoc(answerDoc, {
+    namaLengkap: 'Tidak boleh mengubah profil utama',
+    updatedAt: serverTimestamp(),
+  }));
+
+  await assertFails(setDoc(doc(firestore, 'integratedAssessmentAnswers', 'invalid-question'), {
+    ppksId: 'invalid-question',
+    formAsesmenTerintegrasi: { q92: 'Field di luar formulir' },
+    updatedBy: PENDAMPING_UID,
+    updatedAt: serverTimestamp(),
+  }));
+
+  const nonStaff = environment.authenticatedContext('not-a-staff-member').firestore();
+  await assertFails(setDoc(doc(nonStaff, 'integratedAssessmentAnswers', 'blocked'), {
+    ppksId: 'blocked',
+    formAsesmenTerintegrasi: { q1: '2026-11-06' },
+    updatedBy: 'not-a-staff-member',
+    updatedAt: serverTimestamp(),
+  }));
+});
+
 test('Dokumen staf hanya dapat dibuat pada folder pemilik dan backup Drive hanya mengubah metadata', async () => {
   const firestore = environment.authenticatedContext(PENDAMPING_UID, {
     role: 'pendamping',
