@@ -36,6 +36,13 @@ not_found = [element for pattern, element in required if not re.search(pattern, 
 if not_found:
     raise SystemExit("Precise GPS permissions are still missing from AndroidManifest.xml.")
 
+registries = list(Path("android").rglob("capacitor.plugins.json"))
+if not registries:
+    raise SystemExit("Capacitor plugin registry was not generated after sync.")
+registry_content = "\n".join(path.read_text(encoding="utf-8") for path in registries).lower()
+if "geolocation" not in registry_content:
+    raise SystemExit("The @capacitor/geolocation plugin is not registered in the generated Android project.")
+
 print("Verified Android foreground location permissions:")
 print(" - ACCESS_COARSE_LOCATION")
 print(" - ACCESS_FINE_LOCATION")
