@@ -914,7 +914,7 @@ export function subscribeToIntegratedAssessmentAnswers(
           if (!answers || typeof answers !== 'object' || Array.isArray(answers)) continue;
           const safeAnswers = Object.fromEntries(
             Object.entries(answers as Record<string, unknown>).filter(([key, value]) =>
-              /^q(?:[1-9]|[1-8][0-9]|91)$/.test(key)
+              /^q(?:[1-9]|[1-8][0-9]|9[01])$/.test(key)
               && (typeof value === 'string'
                 || (Array.isArray(value) && value.every((entry) => typeof entry === 'string')))
             ),
