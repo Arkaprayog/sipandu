@@ -33,3 +33,10 @@ The owner has declined upgrading the Firebase project to the Blaze billing plan.
 The current dashboard's PPKS records and integrated-assessment answers use Cloud Firestore; integrated-assessment backup files are handled through the existing Google Drive integration. The legacy `src/lib/documentStorage.ts` / `src/components/SuratTugasEditor.tsx` path still imports Firebase Storage but is not imported by the active dashboard route. Do not re-enable that legacy screen until its file-storage path is migrated and tested. Cloudflare R2 was not provisioned for SIPANDU in this audit; the two existing R2 buckets belong to other projects and must not be reused for SIPANDU data.
 
 A successful workflow deploy step is the evidence that production Rules were published. A successful emulator test alone is not that evidence.
+
+## Integrated assessment answer storage
+
+The current standalone **From Asesmen Terintegrasi** form stores its answer map in the staff-only Firestore collection `integratedAssessmentAnswers/{ppksId}`. This collection is independent from the spreadsheet-owned `ppks/{ppksId}` roster so a verified `pendamping` can save form answers even when the roster document has not yet been synchronized. The document contains only the PPKS source ID, answer map, writer UID, and update timestamp; it cannot create or modify the respondent's profile or identity fields. When the `ppks` document exists, SIPANDU also mirrors the answer map there for compatibility with older app builds.
+
+Production Firestore Rules must include the `integratedAssessmentAnswers` match block before the updated app attempts to save to this collection. The `firebase-rules.yml` workflow runs emulator tests first and deploys only the Firestore Rules to the named SIPANDU database after a successful push to `main`.
+

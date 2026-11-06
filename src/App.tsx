@@ -26,12 +26,12 @@ const SettingsModal = lazyWithRecovery('SettingsModal', () => import('./componen
 const NotificationsModal = lazyWithRecovery('NotificationsModal', () => import('./components/NotificationsModal').then((module) => ({ default: module.NotificationsModal })));
 const GoogleWorkspaceModal = lazyWithRecovery('GoogleWorkspaceModal', () => import('./components/GoogleWorkspaceModal').then((module) => ({ default: module.GoogleWorkspaceModal })));
 import { onAuthStateChanged, signOut, getIdTokenResult } from 'firebase/auth';
-import { auth, getAccessToken, savePPKSToFirestore, saveIntegratedAssessmentToFirestore, replacePPKSCollectionFromSpreadsheet, googleLogout, subscribeToPPKSChanges, saveStageOneIntakeToFirestore, subscribeToStageOneIntake, staffAuthPersistenceReady, isWorkspaceAccountConnected, invalidateAccessToken, getSIPANDUUserProfile, saveSIPANDUUserProfile } from './lib/firebase';
+import { auth, getAccessToken, savePPKSToFirestore, saveIntegratedAssessmentToFirestore, replacePPKSCollectionFromSpreadsheet, googleLogout, subscribeToPPKSChanges, subscribeToIntegratedAssessmentAnswers, saveStageOneIntakeToFirestore, subscribeToStageOneIntake, staffAuthPersistenceReady, isWorkspaceAccountConnected, invalidateAccessToken, getSIPANDUUserProfile, saveSIPANDUUserProfile } from './lib/firebase';
 import { activatePendingTeamMember, restorePendingTeamInvitation } from './lib/teamRegistration';
 import { ensureSIPANDUDatabaseSheet, extractSpreadsheetId, getLinkedSpreadsheetUrlForForm, importPPKSFromSpreadsheet, upsertPPKSInSpreadsheet } from './lib/googleWorkspace';
 import { GOOGLE_SIPANDU_RESOURCES } from './lib/googleSIPANDUResources';
 import { getLiveSyncRetryDelay, LIVE_SYNC_INTERVAL_MS } from './lib/liveSyncPolicy';
-import { getCloudOnlyCompletedAssessments } from './lib/integratedAssessmentArchive';
+import { getCloudOnlyCompletedAssessments, mergeIntegratedAssessmentAnswers, type IntegratedAssessmentAnswersById } from './lib/integratedAssessmentArchive';
 import { preservePPKSRecordOrder } from './lib/ppksRecordState';
 import { filterStageOneNotificationSubmissions } from './lib/stageOneRespondents';
 import { deduplicatePPKSRecords, parsePPKSTimestamp, samePPKSIdentity, sortPPKSRecordsByName, sortPPKSRecordsByTimestamp } from './lib/ppksData';
@@ -387,6 +387,7 @@ function StaffApp() {
 
   // Defer parsing potentially large PPKS/photo data until Firebase confirms authorization.
   const [ppksList, setPpksList] = useState<PPKSRecord[]>([]);
+  const [integratedAssessmentAnswers, setIntegratedAssessmentAnswers] = useState<IntegratedAssessmentAnswersById>({});
   // A separate feed for submissions made through the stage-one Form link/barcode.
   // This state must never be populated from googleSpreadsheetSourceUrl.
   const [stageOneRespondents, setStageOneRespondents] = useState<PPKSRecord[]>([]);
@@ -1255,6 +1256,110 @@ function StaffApp() {
       document.removeEventListener('visibilitychange', handleVisibility);
     };
   }, [authReady, isAuthenticated, localCacheReady]);
+
+  // Canonical answer-only records are independent from the roster. This feed
+  // keeps a pendamping's saved answers visible even if the owner has not yet
+  // materialized the matching spreadsheet respondent in /ppks.
+  useEffect(() => {
+    if (!authReady || !isAuthenticated || !localCacheReady) {
+      setIntegratedAssessmentAnswers({});
+      return;
+    }
+
+    let active = true;
+    let unsubscribe: (() => void) | null = null;
+    let retryTimer: number | undefined;
+    let retryCount = 0;
+    const online = () => typeof navigator === 'undefined' || navigator.onLine !== false;
+
+    const clearRetry = () => {
+      if (retryTimer !== undefined) {
+        window.clearTimeout(retryTimer);
+        retryTimer = undefined;
+      }
+    };
+
+    const scheduleReconnect = (error?: Error) => {
+      if (!active) return;
+      if (unsubscribe) {
+        unsubscribe();
+        unsubscribe = null;
+      }
+      clearRetry();
+      retryCount += 1;
+      const delay = getLiveSyncRetryDelay(retryCount);
+      if (error) console.warn('SIPANDU integrated assessment answer listener disconnected:', error);
+      retryTimer = window.setTimeout(() => {
+        retryTimer = undefined;
+        connect();
+      }, delay);
+    };
+
+    const connect = () => {
+      if (!active || unsubscribe) return;
+      if (!online()) {
+        scheduleReconnect(new Error('Tidak ada koneksi internet.'));
+        return;
+      }
+      try {
+        unsubscribe = subscribeToIntegratedAssessmentAnswers((answersById) => {
+          if (!active) return;
+          retryCount = 0;
+          setIntegratedAssessmentAnswers(answersById);
+        }, (error) => {
+          if (!active) return;
+          unsubscribe = null;
+          scheduleReconnect(error);
+        });
+      } catch (error) {
+        scheduleReconnect(error instanceof Error ? error : new Error(String(error)));
+      }
+    };
+
+    const wakeReconnect = () => {
+      if (!active || unsubscribe || !online()) return;
+      clearRetry();
+      retryCount = 0;
+      connect();
+    };
+    const handleOffline = () => {
+      if (!active) return;
+      if (unsubscribe) {
+        unsubscribe();
+        unsubscribe = null;
+      }
+      clearRetry();
+    };
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') wakeReconnect();
+    };
+
+    window.addEventListener('online', wakeReconnect);
+    window.addEventListener('offline', handleOffline);
+    window.addEventListener('focus', wakeReconnect);
+    window.addEventListener('pageshow', wakeReconnect);
+    document.addEventListener('visibilitychange', handleVisibility);
+    connect();
+
+    return () => {
+      active = false;
+      clearRetry();
+      if (unsubscribe) unsubscribe();
+      unsubscribe = null;
+      window.removeEventListener('online', wakeReconnect);
+      window.removeEventListener('offline', handleOffline);
+      window.removeEventListener('focus', wakeReconnect);
+      window.removeEventListener('pageshow', wakeReconnect);
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
+  }, [authReady, isAuthenticated, localCacheReady]);
+
+  // Overlay only answer maps onto existing spreadsheet roster rows. Do not
+  // synthesize profile-less PPKS records when an assessment exists without /ppks.
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    setPpksList((current) => mergeIntegratedAssessmentAnswers(current, integratedAssessmentAnswers));
+  }, [integratedAssessmentAnswers, isAuthenticated, ppksList]);
 
   // Asesmen Tahap Awal berasal dari koleksi intake native SIPANDU, bukan Google Form.
   useEffect(() => {

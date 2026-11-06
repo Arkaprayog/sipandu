@@ -27,3 +27,48 @@ export function getCloudOnlyCompletedAssessments(
     !localIds.has(record.id) && hasCompletedIntegratedAnswers(record)
   );
 }
+
+
+export type IntegratedAssessmentAnswersById = Record<string, Record<string, string | string[]>>;
+
+function areAnswerMapsEqual(
+  left: Record<string, string | string[]>,
+  right: Record<string, string | string[]>,
+): boolean {
+  const leftKeys = Object.keys(left);
+  const rightKeys = Object.keys(right);
+  if (leftKeys.length !== rightKeys.length) return false;
+  return leftKeys.every((key) => {
+    if (!Object.prototype.hasOwnProperty.call(right, key)) return false;
+    const a = left[key];
+    const b = right[key];
+    if (Array.isArray(a) || Array.isArray(b)) {
+      return Array.isArray(a) && Array.isArray(b)
+        && a.length === b.length
+        && a.every((value, index) => value === b[index]);
+    }
+    return a === b;
+  });
+}
+
+/**
+ * Overlays the canonical answer-only Firestore collection onto the spreadsheet
+ * roster. It never creates an incomplete PPKS profile when a roster document is
+ * missing, and it preserves the original roster object when answers are unchanged.
+ */
+export function mergeIntegratedAssessmentAnswers(
+  records: PPKSRecord[],
+  answersById: IntegratedAssessmentAnswersById,
+): PPKSRecord[] {
+  let changed = false;
+  const merged = records.map((record) => {
+    const storedAnswers = answersById[record.id];
+    if (!storedAnswers) return record;
+    const currentAnswers = record.formAsesmenTerintegrasi || {};
+    const nextAnswers = { ...currentAnswers, ...storedAnswers };
+    if (areAnswerMapsEqual(currentAnswers, nextAnswers)) return record;
+    changed = true;
+    return { ...record, formAsesmenTerintegrasi: nextAnswers };
+  });
+  return changed ? merged : records;
+}
