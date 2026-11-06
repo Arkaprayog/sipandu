@@ -562,7 +562,9 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
           });
           return { pdf, fileName, driveUrl: driveCopy.webViewLink || '', backupError: '' };
         } catch (metadataError) {
-          try { await deleteCentralDriveFile(driveCopy.id); } catch { /* preserve metadata error */ }
+          if (!driveCopy.replacedExisting) {
+            try { await deleteCentralDriveFile(driveCopy.id); } catch { /* preserve metadata error */ }
+          }
           throw metadataError;
         }
       } catch (driveError) {
