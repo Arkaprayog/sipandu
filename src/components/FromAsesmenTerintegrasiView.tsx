@@ -794,159 +794,80 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
   ]);
 
   const handlePrint = async () => {
+    if (isSaving || preparingPrint) return;
     if (!currentPPKS) {
       setStatusMessage({ type: 'error', text: 'Pilih responden PPKS terlebih dahulu agar lembar asesmen dan empat lampiran foto terikat pada responden yang benar.' });
       return;
     }
+
     setPreparingPrint(true);
     setStatusMessage(null);
-    releasePrintPhotoUrls();
-
-    const urls: Record<string, string> = {};
-    const errors: Record<string, string> = {};
     try {
-      if (onBeforePrint) {
-        const cleanAnswers: Record<string, string | string[]> = {};
-        Object.entries(answers).forEach(([key, value]) => {
-          cleanAnswers[key] = Array.isArray(value) ? value.filter(Boolean) : String(value ?? '');
-        });
-        const identityOnly = new Set(['q5', 'q15', 'q16', 'q19', 'q23', 'q25']);
-        const hasMeaningfulAnswers = Object.entries(cleanAnswers).some(([key, value]) => {
-          if (identityOnly.has(key.toLowerCase())) return false;
-          return Array.isArray(value)
-            ? value.some((item) => String(item ?? '').trim() !== '')
-            : String(value ?? '').trim() !== '';
-        });
-        if (hasMeaningfulAnswers) {
-          // A printed form is also archived in Firestore, even when the user did not press Save Form first.
-          await onBeforePrint({ ...currentPPKS, formAsesmenTerintegrasi: cleanAnswers });
-          setStatusMessage({ type: 'success', text: 'Form berhasil diarsipkan ke database SIPANDU. Menyiapkan dokumen untuk dicetak…' });
-        }
-      }
-
-      // Always prepare all four photo appendices. Missing files get an explicit
-      // explanation page instead of a blank sheet.
-      await Promise.all(printablePhotos.map(async (photo) => {
-        try {
-          const resolved = await resolvePhotoForPrint(photo.source);
-          if (resolved.url) urls[photo.key] = resolved.url;
-          if (resolved.error) errors[photo.key] = resolved.error;
-        } catch (error) {
-          errors[photo.key] = error instanceof Error ? error.message : String(error);
-        }
-      }));
-
-      setPrintPhotoUrls(urls);
-      setPrintPhotoErrors(errors);
-      // Allow React to render the print appendices before checking their images.
-      await new Promise<void>((resolve) => requestAnimationFrame(() =>
-        requestAnimationFrame(() => resolve())
-      ));
-
-      const shell = document.querySelector('.official-assessment-shell');
-      const images = shell ? Array.from(shell.querySelectorAll('img')) : [];
-      await Promise.all(images.map((image) => {
-        if (image.complete && image.naturalWidth > 0) return Promise.resolve();
-        return new Promise<void>((resolve) => {
-          let finished = false;
-          const finish = () => {
-            if (finished) return;
-            finished = true;
-            window.clearTimeout(timer);
-            image.removeEventListener('load', finish);
-            image.removeEventListener('error', finish);
-            resolve();
-          };
-          const timer = window.setTimeout(finish, 3500);
-          image.addEventListener('load', finish, { once: true });
-          image.addEventListener('error', finish, { once: true });
-        });
-      }));
-      if (document.fonts?.ready) await document.fonts.ready;
-
-      if (!shell) throw new Error('Area Form Asesmen Terintegrasi tidak ditemukan untuk dicetak.');
-
-      // Print a dedicated clone directly under <body>. The old approach hid
-      // every element outside <main> and assumed a particular React DOM tree;
-      // on mobile Chrome this could leave the print renderer with blank pages.
-      // A self-contained root makes the PDF independent of dashboard wrappers.
-      const printRootId = 'sipandu-official-print-root';
-      document.getElementById(printRootId)?.remove();
-      const printRoot = document.createElement('div');
-      printRoot.id = printRootId;
-      const printClone = shell.cloneNode(true) as HTMLElement;
-
-      // React-controlled form values are DOM properties; copy them explicitly
-      // because cloneNode alone does not preserve every live input/checked value.
-      const sourceControls = Array.from(shell.querySelectorAll('input, textarea, select'));
-      const targetControls = Array.from(printClone.querySelectorAll('input, textarea, select'));
-      sourceControls.forEach((sourceControl, index) => {
-        const targetControl = targetControls[index];
-        if (!targetControl) return;
-        if (sourceControl instanceof HTMLInputElement && targetControl instanceof HTMLInputElement) {
-          targetControl.value = sourceControl.value;
-          targetControl.checked = sourceControl.checked;
-          if (sourceControl.checked) targetControl.setAttribute('checked', '');
-          else targetControl.removeAttribute('checked');
-          if (sourceControl.value) targetControl.setAttribute('value', sourceControl.value);
-          else targetControl.removeAttribute('value');
-        } else if (sourceControl instanceof HTMLTextAreaElement && targetControl instanceof HTMLTextAreaElement) {
-          targetControl.value = sourceControl.value;
-          targetControl.textContent = sourceControl.value;
-        } else if (sourceControl instanceof HTMLSelectElement && targetControl instanceof HTMLSelectElement) {
-          targetControl.selectedIndex = sourceControl.selectedIndex;
-          Array.from(targetControl.options).forEach((option, optionIndex) => {
-            option.selected = optionIndex === sourceControl.selectedIndex;
-            if (option.selected) option.setAttribute('selected', '');
-            else option.removeAttribute('selected');
-          });
-        }
+      const cleanAnswers: Record<string, string | string[]> = {};
+      Object.entries(answers).forEach(([key, value]) => {
+        cleanAnswers[key] = Array.isArray(value) ? value.filter(Boolean) : String(value ?? '');
+      });
+      const identityOnly = new Set(['q5', 'q15', 'q16', 'q19', 'q23', 'q25']);
+      const hasMeaningfulAnswers = Object.entries(cleanAnswers).some(([key, value]) => {
+        if (identityOnly.has(key.toLowerCase())) return false;
+        return Array.isArray(value)
+          ? value.some((item) => String(item ?? '').trim() !== '')
+          : String(value ?? '').trim() !== '';
       });
 
-      printRoot.appendChild(printClone);
-      document.body.appendChild(printRoot);
-      document.body.classList.add('official-assessment-printing');
-      await new Promise<void>((resolve) => requestAnimationFrame(() =>
-        requestAnimationFrame(() => resolve())
-      ));
+      const updated: PPKSRecord = {
+        ...currentPPKS,
+        formAsesmenTerintegrasi: cleanAnswers,
+      };
+      if (onBeforePrint && hasMeaningfulAnswers) {
+        await onBeforePrint(updated);
+      }
 
-      const cloneImages = Array.from(printClone.querySelectorAll('img'));
-      await Promise.all(cloneImages.map((image) => {
-        if (image.complete && image.naturalWidth > 0) return Promise.resolve();
-        return new Promise<void>((resolve) => {
-          let finished = false;
-          const finish = () => {
-            if (finished) return;
-            finished = true;
-            window.clearTimeout(timer);
-            image.removeEventListener('load', finish);
-            image.removeEventListener('error', finish);
-            resolve();
-          };
-          const timer = window.setTimeout(finish, 2500);
-          image.addEventListener('load', finish, { once: true });
-          image.addEventListener('error', finish, { once: true });
+      // The same generated A4 PDF is both uploaded to Drive and sent to the print UI.
+      const archive = await createAndBackupAssessmentPdf(updated);
+      if (archive.backupError) {
+        setStatusMessage({
+          type: 'success',
+          text: 'PDF resmi berhasil dibuat. Jawaban tersimpan di Firestore, tetapi arsip Google Drive belum berhasil: ' + archive.backupError,
         });
-      }));
+      } else {
+        setStatusMessage({
+          type: 'success',
+          text: 'PDF resmi berhasil dibuat dan diarsipkan ke Google Drive SIPANDU.',
+          driveUrl: archive.driveUrl,
+        });
+      }
 
-      setPreparingPrint(false);
       try {
-        await printCurrentWebView('SIPANDU - Form Asesmen Terintegrasi');
-      } catch (nativePrintError) {
-        console.warn('SIPANDU native print bridge unavailable; falling back to browser print:', nativePrintError);
-        window.print();
+        await printPdfBlob(archive.pdf, archive.fileName);
+      } catch (printError) {
+        console.warn('SIPANDU native PDF print is unavailable; downloading the generated PDF instead:', printError);
+        const objectUrl = URL.createObjectURL(archive.pdf);
+        const link = document.createElement('a');
+        link.href = objectUrl;
+        link.download = archive.fileName;
+        link.rel = 'noopener';
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        window.setTimeout(() => URL.revokeObjectURL(objectUrl), 120_000);
+        setStatusMessage({
+          type: 'success',
+          text: 'PDF berhasil dibuat. File diunduh ke perangkat karena dialog cetak tidak tersedia pada perangkat ini.' +
+            (archive.backupError ? ' Backup Google Drive belum berhasil: ' + archive.backupError : ''),
+          ...(archive.driveUrl ? { driveUrl: archive.driveUrl } : {}),
+        });
       }
     } catch (error) {
-      document.body.classList.remove('official-assessment-printing');
-      document.getElementById('sipandu-official-print-root')?.remove();
       releasePrintPhotoUrls();
       setPrintPhotoUrls({});
       setPrintPhotoErrors({});
-      setPreparingPrint(false);
       setStatusMessage({
         type: 'error',
-        text: `Persiapan cetak tidak selesai: ${error instanceof Error ? error.message : String(error)}. Coba cetak kembali.`,
+        text: 'Persiapan PDF tidak selesai: ' + (error instanceof Error ? error.message : String(error)) + '. Jawaban yang sudah tersimpan di Firestore tetap aman; coba cetak kembali.',
       });
+    } finally {
+      setPreparingPrint(false);
     }
   };
 
