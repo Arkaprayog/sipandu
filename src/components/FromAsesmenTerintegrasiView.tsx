@@ -354,6 +354,229 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
     { key: 'fotoRumah', title: 'FOTO RUMAH TAMPAK DEPAN', source: currentPPKS?.fotoRumah || '' },
   ];
 
+  const prepareAssessmentPdfRoot = async (): Promise<{ root: HTMLElement; pages: HTMLElement[] }> => {
+    releasePrintPhotoUrls();
+    setPrintPhotoUrls({});
+    setPrintPhotoErrors({});
+
+    const urls: Record<string, string> = {};
+    const errors: Record<string, string> = {};
+    await Promise.all(printablePhotos.map(async (photo) => {
+      try {
+        const resolved = await resolvePhotoForPrint(photo.source);
+        if (resolved.url) urls[photo.key] = resolved.url;
+        if (resolved.error) errors[photo.key] = resolved.error;
+      } catch (error) {
+        errors[photo.key] = error instanceof Error ? error.message : String(error);
+      }
+    }));
+
+    setPrintPhotoUrls(urls);
+    setPrintPhotoErrors(errors);
+    await new Promise<void>((resolve) => requestAnimationFrame(() =>
+      requestAnimationFrame(() => resolve())
+    ));
+
+    const shell = document.querySelector('.official-assessment-shell');
+    if (!(shell instanceof HTMLElement)) {
+      throw new Error('Area Form Asesmen Terintegrasi tidak ditemukan untuk dibuat menjadi PDF.');
+    }
+
+    const waitForImages = async (container: ParentNode): Promise<void> => {
+      const images = Array.from(container.querySelectorAll('img'));
+      await Promise.all(images.map((image) => {
+        if (image.complete && image.naturalWidth > 0) return Promise.resolve();
+        return new Promise<void>((resolve) => {
+          let finished = false;
+          const finish = () => {
+            if (finished) return;
+            finished = true;
+            window.clearTimeout(timer);
+            image.removeEventListener('load', finish);
+            image.removeEventListener('error', finish);
+            resolve();
+          };
+          const timer = window.setTimeout(finish, 4000);
+          image.addEventListener('load', finish, { once: true });
+          image.addEventListener('error', finish, { once: true });
+        });
+      }));
+    };
+
+    await waitForImages(shell);
+    if (document.fonts?.ready) await document.fonts.ready;
+
+    const rootId = 'sipandu-assessment-pdf-root';
+    document.getElementById(rootId)?.remove();
+    const root = document.createElement('div');
+    root.id = rootId;
+    root.style.cssText = [
+      'position:fixed',
+      'left:0',
+      'top:0',
+      'width:194mm',
+      'max-width:194mm',
+      'z-index:2147483647',
+      'opacity:0',
+      'pointer-events:none',
+      'background:#fff',
+      'color:#111',
+      'overflow:visible',
+    ].join(';');
+
+    const pdfStyles = document.createElement('style');
+    pdfStyles.textContent = `
+      #${rootId} .official-assessment-shell {
+        display:block !important; position:relative !important; left:auto !important; top:auto !important;
+        width:194mm !important; max-width:194mm !important; min-height:0 !important;
+        margin:0 !important; padding:0 !important; overflow:visible !important;
+        box-shadow:none !important; background:#fff !important; color:#111 !important;
+      }
+      #${rootId} .official-toolbar,
+      #${rootId} .official-status,
+      #${rootId} .official-photo-gallery { display:none !important; }
+      #${rootId} .official-page {
+        display:block !important; position:relative !important; left:auto !important; top:auto !important;
+        box-sizing:border-box !important; width:194mm !important; max-width:194mm !important;
+        height:281mm !important; min-height:281mm !important; max-height:281mm !important;
+        margin:0 !important; padding:0 !important; box-shadow:none !important;
+        background:#fff !important; color:#111 !important; overflow:hidden !important;
+      }
+      #${rootId} .official-photo-appendix {
+        display:flex !important; position:relative !important; left:auto !important; top:auto !important;
+        flex-direction:column !important; width:194mm !important; max-width:194mm !important;
+        height:281mm !important; min-height:281mm !important; max-height:281mm !important;
+        margin:0 !important; padding:0 !important; overflow:hidden !important;
+      }
+      #${rootId} .official-photo-appendix-heading { flex:0 0 auto !important; margin-bottom:5mm !important; }
+      #${rootId} .official-photo-print-frame {
+        flex:1 1 auto !important; width:100% !important; height:230mm !important;
+        min-height:230mm !important; max-height:230mm !important; overflow:hidden !important;
+      }
+      #${rootId} .official-photo-print-frame img {
+        display:block !important; max-width:100% !important; max-height:100% !important;
+        width:auto !important; height:auto !important; object-fit:contain !important;
+      }
+      #${rootId} .official-letterhead { margin-bottom:6mm !important; }
+      #${rootId} .official-table { font-size:7pt !important; }
+      #${rootId} .official-table td { padding:1.5px 2px !important; }
+      #${rootId} .official-input,
+      #${rootId} .official-textarea { border:0 !important; min-height:12px !important; padding:0 !important; resize:none !important; }
+      #${rootId} .official-option input { width:9px !important; height:9px !important; }
+      #${rootId} input, #${rootId} textarea, #${rootId} select {
+        print-color-adjust:exact !important; -webkit-print-color-adjust:exact !important;
+      }
+    `;
+
+    const printClone = shell.cloneNode(true) as HTMLElement;
+    const sourceControls = Array.from(shell.querySelectorAll('input, textarea, select'));
+    const targetControls = Array.from(printClone.querySelectorAll('input, textarea, select'));
+    sourceControls.forEach((sourceControl, index) => {
+      const targetControl = targetControls[index];
+      if (!targetControl) return;
+      if (sourceControl instanceof HTMLInputElement && targetControl instanceof HTMLInputElement) {
+        targetControl.value = sourceControl.value;
+        targetControl.checked = sourceControl.checked;
+        if (sourceControl.checked) targetControl.setAttribute('checked', '');
+        else targetControl.removeAttribute('checked');
+        if (sourceControl.value) targetControl.setAttribute('value', sourceControl.value);
+        else targetControl.removeAttribute('value');
+      } else if (sourceControl instanceof HTMLTextAreaElement && targetControl instanceof HTMLTextAreaElement) {
+        targetControl.value = sourceControl.value;
+        targetControl.textContent = sourceControl.value;
+      } else if (sourceControl instanceof HTMLSelectElement && targetControl instanceof HTMLSelectElement) {
+        targetControl.selectedIndex = sourceControl.selectedIndex;
+        Array.from(targetControl.options).forEach((option, optionIndex) => {
+          option.selected = optionIndex === sourceControl.selectedIndex;
+          if (option.selected) option.setAttribute('selected', '');
+          else option.removeAttribute('selected');
+        });
+      }
+    });
+
+    root.append(pdfStyles, printClone);
+    document.body.appendChild(root);
+    await new Promise<void>((resolve) => requestAnimationFrame(() =>
+      requestAnimationFrame(() => resolve())
+    ));
+    await waitForImages(root);
+    if (document.fonts?.ready) await document.fonts.ready;
+
+    const pages = Array.from(root.querySelectorAll<HTMLElement>('.official-page'));
+    if (pages.length < 8) {
+      root.remove();
+      throw new Error('Halaman resmi asesmen tidak lengkap. Ditemukan ' + pages.length + ' halaman.');
+    }
+    return { root, pages };
+  };
+
+  const createAndBackupAssessmentPdf = async (record: PPKSRecord): Promise<{
+    pdf: Blob;
+    fileName: string;
+    driveUrl: string;
+    backupError: string;
+  }> => {
+    let pdf: Blob;
+    let fileName: string;
+    setPreparingPrint(true);
+    try {
+      const prepared = await prepareAssessmentPdfRoot();
+      try {
+        pdf = await createOfficialAssessmentPdf(prepared.pages, prepared.root.id);
+      } finally {
+        prepared.root.remove();
+        releasePrintPhotoUrls();
+        setPrintPhotoUrls({});
+        setPrintPhotoErrors({});
+      }
+
+      const safeRespondent = (record.namaLengkap || record.id)
+        .normalize('NFKC').replace(/[\\/:*?"<>|]+/g, '_').replace(/\\s+/g, '-').slice(0, 80);
+      const safeNik = String(record.nik || '').replace(/\\D/g, '') || 'tanpa-NIK';
+      const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+      fileName = `Form-Asesmen-Terintegrasi-${safeRespondent}-${safeNik}-${stamp}.pdf`;
+
+      try {
+        const driveCopy = await backupAssessmentToCentralDrive({
+          ppksId: record.id,
+          ppksName: record.namaLengkap || record.id,
+          nik: record.nik || '',
+          fileName,
+          pdf,
+        });
+        try {
+          await saveIntegratedAssessmentBackupMetadata(record.id, {
+            status: 'complete',
+            fileId: driveCopy.id,
+            webViewLink: driveCopy.webViewLink,
+          });
+          setDriveArchive({
+            status: 'complete',
+            error: '',
+            fileId: driveCopy.id,
+            webViewLink: driveCopy.webViewLink || '',
+            savedAt: new Date().toISOString(),
+          });
+          return { pdf, fileName, driveUrl: driveCopy.webViewLink || '', backupError: '' };
+        } catch (metadataError) {
+          try { await deleteCentralDriveFile(driveCopy.id); } catch { /* preserve metadata error */ }
+          throw metadataError;
+        }
+      } catch (driveError) {
+        const detail = driveError instanceof Error ? driveError.message : String(driveError);
+        try {
+          await saveIntegratedAssessmentBackupMetadata(record.id, { status: 'failed', error: detail });
+          setDriveArchive({ status: 'failed', error: detail, fileId: '', webViewLink: '', savedAt: '' });
+        } catch (metadataError) {
+          console.error('SIPANDU could not record assessment PDF backup failure:', metadataError);
+        }
+        return { pdf, fileName, driveUrl: '', backupError: detail };
+      }
+    } finally {
+      setPreparingPrint(false);
+    }
+  };
+
   const handleSave = async () => {
     if (isSaving) return;
     if (!currentPPKS) {
