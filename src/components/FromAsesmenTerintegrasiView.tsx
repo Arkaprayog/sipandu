@@ -4,9 +4,9 @@ import { PPKSRecord } from '../types';
 import { getAccessToken, invalidateAccessToken, refreshWorkspaceAccessToken } from '../lib/firebase';
 import { formatPPKSTimestamp } from '../lib/ppksData';
 import { publicAssetUrl } from '../lib/publicAssets';
-import { backupAssessmentToCentralDrive, deleteCentralDriveFile } from '../lib/googleDriveBackup';
+import { backupAssessmentToCentralDrive, deleteCentralDriveFile, listLegacyIntegratedAssessmentDriveArchives } from '../lib/googleDriveBackup';
 import { getIntegratedAssessmentBackupMetadata, saveIntegratedAssessmentBackupMetadata } from '../lib/firebase';
-import { printPdfBlob, printPreparedAssessmentWebView } from '../lib/printing';
+import { printPreparedAssessmentWebView } from '../lib/printing';
 import { createOfficialAssessmentPdf } from '../lib/assessmentPdf';
 import { createPhotoPreviewBlob, MAX_PPKS_PHOTO_FILE_BYTES } from '../lib/photoFilePreview';
 import '../officialAssessment.css';
@@ -263,6 +263,7 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
   const [answers, setAnswers] = useState<Record<string, AnswerValue>>(() => answersForRecord(ppksList.find((record) => record.id === selectedPPKSId)));
   const [statusMessage, setStatusMessage] = useState<{ type: 'success' | 'error'; text: string; driveUrl?: string } | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [isMigratingArchives, setIsMigratingArchives] = useState(false);
   const [driveArchive, setDriveArchive] = useState<{ status: 'complete' | 'failed'; error: string; fileId: string; webViewLink: string; savedAt: string } | null>(null);
   const [printPhotoUrls, setPrintPhotoUrls] = useState<Record<string, string>>({});
   const [printPhotoErrors, setPrintPhotoErrors] = useState<Record<string, string>>({});
@@ -315,7 +316,7 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
   }, [currentPPKS?.id]);
 
   const choosePPKS = (id: string) => {
-    if (isSaving) return;
+    if (isSaving || isMigratingArchives) return;
     releasePrintPhotoUrls();
     setPrintPhotoUrls({});
     setPrintPhotoErrors({});
@@ -325,13 +326,13 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
   };
 
   const updateAnswer = (key: string, value: AnswerValue) => {
-    if (isSaving) return;
+    if (isSaving || isMigratingArchives) return;
     setAnswers((current) => ({ ...current, [key]: value }));
     setStatusMessage(null);
   };
 
   const handleReset = () => {
-    if (isSaving) return;
+    if (isSaving || isMigratingArchives) return;
     if (!currentPPKS) {
       setAnswers(emptyAnswers());
       setStatusMessage({ type: 'success', text: 'Formulir kosong. Pilih responden ketika data tersedia.' });
@@ -510,16 +511,27 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
     return { root, pages };
   };
 
-  const createAndBackupAssessmentPdf = async (record: PPKSRecord, retainPrintRoot = false): Promise<{
+  type AssessmentPdfOptions = {
+    retainPrintRoot?: boolean;
+    existingFileId?: string;
+    existingFolderId?: string;
+    savedAt?: string;
+    requireExistingFileMatch?: boolean;
+  };
+
+  const createAndBackupAssessmentPdf = async (record: PPKSRecord, options: AssessmentPdfOptions = {}): Promise<{
     pdf: Blob;
     fileName: string;
     driveUrl: string;
     backupError: string;
     printRootId?: string;
+    replacedExisting: boolean;
   }> => {
+    const retainPrintRoot = options.retainPrintRoot === true;
     let pdf: Blob;
     let fileName: string;
     let printRootId: string | undefined;
+    let replacedExisting = false;
     setPreparingPrint(true);
     try {
       const prepared = await prepareAssessmentPdfRoot();
@@ -539,19 +551,25 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
         .normalize('NFKC').replace(/[\\/:*?"<>|]+/g, '_').replace(/\s+/g, '-').slice(0, 80);
       const nikValue = String(record.nik || record.formAsesmenTerintegrasi?.q23 || '');
       const safeNik = nikValue.replace(/\D/g, '') || 'tanpa-NIK';
-      const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+      const archiveDate = options.savedAt ? new Date(options.savedAt) : new Date();
+      const stamp = (Number.isNaN(archiveDate.getTime()) ? new Date() : archiveDate).toISOString().replace(/[:.]/g, '-');
       fileName = `Form-Asesmen-Terintegrasi-${safeRespondent}-${safeNik}-${stamp}.pdf`;
 
       try {
-        const previousArchive = await getIntegratedAssessmentBackupMetadata(record.id).catch(() => null);
+        const previousArchive = options.existingFileId
+          ? null
+          : await getIntegratedAssessmentBackupMetadata(record.id).catch(() => null);
         const driveCopy = await backupAssessmentToCentralDrive({
           ppksId: record.id,
           ppksName: record.namaLengkap || record.id,
           nik: nikValue,
           fileName,
-          existingFileId: previousArchive?.fileId || undefined,
+          existingFileId: options.existingFileId || previousArchive?.fileId || undefined,
+          existingFolderId: options.existingFolderId,
+          requireExistingFileMatch: options.requireExistingFileMatch,
           pdf,
         });
+        replacedExisting = driveCopy.replacedExisting;
         try {
           await saveIntegratedAssessmentBackupMetadata(record.id, {
             status: 'complete',
@@ -565,7 +583,7 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
             webViewLink: driveCopy.webViewLink || '',
             savedAt: new Date().toISOString(),
           });
-          return { pdf, fileName, driveUrl: driveCopy.webViewLink || '', backupError: '', ...(printRootId ? { printRootId } : {}) };
+          return { pdf, fileName, driveUrl: driveCopy.webViewLink || '', backupError: '', replacedExisting, ...(printRootId ? { printRootId } : {}) };
         } catch (metadataError) {
           if (!driveCopy.replacedExisting) {
             try { await deleteCentralDriveFile(driveCopy.id); } catch { /* preserve metadata error */ }
@@ -580,7 +598,7 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
         } catch (metadataError) {
           console.error('SIPANDU could not record assessment PDF backup failure:', metadataError);
         }
-        return { pdf, fileName, driveUrl: '', backupError: detail, ...(printRootId ? { printRootId } : {}) };
+        return { pdf, fileName, driveUrl: '', backupError: detail, replacedExisting, ...(printRootId ? { printRootId } : {}) };
       }
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);
@@ -817,7 +835,7 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
   ]);
 
   const handlePrint = async () => {
-    if (isSaving || preparingPrint) return;
+    if (isSaving || preparingPrint || isMigratingArchives) return;
     if (!currentPPKS) {
       setStatusMessage({ type: 'error', text: 'Pilih responden PPKS terlebih dahulu agar lembar asesmen dan empat lampiran foto terikat pada responden yang benar.' });
       return;
@@ -849,7 +867,7 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
 
       // The same generated A4 PDF is both uploaded to Drive and sent to the print UI.
       // Keep its rendered A4 pages mounted until the native print dialog has finished.
-      const archive = await createAndBackupAssessmentPdf(updated, true);
+      const archive = await createAndBackupAssessmentPdf(updated, { retainPrintRoot: true });
       retainedPrintRootId = archive.printRootId;
       if (archive.backupError) {
         setStatusMessage({
@@ -865,13 +883,8 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
       }
 
       try {
-        try {
-          await printPdfBlob(archive.pdf, archive.fileName);
-        } catch (base64PrintError) {
-          if (!archive.printRootId) throw base64PrintError;
-          console.info('SIPANDU is using the A4 WebView print route for this assessment PDF:', base64PrintError);
-          await printPreparedAssessmentWebView(archive.fileName, archive.printRootId);
-        }
+        if (!archive.printRootId) throw new Error('Halaman A4 sementara tidak tersedia untuk pencetakan.');
+        await printPreparedAssessmentWebView(archive.fileName, archive.printRootId);
       } catch (printError) {
         console.warn('SIPANDU print dialog is unavailable; downloading the generated PDF instead:', printError);
         const objectUrl = URL.createObjectURL(archive.pdf);
@@ -906,6 +919,131 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
         setPrintPhotoErrors({});
       }
       setPreparingPrint(false);
+    }
+  };
+
+
+
+  const handleMigrateLegacyAssessmentArchives = async () => {
+    if (isSaving || preparingPrint || isMigratingArchives || ppksList.length === 0) return;
+    if (!window.confirm(
+      'Konversi seluruh arsip JSON lama Form Asesmen Terintegrasi yang dapat diverifikasi menjadi PDF A4 di file Google Drive yang sama? Setiap arsip harus cocok dengan ID responden SIPANDU dan penanda kepemilikan internal. Arsip yang tidak cocok akan dilewati.'
+    )) return;
+
+    const previousSelectedId = selectedPPKSId;
+    const previousAnswers = { ...answers };
+    let converted = 0;
+    let metadataWarnings = 0;
+    let unmatched = 0;
+    let failed = 0;
+    setIsMigratingArchives(true);
+    setStatusMessage({ type: 'success', text: 'Memeriksa arsip JSON lama di Google Drive SIPANDU…' });
+
+    const waitForRender = () => new Promise<void>((resolve) => requestAnimationFrame(() =>
+      requestAnimationFrame(() => resolve())
+    ));
+
+    try {
+      const archives = await listLegacyIntegratedAssessmentDriveArchives();
+      if (!archives.length) {
+        setStatusMessage({
+          type: 'success',
+          text: 'Tidak ditemukan arsip JSON lama SIPANDU yang lolos verifikasi kepemilikan. Tidak ada file Drive yang diubah.',
+        });
+        return;
+      }
+
+      const respondentById = new Map(ppksList.map((record) => [record.id, record]));
+      const matched = archives.filter((archive) => respondentById.has(archive.ppksId));
+      unmatched = archives.length - matched.length;
+
+      for (let index = 0; index < matched.length; index += 1) {
+        const archive = matched[index];
+        const respondent = respondentById.get(archive.ppksId);
+        if (!respondent) {
+          unmatched += 1;
+          continue;
+        }
+
+        const migratedAnswers = emptyAnswers();
+        Object.entries(archive.answers).forEach(([key, value]) => {
+          if (Object.prototype.hasOwnProperty.call(migratedAnswers, key)) {
+            migratedAnswers[key] = value as AnswerValue;
+          }
+        });
+        if (!String(migratedAnswers.q16 || '').trim()) {
+          migratedAnswers.q16 = respondent.namaLengkap || archive.ppksName;
+        }
+        if (!String(migratedAnswers.q23 || '').trim()) {
+          migratedAnswers.q23 = respondent.nik || archive.nik;
+        }
+        if (!String(migratedAnswers.q25 || '').trim()) migratedAnswers.q25 = '-';
+
+        setSelectedPPKSId(respondent.id);
+        setAnswers(migratedAnswers);
+        await waitForRender();
+
+        setStatusMessage({
+          type: 'success',
+          text: 'Mengonversi arsip ' + (index + 1) + ' dari ' + matched.length
+            + ': ' + (respondent.namaLengkap || archive.ppksName) + '…',
+        });
+
+        const archiveRecord: PPKSRecord = {
+          ...respondent,
+          formAsesmenTerintegrasi: archive.answers,
+        };
+        try {
+          const result = await createAndBackupAssessmentPdf(archiveRecord, {
+            existingFileId: archive.fileId,
+            existingFolderId: archive.parentFolderId,
+            savedAt: archive.savedAt,
+            requireExistingFileMatch: true,
+          });
+          if (result.replacedExisting) {
+            converted += 1;
+            if (result.backupError) metadataWarnings += 1;
+          } else {
+            failed += 1;
+            console.error('SIPANDU did not replace this legacy JSON archive:', {
+              fileId: archive.fileId,
+              fileName: archive.fileName,
+              error: result.backupError || 'Drive did not confirm the in-place replacement.',
+            });
+          }
+        } catch (error) {
+          failed += 1;
+          console.error('SIPANDU could not convert one legacy assessment archive:', {
+            fileId: archive.fileId,
+            fileName: archive.fileName,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      }
+
+      setStatusMessage({
+        type: failed ? 'error' : 'success',
+        text: 'Migrasi arsip JSON selesai. Berhasil menjadi PDF A4: ' + converted
+          + ' file; tidak cocok dengan data responden aktif: ' + unmatched
+          + ' file; gagal membuat/mengganti PDF: ' + failed
+          + ' file; PDF terganti tetapi metadata Firestore perlu disegarkan: ' + metadataWarnings
+          + ' file. Arsip yang tidak lolos verifikasi tidak diubah.',
+      });
+    } catch (error) {
+      setStatusMessage({
+        type: 'error',
+        text: 'Migrasi arsip JSON tidak selesai: ' + (error instanceof Error ? error.message : String(error))
+          + '. File yang sudah berhasil diganti tetap berupa PDF.',
+      });
+    } finally {
+      setSelectedPPKSId(previousSelectedId);
+      setAnswers(previousAnswers);
+      setIsMigratingArchives(false);
+      if (previousSelectedId) {
+        void getIntegratedAssessmentBackupMetadata(previousSelectedId)
+          .then((metadata) => setDriveArchive(metadata))
+          .catch(() => undefined);
+      }
     }
   };
 
@@ -1008,13 +1146,16 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
         )}
 
         <div className="flex flex-wrap gap-2">
-          <button type="button" onClick={() => { void handleSave(); }} disabled={!currentPPKS || isSaving} className="inline-flex items-center gap-2 rounded-lg bg-emerald-700 px-4 py-2 text-xs font-bold text-white disabled:opacity-50">
+          <button type="button" onClick={() => { void handleSave(); }} disabled={!currentPPKS || isSaving || isMigratingArchives} className="inline-flex items-center gap-2 rounded-lg bg-emerald-700 px-4 py-2 text-xs font-bold text-white disabled:opacity-50">
             <Save className="h-4 w-4" /> {isSaving ? 'Menyimpan…' : 'Simpan Form'}
           </button>
-          <button type="button" onClick={() => { void handlePrint(); }} disabled={preparingPrint || isSaving || !currentPPKS} className="inline-flex items-center gap-2 rounded-lg border border-sky-400/40 bg-sky-950/50 px-4 py-2 text-xs font-bold text-white disabled:opacity-60">
+          <button type="button" onClick={() => { void handlePrint(); }} disabled={preparingPrint || isSaving || isMigratingArchives || !currentPPKS} className="inline-flex items-center gap-2 rounded-lg border border-sky-400/40 bg-sky-950/50 px-4 py-2 text-xs font-bold text-white disabled:opacity-60">
             <Printer className="h-4 w-4" /> {preparingPrint ? 'Menyiapkan 12 halaman…' : 'Cetak / Simpan PDF'}
           </button>
-          <button type="button" onClick={handleReset} disabled={isSaving} className="inline-flex items-center gap-2 rounded-lg border border-rose-400/40 bg-rose-950/40 px-4 py-2 text-xs font-bold text-white">
+          <button type="button" onClick={() => { void handleMigrateLegacyAssessmentArchives(); }} disabled={isSaving || preparingPrint || isMigratingArchives || ppksList.length === 0} className="inline-flex items-center gap-2 rounded-lg border border-amber-400/40 bg-amber-950/40 px-4 py-2 text-xs font-bold text-white disabled:opacity-60">
+            <FileText className="h-4 w-4" /> {isMigratingArchives ? 'Mengonversi arsip JSON…' : 'Konversi Arsip JSON Lama ke PDF A4'}
+          </button>
+          <button type="button" onClick={handleReset} disabled={isSaving || isMigratingArchives} className="inline-flex items-center gap-2 rounded-lg border border-rose-400/40 bg-rose-950/40 px-4 py-2 text-xs font-bold text-white">
             <RotateCcw className="h-4 w-4" /> Kosongkan Form
           </button>
         </div>
