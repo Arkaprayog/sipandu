@@ -181,7 +181,7 @@ export async function backupAssessmentToCentralDrive(input: {
   fileName: string;
   existingFileId?: string;
   pdf: Blob;
-}): Promise<{ id: string; webViewLink?: string }> {
+}): Promise<{ id: string; webViewLink?: string; replacedExisting: boolean }> {
   if (!(input.pdf instanceof Blob) || input.pdf.size < 8) {
     throw new Error('Dokumen PDF asesmen kosong atau tidak valid.');
   }
@@ -207,13 +207,14 @@ export async function backupAssessmentToCentralDrive(input: {
   const replaceExisting = input.existingFileId
     ? await isReplaceableAssessmentArchive(input.existingFileId, folderId)
     : false;
-  return uploadMultipart(
+  const uploaded = await uploadMultipart(
     folderId,
     fileName,
     'application/pdf',
     input.pdf,
     replaceExisting ? input.existingFileId : undefined,
   );
+  return { ...uploaded, replacedExisting: replaceExisting };
 }
 
 async function isReplaceableAssessmentArchive(fileId: string, folderId: string): Promise<boolean> {
