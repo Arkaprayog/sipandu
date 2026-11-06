@@ -70,18 +70,25 @@ async function uploadMultipart(
   fileName: string,
   mimeType: string,
   data: Blob,
+  existingFileId?: string,
 ): Promise<{ id: string; webViewLink?: string }> {
   const metadata = JSON.stringify({
     name: fileName,
-    parents: [folderId],
+    // Drive files.update does not allow changing parent folders here; keep
+    // the existing file in its current archive folder during in-place migration.
+    ...(!existingFileId ? { parents: [folderId] } : {}),
     appProperties: { sipanduManaged: 'true', sipanduArchive: folderId },
   });
 
   let uploaded: { id: string; webViewLink?: string };
+  const uploadPath = existingFileId
+    ? '/files/' + encodeURIComponent(existingFileId)
+    : '/files';
+  const uploadMethod = existingFileId ? 'PATCH' : 'POST';
   if (data.size > 5 * 1024 * 1024) {
     // Resumable upload avoids holding a second multipart copy in mobile memory.
-    const session = await driveFetch('/files?uploadType=resumable&fields=id,name,webViewLink', {
-      method: 'POST',
+    const session = await driveFetch(uploadPath + '?uploadType=resumable&fields=id,name,webViewLink', {
+      method: uploadMethod,
       headers: {
         'Content-Type': 'application/json; charset=UTF-8',
         'X-Upload-Content-Type': mimeType,
@@ -123,8 +130,8 @@ async function uploadMultipart(
     const boundary = 'sipandu-' + Math.random().toString(36).slice(2);
     const body = buildGoogleDriveMultipartBody(metadata, mimeType, data, boundary);
 
-    const response = await driveFetch('/files?uploadType=multipart&fields=id,name,webViewLink', {
-      method: 'POST',
+    const response = await driveFetch(uploadPath + '?uploadType=multipart&fields=id,name,webViewLink', {
+      method: uploadMethod,
       headers: { 'Content-Type': 'multipart/related; boundary=' + boundary },
       body,
     }, true, true);
@@ -163,26 +170,79 @@ export async function backupLetterToCentralDrive(record: SuratRecord): Promise<{
   return uploadMultipart(folderId, safeName(record.nomorSurat + '-' + record.judul, record.id) + '.json', 'application/json', payload);
 }
 
-/** Writes a portable JSON snapshot of an integrated assessment to the central Drive archive. */
+/**
+ * Uploads the already-rendered official integrated-assessment PDF to the central
+ * Drive archive. Raw answer JSON is intentionally never uploaded by this path.
+ */
 export async function backupAssessmentToCentralDrive(input: {
   ppksId: string;
   ppksName: string;
   nik?: string;
-  answers: Record<string, unknown>;
-}): Promise<{ id: string; webViewLink?: string }> {
+  fileName: string;
+  existingFileId?: string;
+  pdf: Blob;
+}): Promise<{ id: string; webViewLink?: string; replacedExisting: boolean }> {
+  if (!(input.pdf instanceof Blob) || input.pdf.size < 8) {
+    throw new Error('Dokumen PDF asesmen kosong atau tidak valid.');
+  }
+  const header = await input.pdf.slice(0, 5).text();
+  if (header !== '%PDF-') {
+    throw new Error('Arsip Google Drive hanya menerima PDF resmi, bukan JSON atau data mentah.');
+  }
+
   const personFolder = safeName(input.ppksName || input.ppksId, input.ppksId);
   const folderId = await ensureFolderPath([ROOT_FOLDER_NAME, ASSESSMENTS_FOLDER_NAME, personFolder]);
   const savedAt = new Date().toISOString();
-  const payload = new Blob([JSON.stringify({
-    type: 'SIPANDU Form Asesmen Terintegrasi',
-    ppksId: input.ppksId,
-    ppksName: input.ppksName,
-    nik: input.nik || '',
-    savedAt,
-    answers: input.answers,
-  }, null, 2)], { type: 'application/json' });
   const stamp = savedAt.replace(/[:.]/g, '-');
-  return uploadMultipart(folderId, 'asesmen-' + stamp + '.json', 'application/json', payload);
+  const respondent = safeName(input.ppksName || input.ppksId, input.ppksId);
+  const nik = safeName(input.nik || '', 'tanpa-NIK');
+  const requestedName = String(input.fileName || '').replace(/\.pdf$/i, '');
+  const fileName = safeName(
+    requestedName || ('Form-Asesmen-Terintegrasi-' + respondent + '-' + nik + '-' + stamp),
+    'Form-Asesmen-Terintegrasi-' + stamp,
+  ) + '.pdf';
+
+  // Migrate the last tracked SIPANDU JSON/PDF snapshot in-place when it
+  // belongs to this respondent's archive. Unknown files are never overwritten.
+  const replaceExisting = input.existingFileId
+    ? await isReplaceableAssessmentArchive(input.existingFileId, folderId)
+    : false;
+  const uploaded = await uploadMultipart(
+    folderId,
+    fileName,
+    'application/pdf',
+    input.pdf,
+    replaceExisting ? input.existingFileId : undefined,
+  );
+  return { ...uploaded, replacedExisting: replaceExisting };
+}
+
+async function isReplaceableAssessmentArchive(fileId: string, folderId: string): Promise<boolean> {
+  if (!fileId) return false;
+  try {
+    const response = await driveFetch(
+      '/files/' + encodeURIComponent(fileId) + '?fields=id,name,mimeType,appProperties,trashed',
+    );
+    if (!response.ok) return false;
+    const file = await response.json() as {
+      id?: string;
+      name?: string;
+      mimeType?: string;
+      trashed?: boolean;
+      appProperties?: Record<string, string>;
+    };
+    if (file.trashed || file.id !== fileId) return false;
+    if (file.appProperties?.sipanduManaged !== 'true'
+      || file.appProperties?.sipanduArchive !== folderId) return false;
+    const isPreviousJson = file.mimeType === 'application/json'
+      && /^asesmen-.*\.json$/i.test(file.name || '');
+    const isPreviousPdf = file.mimeType === 'application/pdf'
+      && /^form-asesmen-terintegrasi-.*\.pdf$/i.test(file.name || '');
+    return isPreviousJson || isPreviousPdf;
+  } catch {
+    // Never block a new PDF because an old file cannot be inspected.
+    return false;
+  }
 }
 
 /** Deletes a SIPANDU archive copy from the central Google Drive account. */

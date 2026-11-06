@@ -6,7 +6,8 @@ import { formatPPKSTimestamp } from '../lib/ppksData';
 import { publicAssetUrl } from '../lib/publicAssets';
 import { backupAssessmentToCentralDrive, deleteCentralDriveFile } from '../lib/googleDriveBackup';
 import { getIntegratedAssessmentBackupMetadata, saveIntegratedAssessmentBackupMetadata } from '../lib/firebase';
-import { printCurrentWebView } from '../lib/printing';
+import { printPdfBlob } from '../lib/printing';
+import { createOfficialAssessmentPdf } from '../lib/assessmentPdf';
 import { createPhotoPreviewBlob, MAX_PPKS_PHOTO_FILE_BYTES } from '../lib/photoFilePreview';
 import '../officialAssessment.css';
 
@@ -346,6 +347,251 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
     setStatusMessage({ type: 'success', text: 'Isian asesmen dikosongkan. Tekan Simpan Form agar perubahan tersimpan.' });
   };
 
+  const printablePhotos = [
+    { key: 'fotoDiri', title: 'FOTO DIRI PPKS (CLOSE-UP)', source: currentPPKS?.fotoDiri || '' },
+    { key: 'fotoKtp', title: 'FOTO KTP', source: currentPPKS?.fotoKtp || '' },
+    { key: 'fotoKk', title: 'FOTO KARTU KELUARGA', source: currentPPKS?.fotoKk || '' },
+    { key: 'fotoRumah', title: 'FOTO RUMAH TAMPAK DEPAN', source: currentPPKS?.fotoRumah || '' },
+  ];
+
+  const prepareAssessmentPdfRoot = async (): Promise<{ root: HTMLElement; pages: HTMLElement[] }> => {
+    releasePrintPhotoUrls();
+    setPrintPhotoUrls({});
+    setPrintPhotoErrors({});
+
+    const urls: Record<string, string> = {};
+    const errors: Record<string, string> = {};
+    await Promise.all(printablePhotos.map(async (photo) => {
+      try {
+        const resolved = await resolvePhotoForPrint(photo.source);
+        if (resolved.url) urls[photo.key] = resolved.url;
+        if (resolved.error) errors[photo.key] = resolved.error;
+      } catch (error) {
+        errors[photo.key] = error instanceof Error ? error.message : String(error);
+      }
+    }));
+
+    setPrintPhotoUrls(urls);
+    setPrintPhotoErrors(errors);
+    await new Promise<void>((resolve) => requestAnimationFrame(() =>
+      requestAnimationFrame(() => resolve())
+    ));
+
+    const shell = document.querySelector('.official-assessment-shell');
+    if (!(shell instanceof HTMLElement)) {
+      throw new Error('Area Form Asesmen Terintegrasi tidak ditemukan untuk dibuat menjadi PDF.');
+    }
+
+    const waitForImages = async (container: ParentNode): Promise<void> => {
+      const images = Array.from(container.querySelectorAll('img'));
+      await Promise.all(images.map((image) => {
+        if (image.complete && image.naturalWidth > 0) return Promise.resolve();
+        return new Promise<void>((resolve) => {
+          let finished = false;
+          const finish = () => {
+            if (finished) return;
+            finished = true;
+            window.clearTimeout(timer);
+            image.removeEventListener('load', finish);
+            image.removeEventListener('error', finish);
+            resolve();
+          };
+          const timer = window.setTimeout(finish, 4000);
+          image.addEventListener('load', finish, { once: true });
+          image.addEventListener('error', finish, { once: true });
+        });
+      }));
+    };
+
+    await waitForImages(shell);
+    if (document.fonts?.ready) await document.fonts.ready;
+
+    const rootId = 'sipandu-assessment-pdf-root';
+    document.getElementById(rootId)?.remove();
+    const root = document.createElement('div');
+    root.id = rootId;
+    root.style.cssText = [
+      'position:fixed',
+      'left:0',
+      'top:0',
+      'width:194mm',
+      'max-width:194mm',
+      'z-index:2147483647',
+      'opacity:0',
+      'pointer-events:none',
+      'background:#fff',
+      'color:#111',
+      'overflow:visible',
+    ].join(';');
+
+    const pdfStyles = document.createElement('style');
+    pdfStyles.textContent = `
+      #${rootId} .official-assessment-shell {
+        display:block !important; position:relative !important; left:auto !important; top:auto !important;
+        width:194mm !important; max-width:194mm !important; min-height:0 !important;
+        margin:0 !important; padding:0 !important; overflow:visible !important;
+        box-shadow:none !important; background:#fff !important; color:#111 !important;
+      }
+      #${rootId} .official-toolbar,
+      #${rootId} .official-status,
+      #${rootId} .official-photo-gallery { display:none !important; }
+      #${rootId} .official-page:not(.official-photo-appendix) {
+        display:block !important; position:relative !important; left:auto !important; top:auto !important;
+        box-sizing:border-box !important; width:194mm !important; max-width:194mm !important;
+        height:281mm !important; min-height:281mm !important; max-height:none !important;
+        margin:0 !important; padding:0 !important; box-shadow:none !important;
+        background:#fff !important; color:#111 !important; overflow:visible !important;
+      }
+      #${rootId} .official-photo-appendix {
+        display:flex !important; position:relative !important; left:auto !important; top:auto !important;
+        flex-direction:column !important; width:194mm !important; max-width:194mm !important;
+        height:281mm !important; min-height:281mm !important; max-height:281mm !important;
+        margin:0 !important; padding:0 !important; overflow:hidden !important;
+      }
+      #${rootId} .official-photo-appendix-heading { flex:0 0 auto !important; margin-bottom:5mm !important; }
+      #${rootId} .official-photo-print-frame {
+        flex:1 1 auto !important; width:100% !important; height:230mm !important;
+        min-height:230mm !important; max-height:230mm !important; overflow:hidden !important;
+      }
+      #${rootId} .official-photo-print-frame img {
+        display:block !important; max-width:100% !important; max-height:100% !important;
+        width:auto !important; height:auto !important; object-fit:contain !important;
+      }
+      #${rootId} .official-letterhead { margin-bottom:6mm !important; }
+      #${rootId} .official-table { font-size:7pt !important; }
+      #${rootId} .official-table td { padding:1.5px 2px !important; }
+      #${rootId} .official-input,
+      #${rootId} .official-textarea { border:0 !important; min-height:12px !important; padding:0 !important; resize:none !important; }
+      #${rootId} .official-option input { width:9px !important; height:9px !important; }
+      #${rootId} input, #${rootId} textarea, #${rootId} select {
+        print-color-adjust:exact !important; -webkit-print-color-adjust:exact !important;
+      }
+    `;
+
+    const printClone = shell.cloneNode(true) as HTMLElement;
+    const sourceControls = Array.from(shell.querySelectorAll('input, textarea, select'));
+    const targetControls = Array.from(printClone.querySelectorAll('input, textarea, select'));
+    sourceControls.forEach((sourceControl, index) => {
+      const targetControl = targetControls[index];
+      if (!targetControl) return;
+      if (sourceControl instanceof HTMLInputElement && targetControl instanceof HTMLInputElement) {
+        targetControl.value = sourceControl.value;
+        targetControl.checked = sourceControl.checked;
+        if (sourceControl.checked) targetControl.setAttribute('checked', '');
+        else targetControl.removeAttribute('checked');
+        if (sourceControl.value) targetControl.setAttribute('value', sourceControl.value);
+        else targetControl.removeAttribute('value');
+      } else if (sourceControl instanceof HTMLTextAreaElement && targetControl instanceof HTMLTextAreaElement) {
+        targetControl.value = sourceControl.value;
+        targetControl.textContent = sourceControl.value;
+      } else if (sourceControl instanceof HTMLSelectElement && targetControl instanceof HTMLSelectElement) {
+        targetControl.selectedIndex = sourceControl.selectedIndex;
+        Array.from(targetControl.options).forEach((option, optionIndex) => {
+          option.selected = optionIndex === sourceControl.selectedIndex;
+          if (option.selected) option.setAttribute('selected', '');
+          else option.removeAttribute('selected');
+        });
+      }
+    });
+
+    root.append(pdfStyles, printClone);
+    document.body.appendChild(root);
+    await new Promise<void>((resolve) => requestAnimationFrame(() =>
+      requestAnimationFrame(() => resolve())
+    ));
+    await waitForImages(root);
+    if (document.fonts?.ready) await document.fonts.ready;
+
+    const pages = Array.from(root.querySelectorAll<HTMLElement>('.official-page'));
+    if (pages.length < 8) {
+      root.remove();
+      throw new Error('Halaman resmi asesmen tidak lengkap. Ditemukan ' + pages.length + ' halaman.');
+    }
+    return { root, pages };
+  };
+
+  const createAndBackupAssessmentPdf = async (record: PPKSRecord): Promise<{
+    pdf: Blob;
+    fileName: string;
+    driveUrl: string;
+    backupError: string;
+  }> => {
+    let pdf: Blob;
+    let fileName: string;
+    setPreparingPrint(true);
+    try {
+      const prepared = await prepareAssessmentPdfRoot();
+      try {
+        pdf = await createOfficialAssessmentPdf(prepared.pages, prepared.root.id);
+      } finally {
+        prepared.root.remove();
+        releasePrintPhotoUrls();
+        setPrintPhotoUrls({});
+        setPrintPhotoErrors({});
+      }
+
+      const safeRespondent = (record.namaLengkap || record.id)
+        .normalize('NFKC').replace(/[\\/:*?"<>|]+/g, '_').replace(/\s+/g, '-').slice(0, 80);
+      const nikValue = String(record.nik || record.formAsesmenTerintegrasi?.q23 || '');
+      const safeNik = nikValue.replace(/\D/g, '') || 'tanpa-NIK';
+      const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+      fileName = `Form-Asesmen-Terintegrasi-${safeRespondent}-${safeNik}-${stamp}.pdf`;
+
+      try {
+        const previousArchive = await getIntegratedAssessmentBackupMetadata(record.id).catch(() => null);
+        const driveCopy = await backupAssessmentToCentralDrive({
+          ppksId: record.id,
+          ppksName: record.namaLengkap || record.id,
+          nik: nikValue,
+          fileName,
+          existingFileId: previousArchive?.fileId || undefined,
+          pdf,
+        });
+        try {
+          await saveIntegratedAssessmentBackupMetadata(record.id, {
+            status: 'complete',
+            fileId: driveCopy.id,
+            webViewLink: driveCopy.webViewLink,
+          });
+          setDriveArchive({
+            status: 'complete',
+            error: '',
+            fileId: driveCopy.id,
+            webViewLink: driveCopy.webViewLink || '',
+            savedAt: new Date().toISOString(),
+          });
+          return { pdf, fileName, driveUrl: driveCopy.webViewLink || '', backupError: '' };
+        } catch (metadataError) {
+          if (!driveCopy.replacedExisting) {
+            try { await deleteCentralDriveFile(driveCopy.id); } catch { /* preserve metadata error */ }
+          }
+          throw metadataError;
+        }
+      } catch (driveError) {
+        const detail = driveError instanceof Error ? driveError.message : String(driveError);
+        try {
+          await saveIntegratedAssessmentBackupMetadata(record.id, { status: 'failed', error: detail });
+          setDriveArchive({ status: 'failed', error: detail, fileId: '', webViewLink: '', savedAt: '' });
+        } catch (metadataError) {
+          console.error('SIPANDU could not record assessment PDF backup failure:', metadataError);
+        }
+        return { pdf, fileName, driveUrl: '', backupError: detail };
+      }
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      document.getElementById('sipandu-assessment-pdf-root')?.remove();
+      try {
+        await saveIntegratedAssessmentBackupMetadata(record.id, { status: 'failed', error: detail });
+        setDriveArchive({ status: 'failed', error: detail, fileId: '', webViewLink: '', savedAt: '' });
+      } catch (metadataError) {
+        console.error('SIPANDU could not record PDF generation failure:', metadataError);
+      }
+      throw error;
+    } finally {
+      setPreparingPrint(false);
+    }
+  };
+
   const handleSave = async () => {
     if (isSaving) return;
     if (!currentPPKS) {
@@ -362,90 +608,43 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
       clean[key] = Array.isArray(value) ? value.filter(Boolean) : String(value ?? '');
     });
 
-    // Save only the independent answer field; spreadsheet-owned profile data stays unchanged.
     const updated: PPKSRecord = {
       ...currentPPKS,
       formAsesmenTerintegrasi: clean,
     };
 
+    let firestoreSaved = false;
     setIsSaving(true);
     setStatusMessage(null);
     try {
-      // The callback resolves only after Firestore confirms the remote write.
       await onSaveAssessment(updated);
+      firestoreSaved = true;
 
-      // Keep a portable archive copy in the central SIPANDU Google Drive.
-      // Firestore remains the application source of truth, so a Drive outage
-      // cannot erase an assessment that has already been committed.
-      try {
-        const driveCopy = await backupAssessmentToCentralDrive({
-          ppksId: currentPPKS.id,
-          ppksName: currentPPKS.namaLengkap || currentPPKS.id,
-          nik: currentPPKS.nik || (typeof clean.q23 === 'string' ? clean.q23 : ''),
-          answers: clean,
-        });
-        try {
-          await saveIntegratedAssessmentBackupMetadata(currentPPKS.id, {
-            status: 'complete',
-            fileId: driveCopy.id,
-            webViewLink: driveCopy.webViewLink,
-          });
-          setDriveArchive({
-            status: 'complete',
-            error: '',
-            fileId: driveCopy.id,
-            webViewLink: driveCopy.webViewLink || '',
-            savedAt: new Date().toISOString(),
-          });
-          setStatusMessage({
+      // Google Drive receives the same A4 PDF that the user can print, never a JSON snapshot.
+      const archive = await createAndBackupAssessmentPdf(updated);
+      setStatusMessage(archive.backupError
+        ? {
             type: 'success',
-            text: 'Form Asesmen Terintegrasi tersimpan di Firestore dan arsip Google Drive utama SIPANDU.',
-            driveUrl: driveCopy.webViewLink,
+            text: 'Jawaban aman di Firestore dan PDF sudah dibuat, tetapi backup Google Drive belum berhasil: ' + archive.backupError,
+          }
+        : {
+            type: 'success',
+            text: 'Form Asesmen Terintegrasi tersimpan di Firestore dan PDF resmi berhasil diarsipkan di Google Drive.',
+            driveUrl: archive.driveUrl,
           });
-        } catch (metadataError) {
-          // Do not leave a Drive object that SIPANDU cannot track in Firestore.
-          try { await deleteCentralDriveFile(driveCopy.id); } catch { /* preserve metadata error */ }
-          throw metadataError;
-        }
-      } catch (driveError) {
-        const detail = driveError instanceof Error ? driveError.message : String(driveError);
-        try {
-          await saveIntegratedAssessmentBackupMetadata(currentPPKS.id, {
-            status: 'failed',
-            error: detail,
-          });
-          setDriveArchive({
-            status: 'failed',
-            error: detail,
-            fileId: '',
-            webViewLink: '',
-            savedAt: '',
-          });
-        } catch (metadataError) {
-          console.error('SIPANDU could not record assessment Drive backup failure:', metadataError);
-        }
-        setStatusMessage({
-          type: 'success',
-          text: 'Jawaban aman di Firestore, tetapi backup Google Drive belum berhasil: ' + detail + ' Hubungkan ulang akun Google Workspace lalu simpan lagi untuk membuat arsip baru.',
-        });
-      }
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);
       setStatusMessage({
-        type: 'error',
-        text: 'Gagal menyimpan Form Asesmen Terintegrasi ke Firebase: ' + detail,
+        type: firestoreSaved ? 'success' : 'error',
+        text: firestoreSaved
+          ? 'Jawaban sudah aman di Firestore, tetapi PDF/backup Google Drive belum berhasil dibuat: ' + detail
+          : 'Gagal menyimpan Form Asesmen Terintegrasi ke Firebase: ' + detail,
       });
     } finally {
       setIsSaving(false);
+      setPreparingPrint(false);
     }
   };
-
-  const printablePhotos = [
-    { key: 'fotoDiri', title: 'FOTO DIRI PPKS (CLOSE-UP)', source: currentPPKS?.fotoDiri || '' },
-    { key: 'fotoKtp', title: 'FOTO KTP', source: currentPPKS?.fotoKtp || '' },
-    { key: 'fotoKk', title: 'FOTO KARTU KELUARGA', source: currentPPKS?.fotoKk || '' },
-    { key: 'fotoRumah', title: 'FOTO RUMAH TAMPAK DEPAN', source: currentPPKS?.fotoRumah || '' },
-  ];
 
   const getDriveFileId = (value: string): string | null => {
     const trimmed = value.trim();
@@ -610,159 +809,80 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
   ]);
 
   const handlePrint = async () => {
+    if (isSaving || preparingPrint) return;
     if (!currentPPKS) {
       setStatusMessage({ type: 'error', text: 'Pilih responden PPKS terlebih dahulu agar lembar asesmen dan empat lampiran foto terikat pada responden yang benar.' });
       return;
     }
+
     setPreparingPrint(true);
     setStatusMessage(null);
-    releasePrintPhotoUrls();
-
-    const urls: Record<string, string> = {};
-    const errors: Record<string, string> = {};
     try {
-      if (onBeforePrint) {
-        const cleanAnswers: Record<string, string | string[]> = {};
-        Object.entries(answers).forEach(([key, value]) => {
-          cleanAnswers[key] = Array.isArray(value) ? value.filter(Boolean) : String(value ?? '');
-        });
-        const identityOnly = new Set(['q5', 'q15', 'q16', 'q19', 'q23', 'q25']);
-        const hasMeaningfulAnswers = Object.entries(cleanAnswers).some(([key, value]) => {
-          if (identityOnly.has(key.toLowerCase())) return false;
-          return Array.isArray(value)
-            ? value.some((item) => String(item ?? '').trim() !== '')
-            : String(value ?? '').trim() !== '';
-        });
-        if (hasMeaningfulAnswers) {
-          // A printed form is also archived in Firestore, even when the user did not press Save Form first.
-          await onBeforePrint({ ...currentPPKS, formAsesmenTerintegrasi: cleanAnswers });
-          setStatusMessage({ type: 'success', text: 'Form berhasil diarsipkan ke database SIPANDU. Menyiapkan dokumen untuk dicetak…' });
-        }
-      }
-
-      // Always prepare all four photo appendices. Missing files get an explicit
-      // explanation page instead of a blank sheet.
-      await Promise.all(printablePhotos.map(async (photo) => {
-        try {
-          const resolved = await resolvePhotoForPrint(photo.source);
-          if (resolved.url) urls[photo.key] = resolved.url;
-          if (resolved.error) errors[photo.key] = resolved.error;
-        } catch (error) {
-          errors[photo.key] = error instanceof Error ? error.message : String(error);
-        }
-      }));
-
-      setPrintPhotoUrls(urls);
-      setPrintPhotoErrors(errors);
-      // Allow React to render the print appendices before checking their images.
-      await new Promise<void>((resolve) => requestAnimationFrame(() =>
-        requestAnimationFrame(() => resolve())
-      ));
-
-      const shell = document.querySelector('.official-assessment-shell');
-      const images = shell ? Array.from(shell.querySelectorAll('img')) : [];
-      await Promise.all(images.map((image) => {
-        if (image.complete && image.naturalWidth > 0) return Promise.resolve();
-        return new Promise<void>((resolve) => {
-          let finished = false;
-          const finish = () => {
-            if (finished) return;
-            finished = true;
-            window.clearTimeout(timer);
-            image.removeEventListener('load', finish);
-            image.removeEventListener('error', finish);
-            resolve();
-          };
-          const timer = window.setTimeout(finish, 3500);
-          image.addEventListener('load', finish, { once: true });
-          image.addEventListener('error', finish, { once: true });
-        });
-      }));
-      if (document.fonts?.ready) await document.fonts.ready;
-
-      if (!shell) throw new Error('Area Form Asesmen Terintegrasi tidak ditemukan untuk dicetak.');
-
-      // Print a dedicated clone directly under <body>. The old approach hid
-      // every element outside <main> and assumed a particular React DOM tree;
-      // on mobile Chrome this could leave the print renderer with blank pages.
-      // A self-contained root makes the PDF independent of dashboard wrappers.
-      const printRootId = 'sipandu-official-print-root';
-      document.getElementById(printRootId)?.remove();
-      const printRoot = document.createElement('div');
-      printRoot.id = printRootId;
-      const printClone = shell.cloneNode(true) as HTMLElement;
-
-      // React-controlled form values are DOM properties; copy them explicitly
-      // because cloneNode alone does not preserve every live input/checked value.
-      const sourceControls = Array.from(shell.querySelectorAll('input, textarea, select'));
-      const targetControls = Array.from(printClone.querySelectorAll('input, textarea, select'));
-      sourceControls.forEach((sourceControl, index) => {
-        const targetControl = targetControls[index];
-        if (!targetControl) return;
-        if (sourceControl instanceof HTMLInputElement && targetControl instanceof HTMLInputElement) {
-          targetControl.value = sourceControl.value;
-          targetControl.checked = sourceControl.checked;
-          if (sourceControl.checked) targetControl.setAttribute('checked', '');
-          else targetControl.removeAttribute('checked');
-          if (sourceControl.value) targetControl.setAttribute('value', sourceControl.value);
-          else targetControl.removeAttribute('value');
-        } else if (sourceControl instanceof HTMLTextAreaElement && targetControl instanceof HTMLTextAreaElement) {
-          targetControl.value = sourceControl.value;
-          targetControl.textContent = sourceControl.value;
-        } else if (sourceControl instanceof HTMLSelectElement && targetControl instanceof HTMLSelectElement) {
-          targetControl.selectedIndex = sourceControl.selectedIndex;
-          Array.from(targetControl.options).forEach((option, optionIndex) => {
-            option.selected = optionIndex === sourceControl.selectedIndex;
-            if (option.selected) option.setAttribute('selected', '');
-            else option.removeAttribute('selected');
-          });
-        }
+      const cleanAnswers: Record<string, string | string[]> = {};
+      Object.entries(answers).forEach(([key, value]) => {
+        cleanAnswers[key] = Array.isArray(value) ? value.filter(Boolean) : String(value ?? '');
+      });
+      const identityOnly = new Set(['q5', 'q15', 'q16', 'q19', 'q23', 'q25']);
+      const hasMeaningfulAnswers = Object.entries(cleanAnswers).some(([key, value]) => {
+        if (identityOnly.has(key.toLowerCase())) return false;
+        return Array.isArray(value)
+          ? value.some((item) => String(item ?? '').trim() !== '')
+          : String(value ?? '').trim() !== '';
       });
 
-      printRoot.appendChild(printClone);
-      document.body.appendChild(printRoot);
-      document.body.classList.add('official-assessment-printing');
-      await new Promise<void>((resolve) => requestAnimationFrame(() =>
-        requestAnimationFrame(() => resolve())
-      ));
+      const updated: PPKSRecord = {
+        ...currentPPKS,
+        formAsesmenTerintegrasi: cleanAnswers,
+      };
+      if (onBeforePrint && hasMeaningfulAnswers) {
+        await onBeforePrint(updated);
+      }
 
-      const cloneImages = Array.from(printClone.querySelectorAll('img'));
-      await Promise.all(cloneImages.map((image) => {
-        if (image.complete && image.naturalWidth > 0) return Promise.resolve();
-        return new Promise<void>((resolve) => {
-          let finished = false;
-          const finish = () => {
-            if (finished) return;
-            finished = true;
-            window.clearTimeout(timer);
-            image.removeEventListener('load', finish);
-            image.removeEventListener('error', finish);
-            resolve();
-          };
-          const timer = window.setTimeout(finish, 2500);
-          image.addEventListener('load', finish, { once: true });
-          image.addEventListener('error', finish, { once: true });
+      // The same generated A4 PDF is both uploaded to Drive and sent to the print UI.
+      const archive = await createAndBackupAssessmentPdf(updated);
+      if (archive.backupError) {
+        setStatusMessage({
+          type: 'success',
+          text: 'PDF resmi berhasil dibuat. Jawaban tersimpan di Firestore, tetapi arsip Google Drive belum berhasil: ' + archive.backupError,
         });
-      }));
+      } else {
+        setStatusMessage({
+          type: 'success',
+          text: 'PDF resmi berhasil dibuat dan diarsipkan ke Google Drive SIPANDU.',
+          driveUrl: archive.driveUrl,
+        });
+      }
 
-      setPreparingPrint(false);
       try {
-        await printCurrentWebView('SIPANDU - Form Asesmen Terintegrasi');
-      } catch (nativePrintError) {
-        console.warn('SIPANDU native print bridge unavailable; falling back to browser print:', nativePrintError);
-        window.print();
+        await printPdfBlob(archive.pdf, archive.fileName);
+      } catch (printError) {
+        console.warn('SIPANDU native PDF print is unavailable; downloading the generated PDF instead:', printError);
+        const objectUrl = URL.createObjectURL(archive.pdf);
+        const link = document.createElement('a');
+        link.href = objectUrl;
+        link.download = archive.fileName;
+        link.rel = 'noopener';
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        window.setTimeout(() => URL.revokeObjectURL(objectUrl), 120_000);
+        setStatusMessage({
+          type: 'success',
+          text: 'PDF berhasil dibuat. File diunduh ke perangkat karena dialog cetak tidak tersedia pada perangkat ini.' +
+            (archive.backupError ? ' Backup Google Drive belum berhasil: ' + archive.backupError : ''),
+          ...(archive.driveUrl ? { driveUrl: archive.driveUrl } : {}),
+        });
       }
     } catch (error) {
-      document.body.classList.remove('official-assessment-printing');
-      document.getElementById('sipandu-official-print-root')?.remove();
       releasePrintPhotoUrls();
       setPrintPhotoUrls({});
       setPrintPhotoErrors({});
-      setPreparingPrint(false);
       setStatusMessage({
         type: 'error',
-        text: `Persiapan cetak tidak selesai: ${error instanceof Error ? error.message : String(error)}. Coba cetak kembali.`,
+        text: 'Persiapan PDF tidak selesai: ' + (error instanceof Error ? error.message : String(error)) + '. Jawaban yang sudah tersimpan di Firestore tetap aman; coba cetak kembali.',
       });
+    } finally {
+      setPreparingPrint(false);
     }
   };
 
