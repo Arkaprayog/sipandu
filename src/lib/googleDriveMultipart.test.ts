@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { buildGoogleDriveMultipartBody } from './googleDriveMultipart';
+import { buildGoogleDriveMultipartBody, buildGoogleDriveRequestUrl } from './googleDriveMultipart';
 
 test('builds Google Drive multipart body with real CRLF delimiters', async () => {
   const boundary = 'sipandu-regression-boundary';
@@ -32,4 +32,28 @@ test('rejects unsafe multipart boundary and content type line breaks', () => {
     () => buildGoogleDriveMultipartBody('{}', 'application/pdf\r\nInjected: yes', pdf, 'safe-boundary'),
     /Invalid multipart content type/,
   );
+});
+
+
+test('uses the regular Drive v3 endpoint for folder and metadata requests', () => {
+  assert.equal(
+    buildGoogleDriveRequestUrl('/files?q=mimeType%3Dfolder'),
+    'https://www.googleapis.com/drive/v3/files?q=mimeType%3Dfolder',
+  );
+});
+
+test('uses the dedicated Drive upload endpoint for multipart and resumable uploads', () => {
+  assert.equal(
+    buildGoogleDriveRequestUrl('/files?uploadType=multipart&fields=id', true),
+    'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id',
+  );
+  assert.equal(
+    buildGoogleDriveRequestUrl('/files?uploadType=resumable&fields=id', true),
+    'https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&fields=id',
+  );
+});
+
+test('rejects non-rooted and protocol-relative Drive API paths', () => {
+  assert.throws(() => buildGoogleDriveRequestUrl('files'), /Invalid Google Drive API path/);
+  assert.throws(() => buildGoogleDriveRequestUrl('//attacker.example/files'), /Invalid Google Drive API path/);
 });
