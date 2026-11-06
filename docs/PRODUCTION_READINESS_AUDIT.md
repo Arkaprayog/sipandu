@@ -122,3 +122,31 @@ Scope: the complete 132-file repository tree on `main`, with focused source revi
 ### Release acceptance
 
 The release is considered built only after the latest main-branch runs pass application/unit tests, TypeScript checks, production web build and asset checks, Firestore Rules emulator suite, CodeQL, Android debug metadata/signature checks, Android release metadata/signature checks, and native Google scope bridge verification.
+
+## Audit lanjutan dan kesiapan rilis v2.2.7 — 6 November 2026
+
+### Cakupan dan bukti
+
+Audit memeriksa struktur repo `main`, konfigurasi Capacitor/Wrangler/Firebase, alur sesi dan penyimpanan profil, modul arsip dokumen asesmen, aturan Firestore/Storage, workflow GitHub Actions, serta status deployment Cloudflare. Pemeriksaan ini adalah audit source/configuration dan CI, bukan penetration test atau pengujian end-to-end seluruh perangkat dan layanan eksternal.
+
+- Firestore Rules diuji melalui Firebase Emulator dan workflow produksi lulus pada run [42140673270](https://github.com/Arkaprayog/sipandu/actions/runs/42140673270). Log produksi menunjukkan `firestore.rules` berhasil dikompilasi dan dirilis; versi terbaru sebelumnya sudah up to date. Database yang dituju adalah database SIPANDU bernama, bukan database default.
+- Build web, TypeScript, tes aplikasi, pemeriksaan asset Pages, dan CodeQL lulus pada commit `17e3633d5e98956170fcfc549ff67e9d8332d387`.
+- APK debug dan release native berhasil dibangun pada commit tersebut. Verifikasi package `id.my.sipandu.odhiv`, version metadata, signature, native Google scope bridge, serta ikon launcher resmi lulus. Run Android: [42140673373](https://github.com/Arkaprayog/sipandu/actions/runs/42140673373).
+- GitHub Pages berhasil diperbarui. Cloudflare Worker aplikasi tetap berupa static assets (`dist`) dan saat audit tidak memiliki R2 binding; perubahan workflow Firebase saja tidak mengubah bundle Worker.
+- Cloudflare account mempunyai bucket R2 untuk proyek lain, tetapi tidak ada bucket SIPANDU. Bucket milik proyek lain tidak digunakan atau diubah.
+
+### Temuan penting dan keputusan
+
+1. **Firebase Storage bukan dependensi jalur dashboard aktif yang ditemukan.** `src/lib/documentStorage.ts` dan `src/components/SuratTugasEditor.tsx` masih mengimpor Firebase Storage, tetapi code search tidak menemukan komponen Surat Tugas tersebut dipanggil dari jalur dashboard saat ini. Modul tersebut adalah jalur lama/dormant dan tidak boleh diaktifkan sebelum storage dimigrasikan serta diuji.
+2. **Arsip From Asesmen Terintegrasi tidak bergantung pada Firebase Storage.** Jawaban disimpan pada dokumen PPKS di Firestore dan arsip/backup terstruktur menggunakan integrasi Google Drive. Sinkronisasi lintas perangkat membaca data Firestore; bukan file blob dari Firebase Storage.
+3. **Tidak ada upgrade Blaze.** Firebase Storage bucket belum diinisialisasi. Workflow sekarang menguji Storage Rules melalui emulator saja dan menerapkan Firestore Rules saja ke produksi. Production deploy tidak menjalankan perintah Storage, tidak membuat bucket, dan tidak mengubah dokumen Firestore.
+4. **R2 belum dipasang untuk SIPANDU.** Worker `sipandu` adalah Worker static-assets dengan `bindings: []`; belum ada R2 bucket binding atau API upload/download berotorisasi. Audit ini tidak membuat bucket baru karena fitur unggah aktif tidak memerlukannya dan bucket milik aplikasi lain tidak boleh dicampur. Jika kebutuhan upload file staf diaktifkan kembali, implementasikan storage privat terpisah di R2 melalui Worker yang memverifikasi Firebase ID token dan custom role server-side, membatasi object key per UID, ukuran/MIME, serta akses unduh. Jangan mengirim kredensial S3/R2 ke browser atau menampilkan bucket publik untuk data pribadi.
+5. **Aturan dan kode mempunyai batas operasional.** CI hijau membuktikan tes yang dijalankan dan build; bukan bukti login Google Workspace, permission Drive, izin perangkat, notifikasi saat aplikasi benar-benar tertutup, atau uji fisik lintas-perangkat. Cache lokal juga dapat menyimpan data pribadi; perangkat harus dilindungi dan sesi ditutup hanya oleh tindakan logout yang sah.
+
+### Status penerimaan
+
+- Firestore production rules: **berhasil diterapkan**.
+- Firebase Storage production: **tidak diaktifkan, tidak di-deploy, dan tidak dibutuhkan oleh jalur arsip asesmen aktif**.
+- R2 SIPANDU: **belum dikonfigurasi**; tidak ada klaim bahwa migrasi R2 sudah selesai.
+- APK v2.2.7: **dibangun lewat workflow rilis setelah audit ini**; status akhir harus diambil dari run pada commit versi baru.
+- Uji nyata yang masih memerlukan perangkat/akun pemilik: login, refresh tanpa logout, simpan profil, buka arsip asesmen yang sama dari browser dan APK, serta tes cetak/PDF.
