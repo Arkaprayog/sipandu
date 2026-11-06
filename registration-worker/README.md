@@ -30,6 +30,17 @@ The Firebase project ID and Web API key are already configured as non-secret Wor
 
 The shared `TEAM_REGISTRATION_CODE` is checked when a new member registers. Once the Worker has stored that member's pending invitation, the `/activate` endpoint does not need the shared code again; it requires the Firebase service-account secret, Firebase project/API settings, and the KV binding. This lets a member complete email verification even if the shared code has since been rotated or removed. The `/health` endpoint still reports the full service as not ready when any required secret is missing, because new registrations also depend on the shared code.
 
+## Restore an invitation for an existing account
+
+If Firebase already contains the member account but its pending KV invitation is missing or has expired, the signed-in user can restore it without creating another Firebase account:
+
+1. Sign in using the existing email and password, then finish email verification.
+2. On the retained-session screen, enter the current shared team registration code and choose **Pulihkan undangan akun yang sama**.
+3. The Worker verifies the Firebase ID token, verified email, UID, and team code, then writes a new seven-day invitation for that exact UID.
+4. SIPANDU immediately retries activation. The Worker grants only the `pendamping` role and never accepts a role supplied by the browser.
+
+This recovery path rejects accounts that already have the `owner` or `supervisor` role. Those roles must be managed administratively; do not use member-invitation recovery for an administrator account. No new Firebase account is created by this route.
+
 ## Deploy the Worker
 
 From the `registration-worker` directory in a trusted terminal with Wrangler installed. The checked-in `index.runtime.js` is the JavaScript Worker entry point uploaded to Cloudflare; `index.ts` is the typed source reference:

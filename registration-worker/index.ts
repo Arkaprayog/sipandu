@@ -334,6 +334,64 @@ export default {
       }
     }
 
+    if (path === '/restore-invitation' && request.method === 'POST') {
+      if (!(await allowAttempt(env, request))) {
+        return jsonResponse({ ok: false, message: 'Terlalu banyak percobaan. Coba kembali setelah satu menit.' }, 429, origin);
+      }
+      const missing = missingConfiguration(env);
+      if (missing.length) {
+        return jsonResponse({ ok: false, message: `Layanan pemulihan undangan belum siap. Konfigurasi belum tersedia: ${missing.join(', ')}.`, missing }, 503, origin);
+      }
+      const body = await parseJson(request);
+      if (!body || typeof body.code !== 'string' || !(await validateCode(env, body.code))) {
+        return jsonResponse({ ok: false, message: 'Kode pendaftaran tim tidak benar.' }, 403, origin);
+      }
+      const authorization = request.headers.get('Authorization') || '';
+      const idToken = authorization.startsWith('Bearer ') ? authorization.slice(7).trim() : '';
+      if (!idToken) return jsonResponse({ ok: false, message: 'Sesi Firebase tidak ditemukan.' }, 401, origin);
+      try {
+        const firebaseUser = await lookupFirebaseUser(env, idToken);
+        if (!firebaseUser.email || !firebaseUser.localId) {
+          return jsonResponse({ ok: false, message: 'Profil akun Firebase belum lengkap.' }, 400, origin);
+        }
+        if (!firebaseUser.emailVerified) {
+          return jsonResponse({ ok: false, message: 'Email belum diverifikasi. Pulihkan undangan setelah verifikasi email selesai.' }, 403, origin);
+        }
+
+        let existingClaims: Record<string, unknown> = {};
+        if (firebaseUser.customAttributes) {
+          try {
+            const parsed = JSON.parse(firebaseUser.customAttributes) as unknown;
+            if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+              throw new Error('Klaim akun tidak valid.');
+            }
+            existingClaims = parsed as Record<string, unknown>;
+          } catch {
+            return jsonResponse({ ok: false, message: 'Klaim akun Firebase tidak dapat dibaca dengan aman.' }, 403, origin);
+          }
+        }
+        const currentRole = existingClaims.role;
+        if (currentRole === 'owner' || currentRole === 'supervisor') {
+          return jsonResponse({ ok: false, message: 'Akun ini sudah memiliki peran administrator. Pemulihan undangan anggota tidak diperlukan.' }, 409, origin);
+        }
+        if (currentRole !== undefined && currentRole !== 'pendamping') {
+          return jsonResponse({ ok: false, message: 'Akun memiliki peran yang tidak dapat ditimpa melalui pemulihan undangan.' }, 403, origin);
+        }
+
+        const email = firebaseUser.email.trim().toLowerCase();
+        const now = Date.now();
+        await env.PENDING_REGISTRATIONS!.put(`pending:${firebaseUser.localId}`, JSON.stringify({
+          uid: firebaseUser.localId,
+          email,
+          createdAt: now,
+          restoredAt: now,
+        }), { expirationTtl: 7 * 24 * 60 * 60 });
+        return jsonResponse({ ok: true, message: 'Undangan tim berhasil dipulihkan untuk akun dan email yang sama. Lanjutkan aktivasi.' }, 200, origin);
+      } catch (error) {
+        return jsonResponse({ ok: false, message: error instanceof Error ? error.message : 'Undangan tim belum dapat dipulihkan.' }, 401, origin);
+      }
+    }
+
     if (path === '/activate' && request.method === 'POST') {
       const activationMissing = missingActivationConfiguration(env);
       if (activationMissing.length) {

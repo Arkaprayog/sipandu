@@ -27,7 +27,7 @@ const NotificationsModal = lazyWithRecovery('NotificationsModal', () => import('
 const GoogleWorkspaceModal = lazyWithRecovery('GoogleWorkspaceModal', () => import('./components/GoogleWorkspaceModal').then((module) => ({ default: module.GoogleWorkspaceModal })));
 import { onAuthStateChanged, signOut, getIdTokenResult } from 'firebase/auth';
 import { auth, getAccessToken, savePPKSToFirestore, saveIntegratedAssessmentToFirestore, replacePPKSCollectionFromSpreadsheet, googleLogout, subscribeToPPKSChanges, saveStageOneIntakeToFirestore, subscribeToStageOneIntake, staffAuthPersistenceReady, isWorkspaceAccountConnected, invalidateAccessToken, getSIPANDUUserProfile, saveSIPANDUUserProfile } from './lib/firebase';
-import { activatePendingTeamMember } from './lib/teamRegistration';
+import { activatePendingTeamMember, restorePendingTeamInvitation } from './lib/teamRegistration';
 import { ensureSIPANDUDatabaseSheet, extractSpreadsheetId, getLinkedSpreadsheetUrlForForm, importPPKSFromSpreadsheet, upsertPPKSInSpreadsheet } from './lib/googleWorkspace';
 import { GOOGLE_SIPANDU_RESOURCES } from './lib/googleSIPANDUResources';
 import { getLiveSyncRetryDelay, LIVE_SYNC_INTERVAL_MS } from './lib/liveSyncPolicy';
@@ -274,6 +274,7 @@ function StaffApp() {
   const [currentUserName, setCurrentUserName] = useState('');
   const [currentUserRole, setCurrentUserRole] = useState('');
   const [authError, setAuthError] = useState('');
+  const [teamRecoveryCode, setTeamRecoveryCode] = useState('');
   const [localCacheReady, setLocalCacheReady] = useState(false);
 
   useEffect(() => {
@@ -716,6 +717,44 @@ function StaffApp() {
       setAuthError('');
     } catch (error) {
       setAuthError('Permintaan keluar belum selesai: ' + (error instanceof Error ? error.message : String(error)));
+    }
+  };
+
+  const handleRestoreTeamInvitation = async () => {
+    const user = auth.currentUser;
+    const code = teamRecoveryCode.trim();
+    if (!user) {
+      setAuthError('Sesi akun sudah tidak ditemukan. Masuk kembali dengan akun yang sama.');
+      return;
+    }
+    if (!code) {
+      setAuthError('Masukkan kode pendaftaran tim dari administrator untuk memulihkan undangan akun yang sama.');
+      return;
+    }
+    setAuthReady(false);
+    setAuthError('');
+    try {
+      await user.reload();
+      if (!user.emailVerified) {
+        throw new Error('Email belum diverifikasi. Selesaikan verifikasi email sebelum memulihkan undangan.');
+      }
+      await restorePendingTeamInvitation(user, code);
+      await activatePendingTeamMember(user);
+      const token = await getIdTokenResult(user, true);
+      const role = token.claims.role;
+      if (role !== 'pendamping') {
+        throw new Error('Pemulihan undangan selesai, tetapi peran pendamping belum muncul pada token Firebase terbaru. Coba verifikasi akses lagi.');
+      }
+      setCurrentUserRole(role);
+      setCurrentUserName(user.displayName || user.email || '');
+      setTeamRecoveryCode('');
+      setIsAuthenticated(true);
+      setLocalCacheReady(false);
+    } catch (error) {
+      setIsAuthenticated(false);
+      setAuthError(describeTeamActivationError(error));
+    } finally {
+      setAuthReady(true);
     }
   };
 
@@ -1485,6 +1524,33 @@ function StaffApp() {
         <section className="w-full max-w-md rounded-2xl border border-amber-400/30 bg-[#112214] p-5 shadow-2xl">
           <h1 className="text-lg font-extrabold text-amber-100">Sesi SIPANDU masih tersimpan</h1>
           <p className="mt-2 text-sm leading-relaxed text-neutral-200">{authError || 'Akses akun sedang diperiksa.'}</p>
+          {/undangan pendaftaran tim tidak ditemukan atau telah kedaluwarsa/i.test(authError) && (
+            <div className="mt-4 rounded-xl border border-amber-300/30 bg-black/20 p-3">
+              <p className="text-xs leading-relaxed text-amber-50">
+                Pulihkan undangan untuk akun yang sedang tersimpan{auth.currentUser?.email ? ` (${auth.currentUser.email})` : ''}. Proses ini memakai UID Firebase yang sama dan tidak membuat akun baru. Pemulihan ini hanya memberikan peran anggota pendamping; akun owner/supervisor harus dipulihkan melalui administrasi Firebase.
+              </p>
+              <label htmlFor="sipandu-team-recovery-code" className="mt-3 block text-xs font-semibold text-neutral-100">
+                Kode pendaftaran tim dari administrator
+              </label>
+              <input
+                id="sipandu-team-recovery-code"
+                type="password"
+                autoComplete="off"
+                value={teamRecoveryCode}
+                onChange={(event) => setTeamRecoveryCode(event.target.value)}
+                placeholder="Masukkan kode tim"
+                className="mt-1 w-full rounded-lg border border-white/20 bg-white/10 px-3 py-2.5 text-sm text-white outline-none focus:border-emerald-400"
+              />
+              <button
+                type="button"
+                onClick={() => void handleRestoreTeamInvitation()}
+                disabled={!teamRecoveryCode.trim()}
+                className="mt-2 w-full rounded-xl bg-amber-500 px-4 py-3 text-sm font-bold text-black hover:bg-amber-400 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Pulihkan undangan akun yang sama
+              </button>
+            </div>
+          )}
           <button type="button" onClick={() => void handleRetryStaffAccess()} className="mt-4 w-full rounded-xl bg-emerald-600 px-4 py-3 text-sm font-bold text-white hover:bg-emerald-500">
             Coba verifikasi akses lagi
           </button>

@@ -103,3 +103,99 @@ test('rejects untrusted origins at the registration Worker boundary', async () =
   assert.equal(response.status, 403);
   assert.equal(response.headers.get('Access-Control-Allow-Origin'), null);
 });
+
+
+test('restores an invitation for the same verified Firebase account without creating a new account', async () => {
+  const originalFetch = globalThis.fetch;
+  const writes: Array<{ key: string; value: string; expirationTtl?: number }> = [];
+  const kv = {
+    get: async (_key: string) => null,
+    put: async (key: string, value: string, options?: { expirationTtl?: number }) => {
+      writes.push({ key, value, expirationTtl: options?.expirationTtl });
+    },
+    delete: async (_key: string) => undefined,
+  };
+  globalThis.fetch = (async () => new Response(JSON.stringify({
+    users: [{
+      localId: 'firebase-uid-existing-123',
+      email: 'AryPrayoga139@gmail.com',
+      emailVerified: true,
+      customAttributes: '{}',
+    }],
+  }), { status: 200, headers: { 'Content-Type': 'application/json' } })) as typeof fetch;
+
+  try {
+    const response = await worker.fetch(new Request('https://sipandu-registration.test/restore-invitation', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: 'Bearer existing-firebase-id-token',
+        'CF-Connecting-IP': '192.0.2.80',
+      },
+      body: JSON.stringify({ code: 'team-recovery-code-0123456789' }),
+    }), {
+      TEAM_REGISTRATION_CODE: 'team-recovery-code-0123456789',
+      FIREBASE_WEB_API_KEY: 'test-web-api-key',
+      FIREBASE_PROJECT_ID: 'gen-lang-client-0197631978',
+      FIREBASE_SERVICE_ACCOUNT_JSON: '{"project_id":"gen-lang-client-0197631978","client_email":"test@example.iam.gserviceaccount.com","private_key":"test"}',
+      PENDING_REGISTRATIONS: kv,
+    });
+
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), {
+      ok: true,
+      message: 'Undangan tim berhasil dipulihkan untuk akun dan email yang sama. Lanjutkan aktivasi.',
+    });
+    const invitation = writes.find((entry) => entry.key === 'pending:firebase-uid-existing-123');
+    assert.ok(invitation);
+    assert.equal(invitation.expirationTtl, 7 * 24 * 60 * 60);
+    assert.deepEqual(JSON.parse(invitation.value), {
+      uid: 'firebase-uid-existing-123',
+      email: 'aryprayoga139@gmail.com',
+      createdAt: JSON.parse(invitation.value).createdAt,
+      restoredAt: JSON.parse(invitation.value).restoredAt,
+    });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('does not restore an invitation before Firebase email verification', async () => {
+  const originalFetch = globalThis.fetch;
+  const writes: string[] = [];
+  const kv = {
+    get: async (_key: string) => null,
+    put: async (key: string) => { writes.push(key); },
+    delete: async (_key: string) => undefined,
+  };
+  globalThis.fetch = (async () => new Response(JSON.stringify({
+    users: [{
+      localId: 'firebase-uid-unverified',
+      email: 'member@example.test',
+      emailVerified: false,
+    }],
+  }), { status: 200, headers: { 'Content-Type': 'application/json' } })) as typeof fetch;
+
+  try {
+    const response = await worker.fetch(new Request('https://sipandu-registration.test/restore-invitation', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: 'Bearer unverified-firebase-id-token',
+        'CF-Connecting-IP': '192.0.2.81',
+      },
+      body: JSON.stringify({ code: 'team-recovery-code-0123456789' }),
+    }), {
+      TEAM_REGISTRATION_CODE: 'team-recovery-code-0123456789',
+      FIREBASE_WEB_API_KEY: 'test-web-api-key',
+      FIREBASE_PROJECT_ID: 'gen-lang-client-0197631978',
+      FIREBASE_SERVICE_ACCOUNT_JSON: '{"project_id":"gen-lang-client-0197631978","client_email":"test@example.iam.gserviceaccount.com","private_key":"test"}',
+      PENDING_REGISTRATIONS: kv,
+    });
+
+    assert.equal(response.status, 403);
+    assert.deepEqual(writes.filter((key) => key.startsWith('pending:')), []);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
