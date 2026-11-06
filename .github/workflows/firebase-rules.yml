@@ -92,7 +92,7 @@ jobs:
       - name: Install pinned Firebase CLI
         run: npm install --global firebase-tools@15.34.2
 
-      - name: Deploy Firestore and Storage Rules to the configured SIPANDU project
+      - name: Deploy Firestore Rules only to the configured SIPANDU project
         shell: bash
         env:
           FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
