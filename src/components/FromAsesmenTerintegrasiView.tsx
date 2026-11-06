@@ -583,8 +583,8 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
       setStatusMessage({ type: 'error', text: 'Pilih responden PPKS terlebih dahulu. Form tidak disimpan ke data contoh.' });
       return;
     }
-    const nikFromForm = typeof answers.q23 === 'string' ? answers.q23.replace(/\D/g, '') : '';
-    if (nikFromForm && !/^\d{16}$/.test(nikFromForm)) {
+    const nikFromForm = typeof answers.q23 === 'string' ? answers.q23.replace(/\\D/g, '') : '';
+    if (nikFromForm && !/^\\d{16}$/.test(nikFromForm)) {
       setStatusMessage({ type: 'error', text: 'NIK harus terdiri dari 16 digit. Periksa kolom 23 NIK sebelum menyimpan.' });
       return;
     }
@@ -593,81 +593,41 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
       clean[key] = Array.isArray(value) ? value.filter(Boolean) : String(value ?? '');
     });
 
-    // Save only the independent answer field; spreadsheet-owned profile data stays unchanged.
     const updated: PPKSRecord = {
       ...currentPPKS,
       formAsesmenTerintegrasi: clean,
     };
 
+    let firestoreSaved = false;
     setIsSaving(true);
     setStatusMessage(null);
     try {
-      // The callback resolves only after Firestore confirms the remote write.
       await onSaveAssessment(updated);
+      firestoreSaved = true;
 
-      // Keep a portable archive copy in the central SIPANDU Google Drive.
-      // Firestore remains the application source of truth, so a Drive outage
-      // cannot erase an assessment that has already been committed.
-      try {
-        const driveCopy = await backupAssessmentToCentralDrive({
-          ppksId: currentPPKS.id,
-          ppksName: currentPPKS.namaLengkap || currentPPKS.id,
-          nik: currentPPKS.nik || (typeof clean.q23 === 'string' ? clean.q23 : ''),
-          answers: clean,
-        });
-        try {
-          await saveIntegratedAssessmentBackupMetadata(currentPPKS.id, {
-            status: 'complete',
-            fileId: driveCopy.id,
-            webViewLink: driveCopy.webViewLink,
-          });
-          setDriveArchive({
-            status: 'complete',
-            error: '',
-            fileId: driveCopy.id,
-            webViewLink: driveCopy.webViewLink || '',
-            savedAt: new Date().toISOString(),
-          });
-          setStatusMessage({
+      // Google Drive receives the same A4 PDF that the user can print, never a JSON snapshot.
+      const archive = await createAndBackupAssessmentPdf(updated);
+      setStatusMessage(archive.backupError
+        ? {
             type: 'success',
-            text: 'Form Asesmen Terintegrasi tersimpan di Firestore dan arsip Google Drive utama SIPANDU.',
-            driveUrl: driveCopy.webViewLink,
+            text: 'Jawaban aman di Firestore dan PDF sudah dibuat, tetapi backup Google Drive belum berhasil: ' + archive.backupError,
+          }
+        : {
+            type: 'success',
+            text: 'Form Asesmen Terintegrasi tersimpan di Firestore dan PDF resmi berhasil diarsipkan di Google Drive.',
+            driveUrl: archive.driveUrl,
           });
-        } catch (metadataError) {
-          // Do not leave a Drive object that SIPANDU cannot track in Firestore.
-          try { await deleteCentralDriveFile(driveCopy.id); } catch { /* preserve metadata error */ }
-          throw metadataError;
-        }
-      } catch (driveError) {
-        const detail = driveError instanceof Error ? driveError.message : String(driveError);
-        try {
-          await saveIntegratedAssessmentBackupMetadata(currentPPKS.id, {
-            status: 'failed',
-            error: detail,
-          });
-          setDriveArchive({
-            status: 'failed',
-            error: detail,
-            fileId: '',
-            webViewLink: '',
-            savedAt: '',
-          });
-        } catch (metadataError) {
-          console.error('SIPANDU could not record assessment Drive backup failure:', metadataError);
-        }
-        setStatusMessage({
-          type: 'success',
-          text: 'Jawaban aman di Firestore, tetapi backup Google Drive belum berhasil: ' + detail + ' Hubungkan ulang akun Google Workspace lalu simpan lagi untuk membuat arsip baru.',
-        });
-      }
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);
       setStatusMessage({
-        type: 'error',
-        text: 'Gagal menyimpan Form Asesmen Terintegrasi ke Firebase: ' + detail,
+        type: firestoreSaved ? 'success' : 'error',
+        text: firestoreSaved
+          ? 'Jawaban sudah aman di Firestore, tetapi PDF/backup Google Drive belum berhasil dibuat: ' + detail
+          : 'Gagal menyimpan Form Asesmen Terintegrasi ke Firebase: ' + detail,
       });
     } finally {
       setIsSaving(false);
+      setPreparingPrint(false);
     }
   };
 
