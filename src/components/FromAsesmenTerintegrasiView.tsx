@@ -355,14 +355,24 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
     { key: 'fotoRumah', title: 'FOTO RUMAH TAMPAK DEPAN', source: currentPPKS?.fotoRumah || '' },
   ];
 
-  const prepareAssessmentPdfRoot = async (): Promise<{ root: HTMLElement; pages: HTMLElement[] }> => {
+  const prepareAssessmentPdfRoot = async (recordForPdf?: PPKSRecord): Promise<{ root: HTMLElement; pages: HTMLElement[] }> => {
     releasePrintPhotoUrls();
     setPrintPhotoUrls({});
     setPrintPhotoErrors({});
 
+    // Batch legacy migration changes the selected respondent repeatedly. Use
+    // the exact record passed to the PDF builder so photo appendices can never
+    // come from the respondent who happened to be selected before the batch.
+    const photosForPdf = recordForPdf ? [
+      { key: 'fotoDiri', title: 'FOTO DIRI PPKS (CLOSE-UP)', source: recordForPdf.fotoDiri || '' },
+      { key: 'fotoKtp', title: 'FOTO KTP', source: recordForPdf.fotoKtp || '' },
+      { key: 'fotoKk', title: 'FOTO KARTU KELUARGA', source: recordForPdf.fotoKk || '' },
+      { key: 'fotoRumah', title: 'FOTO RUMAH TAMPAK DEPAN', source: recordForPdf.fotoRumah || '' },
+    ] : printablePhotos;
+
     const urls: Record<string, string> = {};
     const errors: Record<string, string> = {};
-    await Promise.all(printablePhotos.map(async (photo) => {
+    await Promise.all(photosForPdf.map(async (photo) => {
       try {
         const resolved = await resolvePhotoForPrint(photo.source);
         if (resolved.url) urls[photo.key] = resolved.url;
@@ -534,7 +544,7 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
     let replacedExisting = false;
     setPreparingPrint(true);
     try {
-      const prepared = await prepareAssessmentPdfRoot();
+      const prepared = await prepareAssessmentPdfRoot(record);
       try {
         pdf = await createOfficialAssessmentPdf(prepared.pages, prepared.root.id);
         if (retainPrintRoot) printRootId = prepared.root.id;
