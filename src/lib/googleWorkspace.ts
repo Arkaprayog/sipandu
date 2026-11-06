@@ -1,10 +1,10 @@
-import { getAccessToken, invalidateAccessToken, refreshWorkspaceAccessToken } from './firebase';
+import { getAccessToken, invalidateAccessToken, refreshWorkspaceAccessToken, isWorkspaceAccountConnected } from './firebase';
 import { IntegratedFormData, PPKSRecord } from '../types';
 import { normalizeExactNumericNIK } from './nikNumeric';
 import { deduplicatePPKSRecords, getPPKSNIKCandidates, sortPPKSRecordsByTimestamp } from './ppksData';
 import { classifyPPKSPhotoHeader, normalizePPKSPhotoSource, readPPKSPhotoSourceByKind } from './photoSources';
-import { countSharedPhotoFileIds, googleDriveViewUrl, matchFormPhotoResponseForPPKS, isGoogleFormLinkedToSpreadsheet, type FormPhotoResponseCandidate } from './formPhotoRecovery';
-import { GOOGLE_SIPANDU_RESOURCES } from './googleSIPANDUResources';
+import { countSharedPhotoFileIds, extractGoogleDriveFileId, googleDriveViewUrl, matchFormPhotoResponseForPPKS, isGoogleFormLinkedToSpreadsheet, type FormPhotoResponseCandidate } from './formPhotoRecovery';
+import { GOOGLE_SIPANDU_RESOURCES, GOOGLE_WORKSPACE_EMAIL } from './googleSIPANDUResources';
 import { getPhotoUploadMimeType, isSupportedPhotoFile, MAX_PPKS_PHOTO_FILE_BYTES } from './photoFilePreview';
 import { ATENSI_PHOTO_COLUMN_INDICES, readAtensiProfileCell, readAtensiGender } from './atensiColumnMapping';
 import { readInterventionRecommendationFromRow } from './interventionMapping';
@@ -93,7 +93,7 @@ export type PPKSPhotoKind = 'diri' | 'ktp' | 'kk' | 'rumah';
  */
 export async function uploadPPKSPhotoToDrive(
   file: File,
-  options: { folderId: string; respondentName: string; respondentId: string; photoKind: PPKSPhotoKind }
+  options: { folderId?: string; respondentName: string; respondentId: string; photoKind: PPKSPhotoKind }
 ): Promise<string> {
   if (!isSupportedPhotoFile(file)) {
     throw new Error('Format tidak didukung. Pilih JPG/JPEG, PNG, GIF, WEBP, BMP, TIFF/TIF, HEIC/HEIF, RAW, PSD, PDF, DOC, atau DOCX.');
@@ -110,8 +110,13 @@ export async function uploadPPKSPhotoToDrive(
   const metadata = JSON.stringify({
     name: fileName,
     mimeType: uploadMimeType,
-    parents: [options.folderId],
-    description: `Foto PPKS ${options.respondentName}; ID SIPANDU ${options.respondentId}; kategori ${photoLabel}`,
+    parents: [(await ensureSIPANDUPhotoDriveFolders()).folders[options.photoKind]],
+    description: 'Foto PPKS ' + options.respondentName + '; ID SIPANDU ' + options.respondentId + '; kategori ' + photoLabel,
+    appProperties: {
+      sipanduManaged: 'true',
+      sipanduPhotoKind: options.photoKind,
+      sipanduRespondentId: options.respondentId.slice(0, 120),
+    },
   });
   const body = new Blob([
     `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${metadata}\r\n--${boundary}\r\nContent-Type: ${uploadMimeType}\r\n\r\n`,
@@ -230,6 +235,225 @@ export async function createDriveFolder(folderName: string): Promise<GoogleDrive
     method: 'POST',
     body: JSON.stringify({ name: folderName.trim(), mimeType: 'application/vnd.google-apps.folder' }),
   });
+}
+
+
+export const SIPANDU_PHOTO_FOLDER_NAMES: Record<PPKSPhotoKind, string> = {
+  diri: 'Foto Diri',
+  ktp: 'Foto KTP',
+  kk: 'Foto KK',
+  rumah: 'Foto Rumah Tampak Depan',
+};
+
+export type SIPANDUPhotoFolderIds = Record<PPKSPhotoKind, string>;
+
+export interface PPKSPhotoOrganizationReport {
+  foldersCreated: number;
+  filesMoved: number;
+  filesAlreadyOrganized: number;
+  filesSkipped: number;
+  filesFailed: number;
+  detail: string;
+}
+
+interface DrivePhotoFileMetadata {
+  id: string;
+  name: string;
+  mimeType: string;
+  parents?: string[];
+  trashed?: boolean;
+  description?: string;
+  appProperties?: Record<string, string>;
+}
+
+const SIPANDU_PHOTO_FOLDER_CACHE_KEY = 'sipandu_drive_photo_organization_v1';
+let cachedSIPANDUPhotoFolderIds: SIPANDUPhotoFolderIds | null = null;
+
+async function findOrCreateDriveFolder(name: string, parentId?: string): Promise<{ id: string; created: boolean }> {
+  const escapedName = name.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
+  const escapedParentId = parentId ? parentId.replace(/\\/g, "\\\\").replace(/'/g, "\\'") : '';
+  const parentFilter = parentId ? " and '" + escapedParentId + "' in parents" : '';
+  const query = new URLSearchParams({
+    q: "mimeType = 'application/vnd.google-apps.folder' and name = '" + escapedName + "' and trashed = false" + parentFilter,
+    pageSize: '50',
+    fields: 'files(id,name,mimeType,parents)',
+    supportsAllDrives: 'true',
+    includeItemsFromAllDrives: 'true',
+  });
+  const found = await googleJson<{ files?: Array<{ id: string; name: string }> }>(
+    'https://www.googleapis.com/drive/v3/files?' + query.toString()
+  );
+  const existing = (found.files || []).find((file) => file.name === name);
+  if (existing?.id) return { id: existing.id, created: false };
+
+  const created = await googleJson<{ id?: string; name?: string }>(
+    'https://www.googleapis.com/drive/v3/files?supportsAllDrives=true&fields=id,name',
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        name,
+        mimeType: 'application/vnd.google-apps.folder',
+        parents: [parentId || 'root'],
+      }),
+    }
+  );
+  if (!created.id) throw new Error('Google Drive tidak mengembalikan ID folder "' + name + '".');
+  return { id: created.id, created: true };
+}
+
+/** Creates or reuses category folders beneath the existing SIPANDU Drive root. */
+export async function ensureSIPANDUPhotoDriveFolders(): Promise<{
+  folders: SIPANDUPhotoFolderIds;
+  foldersCreated: number;
+}> {
+  if (!isWorkspaceAccountConnected()) {
+    throw new Error('Hubungkan akun Google Workspace ' + GOOGLE_WORKSPACE_EMAIL + ' terlebih dahulu sebelum menata foto.');
+  }
+  if (cachedSIPANDUPhotoFolderIds) return { folders: cachedSIPANDUPhotoFolderIds, foldersCreated: 0 };
+
+  // Search without a parent constraint to reuse the same SIPANDU root as the
+  // existing assessment archive path rather than create a duplicate root.
+  const root = await findOrCreateDriveFolder('SIPANDU');
+  let foldersCreated = root.created ? 1 : 0;
+  const folders = {} as SIPANDUPhotoFolderIds;
+  for (const kind of ['diri', 'ktp', 'kk', 'rumah'] as const) {
+    const result = await findOrCreateDriveFolder(SIPANDU_PHOTO_FOLDER_NAMES[kind], root.id);
+    folders[kind] = result.id;
+    if (result.created) foldersCreated += 1;
+  }
+  cachedSIPANDUPhotoFolderIds = folders;
+  return { folders, foldersCreated };
+}
+
+function isAllowedRespondentPhotoFile(file: DrivePhotoFileMetadata): boolean {
+  if (file.trashed || !file.id) return false;
+  if (/^image\//i.test(file.mimeType) || file.mimeType === 'application/pdf') return true;
+  if (file.mimeType && file.mimeType !== 'application/octet-stream') return false;
+  return /\.(?:jpe?g|png|gif|webp|bmp|tiff?|heic|heif|raw|dng|psd|pdf)$/i.test(file.name || '');
+}
+
+/** Move typed respondent photo links; ambiguous file IDs are skipped instead of guessed. */
+export async function organizePPKSPhotosInDrive(records: PPKSRecord[]): Promise<PPKSPhotoOrganizationReport> {
+  if (!isWorkspaceAccountConnected()) {
+    throw new Error('Akun Google Drive yang aktif bukan ' + GOOGLE_WORKSPACE_EMAIL + '. Foto tidak dipindahkan.');
+  }
+  const { folders, foldersCreated } = await ensureSIPANDUPhotoDriveFolders();
+  const report: PPKSPhotoOrganizationReport = {
+    foldersCreated, filesMoved: 0, filesAlreadyOrganized: 0, filesSkipped: 0, filesFailed: 0, detail: '',
+  };
+
+  const entries = new Map<string, { kind: PPKSPhotoKind; respondentId: string }>();
+  const conflictingIds = new Set<string>();
+  for (const record of records) {
+    const sources: Array<{ kind: PPKSPhotoKind; value: string }> = [
+      { kind: 'diri', value: normalizePPKSPhotoSource(record.fotoDiri) },
+      { kind: 'ktp', value: normalizePPKSPhotoSource(record.fotoKtp) },
+      { kind: 'kk', value: normalizePPKSPhotoSource(record.fotoKk || '') },
+      { kind: 'rumah', value: normalizePPKSPhotoSource(record.fotoRumah || '') },
+    ];
+    for (const source of sources) {
+      const fileId = extractGoogleDriveFileId(source.value);
+      if (!fileId) continue;
+      const previous = entries.get(fileId);
+      if (previous && (previous.kind !== source.kind || previous.respondentId !== record.id)) {
+        conflictingIds.add(fileId);
+      } else if (!previous) {
+        entries.set(fileId, { kind: source.kind, respondentId: record.id });
+      }
+    }
+  }
+
+  let cache: Record<string, string> = {};
+  try {
+    const raw = window.localStorage.getItem(SIPANDU_PHOTO_FOLDER_CACHE_KEY);
+    if (raw) cache = JSON.parse(raw) as Record<string, string>;
+  } catch {
+    cache = {};
+  }
+
+  const work = [...entries.entries()].filter(([fileId]) => !conflictingIds.has(fileId));
+  report.filesSkipped += conflictingIds.size;
+  let nextIndex = 0;
+  const worker = async () => {
+    while (true) {
+      const index = nextIndex++;
+      if (index >= work.length) return;
+      const [fileId, entry] = work[index];
+      const targetFolderId = folders[entry.kind];
+      if (cache[fileId] === targetFolderId) {
+        report.filesAlreadyOrganized += 1;
+        continue;
+      }
+
+      try {
+        const metadata = await googleJson<DrivePhotoFileMetadata>(
+          'https://www.googleapis.com/drive/v3/files/' + encodeURIComponent(fileId)
+            + '?supportsAllDrives=true&fields=id,name,mimeType,parents,trashed,description,appProperties'
+        );
+        if (metadata.id !== fileId || !isAllowedRespondentPhotoFile(metadata)) {
+          report.filesSkipped += 1;
+          continue;
+        }
+        const parents = metadata.parents || [];
+        if (parents.includes(targetFolderId)) {
+          report.filesAlreadyOrganized += 1;
+          cache[fileId] = targetFolderId;
+          continue;
+        }
+
+        const marker = '[SIPANDU_PHOTO_KIND]';
+        const oldDescription = String(metadata.description || '').trim();
+        const cleanDescription = oldDescription.split('\n')
+          .filter((line) => !line.startsWith(marker)).join('\n').trim();
+        const description = [
+          cleanDescription,
+          marker + ' ' + entry.kind + ' | Respondent ID: ' + entry.respondentId,
+        ].filter(Boolean).join('\n');
+        const appProperties = {
+          ...(metadata.appProperties || {}),
+          sipanduManaged: 'true',
+          sipanduPhotoKind: entry.kind,
+          sipanduRespondentId: entry.respondentId.slice(0, 120),
+        };
+
+        const query = new URLSearchParams({
+          addParents: targetFolderId,
+          supportsAllDrives: 'true',
+          fields: 'id,name,mimeType,parents',
+        });
+        const oldParents = parents.filter((parentId) => parentId !== targetFolderId);
+        if (oldParents.length) query.set('removeParents', oldParents.join(','));
+        await googleJson<DrivePhotoFileMetadata>(
+          'https://www.googleapis.com/drive/v3/files/' + encodeURIComponent(fileId) + '?' + query.toString(),
+          { method: 'PATCH', body: JSON.stringify({ description, appProperties }) }
+        );
+        cache[fileId] = targetFolderId;
+        report.filesMoved += 1;
+      } catch (error) {
+        report.filesFailed += 1;
+        console.warn('SIPANDU could not organize one respondent photo in Drive:', {
+          fileId, kind: entry.kind, message: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+  };
+
+  await Promise.all(Array.from({ length: Math.min(6, work.length) }, () => worker()));
+  try {
+    // Store only Drive IDs and category folder IDs, never names, NIKs, or photo data.
+    window.localStorage.setItem(SIPANDU_PHOTO_FOLDER_CACHE_KEY, JSON.stringify(cache));
+  } catch {
+    // Google Drive remains authoritative when local browser storage is unavailable.
+  }
+
+  report.detail = [
+    report.foldersCreated + ' folder baru dibuat',
+    report.filesMoved + ' foto dipindahkan',
+    report.filesAlreadyOrganized + ' sudah berada di folder yang benar',
+    report.filesSkipped + ' dilewati karena file tidak valid atau kategori ambigu',
+    report.filesFailed + ' gagal diproses',
+  ].join('; ') + '.';
+  return report;
 }
 
 /** Returns spreadsheet name and actual tab titles from the Google Sheets API. */
@@ -1345,6 +1569,7 @@ export async function importPPKSFromSpreadsheet(
     scientificNotationValues: number;
   }>;
   previewRows: string[][];
+  photoDriveOrganization: PPKSPhotoOrganizationReport | null;
 }> {
   const metadata = await getSpreadsheetMetadata(spreadsheetUrlOrId);
   if (!metadata.sheetTitles.length) throw new Error('Spreadsheet tidak memiliki tab yang dapat dibaca.');
@@ -1432,6 +1657,18 @@ export async function importPPKSFromSpreadsheet(
       photoRecoveryDetail = 'Semua rekaman sudah memiliki tautan sumber foto.';
     }
   }
+  // Organize old and new Form photo links whenever the source roster syncs.
+  let photoDriveOrganization: PPKSPhotoOrganizationReport | null = null;
+  try {
+    photoDriveOrganization = await organizePPKSPhotosInDrive(records);
+  } catch (error) {
+    console.warn('SIPANDU could not automatically organize respondent photos in Google Drive:', error);
+    photoDriveOrganization = {
+      foldersCreated: 0, filesMoved: 0, filesAlreadyOrganized: 0, filesSkipped: 0,
+      filesFailed: 1, detail: error instanceof Error ? error.message : String(error),
+    };
+  }
+
   const nikHeadersFound = headers.filter((header) => isLikelyRespondentNIKHeader(header)).map((header) => header.trim());
   const recordsWithNIK = records.filter((record) => Boolean(String(record.nik || '').trim())).length;
   // Diagnose the source headers and value quality without returning any actual NIK values.
@@ -1477,6 +1714,7 @@ export async function importPPKSFromSpreadsheet(
     nikHeadersFound,
     nikColumnDiagnostics,
     previewRows: rows.slice(0, 8),
+    photoDriveOrganization,
   };
 }
 
