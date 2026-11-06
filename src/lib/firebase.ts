@@ -926,7 +926,7 @@ export function subscribeToIntegratedAssessmentAnswers(
           if (!answers || typeof answers !== 'object' || Array.isArray(answers)) continue;
           const safeAnswers = Object.fromEntries(
             Object.entries(answers as Record<string, unknown>).filter(([key, value]) =>
-              isIntegratedAssessmentAnswerKey(key).test(key)
+              isIntegratedAssessmentAnswerKey(key)
               && (typeof value === 'string'
                 || (Array.isArray(value) && value.every((entry) => typeof entry === 'string')))
             ),
