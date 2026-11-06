@@ -95,6 +95,9 @@ jobs:
       - name: Copy web assets into Android app
         run: npx cap sync android
 
+      - name: Add and verify precise Android GPS permissions
+        run: python3 scripts/ensure_android_location_permissions.py
+
       - name: Generate SIPANDU notification sound and status-bar icon
         run: python3 scripts/generate_android_notification_assets.py
 
