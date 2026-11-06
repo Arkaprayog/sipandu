@@ -175,7 +175,8 @@ service cloud.firestore {
     }
 
     // One current Google Drive archive pointer for each independently saved
-    // integrated assessment. The full answer map remains in /ppks.
+    // integrated assessment. Full answer maps are canonical in
+    // /integratedAssessmentAnswers and mirrored to /ppks when that roster row exists.
     match /integratedAssessmentBackups/{ppksId} {
       allow read: if isStaff();
       allow create, update: if isStaff()
