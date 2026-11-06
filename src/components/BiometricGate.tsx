@@ -1,17 +1,18 @@
 import React, { useCallback, useEffect, useState } from 'react';
+import { App as CapacitorApp } from '@capacitor/app';
+import { Capacitor } from '@capacitor/core';
 import { onAuthStateChanged } from 'firebase/auth';
 import { auth } from '../lib/firebase';
 import { isQuickUnlockEnabled } from '../lib/biometricLock';
 import { LoginPage } from './LoginPage';
 
 /**
- * When a Firebase session is still active and local quick-unlock is configured,
- * reuse the existing login page instead of creating a separate biometric screen.
- * The login page offers native face/fingerprint authentication, device-credential fallback,
- * and a legacy app-PIN fallback for users who already configured one.
+ * The Firebase session remains active across page reloads. A reload/visibility
+ * transition must not be treated as an app-lock event. Native backgrounding
+ * and the explicit SIPANDU lock action still require quick unlock.
  */
 export const BiometricGate: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [locked, setLocked] = useState(() => isQuickUnlockEnabled());
+  const [locked, setLocked] = useState(false);
 
   const unlock = useCallback(() => {
     setLocked(false);
@@ -19,7 +20,8 @@ export const BiometricGate: React.FC<{ children: React.ReactNode }> = ({ childre
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
-      setLocked(Boolean(user && isQuickUnlockEnabled(user.uid)));
+      // A restored user is not a new login attempt and must not be locked here.
+      if (!user) setLocked(false);
     });
     return unsubscribe;
   }, []);
@@ -34,14 +36,29 @@ export const BiometricGate: React.FC<{ children: React.ReactNode }> = ({ childre
   }, []);
 
   useEffect(() => {
-    const onVisibilityChange = () => {
-      if (document.visibilityState === 'hidden') {
-        const user = auth.currentUser;
-        if (user && isQuickUnlockEnabled(user.uid)) setLocked(true);
+    if (!Capacitor.isNativePlatform()) return;
+
+    let mounted = true;
+    let listener: { remove: () => Promise<void> } | undefined;
+
+    void CapacitorApp.addListener('appStateChange', ({ isActive }) => {
+      if (isActive) return;
+      const user = auth.currentUser;
+      if (user && isQuickUnlockEnabled(user.uid)) setLocked(true);
+    }).then((handle) => {
+      if (!mounted) {
+        void handle.remove();
+        return;
       }
+      listener = handle;
+    }).catch((error) => {
+      console.warn('SIPANDU could not register native app-background lock:', error);
+    });
+
+    return () => {
+      mounted = false;
+      if (listener) void listener.remove();
     };
-    document.addEventListener('visibilitychange', onVisibilityChange);
-    return () => document.removeEventListener('visibilitychange', onVisibilityChange);
   }, []);
 
   if (!locked) return <>{children}</>;

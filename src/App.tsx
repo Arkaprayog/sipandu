@@ -31,6 +31,7 @@ import { activatePendingTeamMember } from './lib/teamRegistration';
 import { ensureSIPANDUDatabaseSheet, extractSpreadsheetId, getLinkedSpreadsheetUrlForForm, importPPKSFromSpreadsheet, upsertPPKSInSpreadsheet } from './lib/googleWorkspace';
 import { GOOGLE_SIPANDU_RESOURCES } from './lib/googleSIPANDUResources';
 import { getLiveSyncRetryDelay, LIVE_SYNC_INTERVAL_MS } from './lib/liveSyncPolicy';
+import { getCloudOnlyCompletedAssessments } from './lib/integratedAssessmentArchive';
 import { preservePPKSRecordOrder } from './lib/ppksRecordState';
 import { filterStageOneNotificationSubmissions } from './lib/stageOneRespondents';
 import { deduplicatePPKSRecords, parsePPKSTimestamp, samePPKSIdentity, sortPPKSRecordsByName, sortPPKSRecordsByTimestamp } from './lib/ppksData';
@@ -309,9 +310,18 @@ function StaffApp() {
         // Refresh Firebase's cached user profile and ID token before making
         // an authorization decision. Email verification may have happened in
         // another browser/app after this session was first created.
-        await user.reload();
-        let token = await getIdTokenResult(user, true);
+        // A signed-in staff member already has a durable Firebase session and a
+        // cached, signed role claim. Reuse it during normal reloads; refreshing
+        // the user/token on every startup made temporary network failures look
+        // like a logout. Re-check with the server only when the cached role is
+        // missing or invalid (e.g. a newly activated invitation).
+        let token = await getIdTokenResult(user);
         let role = token.claims.role;
+        if (role !== 'owner' && role !== 'supervisor' && role !== 'pendamping') {
+          await user.reload();
+          token = await getIdTokenResult(user, true);
+          role = token.claims.role;
+        }
         if (role !== 'owner' && role !== 'supervisor' && role !== 'pendamping' && !user.emailVerified) {
           setIsAuthenticated(false);
           setCurrentUserName('');
@@ -1112,7 +1122,7 @@ function StaffApp() {
           retryCount = 0;
           setPpksList((currentRecords) => {
             const cloudById = new Map(cloudRecords.map((record) => [record.id, record]));
-            return currentRecords.map((current) => {
+            const mergedLocalRecords = currentRecords.map((current) => {
               const cloud = cloudById.get(current.id);
               if (!cloud) return current;
               const manualPhotoOverrides = {
@@ -1145,6 +1155,13 @@ function StaffApp() {
                   : current.statusAsesmen,
               };
             });
+            // Browser and Android have separate local caches. Include only cloud-only
+            // records with a completed independent assessment so the Dokumen archive
+            // is identical on each device without resurrecting the entire stale roster.
+            return [
+              ...mergedLocalRecords,
+              ...getCloudOnlyCompletedAssessments(currentRecords, cloudRecords),
+            ];
           });
           setFirestoreRealtimeState({
             type: info.fromCache ? 'paused' : 'connected',

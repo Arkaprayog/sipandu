@@ -1,23 +1,11 @@
 import React, { useMemo, useState } from 'react';
 import { PPKSRecord } from '../types';
 import { FolderArchive, FileText, Printer, Search, ClipboardCheck, Clock3 } from 'lucide-react';
+import { hasCompletedIntegratedAnswers } from '../lib/integratedAssessmentArchive';
 
 interface DokumenViewProps {
   ppksList: PPKSRecord[];
   onOpenAssessment: (ppksId: string) => void;
-}
-
-/** Identity-only fields are prefilled from the master PPKS roster and do not mean an assessment was completed. */
-const IDENTITY_ONLY_ANSWERS = new Set(['q5', 'q15', 'q16', 'q19', 'q23', 'q25']);
-
-function hasCompletedIntegratedAnswers(record: PPKSRecord): boolean {
-  const answers = record.formAsesmenTerintegrasi;
-  if (!answers || typeof answers !== 'object' || Array.isArray(answers)) return false;
-  return Object.entries(answers).some(([key, value]) => {
-    if (IDENTITY_ONLY_ANSWERS.has(key.toLowerCase())) return false;
-    if (Array.isArray(value)) return value.some((item) => String(item ?? '').trim() !== '');
-    return String(value ?? '').trim() !== '';
-  });
 }
 
 function assessmentDate(record: PPKSRecord): string {
@@ -102,7 +90,7 @@ export const DokumenView: React.FC<DokumenViewProps> = ({ ppksList, onOpenAssess
           <div className="space-y-3">
             {archiveRecords.map((record) => {
               const answerCount = Object.entries(record.formAsesmenTerintegrasi || {}).filter(([key, value]) => {
-                if (IDENTITY_ONLY_ANSWERS.has(key.toLowerCase())) return false;
+                if (['q5', 'q15', 'q16', 'q19', 'q23', 'q25'].includes(key.toLowerCase())) return false;
                 return Array.isArray(value)
                   ? value.some((item) => String(item ?? '').trim() !== '')
                   : String(value ?? '').trim() !== '';
