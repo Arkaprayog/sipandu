@@ -63,23 +63,28 @@ test('Pendamping dapat menyimpan jawaban asesmen walau dokumen roster PPKS belum
     role: 'pendamping',
   }).firestore();
   const answerDoc = doc(firestore, 'integratedAssessmentAnswers', 'sheet-row-99');
+  const officialAnswers = Object.fromEntries([
+    ...Array.from({ length: 91 }, (_, index) => [`q${index + 1}`, `Jawaban ${index + 1}`]),
+    ['metaSatker', 'Sentra Medan'],
+    ['metaYear', '2026'],
+    ['metaSequence', '001'],
+    ['kesimpulanResumeKasus', 'Kesimpulan hasil asesmen'],
+    ['rekomendasiCatatanPetugas', 'Rekomendasi tindak lanjut'],
+  ]) as Record<string, string>;
 
+  assert.equal(Object.keys(officialAnswers).length, 96);
   await assertSucceeds(setDoc(answerDoc, {
     ppksId: 'sheet-row-99',
-    formAsesmenTerintegrasi: {
-      q1: '2026-11-06',
-      q16: 'Responden dari spreadsheet',
-      q91: 'Jawaban terakhir',
-    },
+    formAsesmenTerintegrasi: officialAnswers,
     updatedBy: PENDAMPING_UID,
     updatedAt: serverTimestamp(),
   }));
 
   await assertSucceeds(updateDoc(answerDoc, {
     formAsesmenTerintegrasi: {
-      q1: '2026-11-06',
-      q16: 'Responden dari spreadsheet',
-      q2: 'Jawaban diperbarui',
+      ...officialAnswers,
+      metaSatker: 'Sentra Sosial Medan',
+      kesimpulanResumeKasus: 'Kesimpulan diperbarui',
     },
     updatedAt: serverTimestamp(),
   }));
