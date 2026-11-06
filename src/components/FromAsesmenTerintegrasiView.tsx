@@ -531,8 +531,8 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
       }
 
       const safeRespondent = (record.namaLengkap || record.id)
-        .normalize('NFKC').replace(/[\\/:*?"<>|]+/g, '_').replace(/\\s+/g, '-').slice(0, 80);
-      const safeNik = String(record.nik || '').replace(/\\D/g, '') || 'tanpa-NIK';
+        .normalize('NFKC').replace(/[\\/:*?"<>|]+/g, '_').replace(/\s+/g, '-').slice(0, 80);
+      const safeNik = String(record.nik || '').replace(/\D/g, '') || 'tanpa-NIK';
       const stamp = new Date().toISOString().replace(/[:.]/g, '-');
       fileName = `Form-Asesmen-Terintegrasi-${safeRespondent}-${safeNik}-${stamp}.pdf`;
 
