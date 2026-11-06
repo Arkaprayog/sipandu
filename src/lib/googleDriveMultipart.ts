@@ -1,3 +1,14 @@
+const GOOGLE_DRIVE_API_BASE = 'https://www.googleapis.com/drive/v3';
+const GOOGLE_DRIVE_UPLOAD_API_BASE = 'https://www.googleapis.com/upload/drive/v3';
+
+/** Build the correct Drive v3 URL for metadata requests or media uploads. */
+export function buildGoogleDriveRequestUrl(path: string, upload = false): string {
+  if (!path.startsWith('/') || path.startsWith('//')) {
+    throw new Error('Invalid Google Drive API path.');
+  }
+  return (upload ? GOOGLE_DRIVE_UPLOAD_API_BASE : GOOGLE_DRIVE_API_BASE) + path;
+}
+
 export function buildGoogleDriveMultipartBody(
   metadataJson: string,
   mimeType: string,
