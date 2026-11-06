@@ -811,7 +811,10 @@ export async function saveIntegratedAssessmentToFirestore(
 ): Promise<{ role: SipanduRole }> {
   const user = auth.currentUser;
   if (!user) throw new Error('Belum masuk ke Firebase Auth sebagai akun SIPANDU.');
-  if (!ppksId.trim()) throw new Error('ID PPKS kosong. Pilih responden yang valid sebelum menyimpan.');
+  const normalizedId = String(ppksId || '').trim();
+  if (!normalizedId || normalizedId.includes('/') || normalizedId.length > 150) {
+    throw new Error('ID PPKS kosong atau tidak valid. Pilih responden yang valid sebelum menyimpan.');
+  }
   if (!answers || typeof answers !== 'object' || Array.isArray(answers)) {
     throw new Error('Jawaban Form Asesmen Terintegrasi tidak valid.');
   }
@@ -822,24 +825,107 @@ export async function saveIntegratedAssessmentToFirestore(
     throw new Error('Custom claim role akun SIPANDU tidak valid. Admin harus menetapkan role tepercaya melalui Firebase Admin SDK.');
   }
 
-  const payload: Record<string, unknown> = {
-    formAsesmenTerintegrasi: stripUndefinedForFirestore(answers),
+  const cleanAnswers = stripUndefinedForFirestore(answers) as Record<string, string | string[]>;
+  const answerReference = doc(db, 'integratedAssessmentAnswers', normalizedId);
+  try {
+    // The answer collection is canonical for the standalone assessment. It is
+    // deliberately independent from /ppks so pendamping can save an assessment
+    // even when an owner has not yet synchronized that respondent's roster doc.
+    // It contains no identity/profile fields and cannot create a partial PPKS row.
+    await setDoc(answerReference, {
+      ppksId: normalizedId,
+      formAsesmenTerintegrasi: cleanAnswers,
+      updatedBy: user.uid,
+      updatedAt: serverTimestamp(),
+    });
+  } catch (error) {
+    const canonicalError = error;
+    const legacyPayload: Record<string, unknown> = {
+      formAsesmenTerintegrasi: cleanAnswers,
+    };
+    if (role === 'owner' || role === 'supervisor') {
+      legacyPayload.statusAsesmen = 'Terintegrasi';
+    }
+    try {
+      // Compatibility fallback for deployments where the new answer-only rule
+      // has not reached production yet. updateDoc never creates an incomplete
+      // respondent profile.
+      await updateDoc(doc(db, 'ppks', normalizedId), legacyPayload);
+      return { role: role as SipanduRole };
+    } catch (legacyError) {
+      const legacyCode = getErrorParts(legacyError).code;
+      if (legacyCode.includes('not-found')) {
+        throw new Error(
+          'Penyimpanan jawaban asesmen terpisah belum diizinkan oleh Firestore Rules. ' +
+          'Aturan koleksi integratedAssessmentAnswers perlu dideploy terlebih dahulu. ' +
+          describeConnectionError(canonicalError)
+        );
+      }
+      throw new Error(describeConnectionError(canonicalError) + ' Jalur kompatibilitas lama juga gagal: ' + describeConnectionError(legacyError));
+    }
+  }
+
+  // Keep legacy /ppks fields synchronized where a roster document exists, so
+  // older app builds and existing archive readers remain compatible. A missing
+  // roster document is expected and does not invalidate the canonical save above.
+  const legacyPayload: Record<string, unknown> = {
+    formAsesmenTerintegrasi: cleanAnswers,
   };
-  // Pendamping is intentionally not allowed to change the main PPKS status.
   if (role === 'owner' || role === 'supervisor') {
-    payload.statusAsesmen = 'Terintegrasi';
+    legacyPayload.statusAsesmen = 'Terintegrasi';
+  }
+  try {
+    await updateDoc(doc(db, 'ppks', normalizedId), legacyPayload);
+  } catch (error) {
+    console.warn(
+      'SIPANDU: canonical integrated assessment answer saved; legacy PPKS mirror was not updated:',
+      error,
+    );
+  }
+
+  return { role: role as SipanduRole };
+}
+
+/**
+ * Live answer-only collection for integrated assessments. It overlays answer maps
+ * onto the Google Sheets roster in the app and never synthesizes respondent
+ * profile documents when a roster row is not present locally.
+ */
+export function subscribeToIntegratedAssessmentAnswers(
+  onAnswers: (
+    answersById: Record<string, Record<string, string | string[]>>,
+    info: { fromCache: boolean },
+  ) => void,
+  onError: (error: Error) => void,
+): () => void {
+  if (!auth.currentUser) {
+    throw new Error('Sesi SIPANDU belum aktif untuk realtime jawaban asesmen.');
   }
 
   try {
-    // updateDoc prevents accidentally creating a partial PPKS document when a
-    // selected spreadsheet record has not yet been synchronized to Firestore.
-    await updateDoc(doc(db, 'ppks', ppksId), payload);
-    return { role: role as SipanduRole };
+    return onSnapshot(
+      collection(db, 'integratedAssessmentAnswers'),
+      (snapshot) => {
+        const answersById: Record<string, Record<string, string | string[]>> = {};
+        for (const item of snapshot.docs) {
+          const data = item.data();
+          if (data.ppksId !== item.id) continue;
+          const answers = data.formAsesmenTerintegrasi;
+          if (!answers || typeof answers !== 'object' || Array.isArray(answers)) continue;
+          const safeAnswers = Object.fromEntries(
+            Object.entries(answers as Record<string, unknown>).filter(([key, value]) =>
+              /^q(?:[1-9]|[1-8][0-9]|91)$/.test(key)
+              && (typeof value === 'string'
+                || (Array.isArray(value) && value.every((entry) => typeof entry === 'string')))
+            ),
+          ) as Record<string, string | string[]>;
+          answersById[item.id] = safeAnswers;
+        }
+        onAnswers(answersById, { fromCache: snapshot.metadata.fromCache });
+      },
+      (error) => onError(new Error(describeConnectionError(error))),
+    );
   } catch (error) {
-    const { code } = getErrorParts(error);
-    if (code.includes('not-found')) {
-      throw new Error('Data responden belum tersedia pada database Firestore. Minta owner/supervisor menyinkronkan roster PPKS terlebih dahulu, lalu ulangi penyimpanan.');
-    }
     throw new Error(describeConnectionError(error));
   }
 }
