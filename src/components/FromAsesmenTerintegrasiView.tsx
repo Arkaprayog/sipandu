@@ -538,11 +538,13 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
       fileName = `Form-Asesmen-Terintegrasi-${safeRespondent}-${safeNik}-${stamp}.pdf`;
 
       try {
+        const previousArchive = await getIntegratedAssessmentBackupMetadata(record.id).catch(() => null);
         const driveCopy = await backupAssessmentToCentralDrive({
           ppksId: record.id,
           ppksName: record.namaLengkap || record.id,
           nik: nikValue,
           fileName,
+          existingFileId: previousArchive?.fileId || undefined,
           pdf,
         });
         try {
