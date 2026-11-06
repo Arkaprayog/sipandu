@@ -26,6 +26,7 @@ import {
   fetchFormResponses,
   removeLegacyDemoRowsFromSpreadsheet,
   removeObviousDemoFilesFromDrive,
+  organizePPKSPhotosInDrive,
   GoogleDriveFile,
 } from '../lib/googleWorkspace';
 import { GOOGLE_SIPANDU_RESOURCES, GOOGLE_WORKSPACE_EMAIL, getGoogleFormIdFromUrl } from '../lib/googleSIPANDUResources';
@@ -72,6 +73,7 @@ export const GoogleWorkspaceModal: React.FC<GoogleWorkspaceModalProps> = ({
   const [googleUser, setGoogleUser] = useState<any>(null);
   const [token, setToken] = useState<string | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
+  const [photoOrganizationRunning, setPhotoOrganizationRunning] = useState<boolean>(false);
   const [statusMessage, setStatusMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   // Drive state
@@ -365,6 +367,30 @@ export const GoogleWorkspaceModal: React.FC<GoogleWorkspaceModalProps> = ({
     }
   };
 
+  const handleOrganizeRespondentPhotos = async () => {
+    if (photoOrganizationRunning || loading) return;
+    setPhotoOrganizationRunning(true);
+    setStatusMessage(null);
+    try {
+      const activeEmail = getWorkspaceGoogleEmail(googleUser)?.toLowerCase();
+      if (activeEmail !== GOOGLE_WORKSPACE_EMAIL.toLowerCase()) {
+        throw new Error('Pilih akun Google Workspace ' + GOOGLE_WORKSPACE_EMAIL + ' terlebih dahulu.');
+      }
+      if (!ppksList.length) {
+        throw new Error('Muat/sinkronkan Database PPKS terlebih dahulu agar tautan foto dapat dipasangkan ke kategori responden.');
+      }
+      const report = await organizePPKSPhotosInDrive(ppksList);
+      setStatusMessage({
+        type: report.filesFailed ? 'error' : 'success',
+        text: 'Penataan foto Google Drive selesai. ' + report.detail,
+      });
+    } catch (error: any) {
+      setStatusMessage({ type: 'error', text: error?.message || String(error) });
+    } finally {
+      setPhotoOrganizationRunning(false);
+    }
+  };
+
   // Discover the user's actual spreadsheets rather than inventing a sample/default file.
   const handleDiscoverSpreadsheets = async () => {
     setLoading(true);
@@ -446,7 +472,7 @@ export const GoogleWorkspaceModal: React.FC<GoogleWorkspaceModalProps> = ({
           : `NIK belum terpetakan. Kolom dikenali: ${imported.nikHeadersFound.join(', ') || 'tidak ditemukan'}. Diagnostik kolom sumber: ${diagnosticSummary}. Jika nilai memakai notasi ilmiah/terpotong, perbaiki nilai NIK pada spreadsheet menjadi teks 16 digit, lalu sinkronkan kembali.`;
       setStatusMessage({
         type: imported.recordsWithNIK === 0 ? 'error' : 'success',
-        text: `Berhasil memuat ${imported.records.length} PPKS dari “${imported.spreadsheetTitle}” → tab “${imported.selectedTab}”. Baris sumber: ${imported.sourceDataRows} (di luar header), baris bernama: ${imported.sourceRowsWithName}, tidak dikenali sebagai nama: ${imported.rowsWithoutRecognizedName}, data contoh disaring: ${imported.sampleRecordsFiltered}. ${nikStatus} Data tersedia di Database PPKS dan From Asesmen Terintegrasi, diurutkan dari timestamp terbaru. Sumber tidak diubah.`,
+        text: `Berhasil memuat ${imported.records.length} PPKS dari “${imported.spreadsheetTitle}” → tab “${imported.selectedTab}”. Baris sumber: ${imported.sourceDataRows} (di luar header), baris bernama: ${imported.sourceRowsWithName}, tidak dikenali sebagai nama: ${imported.rowsWithoutRecognizedName}, data contoh disaring: ${imported.sampleRecordsFiltered}. ${nikStatus} ${imported.photoDriveOrganization?.detail ? 'Penataan foto Google Drive: ' + imported.photoDriveOrganization.detail + ' ' : ''}Data tersedia di Database PPKS dan From Asesmen Terintegrasi, diurutkan dari timestamp terbaru. Sumber tidak diubah.`,
       });
     } catch (err: any) {
       setStatusMessage({ type: 'error', text: err?.message || String(err) });
@@ -994,6 +1020,27 @@ export const GoogleWorkspaceModal: React.FC<GoogleWorkspaceModalProps> = ({
                     <span>Muat Berkas</span>
                   </button>
                 </div>
+              </div>
+
+              <div className="rounded-xl border border-sky-500/30 bg-black/40 p-3.5 space-y-2">
+                <div>
+                  <h5 className="text-xs font-bold text-white">Folder foto responden SIPANDU</h5>
+                  <p className="text-[11px] text-neutral-300">
+                    Foto Diri, Foto KTP, Foto KK, dan Foto Rumah Tampak Depan. Foto lama dipindahkan berdasarkan kolom foto yang sudah terpetakan pada Database PPKS.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => { void handleOrganizeRespondentPhotos(); }}
+                  disabled={loading || photoOrganizationRunning || !token}
+                  className="w-full sm:w-auto px-3.5 py-2 rounded-lg bg-sky-700 hover:bg-sky-600 font-semibold text-xs text-white flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
+                >
+                  <FolderPlus className="w-3.5 h-3.5" />
+                  <span>{photoOrganizationRunning ? 'Merapikan foto responden…' : 'Buat Folder & Rapikan Foto Lama'}</span>
+                </button>
+                <p className="text-[10px] text-neutral-400">
+                  Unggahan baru Google Forms dipindahkan otomatis ketika sinkronisasi Spreadsheet SIPANDU berikutnya berjalan.
+                </p>
               </div>
 
               {/* Buat Folder Khusus */}
