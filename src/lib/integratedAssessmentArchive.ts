@@ -72,3 +72,18 @@ export function mergeIntegratedAssessmentAnswers(
   });
   return changed ? merged : records;
 }
+
+
+const INTEGRATED_QUESTION_KEY = /^q(?:[1-9]|[1-8][0-9]|9[01])$/;
+const INTEGRATED_EXTRA_ANSWER_KEYS = new Set([
+  'metaSatker',
+  'metaYear',
+  'metaSequence',
+  'kesimpulanResumeKasus',
+  'rekomendasiCatatanPetugas',
+]);
+
+/** Exact answer keys used by the official standalone integrated assessment form. */
+export function isIntegratedAssessmentAnswerKey(key: string): boolean {
+  return INTEGRATED_QUESTION_KEY.test(key) || INTEGRATED_EXTRA_ANSWER_KEYS.has(key);
+}
