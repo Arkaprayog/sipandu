@@ -18,7 +18,7 @@ export function normalizeGeolocationError(error: unknown): string {
   if (
     diagnostic.includes('os-plug-gloc-0003') ||
     code === '1' ||
-    /permission denied|user denied|not allowed to access.*location|location permission/i.test(diagnostic)
+    /permission denied|user denied|not allowed to access.*location|location permission denied|location permissions? denied/i.test(diagnostic)
   ) {
     return 'Izin lokasi SIPANDU belum diberikan. Izinkan Lokasi Akurat/Precise Location untuk aplikasi atau browser SIPANDU.';
   }
