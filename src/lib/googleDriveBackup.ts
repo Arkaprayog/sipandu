@@ -1,8 +1,7 @@
 import { getAccessToken, invalidateAccessToken, refreshWorkspaceAccessToken } from './firebase';
 import type { SuratRecord } from '../types';
-import { buildGoogleDriveMultipartBody } from './googleDriveMultipart';
+import { buildGoogleDriveMultipartBody, buildGoogleDriveRequestUrl } from './googleDriveMultipart';
 
-const DRIVE_API = 'https://www.googleapis.com/drive/v3';
 const ROOT_FOLDER_NAME = 'SIPANDU';
 const DOCUMENTS_FOLDER_NAME = 'Dokumen';
 const ASSESSMENTS_FOLDER_NAME = 'From Asesmen Terintegrasi';
@@ -12,14 +11,14 @@ function safeName(value: string, fallback: string): string {
   return cleaned || fallback;
 }
 
-async function driveFetch(path: string, init: RequestInit = {}, retry = true): Promise<Response> {
+async function driveFetch(path: string, init: RequestInit = {}, retry = true, uploadEndpoint = false): Promise<Response> {
   let token = await getAccessToken();
   if (!token) token = await refreshWorkspaceAccessToken();
   if (!token) {
     throw new Error('Google Drive belum terhubung. Hubungkan akun Google Workspace SIPANDU terlebih dahulu agar salinan backup dapat dibuat.');
   }
 
-  const request = (accessToken: string) => fetch(DRIVE_API + path, {
+  const request = (accessToken: string) => fetch(buildGoogleDriveRequestUrl(path, uploadEndpoint), {
     ...init,
     headers: {
       Authorization: 'Bearer ' + accessToken,
@@ -89,7 +88,7 @@ async function uploadMultipart(
         'X-Upload-Content-Length': String(data.size),
       },
       body: metadata,
-    });
+    }, true, true);
     if (!session.ok) {
       const error = await session.json().catch(() => ({}));
       throw new Error((error as { error?: { message?: string } }).error?.message || 'Sesi upload Google Drive gagal dibuat.');
@@ -128,7 +127,7 @@ async function uploadMultipart(
       method: 'POST',
       headers: { 'Content-Type': 'multipart/related; boundary=' + boundary },
       body,
-    });
+    }, true, true);
     if (!response.ok) {
       const error = await response.json().catch(() => ({}));
       throw new Error((error as { error?: { message?: string } }).error?.message || 'File gagal disalin ke Google Drive.');
