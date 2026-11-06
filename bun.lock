@@ -9,6 +9,7 @@
         "@capacitor/android": "^7.4.3",
         "@capacitor/app": "^7.0.0",
         "@capacitor/core": "^7.4.3",
+        "@capacitor/geolocation": "^7.1.8",
         "@capacitor/local-notifications": "^7.0.0",
         "@capgo/capacitor-printer": "^7.0.0",
         "@capgo/capacitor-social-login": "^7.0.0",
@@ -53,7 +54,11 @@
 
     "@capacitor/core": ["@capacitor/core@7.6.9", "", { "dependencies": { "tslib": "^2.1.0" } }, "sha512-4DOh/xySC9S5ryhUIqpOppasIyi2WiTdF0JuZ/2DEs+vf5eunRzHDdNYBp1snA3faHciTw/3SVGXfR+WkYxsMA=="],
 
+    "@capacitor/geolocation": ["@capacitor/geolocation@7.1.8", "", { "dependencies": { "@capacitor/synapse": "^1.0.3" }, "peerDependencies": { "@capacitor/core": ">=7.0.0" } }, "sha512-x/rJieD2N2zlGvXFRD3ru4ArJWTwXAIYmyhfo5zg4F1DKGos7mCCOvIOSVMdfQmt14SCsmJeO9Qe8EtDGNGCrw=="],
+
     "@capacitor/local-notifications": ["@capacitor/local-notifications@7.0.7", "", { "peerDependencies": { "@capacitor/core": ">=7.0.0" } }, "sha512-3qSpa8PpVMONHqBOaJ4RbA/lB5vOdEngtep0myGmP3S56gShPScDCotbw7dwmQy3NCdY4Up9nH3ySrGvUh2jZg=="],
+
+    "@capacitor/synapse": ["@capacitor/synapse@1.0.4", "", {}, "sha512-/C1FUo8/OkKuAT4nCIu/34ny9siNHr9qtFezu4kxm6GY1wNFxrCFWjfYx5C1tUhVGz3fxBABegupkpjXvjCHrw=="],
 
     "@capgo/capacitor-printer": ["@capgo/capacitor-printer@7.0.14", "", { "peerDependencies": { "@capacitor/core": ">=7.0.0 <8.0.0" } }, "sha512-+TnHDEhWV+eY0Vd8yikfy4wMoj3ERhdgmg+wTpF7HScas6hc8U5o96mGwcS1/SVSOb4ouCStoER89WrGDPfRmA=="],
 

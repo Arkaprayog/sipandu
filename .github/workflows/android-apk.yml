@@ -19,6 +19,7 @@ on:
       - "scripts/verify-dist.mjs"
       - "scripts/verify_apk_native_google_bridge.py"
       - "scripts/patch_social_login_reauth.py"
+      - "scripts/ensure_android_location_permissions.py"
       - ".github/workflows/android-apk.yml"
 
 permissions:
@@ -75,6 +76,7 @@ jobs:
         run: |
           npx cap add android
           npx cap sync android
+          python3 scripts/ensure_android_location_permissions.py
 
       - name: Apply package version to private Android release APK
         shell: bash
@@ -254,6 +256,9 @@ jobs:
           grep -q "package: name='id.my.sipandu.odhiv'" /tmp/sipandu-private-release-badging.txt
           grep -q "versionCode='$APP_VERSION_CODE'" /tmp/sipandu-private-release-badging.txt
           grep -q "versionName='$APP_VERSION'" /tmp/sipandu-private-release-badging.txt
+          "$BUILD_TOOLS/aapt" dump permissions "$APK" | tee /tmp/sipandu-private-release-permissions.txt
+          grep -q "android.permission.ACCESS_COARSE_LOCATION" /tmp/sipandu-private-release-permissions.txt
+          grep -q "android.permission.ACCESS_FINE_LOCATION" /tmp/sipandu-private-release-permissions.txt
           "$BUILD_TOOLS/apksigner" verify --verbose --print-certs "$APK"
 
       - name: Verify Google scope bridge inside signed APK bytecode

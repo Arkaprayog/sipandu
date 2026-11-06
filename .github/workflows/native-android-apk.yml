@@ -95,6 +95,9 @@ jobs:
       - name: Copy web assets into Android app
         run: npx cap sync android
 
+      - name: Add and verify precise Android GPS permissions
+        run: python3 scripts/ensure_android_location_permissions.py
+
       - name: Generate SIPANDU notification sound and status-bar icon
         run: python3 scripts/generate_android_notification_assets.py
 
@@ -177,6 +180,9 @@ jobs:
           grep -q "versionName='$(node -p "require('./package.json').version")'" /tmp/sipandu-apk-badging.txt
           grep -q "versionCode='$EXPECTED_VERSION_CODE'" /tmp/sipandu-apk-badging.txt
           grep -q "application-label:'SIPANDU ODHIV'" /tmp/sipandu-apk-badging.txt
+          "$AAPT" dump permissions "$APK" | tee /tmp/sipandu-debug-permissions.txt
+          grep -q "android.permission.ACCESS_COARSE_LOCATION" /tmp/sipandu-debug-permissions.txt
+          grep -q "android.permission.ACCESS_FINE_LOCATION" /tmp/sipandu-debug-permissions.txt
           "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs "$APK" | tee /tmp/sipandu-debug-signing.txt
           grep -E "Signer #1 certificate SHA-1 digest|Signer #1 certificate SHA-256 digest" /tmp/sipandu-debug-signing.txt
 
@@ -306,6 +312,9 @@ jobs:
           grep -q "versionName='$(node -p "require('./package.json').version")'" /tmp/sipandu-release-badging.txt
           grep -q "versionCode='$EXPECTED_VERSION_CODE'" /tmp/sipandu-release-badging.txt
           grep -q "application-label:'SIPANDU ODHIV'" /tmp/sipandu-release-badging.txt
+          "$AAPT" dump permissions "$APK" | tee /tmp/sipandu-release-permissions.txt
+          grep -q "android.permission.ACCESS_COARSE_LOCATION" /tmp/sipandu-release-permissions.txt
+          grep -q "android.permission.ACCESS_FINE_LOCATION" /tmp/sipandu-release-permissions.txt
           "$APKSIGNER" verify --verbose --print-certs "$APK" | tee /tmp/sipandu-release-signing.txt
           SHA1="$(sed -n 's/.*Signer #1 certificate SHA-1 digest: //p' /tmp/sipandu-release-signing.txt | head -n 1)"
           test -n "$SHA1" || { echo "::error::Release APK SHA-1 fingerprint could not be extracted."; exit 1; }
