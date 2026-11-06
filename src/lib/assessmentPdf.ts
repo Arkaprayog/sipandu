@@ -4,13 +4,12 @@ import { PDFDocument } from 'pdf-lib';
 const A4_WIDTH_PT = 595.276;
 const A4_HEIGHT_PT = 841.89;
 const PAGE_MARGIN_PT = (8 / 25.4) * 72;
-const JPEG_QUALITY = 0.9;
-const RENDER_SCALE = 1.75;
+const RENDER_SCALE = 2.5;
 
 /**
- * Rasterizes each already-paginated official assessment sheet separately and
- * assembles a real A4 PDF. Rendering one page at a time avoids the oversized
- * single-canvas memory spikes that are common on Android tablets.
+ * Renders each official assessment sheet separately at high resolution and
+ * assembles a true A4 PDF. Lossless PNG page images keep small text and lines crisp;
+ * one-page-at-a-time rendering limits peak canvas memory on Android devices.
  */
 export async function createOfficialAssessmentPdf(
   pages: HTMLElement[],
@@ -58,14 +57,14 @@ export async function createOfficialAssessmentPdf(
       if (canvas.width <= 0 || canvas.height <= 0) {
         throw new Error('Halaman ' + (index + 1) + ' gagal dirender.');
       }
-      const jpegBlob = await new Promise<Blob>((resolve, reject) => {
+      const pngBlob = await new Promise<Blob>((resolve, reject) => {
         canvas.toBlob((blob) => {
           if (blob) resolve(blob);
           else reject(new Error('Gambar halaman ' + (index + 1) + ' gagal dikompresi.'));
-        }, 'image/jpeg', JPEG_QUALITY);
+        }, 'image/png');
       });
-      const jpegBytes = new Uint8Array(await jpegBlob.arrayBuffer());
-      const embeddedImage = await pdf.embedJpg(jpegBytes);
+      const pngBytes = new Uint8Array(await pngBlob.arrayBuffer());
+      const embeddedImage = await pdf.embedPng(pngBytes);
       const pdfPage = pdf.addPage([A4_WIDTH_PT, A4_HEIGHT_PT]);
       const fit = Math.min(
         contentWidth / embeddedImage.width,
