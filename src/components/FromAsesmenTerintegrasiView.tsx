@@ -435,12 +435,12 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
       #${rootId} .official-toolbar,
       #${rootId} .official-status,
       #${rootId} .official-photo-gallery { display:none !important; }
-      #${rootId} .official-page {
+      #${rootId} .official-page:not(.official-photo-appendix) {
         display:block !important; position:relative !important; left:auto !important; top:auto !important;
         box-sizing:border-box !important; width:194mm !important; max-width:194mm !important;
-        height:281mm !important; min-height:281mm !important; max-height:281mm !important;
+        height:281mm !important; min-height:281mm !important; max-height:none !important;
         margin:0 !important; padding:0 !important; box-shadow:none !important;
-        background:#fff !important; color:#111 !important; overflow:hidden !important;
+        background:#fff !important; color:#111 !important; overflow:visible !important;
       }
       #${rootId} .official-photo-appendix {
         display:flex !important; position:relative !important; left:auto !important; top:auto !important;
