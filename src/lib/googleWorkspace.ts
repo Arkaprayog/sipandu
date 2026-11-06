@@ -325,9 +325,9 @@ export async function ensureSIPANDUPhotoDriveFolders(): Promise<{
 
 function isAllowedRespondentPhotoFile(file: DrivePhotoFileMetadata): boolean {
   if (file.trashed || !file.id) return false;
-  if (/^image\\//i.test(file.mimeType) || file.mimeType === 'application/pdf') return true;
+  if (/^image\//i.test(file.mimeType) || file.mimeType === 'application/pdf') return true;
   if (file.mimeType && file.mimeType !== 'application/octet-stream') return false;
-  return /\\.(?:jpe?g|png|gif|webp|bmp|tiff?|heic|heif|raw|dng|psd|pdf)$/i.test(file.name || '');
+  return /\.(?:jpe?g|png|gif|webp|bmp|tiff?|heic|heif|raw|dng|psd|pdf)$/i.test(file.name || '');
 }
 
 /** Move typed respondent photo links; ambiguous file IDs are skipped instead of guessed. */
