@@ -171,6 +171,7 @@ export async function backupAssessmentToCentralDrive(input: {
   ppksId: string;
   ppksName: string;
   nik?: string;
+  fileName: string;
   pdf: Blob;
 }): Promise<{ id: string; webViewLink?: string }> {
   if (!(input.pdf instanceof Blob) || input.pdf.size < 8) {
@@ -187,8 +188,9 @@ export async function backupAssessmentToCentralDrive(input: {
   const stamp = savedAt.replace(/[:.]/g, '-');
   const respondent = safeName(input.ppksName || input.ppksId, input.ppksId);
   const nik = safeName(input.nik || '', 'tanpa-NIK');
+  const requestedName = String(input.fileName || '').replace(/\.pdf$/i, '');
   const fileName = safeName(
-    'Form-Asesmen-Terintegrasi-' + respondent + '-' + nik + '-' + stamp,
+    requestedName || ('Form-Asesmen-Terintegrasi-' + respondent + '-' + nik + '-' + stamp),
     'Form-Asesmen-Terintegrasi-' + stamp,
   ) + '.pdf';
 
