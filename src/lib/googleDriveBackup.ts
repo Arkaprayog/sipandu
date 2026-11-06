@@ -74,7 +74,9 @@ async function uploadMultipart(
 ): Promise<{ id: string; webViewLink?: string }> {
   const metadata = JSON.stringify({
     name: fileName,
-    parents: [folderId],
+    // Drive files.update does not allow changing parent folders here; keep
+    // the existing file in its current archive folder during in-place migration.
+    ...(!existingFileId ? { parents: [folderId] } : {}),
     appProperties: { sipanduManaged: 'true', sipanduArchive: folderId },
   });
 
