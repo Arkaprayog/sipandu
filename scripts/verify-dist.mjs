@@ -70,11 +70,14 @@ const javascriptBundle = javascriptAssets
 for (const marker of [
   'sipandu:boot-asset-retry:',
   '__sipandu_boot_retry',
-  'retryWithFreshDocument',
-  'isNonCriticalImageAsset',
-  'SIPANDU gagal dimuat',
+  'boot-timeout',
 ]) {
   if (!javascriptBundle.includes(marker)) fail('Pemulihan aset awal tidak lengkap pada bundle JavaScript produksi: ' + marker);
+}
+
+const htmlShell = fs.readFileSync(path.join(dist, 'index.html'), 'utf8');
+for (const marker of ['sipandu-boot-error', 'SIPANDU gagal dimuat', 'sipandu-boot-error-detail']) {
+  if (!htmlShell.includes(marker)) fail('Panel pemulihan boot tidak lengkap pada dist/index.html: ' + marker);
 }
 
 const headersPath = path.resolve('public', '_headers');
