@@ -1,5 +1,6 @@
 import html2canvas from 'html2canvas';
 import { PDFDocument } from 'pdf-lib';
+import { sanitizeHtml2CanvasDocument } from './cssColorCompatibility';
 
 const A4_WIDTH_PT = 595.276;
 const A4_HEIGHT_PT = 841.89;
@@ -45,6 +46,9 @@ export async function createOfficialAssessmentPdf(
       scrollX: 0,
       scrollY: 0,
       onclone: (clonedDocument) => {
+        // Tailwind CSS v4 emits oklch() colors, unsupported by html2canvas 1.x.
+        // Normalize computed styles inside this PDF snapshot, not in the live UI.
+        sanitizeHtml2CanvasDocument(clonedDocument);
         const root = clonedDocument.getElementById(renderRootId);
         if (root) {
           root.style.setProperty('opacity', '1', 'important');
