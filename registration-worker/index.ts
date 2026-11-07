@@ -81,7 +81,7 @@ function missingConfiguration(env: Env): string[] {
  // the shared registration code remaining configured after signup.
  export function missingActivationConfiguration(env: Env): string[] {
    const missing: string[] = [];
-   if (!env.FIREBASE_WEB_API_KEY) missing.push('FIREBASE_WEB_API_KEY');
+   if (!env.FIREBASE_AUTH_API_KEY && !env.FIREBASE_WEB_API_KEY) missing.push('FIREBASE_AUTH_API_KEY');
    if (!env.FIREBASE_PROJECT_ID) missing.push('FIREBASE_PROJECT_ID');
    if (!env.FIREBASE_SERVICE_ACCOUNT_JSON) missing.push('FIREBASE_SERVICE_ACCOUNT_JSON');
    if (!env.PENDING_REGISTRATIONS) missing.push('PENDING_REGISTRATIONS KV');
