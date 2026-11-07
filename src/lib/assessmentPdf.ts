@@ -12,7 +12,7 @@ const RENDER_SCALE = 2.5;
  * sRGB before html2canvas reads computed styles from its cloned document.
  */
 function replaceOklchWithRgba(value: string, context: CanvasRenderingContext2D): string {
-  return value.replace(/oklch\\([^)]*\\)/gi, (color) => {
+  return value.replace(/oklch\([^)]*\)/gi, (color) => {
     context.clearRect(0, 0, 1, 1);
     context.fillStyle = '#000000';
     try {
@@ -51,7 +51,7 @@ function sanitizeOklchColorsForHtml2Canvas(
     for (let index = 0; index < computed.length; index += 1) {
       const property = computed.item(index);
       const value = computed.getPropertyValue(property);
-      if (!/oklch\\(/i.test(value)) continue;
+      if (!/oklch\(/i.test(value)) continue;
       const compatibleValue = replaceOklchWithRgba(value, context);
       if (compatibleValue !== value) {
         (element as HTMLElement).style.setProperty(property, compatibleValue, 'important');
