@@ -36,6 +36,7 @@ import { preservePPKSRecordOrder } from './lib/ppksRecordState';
 import { filterStageOneNotificationSubmissions } from './lib/stageOneRespondents';
 import { deduplicatePPKSRecords, parsePPKSTimestamp, samePPKSIdentity, sortPPKSRecordsByName, sortPPKSRecordsByTimestamp } from './lib/ppksData';
 import { normalizePPKSPhotoSource } from './lib/photoSources';
+import { stripPhotoPayloadsFromLocalCache } from './lib/localCacheSanitizer';
 import { buildGoogleFormsPrefilledUrl, buildWhatsAppMessage, createWhatsAppLink } from './utils/helpers';
 import {
   loadRespondentNotifications,
@@ -264,22 +265,6 @@ function normalizeAppSettings(value: unknown): AppSettings {
     googleSpreadsheetSourceTab: sourceTab,
     theme: saved.theme === 'light' ? 'light' : 'dark',
   };
-}
-
-function stripPhotoPayloadsFromLocalCache(value: unknown): unknown {
-  if (typeof value === 'string') {
-    return /^(?:data:image\/|data:application\/|blob:)/i.test(value) ? '' : value;
-  }
-  if (Array.isArray(value)) return value.map(stripPhotoPayloadsFromLocalCache);
-  if (value && typeof value === 'object') {
-    return Object.fromEntries(
-      Object.entries(value as Record<string, unknown>).map(([key, child]) => [
-        key,
-        stripPhotoPayloadsFromLocalCache(child),
-      ]),
-    );
-  }
-  return value;
 }
 
 async function clearSipanduBrowserCaches(): Promise<void> {
