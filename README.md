@@ -21,7 +21,7 @@ Sistem Informasi & Pendampingan Terpadu untuk pengelolaan Database PPKS ODHIV Su
 - `src/lib/respondentNotifications.ts`: histori dan notifikasi responden
 - `firestore.rules`: policy akses Firestore yang harus diuji dan diterapkan ke database target
 - `admin-tools/`: utilitas Admin SDK untuk administrator tepercaya
-- `scripts/`: generator ikon dari logo resmi, optimasi latar login, generator dokumen, dan pemeriksaan aset/bytecode produksi
+- `scripts/`: generator ikon resmi, optimasi latar login, dan pemeriksaan aset/bytecode produksi
 - `.github/workflows/`: build/deploy web dan build Android debug
 
 
@@ -34,6 +34,17 @@ Sistem Informasi & Pendampingan Terpadu untuk pengelolaan Database PPKS ODHIV Su
 - Logo di tengah QR/barcode menggunakan file asli `public/uploads/logo-kemsos.webp`.
 - Kop `Form Asesmen Terintegrasi` menggunakan `public/uploads/Logo Kemensos.png` dan `public/uploads/ATENSI HD.png` secara langsung.
 - Semua gambar logo berasal dari aset repo. Jangan menggambar ulang, menghasilkan dengan AI, mengambil dari internet, atau mengganti dengan gambar lain. Ikon launcher asli dipulihkan oleh `scripts/restore_original_app_icon.py` dan diverifikasi berdasarkan SHA-256. `node scripts/verify-dist.mjs` memeriksa hasil salinan produksi berdasarkan SHA-256.
+
+## Hardening keamanan aplikasi — November 2026
+
+- Cache responden yang dipertahankan untuk kenyamanan aplikasi tidak lagi menyalin payload gambar/dokumen `data:*` atau `blob:` ke localStorage. Logout menghapus seluruh key lokal SIPANDU, token tab, histori notifikasi, dan Cache Storage.
+- Form publik Asesmen Tahap Awal melewati Cloudflare Turnstile di Worker `sipandu-registration`; Worker memverifikasi host dan action, membatasi laju kiriman, memvalidasi payload, lalu membuat dokumen pada Firestore melalui service identity. Firestore Rules tidak lagi mengizinkan kiriman publik langsung dari browser.
+- OAuth Google Workspace memakai scope baca Drive/Forms yang lebih sempit, `drive.file` untuk file aplikasi, serta scope Sheets tulis yang memang dibutuhkan integrasi.
+- Header CSP dan header keamanan didefinisikan di `public/_headers` untuk Cloudflare Workers Static Assets dan di `vercel.json` untuk deployment Vercel. Header `_headers` berlaku pada respons aset statis, bukan respons yang dibuat Worker API.
+- Dokumen Surat Tugas bertanda tangan dan generator yang menyalin halaman/QR ke aset publik telah dihapus; modul editor lama tidak lagi dipakai dashboard.
+- Workflows membatasi izin token per job, mengunci ref aksi eksternal pada commit SHA, mencegah checkout menyimpan kredensial, serta membatasi deployment produksi dan job yang memegang secret ke branch `main`.
+
+**Catatan API key Firebase:** `firebase-applet-config.json` tetap memuat Web API key yang memang terlihat oleh browser. API key ini bukan service-account secret, tetapi wajib dibatasi di Google Cloud Console. Karena Worker juga perlu memanggil Identity Toolkit, gunakan API key server terpisah yang hanya dibatasi ke Identity Toolkit API; jangan memasang HTTP-referrer restriction ke key Worker. Pemisahan/referrer restriction pada Cloud Console belum dapat diverifikasi dari akses repo/Cloudflare.
 
 ## Menjalankan secara lokal
 
