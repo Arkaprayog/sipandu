@@ -57,6 +57,91 @@ test('rejects malformed JSON and non-object JSON values', async () => {
 });
 
 
+test('public intake rejects an invalid Turnstile token before contacting Firestore', async () => {
+  const originalFetch = globalThis.fetch;
+  const calls: string[] = [];
+  const kv = {
+    get: async (_key: string) => null,
+    put: async (_key: string, _value: string) => undefined,
+    delete: async (_key: string) => undefined,
+  };
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    const url = String(input);
+    calls.push(url);
+    if (url.includes('/turnstile/v0/siteverify')) {
+      return new Response(JSON.stringify({ success: false, 'error-codes': ['invalid-input-response'] }), {
+        status: 200, headers: { 'Content-Type': 'application/json' },
+      });
+    }
+    throw new Error('Firestore must not be called when Turnstile fails.');
+  }) as typeof fetch;
+
+  try {
+    const response = await worker.fetch(new Request('https://sipandu-registration.test/public-stage-one-intake', {
+      method: 'POST',
+      headers: {
+        Origin: 'https://sipanduodhiv.my.id',
+        'Content-Type': 'application/json',
+        'CF-Connecting-IP': '192.0.2.90',
+      },
+      body: JSON.stringify({
+        turnstileToken: 'invalid-test-token',
+        payload: {
+          timestamp: new Date().toISOString(),
+          namaLengkap: 'Responden Contoh',
+          nik: '1234567890123456',
+          usia: 30,
+          jenisKelamin: 'Perempuan',
+          kotaDomisili: 'Kota Medan',
+          alamatLengkap: '',
+          noHpWa: '081234567890',
+          jenisBantuan: 'Bantuan',
+          intervensiMental: '',
+          desil: 0,
+          fotoDiri: 'data:image/jpeg;base64,' + 'A'.repeat(100),
+          fotoKtp: 'data:image/jpeg;base64,' + 'A'.repeat(100),
+          statusAsesmen: 'Tahap Awal',
+        },
+      }),
+    }), {
+      TURNSTILE_SECRET_KEY: 'server-only-test-secret',
+      FIREBASE_PROJECT_ID: 'gen-lang-client-0197631978',
+      FIREBASE_DATABASE_ID: 'database-test',
+      FIREBASE_SERVICE_ACCOUNT_JSON: '{"project_id":"gen-lang-client-0197631978","client_email":"test@example.iam.gserviceaccount.com","private_key":"unused"}',
+      PENDING_REGISTRATIONS: kv,
+    });
+
+    assert.equal(response.status, 403);
+    assert.match((await response.json() as { message: string }).message, /Verifikasi keamanan gagal/);
+    assert.equal(calls.length, 1);
+    assert.match(calls[0], /turnstile\/v0\/siteverify/);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('public intake refuses to run without a Turnstile secret', async () => {
+  const response = await worker.fetch(new Request('https://sipandu-registration.test/public-stage-one-intake', {
+    method: 'POST',
+    headers: {
+      Origin: 'https://sipanduodhiv.my.id',
+      'Content-Type': 'application/json',
+      'CF-Connecting-IP': '192.0.2.91',
+    },
+    body: JSON.stringify({ turnstileToken: 'token', payload: {} }),
+  }), {
+    FIREBASE_PROJECT_ID: 'gen-lang-client-0197631978',
+    FIREBASE_DATABASE_ID: 'database-test',
+    FIREBASE_SERVICE_ACCOUNT_JSON: '{}',
+    PENDING_REGISTRATIONS: {
+      get: async () => null,
+      put: async () => undefined,
+      delete: async () => undefined,
+    },
+  });
+  assert.equal(response.status, 503);
+});
+
 test('activation does not require the shared signup code once a pending invitation exists', () => {
   const env = {
     FIREBASE_WEB_API_KEY: 'public-web-api-key',
