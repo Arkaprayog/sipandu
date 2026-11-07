@@ -94,7 +94,7 @@ if (!fs.existsSync(headersPath)) {
   ]) {
     if (!staticHeaders.includes(marker)) fail('Header keamanan Cloudflare belum lengkap: ' + marker);
   }
-  const cspLine = staticHeaders.split('\\n').find((line) => line.trimStart().startsWith('Content-Security-Policy:'));
+  const cspLine = staticHeaders.split(/\r?\n/).find((line) => line.trimStart().startsWith('Content-Security-Policy:'));
   if (!cspLine || cspLine.length > 2000) fail('Header CSP Cloudflare hilang atau melewati batas panjang 2.000 karakter per baris.');
 }
 
