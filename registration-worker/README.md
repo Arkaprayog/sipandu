@@ -45,9 +45,15 @@ This recovery path rejects accounts that already have the `owner` or `supervisor
 
 ## Deploy the Worker
 
-From the `registration-worker` directory in a trusted terminal with Wrangler installed. Wrangler bundles the reviewed `index.ts` TypeScript source directly during deployment; no generated JavaScript entry point is checked in.
+The reviewed source of truth is `index.ts`. The deploy workflow runs Worker tests, bundles that TypeScript source to a temporary `index.runtime.js` using esbuild, checks the generated JavaScript, then runs Wrangler. The generated bundle is not committed to the repository.
+
+In a trusted terminal from the repository root:
 
 ```sh
+bun install --frozen-lockfile
+bunx tsx --test registration-worker/index.test.ts
+bunx esbuild registration-worker/index.ts --bundle --format=esm --platform=browser --target=es2022 --outfile=registration-worker/index.runtime.js
+cd registration-worker
 bunx wrangler deploy --config wrangler.jsonc
 ```
 
