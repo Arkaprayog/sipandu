@@ -287,14 +287,14 @@ function validPublicStageOnePayload(value: unknown): value is Record<string, unk
   return timestamp
     && typeof data.namaLengkap === 'string' && data.namaLengkap.trim().length >= 2 && data.namaLengkap.length <= 120
     && typeof data.nik === 'string' && /^\d{16}$/.test(data.nik)
-    && Number.isInteger(data.usia) && Number(data.usia) >= 1 && Number(data.usia) <= 100
+    && typeof data.usia === 'number' && Number.isInteger(data.usia) && data.usia >= 1 && data.usia <= 100
     && (data.jenisKelamin === 'Laki-laki' || data.jenisKelamin === 'Perempuan')
     && typeof data.kotaDomisili === 'string' && data.kotaDomisili.trim().length >= 2 && data.kotaDomisili.length <= 100
     && typeof data.alamatLengkap === 'string' && data.alamatLengkap.length <= 300
     && typeof data.noHpWa === 'string' && data.noHpWa.length >= 8 && data.noHpWa.length <= 25
     && typeof data.jenisBantuan === 'string' && data.jenisBantuan.trim().length > 0 && data.jenisBantuan.length <= 240
     && typeof data.intervensiMental === 'string' && data.intervensiMental.length <= 1000
-    && Number.isInteger(data.desil) && Number(data.desil) >= 0 && Number(data.desil) <= 10
+    && typeof data.desil === 'number' && Number.isInteger(data.desil) && data.desil >= 0 && data.desil <= 10
     && data.statusAsesmen === 'Tahap Awal'
     && photo(data.fotoDiri) && photo(data.fotoKtp);
 }
