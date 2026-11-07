@@ -6,6 +6,11 @@ on:
     paths:
       - "registration-worker/**"
       - ".github/workflows/deploy-registration-worker.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "registration-worker/**"
+      - ".github/workflows/deploy-registration-worker.yml"
   workflow_dispatch:
 
 permissions:
@@ -33,14 +38,14 @@ jobs:
 
       - name: Verify Worker entry point and configuration
         run: |
-          test -f registration-worker/index.runtime.js
+          test -f registration-worker/index.ts
           test -f registration-worker/index.test.ts
           test -f registration-worker/wrangler.jsonc
           node --input-type=module - <<'NODE'
           import fs from 'node:fs';
           const config = JSON.parse(fs.readFileSync('registration-worker/wrangler.jsonc', 'utf8'));
           if (config.name !== 'sipandu-registration') throw new Error('Unexpected Worker name.');
-          if (config.main !== 'index.runtime.js') throw new Error('Unexpected Worker entry point.');
+          if (config.main !== 'index.ts') throw new Error('Unexpected Worker entry point.');
           const kv = config.kv_namespaces?.find((item) => item.binding === 'PENDING_REGISTRATIONS');
           if (!kv || kv.id !== '49fbf170f6f6410f9ae787a7cc63ffb9') {
             throw new Error('The existing PENDING_REGISTRATIONS namespace binding is missing or mismatched.');
@@ -51,13 +56,7 @@ jobs:
       - name: Install locked dependencies
         run: bun install --frozen-lockfile
 
-      - name: Bundle the reviewed TypeScript Worker source
-        run: bunx esbuild registration-worker/index.ts --bundle --format=esm --platform=browser --target=es2022 --outfile=registration-worker/index.runtime.js
-
-      - name: Validate generated Worker bundle
-        run: node --check registration-worker/index.runtime.js
-
-      - name: Run registration Worker tests
+      - name: Run registration Worker security tests
         run: bunx tsx --test registration-worker/index.test.ts
 
       - name: Install Wrangler in an isolated directory
@@ -70,7 +69,13 @@ jobs:
             --no-fund \
             "wrangler@4.136.3"
 
+      - name: Validate Wrangler TypeScript bundle for pull requests
+        if: github.ref != 'refs/heads/main'
+        working-directory: registration-worker
+        run: "$RUNNER_TEMP/wrangler-cli/node_modules/.bin/wrangler" deploy --dry-run --config wrangler.jsonc
+
       - name: Deploy Worker with Wrangler configuration
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
         working-directory: registration-worker
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}

@@ -150,7 +150,7 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
             </div>
           )}
           {photoUrl.startsWith('data:image/') && (
-            <p className="text-[10px] text-emerald-200">Foto sudah dikompres agar tetap tersimpan di perangkat (maksimal sekitar 320 KB).</p>
+            <p className="text-[10px] text-emerald-200">Foto sudah dikompres untuk diunggah ke penyimpanan cloud SIPANDU (maksimal sekitar 320 KB).</p>
           )}
 
           <div>

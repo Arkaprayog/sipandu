@@ -44,7 +44,7 @@ Sistem Informasi & Pendampingan Terpadu untuk pengelolaan Database PPKS ODHIV Su
 - Dokumen Surat Tugas bertanda tangan dan generator yang menyalin halaman/QR ke aset publik telah dihapus; modul editor lama tidak lagi dipakai dashboard.
 - Workflows membatasi izin token per job, mengunci ref aksi eksternal pada commit SHA, mencegah checkout menyimpan kredensial, serta membatasi deployment produksi dan job yang memegang secret ke branch `main`.
 
-**Catatan API key Firebase:** `firebase-applet-config.json` tetap memuat Web API key yang memang terlihat oleh browser. API key ini bukan service-account secret, tetapi wajib dibatasi di Google Cloud Console. Karena Worker juga perlu memanggil Identity Toolkit, gunakan API key server terpisah yang hanya dibatasi ke Identity Toolkit API; jangan memasang HTTP-referrer restriction ke key Worker. Pemisahan/referrer restriction pada Cloud Console belum dapat diverifikasi dari akses repo/Cloudflare.
+**Catatan API key Firebase:** `firebase-applet-config.json` tetap memuat Web API key yang memang terlihat oleh browser. Batasi key browser di Google Cloud Console berdasarkan API yang dipakai aplikasi dan domain/referrer produksi. Worker membutuhkan key server yang berbeda untuk Identity Toolkit, dibatasi hanya ke Identity Toolkit API dan tidak memakai HTTP-referrer restriction. Nilai `FIREBASE_AUTH_API_KEY` yang saat ini terpasang di Cloudflare masih salinan sementara dari key browser; ganti dengan key server terpisah sebelum produksi. Pembatasan key dan IAM service account di Google Cloud Console belum dapat diverifikasi dari koneksi GitHub/Cloudflare.
 
 ## Menjalankan secara lokal
 

@@ -1853,7 +1853,7 @@ function StaffApp() {
             settings={settings}
             onSave={(updated) => {
               setSettings(updated);
-              try { localStorage.setItem('sipandu_settings', JSON.stringify(updated)); }
+              try { localStorage.setItem('sipandu_settings', JSON.stringify(stripPhotoPayloadsFromLocalCache(updated))); }
               catch (error) { console.warn('SIPANDU settings could not be saved immediately:', error); }
             }}
           />
@@ -1881,7 +1881,7 @@ function StaffApp() {
             settings={settings}
             onUpdateSettings={(updated) => {
               setSettings(updated);
-              try { localStorage.setItem('sipandu_settings', JSON.stringify(updated)); }
+              try { localStorage.setItem('sipandu_settings', JSON.stringify(stripPhotoPayloadsFromLocalCache(updated))); }
               catch (error) { console.warn('SIPANDU Workspace settings could not be saved immediately:', error); }
             }}
             onLoadPPKSFromCloud={handleLoadPPKSFromCloud}
