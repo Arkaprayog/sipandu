@@ -362,7 +362,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          echo "APP_VERSION=$(node -p "require('./package.json').version")" >> "$GITHUB_ENV"
+          echo "APP_VERSION=$(node -e 'process.stdout.write(require("./package.json").version)')" >> "$GITHUB_ENV"
 
       - name: Download signed APK artifact from build job
         uses: actions/download-artifact@v4
