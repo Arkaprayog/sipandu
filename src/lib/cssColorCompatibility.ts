@@ -6,7 +6,7 @@
  * PDF document only; the live SIPANDU interface remains untouched.
  */
 
-const OKLCH_PATTERN = /oklch\\(\\s*([^()]*)\\)/gi;
+const OKLCH_PATTERN = /oklch\(\s*([^()]*)\)/gi;
 
 function numericToken(token: string, percentageScale = 1): number {
   const normalized = token.trim().toLowerCase();
@@ -34,13 +34,13 @@ function linearToSrgb(value: number): number {
   return Math.round(encoded * 255);
 }
 
-/** Convert one CSS oklch() color to an html2canvas-compatible rgba() string. */
+/** Convert one CSS Color 4 oklch() color to an html2canvas-compatible rgba() string. */
 export function normalizeOklchColor(input: string): string | null {
-  const match = /^\\s*oklch\\(\\s*([^()]*)\\)\\s*$/i.exec(input);
+  const match = /^\s*oklch\(\s*([^()]*)\)\s*$/i.exec(input);
   if (!match) return null;
 
   const [components, alphaComponent] = match[1].split('/');
-  const tokens = components.trim().split(/\\s+/);
+  const tokens = components.trim().split(/\s+/);
   if (tokens.length !== 3) return null;
 
   const lightness = Math.min(1, Math.max(0, numericToken(tokens[0], 1)));
@@ -64,7 +64,7 @@ export function normalizeOklchColor(input: string): string | null {
   const blue = linearToSrgb(-0.0041960863 * l - 0.7034186147 * m + 1.7076147010 * s);
   const alphaText = Number(alpha.toFixed(3)).toString();
 
-  return `rgba(${red}, ${green}, ${blue}, ${alphaText})`;
+  return \`rgba(\${red}, \${green}, \${blue}, \${alphaText})\`;
 }
 
 /** Replace any oklch() color occurrences inside a CSS declaration or gradient. */
@@ -89,7 +89,7 @@ export function sanitizeHtml2CanvasDocument(clonedDocument: Document): void {
     for (let index = 0; index < computed.length; index += 1) {
       const property = computed.item(index);
       const value = computed.getPropertyValue(property);
-      if (!/oklch\\s*\\(/i.test(value)) continue;
+      if (!/oklch\s*\(/i.test(value)) continue;
 
       const normalized = replaceOklchColors(value);
       if (normalized !== value) {
@@ -102,10 +102,10 @@ export function sanitizeHtml2CanvasDocument(clonedDocument: Document): void {
   for (const element of elements) {
     const inlineStyle = (element as Element & { style?: CSSStyleDeclaration }).style;
     if (!inlineStyle) continue;
-    for (let index = 0; index < inlineStyle.length; index += 1) {
-      const property = inlineStyle.item(index);
+    const properties = Array.from({ length: inlineStyle.length }, (_, index) => inlineStyle.item(index));
+    for (const property of properties) {
       const value = inlineStyle.getPropertyValue(property);
-      if (/oklch\\s*\\(/i.test(value)) {
+      if (/oklch\s*\(/i.test(value)) {
         inlineStyle.setProperty(property, replaceOklchColors(value), 'important');
       }
     }
