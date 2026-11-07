@@ -6,7 +6,6 @@
   "workers_dev": true,
   "vars": {
     "FIREBASE_PROJECT_ID": "gen-lang-client-0197631978",
-    "FIREBASE_WEB_API_KEY": "AIzaSyCPQq7qsAXUvpW1LHE_5IB_Xs9drioH-o8",
     "FIREBASE_DATABASE_ID": "ai-studio-sipanduodhiv-985a0308-7693-46e1-b6d3-fdbce52371a8"
   },
   "kv_namespaces": [
@@ -19,7 +18,8 @@
     "required": [
       "TEAM_REGISTRATION_CODE",
       "FIREBASE_SERVICE_ACCOUNT_JSON",
-      "TURNSTILE_SECRET_KEY"
+      "TURNSTILE_SECRET_KEY",
+      "FIREBASE_WEB_API_KEY"
     ]
   }
 }
