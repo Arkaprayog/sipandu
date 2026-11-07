@@ -59,24 +59,22 @@ if (!fs.existsSync(manifestPath)) {
 }
 
 // Guard against regressions in the boot module's one-shot stale-asset recovery.
-// This code is bundled separately so the document shell stays CSP-compatible.
+// Vite may merge the tiny boot entry into the main application chunk.
 const assetDirectory = path.join(dist, 'assets');
-const bootModules = fs.existsSync(assetDirectory)
-  ? fs.readdirSync(assetDirectory).filter((name) => name.startsWith('boot-') && name.endsWith('.js'))
+const javascriptAssets = fs.existsSync(assetDirectory)
+  ? fs.readdirSync(assetDirectory).filter((name) => name.endsWith('.js'))
   : [];
-if (bootModules.length !== 1) {
-  fail('Entry chunk boot.ts tidak ditemukan atau terduplikasi pada dist/assets.');
-} else {
-  const bootCode = fs.readFileSync(path.join(assetDirectory, bootModules[0]), 'utf8');
-  for (const marker of [
-    'sipandu:boot-asset-retry:',
-    '__sipandu_boot_retry',
-    'retryWithFreshDocument',
-    'isNonCriticalImageAsset',
-    'SIPANDU gagal dimuat',
-  ]) {
-    if (!bootCode.includes(marker)) fail('Pemulihan aset awal tidak lengkap pada ' + bootModules[0] + ': ' + marker);
-  }
+const javascriptBundle = javascriptAssets
+  .map((name) => fs.readFileSync(path.join(assetDirectory, name), 'utf8'))
+  .join('\n');
+for (const marker of [
+  'sipandu:boot-asset-retry:',
+  '__sipandu_boot_retry',
+  'retryWithFreshDocument',
+  'isNonCriticalImageAsset',
+  'SIPANDU gagal dimuat',
+]) {
+  if (!javascriptBundle.includes(marker)) fail('Pemulihan aset awal tidak lengkap pada bundle JavaScript produksi: ' + marker);
 }
 
 const headersPath = path.resolve('public', '_headers');
