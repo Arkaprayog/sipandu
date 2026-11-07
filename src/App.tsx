@@ -266,6 +266,42 @@ function normalizeAppSettings(value: unknown): AppSettings {
   };
 }
 
+function stripPhotoPayloadsFromLocalCache(value: unknown): unknown {
+  if (typeof value === 'string') {
+    return /^(?:data:image\/|data:application\/|blob:)/i.test(value) ? '' : value;
+  }
+  if (Array.isArray(value)) return value.map(stripPhotoPayloadsFromLocalCache);
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>).map(([key, child]) => [
+        key,
+        stripPhotoPayloadsFromLocalCache(child),
+      ]),
+    );
+  }
+  return value;
+}
+
+async function clearSipanduBrowserCaches(): Promise<void> {
+  const clearStorage = (storage: Storage) => {
+    for (let index = storage.length - 1; index >= 0; index -= 1) {
+      const key = storage.key(index);
+      if (key && (key.startsWith('sipandu_') || key.startsWith('sipandu:'))) {
+        storage.removeItem(key);
+      }
+    }
+  };
+  try { clearStorage(window.localStorage); } catch { /* Browser storage may be disabled. */ }
+  try { clearStorage(window.sessionStorage); } catch { /* Browser storage may be disabled. */ }
+  if ('caches' in window) {
+    try {
+      await Promise.all((await window.caches.keys()).map((key) => window.caches.delete(key)));
+    } catch (error) {
+      console.warn('SIPANDU could not clear the browser cache:', error);
+    }
+  }
+}
+
 function StaffApp() {
   // Firebase Authentication is the source of truth; URL/localStorage flags cannot bypass login.
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -550,8 +586,10 @@ function StaffApp() {
         const parsed: unknown = JSON.parse(raw);
         if (Array.isArray(parsed)) {
           nextRecords = sortPPKSRecordsByTimestamp(deduplicatePPKSRecords(
-            (parsed as PPKSRecord[]).filter((record) => record && !isLegacySamplePPKS(record))
+            (stripPhotoPayloadsFromLocalCache(parsed) as PPKSRecord[]).filter((record) => record && !isLegacySamplePPKS(record))
           ));
+          // Immediately scrub any legacy inline photo payloads left by older builds.
+          try { localStorage.setItem('sipandu_ppks', JSON.stringify(stripPhotoPayloadsFromLocalCache(nextRecords))); } catch { /* cache is optional */ }
         } else {
           console.warn('Cached PPKS data is not an array; starting with the default roster.');
         }
@@ -570,7 +608,7 @@ function StaffApp() {
       }
       if (raw) {
         const parsed = JSON.parse(raw);
-        if (!(parsed?.nama === 'Deny Arifin Martyon S.' && parsed?.nip === '19920315 202012 1 002')) nextProfile = parsed as ProfileUser;
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) nextProfile = parsed as ProfileUser;
       }
     } catch (error) {
       console.warn('SIPANDU could not read its local profile cache:', error);
@@ -627,7 +665,7 @@ function StaffApp() {
     if (!isAuthenticated || !localCacheReady) return;
     const timer = window.setTimeout(() => {
       try {
-        localStorage.setItem('sipandu_ppks', JSON.stringify(ppksList));
+        localStorage.setItem('sipandu_ppks', JSON.stringify(stripPhotoPayloadsFromLocalCache(ppksList)));
       } catch (error) {
         console.error('SIPANDU PPKS cache could not be persisted:', error);
         setCloudSyncNotice({ type: 'error', text: 'Browser kehabisan ruang penyimpanan untuk cache lokal. Pastikan data sudah tersinkron ke Firebase/Google Sheets sebelum menutup aplikasi.' });
@@ -707,17 +745,31 @@ function StaffApp() {
 
   const handleLogout = async () => {
     if (!window.confirm('Apakah Anda yakin ingin keluar dari aplikasi SIPANDU ODHIV?')) return;
+    const failures: string[] = [];
     try {
-      // The only normal path that clears the persistent staff session is this
-      // explicit user action on the Keluar button.
       await signOut(auth);
+    } catch (error) {
+      failures.push('Sesi aplikasi: ' + (error instanceof Error ? error.message : String(error)));
+    }
+    try {
       await googleLogout();
+    } catch (error) {
+      failures.push('Sesi Google Workspace: ' + (error instanceof Error ? error.message : String(error)));
+    } finally {
+      // Remove respondent/profile caches, tokens, notification history, boot retry
+      // markers, and all service-worker caches even when one sign-out call fails.
+      await clearSipanduBrowserCaches();
       setIsAuthenticated(false);
       setCurrentUserName('');
       setCurrentUserRole('');
-      setAuthError('');
-    } catch (error) {
-      setAuthError('Permintaan keluar belum selesai: ' + (error instanceof Error ? error.message : String(error)));
+      setCurrentUserUid('');
+      setPpksList([]);
+      setProfile(initialProfileUser);
+      setSettings(initialAppSettings);
+      setRespondentNotifications([]);
+      setAuthError(failures.length
+        ? 'Data cache lokal sudah dibersihkan, tetapi ada sesi yang perlu diperiksa: ' + failures.join(' · ')
+        : '');
     }
   };
 
