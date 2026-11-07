@@ -129,7 +129,7 @@ test('public intake creates a Firestore record only after valid Turnstile verifi
   });
   const originalFetch = globalThis.fetch;
   const calls: string[] = [];
-  let savedFields: Record<string, unknown> | null = null;
+  const savedFields: { value?: Record<string, unknown> } = {};
   const kv = {
     get: async (_key: string) => null,
     put: async (_key: string, _value: string) => undefined,
@@ -153,7 +153,7 @@ test('public intake creates a Firestore record only after valid Turnstile verifi
     if (url.includes('/documents/stageOneIntake?documentId=')) {
       assert.equal(init?.method, 'POST');
       assert.equal(new Headers(init?.headers).get('Authorization'), 'Bearer service-account-test-token');
-      savedFields = JSON.parse(String(init?.body)).fields as Record<string, unknown>;
+      savedFields.value = JSON.parse(String(init?.body)).fields as Record<string, unknown>;
       return new Response(JSON.stringify({ name: url }), {
         status: 200, headers: { 'Content-Type': 'application/json' },
       });
@@ -208,9 +208,9 @@ test('public intake creates a Firestore record only after valid Turnstile verifi
     assert.match(calls[0], /turnstile\/v0\/siteverify/);
     assert.equal(calls[1], 'https://oauth2.googleapis.com/token');
     assert.match(calls[2], /documents\/stageOneIntake/);
-    assert.equal((savedFields?.source as { stringValue: string }).stringValue, 'respondent-link');
-    assert.equal((savedFields?.nik as { stringValue: string }).stringValue, '1234567890123456');
-    assert.ok(savedFields?.submittedAt);
+    assert.equal((savedFields.value?.source as { stringValue: string }).stringValue, 'respondent-link');
+    assert.equal((savedFields.value?.nik as { stringValue: string }).stringValue, '1234567890123456');
+    assert.ok(savedFields.value?.submittedAt);
   } finally {
     globalThis.fetch = originalFetch;
   }
