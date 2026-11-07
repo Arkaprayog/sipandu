@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { stripPhotoPayloadsFromLocalCache } from './localCacheSanitizer';
 
-test('removes data URL and blob photo payloads recursively before local cache writes', () => {
+test('removes photo fields, signed media URLs, and inline payloads before local cache writes', () => {
   const input = {
     id: 'respondent-1',
     fotoDiri: 'data:image/jpeg;base64,large-photo',
@@ -14,10 +14,7 @@ test('removes data URL and blob photo payloads recursively before local cache wr
   };
   assert.deepEqual(stripPhotoPayloadsFromLocalCache(input), {
     id: 'respondent-1',
-    fotoDiri: '',
-    fotoKtp: '',
-    fotoKk: '',
-    profile: { avatar: '' },
+    profile: {},
     tags: ['safe-value', ''],
   });
 });
