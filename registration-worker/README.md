@@ -15,7 +15,7 @@ The KV namespace has already been created. The existing app Worker `sipandu` is 
 
 1. Open Google Cloud Console and select Firebase project `gen-lang-client-0197631978`.
 2. Create a dedicated service account for this registration Worker.
-3. Create a least-privilege custom IAM role that grants only `firebaseauth.users.update`, then grant that role to the service account on the Firebase project. The Identity Toolkit `projects.accounts.update` endpoint requires this permission. Avoid granting project Owner or broad Firebase Admin roles.
+3. Create a least-privilege custom IAM role that grants `firebaseauth.users.update`, `datastore.entities.create`, and `datastore.databases.get`, then grant that role to the service account on the Firebase project. The first permission is required for Identity Toolkit role assignment; the Datastore permissions let the Turnstile gateway create only new public intake records in Firestore. Avoid granting project Owner or broad Firebase Admin roles.
 4. Create a JSON key and download it. **Do not commit this file to GitHub, place it in the app, or send it in chat.**
 5. In Firebase Authentication, enable Email/Password sign-in and confirm that the email verification template and sender settings are working.
 
@@ -24,9 +24,11 @@ The KV namespace has already been created. The existing app Worker `sipandu` is 
 Open Cloudflare Dashboard → Workers & Pages → `sipandu-registration` → Settings → Variables and Secrets. Add these as **Secret** values:
 
 - `FIREBASE_SERVICE_ACCOUNT_JSON`: the complete JSON key downloaded from Google Cloud.
+- `FIREBASE_AUTH_API_KEY`: the Firebase Web API key used only by the server-side Identity Toolkit lookup. It is a Worker Secret, not a checked-in variable.
+- `TURNSTILE_SECRET_KEY`: the secret for the SIPANDU public intake Turnstile widget. It must never be placed in the browser bundle.
 - `TEAM_REGISTRATION_CODE`: one strong, random shared code (prefer 32 or more random characters) that the administrator shares only with SIPANDU team members.
 
-The Firebase project ID and Web API key are already configured as non-secret Worker variables. The KV binding is already included in `wrangler.jsonc`.
+The Firebase project ID and named Firestore database ID are non-secret Worker variables in `wrangler.jsonc`. The KV binding is already included there. The app's Firebase client API key remains visible in `firebase-applet-config.json` by design; it must be restricted in Google Cloud Console to the Firebase APIs and application origins actually used by SIPANDU.
 
 The shared `TEAM_REGISTRATION_CODE` is checked when a new member registers. Once the Worker has stored that member's pending invitation, the `/activate` endpoint does not need the shared code again; it requires the Firebase service-account secret, Firebase project/API settings, and the KV binding. This lets a member complete email verification even if the shared code has since been rotated or removed. The `/health` endpoint still reports the full service as not ready when any required secret is missing, because new registrations also depend on the shared code.
 
@@ -71,6 +73,12 @@ firebase deploy --only firestore:ai-studio-sipanduodhiv-985a0308-7693-46e1-b6d3-
 
 This rules deployment is separate from the Cloudflare Worker deployment. Registration cannot save profiles across devices until the matching Firestore Rules are active on the Firebase database.
 
+
+## Public respondent intake protection
+
+The public Asesmen Tahap Awal form renders the managed Turnstile widget using the public sitekey in `src/lib/turnstile.ts`. The browser sends its short-lived token and validated form payload to `/public-stage-one-intake`; this Worker checks Turnstile Siteverify success, the exact allowed hostname, and the expected action before using the dedicated server identity to create the Firestore document. The Firestore client rules no longer allow anonymous browser writes to `stageOneIntake`; staff browser writes remain limited to the validated `staff-entry` source.
+
+The Turnstile widget is registered for `sipanduodhiv.my.id` and `sipandu.aryprayoga139.workers.dev`. Add a domain deliberately in both the Cloudflare Turnstile widget and the Worker `ALLOWED_ORIGINS` set before publishing the form from a new host. Rate limiting remains enabled in Cloudflare KV in addition to the managed challenge.
 
 ## Origins
 
