@@ -58,17 +58,44 @@ if (!fs.existsSync(manifestPath)) {
   }
 }
 
-// Guard against regressions in the two fixes for stale entrypoint assets:
-// automatic one-shot recovery is inlined in HTML, and Vercel must not cache HTML.
-for (const marker of [
-  "sipandu:boot-asset-retry:",
-  "__sipandu_boot_retry",
-  "retryWithFreshDocument",
-  // A failed wallpaper/logo preload must not block the entire application.
-  "isNonCriticalImageAsset",
-  "if (!/\\.(?:m?js|css)"
-]) {
-  if (!html.includes(marker)) fail('Pemulihan aset awal tidak lengkap pada dist/index.html: ' + marker);
+// Guard against regressions in the boot module's one-shot stale-asset recovery.
+// This code is bundled separately so the document shell stays CSP-compatible.
+const assetDirectory = path.join(dist, 'assets');
+const bootModules = fs.existsSync(assetDirectory)
+  ? fs.readdirSync(assetDirectory).filter((name) => name.startsWith('boot-') && name.endsWith('.js'))
+  : [];
+if (bootModules.length !== 1) {
+  fail('Entry chunk boot.ts tidak ditemukan atau terduplikasi pada dist/assets.');
+} else {
+  const bootCode = fs.readFileSync(path.join(assetDirectory, bootModules[0]), 'utf8');
+  for (const marker of [
+    'sipandu:boot-asset-retry:',
+    '__sipandu_boot_retry',
+    'retryWithFreshDocument',
+    'isNonCriticalImageAsset',
+    'SIPANDU gagal dimuat',
+  ]) {
+    if (!bootCode.includes(marker)) fail('Pemulihan aset awal tidak lengkap pada ' + bootModules[0] + ': ' + marker);
+  }
+}
+
+const headersPath = path.resolve('public', '_headers');
+if (!fs.existsSync(headersPath)) {
+  fail('public/_headers wajib mengatur header keamanan Cloudflare Workers.');
+} else {
+  const staticHeaders = fs.readFileSync(headersPath, 'utf8');
+  for (const marker of [
+    'Content-Security-Policy:',
+    'X-Content-Type-Options: nosniff',
+    'X-Frame-Options: DENY',
+    'Referrer-Policy:',
+    'Permissions-Policy:',
+    'Strict-Transport-Security:',
+  ]) {
+    if (!staticHeaders.includes(marker)) fail('Header keamanan Cloudflare belum lengkap: ' + marker);
+  }
+  const cspLine = staticHeaders.split('\\n').find((line) => line.trimStart().startsWith('Content-Security-Policy:'));
+  if (!cspLine || cspLine.length > 2000) fail('Header CSP Cloudflare hilang atau melewati batas panjang 2.000 karakter per baris.');
 }
 
 const vercelConfigPath = path.resolve('vercel.json');
@@ -135,7 +162,7 @@ for (const reference of [...scriptRefs, ...cssRefs]) {
 // The startup shell intentionally loads App as a separate chunk so the first
 // screen renders before large Firebase/Workspace dependencies are downloaded.
 // References to every dynamic JS/CSS dependency are validated below.
-const assetDirectory = path.join(dist, 'assets');
+
 if (fs.existsSync(assetDirectory)) {
   const splitAppModules = fs.readdirSync(assetDirectory).filter((name) => name.startsWith('App-') && name.endsWith('.js'));
   for (const moduleName of splitAppModules) {
