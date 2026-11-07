@@ -729,7 +729,7 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
           const response = await fetch(trimmed);
           if (!response.ok) throw new Error('HTTP ' + response.status);
           const sourceBlob = await response.blob();
-          const previewBlob = await createPhotoPreviewBlob(sourceBlob, trimmed.split('/').pop() || 'photo', sourceBlob.type);
+          const previewBlob = await createPhotoPreviewBlob(sourceBlob, trimmed.split('/').pop() || 'photo', sourceBlob.type, Number.POSITIVE_INFINITY);
           const url = URL.createObjectURL(previewBlob);
           if (purpose === 'preview') previewObjectUrlsRef.current.push(url);
           else printObjectUrlsRef.current.push(url);
@@ -799,7 +799,7 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
     }
 
     const downloadedBlob = await response.blob();
-    const previewBlob = await createPhotoPreviewBlob(downloadedBlob, fileName, mimeType || downloadedBlob.type);
+    const previewBlob = await createPhotoPreviewBlob(downloadedBlob, fileName, mimeType || downloadedBlob.type, Number.POSITIVE_INFINITY);
     const url = URL.createObjectURL(previewBlob);
     if (purpose === 'preview') previewObjectUrlsRef.current.push(url);
     else printObjectUrlsRef.current.push(url);
