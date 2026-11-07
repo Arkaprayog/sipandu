@@ -41,6 +41,26 @@ jobs:
         run: bun run test
       - name: TypeScript check
         run: bun run lint
+
+      - name: Validate Registration Worker source and generated bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --input-type=module - <<'NODE'
+          import fs from 'node:fs';
+          const config = JSON.parse(fs.readFileSync('registration-worker/wrangler.jsonc', 'utf8'));
+          if (config.name !== 'sipandu-registration' || config.main !== 'index.runtime.js') {
+            throw new Error('Unexpected SIPANDU registration Worker target or generated bundle entry.');
+          }
+          const kv = config.kv_namespaces?.find((item) => item.binding === 'PENDING_REGISTRATIONS');
+          if (!kv || kv.id !== '49fbf170f6f6410f9ae787a7cc63ffb9') throw new Error('Registration Worker KV binding mismatch.');
+          const required = new Set(config.secrets?.required || []);
+          for (const name of ['TEAM_REGISTRATION_CODE', 'FIREBASE_SERVICE_ACCOUNT_JSON', 'TURNSTILE_SECRET_KEY', 'FIREBASE_AUTH_API_KEY']) {
+            if (!required.has(name)) throw new Error('Missing required Worker secret declaration: ' + name);
+          }
+          NODE
+          bunx esbuild registration-worker/index.ts --bundle --format=esm --platform=browser --target=es2022 --outfile="$RUNNER_TEMP/sipandu-registration-worker.js"
+          node --check "$RUNNER_TEMP/sipandu-registration-worker.js"
       - name: Generate PWA, iOS, and favicon icons from the official uploaded logo
         run: python3 scripts/generate_pwa_icons.py
       - name: Build SIPANDU
