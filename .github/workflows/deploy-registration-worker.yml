@@ -34,7 +34,6 @@ jobs:
           test -f registration-worker/index.runtime.js
           test -f registration-worker/index.test.ts
           test -f registration-worker/wrangler.jsonc
-          node --check registration-worker/index.runtime.js
           node --input-type=module - <<'NODE'
           import fs from 'node:fs';
           const config = JSON.parse(fs.readFileSync('registration-worker/wrangler.jsonc', 'utf8'));
@@ -49,6 +48,12 @@ jobs:
 
       - name: Install locked dependencies
         run: bun install --frozen-lockfile
+
+      - name: Bundle the reviewed TypeScript Worker source
+        run: bunx esbuild registration-worker/index.ts --bundle --format=esm --platform=browser --target=es2022 --outfile=registration-worker/index.runtime.js
+
+      - name: Validate generated Worker bundle
+        run: node --check registration-worker/index.runtime.js
 
       - name: Run registration Worker tests
         run: bunx tsx --test registration-worker/index.test.ts
