@@ -36,6 +36,7 @@ import { preservePPKSRecordOrder } from './lib/ppksRecordState';
 import { filterStageOneNotificationSubmissions } from './lib/stageOneRespondents';
 import { deduplicatePPKSRecords, parsePPKSTimestamp, samePPKSIdentity, sortPPKSRecordsByName, sortPPKSRecordsByTimestamp } from './lib/ppksData';
 import { normalizePPKSPhotoSource } from './lib/photoSources';
+import { stripPhotoPayloadsFromLocalCache } from './lib/localCacheSanitizer';
 import { buildGoogleFormsPrefilledUrl, buildWhatsAppMessage, createWhatsAppLink } from './utils/helpers';
 import {
   loadRespondentNotifications,
@@ -48,7 +49,7 @@ import {
 function describeTeamActivationError(error: unknown): string {
   const detail = error instanceof Error ? error.message.trim() : String(error ?? '').trim();
   const missing = [...new Set(
-    detail.match(/TEAM_REGISTRATION_CODE|FIREBASE_SERVICE_ACCOUNT_JSON|FIREBASE_WEB_API_KEY|FIREBASE_PROJECT_ID|PENDING_REGISTRATIONS KV/g) || []
+    detail.match(/TEAM_REGISTRATION_CODE|FIREBASE_SERVICE_ACCOUNT_JSON|FIREBASE_AUTH_API_KEY|FIREBASE_WEB_API_KEY|FIREBASE_PROJECT_ID|PENDING_REGISTRATIONS KV/g) || []
   )];
 
   if (missing.length) {
@@ -264,6 +265,26 @@ function normalizeAppSettings(value: unknown): AppSettings {
     googleSpreadsheetSourceTab: sourceTab,
     theme: saved.theme === 'light' ? 'light' : 'dark',
   };
+}
+
+async function clearSipanduBrowserCaches(): Promise<void> {
+  const clearStorage = (storage: Storage) => {
+    for (let index = storage.length - 1; index >= 0; index -= 1) {
+      const key = storage.key(index);
+      if (key && (key.startsWith('sipandu_') || key.startsWith('sipandu:'))) {
+        storage.removeItem(key);
+      }
+    }
+  };
+  try { clearStorage(window.localStorage); } catch { /* Browser storage may be disabled. */ }
+  try { clearStorage(window.sessionStorage); } catch { /* Browser storage may be disabled. */ }
+  if ('caches' in window) {
+    try {
+      await Promise.all((await window.caches.keys()).map((key) => window.caches.delete(key)));
+    } catch (error) {
+      console.warn('SIPANDU could not clear the browser cache:', error);
+    }
+  }
 }
 
 function StaffApp() {
@@ -550,8 +571,10 @@ function StaffApp() {
         const parsed: unknown = JSON.parse(raw);
         if (Array.isArray(parsed)) {
           nextRecords = sortPPKSRecordsByTimestamp(deduplicatePPKSRecords(
-            (parsed as PPKSRecord[]).filter((record) => record && !isLegacySamplePPKS(record))
+            (stripPhotoPayloadsFromLocalCache(parsed) as PPKSRecord[]).filter((record) => record && !isLegacySamplePPKS(record))
           ));
+          // Immediately scrub any legacy inline photo payloads left by older builds.
+          try { localStorage.setItem('sipandu_ppks', JSON.stringify(stripPhotoPayloadsFromLocalCache(nextRecords))); } catch { /* cache is optional */ }
         } else {
           console.warn('Cached PPKS data is not an array; starting with the default roster.');
         }
@@ -569,15 +592,23 @@ function StaffApp() {
         raw = localStorage.getItem('sipandu_profile');
       }
       if (raw) {
-        const parsed = JSON.parse(raw);
-        if (!(parsed?.nama === 'Deny Arifin Martyon S.' && parsed?.nip === '19920315 202012 1 002')) nextProfile = parsed as ProfileUser;
+        const parsed = stripPhotoPayloadsFromLocalCache(JSON.parse(raw));
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+          nextProfile = parsed as ProfileUser;
+          // Remove any legacy inline profile image from existing local storage.
+          try { localStorage.setItem(profileCacheKey, JSON.stringify(stripPhotoPayloadsFromLocalCache(nextProfile))); } catch { /* cache is optional */ }
+        }
       }
     } catch (error) {
       console.warn('SIPANDU could not read its local profile cache:', error);
     }
     try {
       const raw = localStorage.getItem('sipandu_settings');
-      if (raw) nextSettings = normalizeAppSettings(JSON.parse(raw));
+      if (raw) {
+        nextSettings = normalizeAppSettings(stripPhotoPayloadsFromLocalCache(JSON.parse(raw)) as Partial<AppSettings>);
+        // Settings are text/configuration only; sanitize older cached values before retaining them.
+        try { localStorage.setItem('sipandu_settings', JSON.stringify(stripPhotoPayloadsFromLocalCache(nextSettings))); } catch { /* cache is optional */ }
+      }
     } catch (error) {
       console.warn('SIPANDU could not read its local settings cache:', error);
     }
@@ -604,7 +635,7 @@ function StaffApp() {
         try {
           const raw = localStorage.getItem(`sipandu_profile_${user.uid}`)
             || localStorage.getItem('sipandu_profile');
-          const localProfile = raw ? JSON.parse(raw) as ProfileUser : null;
+          const localProfile = raw ? stripPhotoPayloadsFromLocalCache(JSON.parse(raw)) as ProfileUser : null;
           if (localProfile?.nama?.trim() && localProfile?.nip?.trim() && user.email) {
             await saveSIPANDUUserProfile(user.uid, localProfile);
           }
@@ -627,7 +658,7 @@ function StaffApp() {
     if (!isAuthenticated || !localCacheReady) return;
     const timer = window.setTimeout(() => {
       try {
-        localStorage.setItem('sipandu_ppks', JSON.stringify(ppksList));
+        localStorage.setItem('sipandu_ppks', JSON.stringify(stripPhotoPayloadsFromLocalCache(ppksList)));
       } catch (error) {
         console.error('SIPANDU PPKS cache could not be persisted:', error);
         setCloudSyncNotice({ type: 'error', text: 'Browser kehabisan ruang penyimpanan untuk cache lokal. Pastikan data sudah tersinkron ke Firebase/Google Sheets sebelum menutup aplikasi.' });
@@ -641,7 +672,7 @@ function StaffApp() {
     const timer = window.setTimeout(() => {
       try {
         const uid = auth.currentUser?.uid || 'anonymous';
-        localStorage.setItem(`sipandu_profile_${uid}`, JSON.stringify(profile));
+        localStorage.setItem(`sipandu_profile_${uid}`, JSON.stringify(stripPhotoPayloadsFromLocalCache(profile)));
       } catch (error) { console.error('SIPANDU profile cache could not be persisted:', error); }
     }, 250);
     return () => window.clearTimeout(timer);
@@ -650,7 +681,7 @@ function StaffApp() {
   useEffect(() => {
     if (!isAuthenticated || !localCacheReady) return;
     const timer = window.setTimeout(() => {
-      try { localStorage.setItem('sipandu_settings', JSON.stringify(settings)); }
+      try { localStorage.setItem('sipandu_settings', JSON.stringify(stripPhotoPayloadsFromLocalCache(settings))); }
       catch (error) { console.warn('SIPANDU settings cache could not be persisted:', error); }
     }, 250);
     return () => window.clearTimeout(timer);
@@ -707,17 +738,31 @@ function StaffApp() {
 
   const handleLogout = async () => {
     if (!window.confirm('Apakah Anda yakin ingin keluar dari aplikasi SIPANDU ODHIV?')) return;
+    const failures: string[] = [];
     try {
-      // The only normal path that clears the persistent staff session is this
-      // explicit user action on the Keluar button.
       await signOut(auth);
+    } catch (error) {
+      failures.push('Sesi aplikasi: ' + (error instanceof Error ? error.message : String(error)));
+    }
+    try {
       await googleLogout();
+    } catch (error) {
+      failures.push('Sesi Google Workspace: ' + (error instanceof Error ? error.message : String(error)));
+    } finally {
+      // Remove respondent/profile caches, tokens, notification history, boot retry
+      // markers, and all service-worker caches even when one sign-out call fails.
+      await clearSipanduBrowserCaches();
       setIsAuthenticated(false);
       setCurrentUserName('');
       setCurrentUserRole('');
-      setAuthError('');
-    } catch (error) {
-      setAuthError('Permintaan keluar belum selesai: ' + (error instanceof Error ? error.message : String(error)));
+      setCurrentUserUid('');
+      setPpksList([]);
+      setProfile(initialProfileUser);
+      setSettings(initialAppSettings);
+      setRespondentNotifications([]);
+      setAuthError(failures.length
+        ? 'Data cache lokal sudah dibersihkan, tetapi ada sesi yang perlu diperiksa: ' + failures.join(' · ')
+        : '');
     }
   };
 

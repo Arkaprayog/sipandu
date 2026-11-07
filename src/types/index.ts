@@ -92,19 +92,6 @@ export interface ProfileUser {
   photoUrl: string;
 }
 
-export interface UserAccount {
-  id: string;
-  username: string; // e.g. "deny" or "Deny Arifin Martyon"
-  displayName: string;
-  password: string; // e.g. "kemensos123"
-  nip: string;
-  unitKerja: string;
-  jabatan: string;
-  noHp: string;
-  photoUrl: string;
-  role: 'Pendamping' | 'Supervisor / Kasubdit';
-}
-
 export interface SuratRecord {
   id: string;
   nomorSurat: string;

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import worker, { missingActivationConfiguration, parseJson } from './index.runtime.js';
+import worker, { missingActivationConfiguration, parseJson } from './index.ts';
 
 function streamedJsonRequest(value: string): Request {
   const bytes = new TextEncoder().encode(value);
@@ -57,9 +57,190 @@ test('rejects malformed JSON and non-object JSON values', async () => {
 });
 
 
+test('public intake rejects an invalid Turnstile token before contacting Firestore', async () => {
+  const originalFetch = globalThis.fetch;
+  const calls: string[] = [];
+  const kv = {
+    get: async (_key: string) => null,
+    put: async (_key: string, _value: string) => undefined,
+    delete: async (_key: string) => undefined,
+  };
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    const url = String(input);
+    calls.push(url);
+    if (url.includes('/turnstile/v0/siteverify')) {
+      return new Response(JSON.stringify({ success: false, 'error-codes': ['invalid-input-response'] }), {
+        status: 200, headers: { 'Content-Type': 'application/json' },
+      });
+    }
+    throw new Error('Firestore must not be called when Turnstile fails.');
+  }) as typeof fetch;
+
+  try {
+    const response = await worker.fetch(new Request('https://sipandu-registration.test/public-stage-one-intake', {
+      method: 'POST',
+      headers: {
+        Origin: 'https://sipanduodhiv.my.id',
+        'Content-Type': 'application/json',
+        'CF-Connecting-IP': '192.0.2.90',
+      },
+      body: JSON.stringify({
+        turnstileToken: 'invalid-test-token',
+        payload: {
+          timestamp: new Date().toISOString(),
+          namaLengkap: 'Responden Contoh',
+          nik: '1234567890123456',
+          usia: 30,
+          jenisKelamin: 'Perempuan',
+          kotaDomisili: 'Kota Medan',
+          alamatLengkap: '',
+          noHpWa: '081234567890',
+          jenisBantuan: 'Bantuan',
+          intervensiMental: '',
+          desil: 0,
+          fotoDiri: 'data:image/jpeg;base64,' + 'A'.repeat(100),
+          fotoKtp: 'data:image/jpeg;base64,' + 'A'.repeat(100),
+          statusAsesmen: 'Tahap Awal',
+        },
+      }),
+    }), {
+      TURNSTILE_SECRET_KEY: 'server-only-test-secret',
+      FIREBASE_PROJECT_ID: 'gen-lang-client-0197631978',
+      FIREBASE_DATABASE_ID: 'database-test',
+      FIREBASE_SERVICE_ACCOUNT_JSON: '{"project_id":"gen-lang-client-0197631978","client_email":"test@example.iam.gserviceaccount.com","private_key":"unused"}',
+      PENDING_REGISTRATIONS: kv,
+    });
+
+    assert.equal(response.status, 403);
+    assert.match((await response.json() as { message: string }).message, /Verifikasi keamanan gagal/);
+    assert.equal(calls.length, 1);
+    assert.match(calls[0], /turnstile\/v0\/siteverify/);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('public intake creates a Firestore record only after valid Turnstile verification', async () => {
+  const { generateKeyPairSync } = await import('node:crypto');
+  const { privateKey } = generateKeyPairSync('rsa', {
+    modulusLength: 2048,
+    privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
+    publicKeyEncoding: { type: 'spki', format: 'pem' },
+  });
+  const originalFetch = globalThis.fetch;
+  const calls: string[] = [];
+  const savedFields: { value?: Record<string, unknown> } = {};
+  const kv = {
+    get: async (_key: string) => null,
+    put: async (_key: string, _value: string) => undefined,
+    delete: async (_key: string) => undefined,
+  };
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input);
+    calls.push(url);
+    if (url.includes('/turnstile/v0/siteverify')) {
+      return new Response(JSON.stringify({
+        success: true,
+        hostname: 'sipanduodhiv.my.id',
+        action: 'sipandu-stage-one',
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }
+    if (url === 'https://oauth2.googleapis.com/token') {
+      return new Response(JSON.stringify({ access_token: 'service-account-test-token', expires_in: 3600 }), {
+        status: 200, headers: { 'Content-Type': 'application/json' },
+      });
+    }
+    if (url.includes('/documents/stageOneIntake?documentId=')) {
+      assert.equal(init?.method, 'POST');
+      assert.equal(new Headers(init?.headers).get('Authorization'), 'Bearer service-account-test-token');
+      savedFields.value = JSON.parse(String(init?.body)).fields as Record<string, unknown>;
+      return new Response(JSON.stringify({ name: url }), {
+        status: 200, headers: { 'Content-Type': 'application/json' },
+      });
+    }
+    throw new Error('Unexpected outbound request: ' + url);
+  }) as typeof fetch;
+
+  try {
+    const response = await worker.fetch(new Request('https://sipandu-registration.test/public-stage-one-intake', {
+      method: 'POST',
+      headers: {
+        Origin: 'https://sipanduodhiv.my.id',
+        'Content-Type': 'application/json',
+        'CF-Connecting-IP': '192.0.2.92',
+      },
+      body: JSON.stringify({
+        turnstileToken: 'valid-test-token',
+        payload: {
+          timestamp: new Date().toISOString(),
+          namaLengkap: 'Responden Contoh',
+          nik: '1234567890123456',
+          usia: 30,
+          jenisKelamin: 'Perempuan',
+          kotaDomisili: 'Kota Medan',
+          alamatLengkap: '',
+          noHpWa: '081234567890',
+          jenisBantuan: 'Bantuan',
+          intervensiMental: '',
+          desil: 0,
+          fotoDiri: 'data:image/jpeg;base64,' + 'A'.repeat(100),
+          fotoKtp: 'data:image/jpeg;base64,' + 'A'.repeat(100),
+          statusAsesmen: 'Tahap Awal',
+        },
+      }),
+    }), {
+      TURNSTILE_SECRET_KEY: 'server-only-test-secret',
+      FIREBASE_PROJECT_ID: 'gen-lang-client-0197631978',
+      FIREBASE_DATABASE_ID: 'ai-studio-sipanduodhiv-985a0308-7693-46e1-b6d3-fdbce52371a8',
+      FIREBASE_SERVICE_ACCOUNT_JSON: JSON.stringify({
+        project_id: 'gen-lang-client-0197631978',
+        client_email: 'test@example.iam.gserviceaccount.com',
+        private_key: privateKey,
+      }),
+      PENDING_REGISTRATIONS: kv,
+    });
+
+    assert.equal(response.status, 201);
+    const result = await response.json() as { ok?: boolean; id?: string };
+    assert.equal(result.ok, true);
+    assert.ok(result.id);
+    assert.equal(calls.length, 3);
+    assert.match(calls[0], /turnstile\/v0\/siteverify/);
+    assert.equal(calls[1], 'https://oauth2.googleapis.com/token');
+    assert.match(calls[2], /documents\/stageOneIntake/);
+    assert.equal((savedFields.value?.source as { stringValue: string }).stringValue, 'respondent-link');
+    assert.equal((savedFields.value?.nik as { stringValue: string }).stringValue, '1234567890123456');
+    assert.ok(savedFields.value?.submittedAt);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('public intake refuses to run without a Turnstile secret', async () => {
+  const response = await worker.fetch(new Request('https://sipandu-registration.test/public-stage-one-intake', {
+    method: 'POST',
+    headers: {
+      Origin: 'https://sipanduodhiv.my.id',
+      'Content-Type': 'application/json',
+      'CF-Connecting-IP': '192.0.2.91',
+    },
+    body: JSON.stringify({ turnstileToken: 'token', payload: {} }),
+  }), {
+    FIREBASE_PROJECT_ID: 'gen-lang-client-0197631978',
+    FIREBASE_DATABASE_ID: 'database-test',
+    FIREBASE_SERVICE_ACCOUNT_JSON: '{}',
+    PENDING_REGISTRATIONS: {
+      get: async () => null,
+      put: async () => undefined,
+      delete: async () => undefined,
+    },
+  });
+  assert.equal(response.status, 503);
+});
+
 test('activation does not require the shared signup code once a pending invitation exists', () => {
   const env = {
-    FIREBASE_WEB_API_KEY: 'public-web-api-key',
+    FIREBASE_AUTH_API_KEY: 'worker-secret-api-key',
     FIREBASE_PROJECT_ID: 'gen-lang-client-0197631978',
     FIREBASE_SERVICE_ACCOUNT_JSON: '{"project_id":"gen-lang-client-0197631978"}',
     PENDING_REGISTRATIONS: {
@@ -73,7 +254,7 @@ test('activation does not require the shared signup code once a pending invitati
 
 test('activation reports missing Firebase service-account configuration', () => {
   const env = {
-    FIREBASE_WEB_API_KEY: 'public-web-api-key',
+    FIREBASE_AUTH_API_KEY: 'worker-secret-api-key',
     FIREBASE_PROJECT_ID: 'gen-lang-client-0197631978',
     PENDING_REGISTRATIONS: {
       get: async () => null,
@@ -135,7 +316,7 @@ test('restores an invitation for the same verified Firebase account without crea
       body: JSON.stringify({ code: 'team-recovery-code-0123456789' }),
     }), {
       TEAM_REGISTRATION_CODE: 'team-recovery-code-0123456789',
-      FIREBASE_WEB_API_KEY: 'test-web-api-key',
+      FIREBASE_AUTH_API_KEY: 'test-worker-secret-api-key',
       FIREBASE_PROJECT_ID: 'gen-lang-client-0197631978',
       FIREBASE_SERVICE_ACCOUNT_JSON: '{"project_id":"gen-lang-client-0197631978","client_email":"test@example.iam.gserviceaccount.com","private_key":"test"}',
       PENDING_REGISTRATIONS: kv,
@@ -187,7 +368,7 @@ test('does not restore an invitation before Firebase email verification', async 
       body: JSON.stringify({ code: 'team-recovery-code-0123456789' }),
     }), {
       TEAM_REGISTRATION_CODE: 'team-recovery-code-0123456789',
-      FIREBASE_WEB_API_KEY: 'test-web-api-key',
+      FIREBASE_AUTH_API_KEY: 'test-worker-secret-api-key',
       FIREBASE_PROJECT_ID: 'gen-lang-client-0197631978',
       FIREBASE_SERVICE_ACCOUNT_JSON: '{"project_id":"gen-lang-client-0197631978","client_email":"test@example.iam.gserviceaccount.com","private_key":"test"}',
       PENDING_REGISTRATIONS: kv,

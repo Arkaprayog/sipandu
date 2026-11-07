@@ -58,17 +58,45 @@ if (!fs.existsSync(manifestPath)) {
   }
 }
 
-// Guard against regressions in the two fixes for stale entrypoint assets:
-// automatic one-shot recovery is inlined in HTML, and Vercel must not cache HTML.
+// Guard against regressions in the boot module's one-shot stale-asset recovery.
+// Vite may merge the tiny boot entry into the main application chunk.
+const assetDirectory = path.join(dist, 'assets');
+const javascriptAssets = fs.existsSync(assetDirectory)
+  ? fs.readdirSync(assetDirectory).filter((name) => name.endsWith('.js'))
+  : [];
+const javascriptBundle = javascriptAssets
+  .map((name) => fs.readFileSync(path.join(assetDirectory, name), 'utf8'))
+  .join('\n');
 for (const marker of [
-  "sipandu:boot-asset-retry:",
-  "__sipandu_boot_retry",
-  "retryWithFreshDocument",
-  // A failed wallpaper/logo preload must not block the entire application.
-  "isNonCriticalImageAsset",
-  "if (!/\\.(?:m?js|css)"
+  'sipandu:boot-asset-retry:',
+  '__sipandu_boot_retry',
+  'boot-timeout',
 ]) {
-  if (!html.includes(marker)) fail('Pemulihan aset awal tidak lengkap pada dist/index.html: ' + marker);
+  if (!javascriptBundle.includes(marker)) fail('Pemulihan aset awal tidak lengkap pada bundle JavaScript produksi: ' + marker);
+}
+
+const htmlShell = fs.readFileSync(path.join(dist, 'index.html'), 'utf8');
+for (const marker of ['sipandu-boot-error', 'SIPANDU gagal dimuat', 'sipandu-boot-error-detail']) {
+  if (!htmlShell.includes(marker)) fail('Panel pemulihan boot tidak lengkap pada dist/index.html: ' + marker);
+}
+
+const headersPath = path.resolve('public', '_headers');
+if (!fs.existsSync(headersPath)) {
+  fail('public/_headers wajib mengatur header keamanan Cloudflare Workers.');
+} else {
+  const staticHeaders = fs.readFileSync(headersPath, 'utf8');
+  for (const marker of [
+    'Content-Security-Policy:',
+    'X-Content-Type-Options: nosniff',
+    'X-Frame-Options: DENY',
+    'Referrer-Policy:',
+    'Permissions-Policy:',
+    'Strict-Transport-Security:',
+  ]) {
+    if (!staticHeaders.includes(marker)) fail('Header keamanan Cloudflare belum lengkap: ' + marker);
+  }
+  const cspLine = staticHeaders.split(/\r?\n/).find((line) => line.trimStart().startsWith('Content-Security-Policy:'));
+  if (!cspLine || cspLine.length > 2000) fail('Header CSP Cloudflare hilang atau melewati batas panjang 2.000 karakter per baris.');
 }
 
 const vercelConfigPath = path.resolve('vercel.json');
@@ -135,7 +163,7 @@ for (const reference of [...scriptRefs, ...cssRefs]) {
 // The startup shell intentionally loads App as a separate chunk so the first
 // screen renders before large Firebase/Workspace dependencies are downloaded.
 // References to every dynamic JS/CSS dependency are validated below.
-const assetDirectory = path.join(dist, 'assets');
+
 if (fs.existsSync(assetDirectory)) {
   const splitAppModules = fs.readdirSync(assetDirectory).filter((name) => name.startsWith('App-') && name.endsWith('.js'));
   for (const moduleName of splitAppModules) {
@@ -175,26 +203,18 @@ if (fs.existsSync(assetDirectory)) {
 }
 
 
-const editableSuratTugas = path.join(dist, 'uploads', 'Surat Tugas - Template Editable Terkunci.docx');
-if (!fs.existsSync(editableSuratTugas) || fs.statSync(editableSuratTugas).size < 50000) {
-  fail('Template Surat Tugas editable tidak ada atau kosong di dist/uploads. Periksa generator locked DOCX.');
-} else {
-  console.log(`Locked editable Surat Tugas template present: ${fs.statSync(editableSuratTugas).size} bytes.`);
-}
-
-const suratTugasOriginalPage = path.join(dist, 'uploads', 'surat-tugas-original-background.png');
-if (!fs.existsSync(suratTugasOriginalPage) || fs.statSync(suratTugasOriginalPage).size < 100000) {
-  fail('Gambar dasar halaman asli Surat Tugas tidak ada atau terlalu kecil pada hasil build.');
-} else {
-  console.log(`Original Surat Tugas page artwork present: ${fs.statSync(suratTugasOriginalPage).size} bytes.`);
-}
-// The current editor opens the original PDF with pdf-lib, so the actual PDF source
-// must be present in dist. A fingerprinted PNG import is no longer required.
-const originalSuratTugasPdf = path.join(dist, 'uploads', 'Surat Tugas.pdf');
-if (!fs.existsSync(originalSuratTugasPdf) || fs.statSync(originalSuratTugasPdf).size < 100000) {
-  fail('PDF sumber Surat Tugas tidak ada atau terlalu kecil pada hasil build.');
-} else {
-  console.log(`Original Surat Tugas PDF source present: ${fs.statSync(originalSuratTugasPdf).size} bytes.`);
+// Personal staff letters and digital-signature QR source files must never be
+// copied into the public production bundle. The retired editor has no public asset dependency.
+for (const forbidden of [
+  'uploads/Surat Tugas.pdf',
+  'uploads/Surat Tugas - Template Editable Terkunci.docx',
+  'uploads/surat-tugas-original-background.png',
+  'uploads/surat-tugas-header-locked.png',
+  'uploads/surat-tugas-barcode-locked.png',
+]) {
+  if (fs.existsSync(path.join(dist, forbidden))) {
+    fail('Aset dokumen pribadi tidak boleh dipublikasikan: dist/' + forbidden);
+  }
 }
 
 const loginBackground = path.join(dist, 'uploads', 'Wallpaper Background Landingpage.webp');

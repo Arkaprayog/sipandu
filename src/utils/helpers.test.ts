@@ -78,9 +78,9 @@ test('buildWhatsAppMessage includes respondent name and official Kemensos templa
 
   const message = buildWhatsAppMessage(mockPpks);
   assert.match(message, /Halo Budi Santoso/);
-  assert.match(message, /Saya Deny Arifin Martyon dari Tim Administrasi/);
+  assert.match(message, /Saya Tim SIPANDU ODHIV dari Tim Administrasi/);
   assert.match(message, /Program Atensi Kementerian Sosial Tahap Awal/);
-  assert.match(message, /Deny Arifin Martyon S\./);
+  assert.match(message, /Tim SIPANDU ODHIV/);
   assert.match(message, /Direktorat Rehabilitasi Sosial Korban Penyalahgunaan Narkoba & ODHIV/);
 });
 

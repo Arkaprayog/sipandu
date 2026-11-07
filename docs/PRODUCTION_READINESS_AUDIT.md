@@ -137,7 +137,7 @@ Audit memeriksa struktur repo `main`, konfigurasi Capacitor/Wrangler/Firebase, a
 
 ### Temuan penting dan keputusan
 
-1. **Firebase Storage bukan dependensi jalur dashboard aktif yang ditemukan.** `src/lib/documentStorage.ts` dan `src/components/SuratTugasEditor.tsx` masih mengimpor Firebase Storage, tetapi code search tidak menemukan komponen Surat Tugas tersebut dipanggil dari jalur dashboard saat ini. Modul tersebut adalah jalur lama/dormant dan tidak boleh diaktifkan sebelum storage dimigrasikan serta diuji.
+1. **Firebase Storage bukan dependensi jalur dashboard aktif yang ditemukan.** `src/lib/documentStorage.ts` masih merupakan modul lama yang mengimpor Firebase Storage, tetapi komponen Surat Tugas yang menggunakannya telah dihapus dari repo karena tidak dipanggil oleh dashboard aktif. PDF Surat Tugas bertanda tangan dan generator gambar halaman/QR-nya juga dihapus dari aset publik.
 2. **Arsip From Asesmen Terintegrasi tidak bergantung pada Firebase Storage.** Jawaban disimpan pada dokumen PPKS di Firestore dan arsip/backup terstruktur menggunakan integrasi Google Drive. Sinkronisasi lintas perangkat membaca data Firestore; bukan file blob dari Firebase Storage.
 3. **Tidak ada upgrade Blaze.** Firebase Storage bucket belum diinisialisasi. Workflow sekarang menguji Storage Rules melalui emulator saja dan menerapkan Firestore Rules saja ke produksi. Production deploy tidak menjalankan perintah Storage, tidak membuat bucket, dan tidak mengubah dokumen Firestore.
 4. **R2 belum dipasang untuk SIPANDU.** Worker `sipandu` adalah Worker static-assets dengan `bindings: []`; belum ada R2 bucket binding atau API upload/download berotorisasi. Audit ini tidak membuat bucket baru karena fitur unggah aktif tidak memerlukannya dan bucket milik aplikasi lain tidak boleh dicampur. Jika kebutuhan upload file staf diaktifkan kembali, implementasikan storage privat terpisah di R2 melalui Worker yang memverifikasi Firebase ID token dan custom role server-side, membatasi object key per UID, ukuran/MIME, serta akses unduh. Jangan mengirim kredensial S3/R2 ke browser atau menampilkan bucket publik untuk data pribadi.
@@ -155,3 +155,17 @@ Audit memeriksa struktur repo `main`, konfigurasi Capacitor/Wrangler/Firebase, a
 - R2 SIPANDU: **belum dikonfigurasi**; tidak ada klaim bahwa migrasi R2 sudah selesai.
 - APK v2.2.8: **dibangun dari hasil audit yang mencakup perbaikan multipart Google Drive**; status akhir harus diambil dari run pada commit versi baru.
 - Uji nyata yang masih memerlukan perangkat/akun pemilik: login, refresh tanpa logout, simpan profil, buka arsip asesmen yang sama dari browser dan APK, serta tes cetak/PDF.
+
+## Tindak lanjut hardening sesuai temuan keamanan — 7 November 2026
+
+Perbaikan kode dikerjakan pada branch `fix/sipandu-security-hardening-20261107` dan perlu lulus CI/diterapkan melalui PR sebelum dinyatakan aktif di produksi.
+
+- Logout kini menghapus key `sipandu_*` dan `sipandu:*` dari localStorage/sessionStorage, Cache Storage, histori notifikasi, profil/cache responden; sanitizer rekursif mengosongkan payload foto/dokumen `data:image`, `data:application`, dan `blob:` sebelum cache ditulis.
+- Public Stage One intake memakai Turnstile managed. Worker memeriksa Siteverify success, hostname dan action, melakukan rate limit, validasi payload, lalu membuat dokumen lewat Firestore REST dengan service account. Rules browser hanya memperbolehkan `staff-entry`; anonymous client write ditutup.
+- IAM service account Worker harus memiliki hanya `firebaseauth.users.update`, `datastore.entities.create`, dan `datastore.databases.get` (atau role custom ekuivalen). Hak ini belum dapat diperiksa melalui konektor Cloudflare/GitHub.
+- Scope OAuth: Drive read-only untuk membaca resource yang sudah ada, Drive file untuk file yang dibuat aplikasi, Spreadsheet write karena integrasi memperbarui Sheet, dan Forms body read-only. Scope Forms responses dan Drive full telah dihapus.
+- CSP dan header keamanan diset di `public/_headers` (Cloudflare Workers Static Assets) dan `vercel.json`. Cloudflare menyatakan `_headers` diterapkan pada respons static assets, bukan respons API yang dibuat Worker; endpoint API tetap perlu mengatur header sendiri.
+- PDF Surat Tugas bertanda tangan/QR dan generator yang menyalinnya ke `dist/uploads` dihapus. Editor lama yang tidak digunakan dashboard juga dihapus.
+- Workflow menggunakan least privilege, checkout tanpa persist credential, commit-SHA action pin, Dependabot mingguan, deploy hanya dari `main`, dan permission tulis dipisah ke job yang benar-benar menerbitkan rilis.
+- PDF From Asesmen Terintegrasi diunduh sebagai PDF A4 pada tombol Simpan; tombol Cetak memakai PDF A4 yang sama. Batas 30 MB tidak lagi diterapkan pada jalur render foto lampiran PDF, meskipun memori browser/perangkat tetap menjadi batas teknis.
+- **Belum dapat diverifikasi:** pembatasan Web API key di Google Cloud Console, kunci terpisah untuk panggilan Worker Identity Toolkit, dan IAM role service account Firestore. Firebase client key masih ada di `firebase-applet-config.json` karena merupakan konfigurasi publik Firebase; bukan service-account secret.

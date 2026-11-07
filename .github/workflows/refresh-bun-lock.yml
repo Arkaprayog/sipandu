@@ -1,16 +1,10 @@
 name: Refresh Bun lockfile
 
 on:
-  push:
-    branches: ['**']
-    paths:
-      - "package.json"
-      - "bun.lock"
-      - ".github/workflows/refresh-bun-lock.yml"
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: sipandu-bun-lock-refresh
@@ -18,21 +12,26 @@ concurrency:
 
 jobs:
   refresh-lockfile:
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    permissions:
+      contents: write
     steps:
-      - name: Checkout main
-        uses: actions/checkout@v4
+      - name: Checkout main without persisting credentials into build steps
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
-          ref: ${{ github.ref }}
+          ref: main
+          persist-credentials: false
 
       - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
-          bun-version: latest
+          bun-version: 1.4.4
 
       - name: Regenerate lockfile from package.json
         run: |
+          set -euo pipefail
           bun install
           git diff --check
           if ! git diff --quiet -- package.json; then
@@ -43,6 +42,8 @@ jobs:
 
       - name: Commit updated bun.lock when needed
         shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           if git diff --quiet -- bun.lock; then
@@ -53,9 +54,8 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add bun.lock
           git commit -m "fix(deps): sync Bun lockfile with package.json"
-          # A normal application commit may land while dependency resolution runs.
-          # Rebase our lockfile-only commit onto the latest main instead of losing the update.
-          branch="${GITHUB_REF_NAME}"
-          git fetch origin "$branch"
-          git rebase "origin/$branch"
-          git push origin HEAD:"$branch"
+          # Use the official CLI token only for this single lockfile push.
+          gh auth setup-git
+          git fetch origin main
+          git rebase origin/main
+          git push origin HEAD:main
