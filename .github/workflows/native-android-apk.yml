@@ -16,6 +16,7 @@ concurrency:
 
 jobs:
   build-apk:
+    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main'
     name: Build and verify Android APKs
     runs-on: ubuntu-latest
     timeout-minutes: 30
