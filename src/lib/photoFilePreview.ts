@@ -351,10 +351,11 @@ export async function createPhotoPreviewBlob(
   input: Blob,
   fileName = 'photo',
   mimeType = input.type,
+  maxBytes = MAX_PPKS_PHOTO_FILE_BYTES,
 ): Promise<Blob> {
   if (!input.size) throw new Error('File kosong atau rusak.');
-  if (input.size > MAX_PPKS_PHOTO_FILE_BYTES) {
-    throw new Error('Ukuran berkas maksimal 30 MB agar tetap aman diproses pada perangkat.');
+  if (Number.isFinite(maxBytes) && input.size > maxBytes) {
+    throw new Error('Ukuran berkas melebihi batas pemrosesan yang ditetapkan untuk fitur ini.');
   }
   const buffer = await input.arrayBuffer();
   const format = detectPhotoFileFormat(fileName, mimeType, buffer);
