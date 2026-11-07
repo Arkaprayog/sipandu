@@ -8,7 +8,7 @@ import { backupAssessmentToCentralDrive, deleteCentralDriveFile, listLegacyInteg
 import { getIntegratedAssessmentBackupMetadata, saveIntegratedAssessmentBackupMetadata } from '../lib/firebase';
 import { printPreparedAssessmentWebView } from '../lib/printing';
 import { createOfficialAssessmentPdf } from '../lib/assessmentPdf';
-import { createPhotoPreviewBlob, MAX_PPKS_PHOTO_FILE_BYTES } from '../lib/photoFilePreview';
+import { createPhotoPreviewBlob } from '../lib/photoFilePreview';
 import '../officialAssessment.css';
 
 type AnswerValue = string | string[];
@@ -628,6 +628,18 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
     }
   };
 
+  const downloadAssessmentPdf = (pdf: Blob, fileName: string) => {
+    const url = URL.createObjectURL(pdf);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = fileName;
+    link.rel = 'noopener';
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  };
+
   const handleSave = async () => {
     if (isSaving || isMigratingArchives) return;
     if (!currentPPKS) {
@@ -658,14 +670,16 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
 
       // Google Drive receives the same A4 PDF that the user can print, never a JSON snapshot.
       const archive = await createAndBackupAssessmentPdf(updated);
+      // Save produces a real A4 PDF on the device as well as the private Drive archive.
+      downloadAssessmentPdf(archive.pdf, archive.fileName);
       setStatusMessage(archive.backupError
         ? {
             type: 'success',
-            text: 'Jawaban aman di Firestore dan PDF sudah dibuat, tetapi backup Google Drive belum berhasil: ' + archive.backupError,
+            text: 'Jawaban aman di Firestore. File PDF A4 sudah diunduh ke perangkat, tetapi backup Google Drive belum berhasil: ' + archive.backupError,
           }
         : {
             type: 'success',
-            text: 'Form Asesmen Terintegrasi tersimpan di Firestore dan PDF resmi berhasil diarsipkan di Google Drive.',
+            text: 'Form Asesmen Terintegrasi tersimpan. File PDF A4 diunduh ke perangkat dan diarsipkan di Google Drive.',
             driveUrl: archive.driveUrl,
           });
     } catch (error) {
@@ -767,9 +781,6 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
     const metadata = await metadataResponse.json() as { name?: string; mimeType?: string; size?: string };
     const fileName = metadata.name || 'photo';
     const mimeType = metadata.mimeType || '';
-    if (Number(metadata.size || 0) > MAX_PPKS_PHOTO_FILE_BYTES) {
-      return { url: '', error: 'Ukuran file lebih dari 30 MB. File tidak diproses agar memori ponsel tetap aman.', temporary: false };
-    }
 
     const mediaUrl = 'https://www.googleapis.com/drive/v3/files/' + encodeURIComponent(fileId) + '?alt=media';
     const response = await authorizedFetch(mediaUrl);
@@ -788,9 +799,6 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
     }
 
     const downloadedBlob = await response.blob();
-    if (downloadedBlob.size > MAX_PPKS_PHOTO_FILE_BYTES) {
-      return { url: '', error: 'Ukuran file lebih dari 30 MB. File tidak diproses agar memori ponsel tetap aman.', temporary: false };
-    }
     const previewBlob = await createPhotoPreviewBlob(downloadedBlob, fileName, mimeType || downloadedBlob.type);
     const url = URL.createObjectURL(previewBlob);
     if (purpose === 'preview') previewObjectUrlsRef.current.push(url);
