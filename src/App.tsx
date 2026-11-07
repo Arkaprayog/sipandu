@@ -592,15 +592,23 @@ function StaffApp() {
         raw = localStorage.getItem('sipandu_profile');
       }
       if (raw) {
-        const parsed = JSON.parse(raw);
-        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) nextProfile = parsed as ProfileUser;
+        const parsed = stripPhotoPayloadsFromLocalCache(JSON.parse(raw));
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+          nextProfile = parsed as ProfileUser;
+          // Remove any legacy inline profile image from existing local storage.
+          try { localStorage.setItem(profileCacheKey, JSON.stringify(stripPhotoPayloadsFromLocalCache(nextProfile))); } catch { /* cache is optional */ }
+        }
       }
     } catch (error) {
       console.warn('SIPANDU could not read its local profile cache:', error);
     }
     try {
       const raw = localStorage.getItem('sipandu_settings');
-      if (raw) nextSettings = normalizeAppSettings(JSON.parse(raw));
+      if (raw) {
+        nextSettings = normalizeAppSettings(stripPhotoPayloadsFromLocalCache(JSON.parse(raw)) as Partial<AppSettings>);
+        // Settings are text/configuration only; sanitize older cached values before retaining them.
+        try { localStorage.setItem('sipandu_settings', JSON.stringify(stripPhotoPayloadsFromLocalCache(nextSettings))); } catch { /* cache is optional */ }
+      }
     } catch (error) {
       console.warn('SIPANDU could not read its local settings cache:', error);
     }
@@ -627,7 +635,7 @@ function StaffApp() {
         try {
           const raw = localStorage.getItem(`sipandu_profile_${user.uid}`)
             || localStorage.getItem('sipandu_profile');
-          const localProfile = raw ? JSON.parse(raw) as ProfileUser : null;
+          const localProfile = raw ? stripPhotoPayloadsFromLocalCache(JSON.parse(raw)) as ProfileUser : null;
           if (localProfile?.nama?.trim() && localProfile?.nip?.trim() && user.email) {
             await saveSIPANDUUserProfile(user.uid, localProfile);
           }
@@ -664,7 +672,7 @@ function StaffApp() {
     const timer = window.setTimeout(() => {
       try {
         const uid = auth.currentUser?.uid || 'anonymous';
-        localStorage.setItem(`sipandu_profile_${uid}`, JSON.stringify(profile));
+        localStorage.setItem(`sipandu_profile_${uid}`, JSON.stringify(stripPhotoPayloadsFromLocalCache(profile)));
       } catch (error) { console.error('SIPANDU profile cache could not be persisted:', error); }
     }, 250);
     return () => window.clearTimeout(timer);
@@ -673,7 +681,7 @@ function StaffApp() {
   useEffect(() => {
     if (!isAuthenticated || !localCacheReady) return;
     const timer = window.setTimeout(() => {
-      try { localStorage.setItem('sipandu_settings', JSON.stringify(settings)); }
+      try { localStorage.setItem('sipandu_settings', JSON.stringify(stripPhotoPayloadsFromLocalCache(settings))); }
       catch (error) { console.warn('SIPANDU settings cache could not be persisted:', error); }
     }, 250);
     return () => window.clearTimeout(timer);
