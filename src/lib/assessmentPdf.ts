@@ -7,6 +7,60 @@ const PAGE_MARGIN_PT = (8 / 25.4) * 72;
 const RENDER_SCALE = 2.5;
 
 /**
+ * html2canvas 1.4.x cannot parse modern CSS Color 4 values such as oklch().
+ * Chrome can rasterize these colors, so use a 1x1 canvas to convert them to
+ * sRGB before html2canvas reads computed styles from its cloned document.
+ */
+function replaceOklchWithRgba(value: string, context: CanvasRenderingContext2D): string {
+  return value.replace(/oklch\\([^)]*\\)/gi, (color) => {
+    context.clearRect(0, 0, 1, 1);
+    context.fillStyle = '#000000';
+    try {
+      context.fillStyle = color;
+      context.fillRect(0, 0, 1, 1);
+      const pixel = context.getImageData(0, 0, 1, 1).data;
+      const alpha = Number((pixel[3] / 255).toFixed(3));
+      return `rgba(${pixel[0]}, ${pixel[1]}, ${pixel[2]}, ${alpha})`;
+    } catch {
+      // Keep PDF creation available even on browsers whose canvas cannot
+      // rasterize this color syntax; the neutral fallback is printer-safe.
+      return 'rgba(0, 0, 0, 1)';
+    }
+  });
+}
+
+function sanitizeOklchColorsForHtml2Canvas(
+  clonedDocument: Document,
+  renderRootId: string,
+): void {
+  const renderRoot = clonedDocument.getElementById(renderRootId);
+  const view = clonedDocument.defaultView;
+  const canvas = clonedDocument.createElement('canvas');
+  const context = canvas.getContext('2d', { willReadFrequently: true });
+  if (!renderRoot || !view || !context) return;
+
+  const elements: Element[] = [
+    clonedDocument.documentElement,
+    clonedDocument.body,
+    renderRoot,
+    ...Array.from(renderRoot.querySelectorAll('*')),
+  ].filter((element, index, all) => all.indexOf(element) === index);
+
+  elements.forEach((element) => {
+    const computed = view.getComputedStyle(element);
+    for (let index = 0; index < computed.length; index += 1) {
+      const property = computed.item(index);
+      const value = computed.getPropertyValue(property);
+      if (!/oklch\\(/i.test(value)) continue;
+      const compatibleValue = replaceOklchWithRgba(value, context);
+      if (compatibleValue !== value) {
+        (element as HTMLElement).style.setProperty(property, compatibleValue, 'important');
+      }
+    }
+  });
+}
+
+/**
  * Renders each official assessment sheet separately at high resolution and
  * assembles a true A4 PDF. Lossless PNG page images keep small text and lines crisp;
  * one-page-at-a-time rendering limits peak canvas memory on Android devices.
@@ -45,6 +99,7 @@ export async function createOfficialAssessmentPdf(
       scrollX: 0,
       scrollY: 0,
       onclone: (clonedDocument) => {
+        sanitizeOklchColorsForHtml2Canvas(clonedDocument, renderRootId);
         const root = clonedDocument.getElementById(renderRootId);
         if (root) {
           root.style.setProperty('opacity', '1', 'important');
