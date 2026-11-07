@@ -51,6 +51,9 @@ jobs:
       - name: Install locked dependencies
         run: bun install --frozen-lockfile
 
+      - name: Run registration Worker security tests
+        run: bunx tsx --test registration-worker/index.test.ts
+
       - name: Install Wrangler in an isolated directory
         run: |
           mkdir -p "$RUNNER_TEMP/wrangler-cli"
