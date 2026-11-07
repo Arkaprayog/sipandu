@@ -90,11 +90,10 @@ googleAuthProvider.setCustomParameters({
 // Ask explicitly for identity scopes in addition to the Google API scopes.
 googleAuthProvider.addScope('email');
 googleAuthProvider.addScope('profile');
-googleAuthProvider.addScope('https://www.googleapis.com/auth/drive');
+googleAuthProvider.addScope('https://www.googleapis.com/auth/drive.readonly');
 googleAuthProvider.addScope('https://www.googleapis.com/auth/drive.file');
 googleAuthProvider.addScope('https://www.googleapis.com/auth/spreadsheets');
 googleAuthProvider.addScope('https://www.googleapis.com/auth/forms.body');
-googleAuthProvider.addScope('https://www.googleapis.com/auth/forms.responses.readonly');
 
 // Google access tokens are short-lived. Keep them only in sessionStorage (not
 // localStorage) so a page reload in the same tab does not force an immediate
@@ -365,11 +364,10 @@ function buildWorkspaceProvider(prompt?: 'none' | 'select_account'): GoogleAuthP
   });
   provider.addScope('email');
   provider.addScope('profile');
-  provider.addScope('https://www.googleapis.com/auth/drive');
+  provider.addScope('https://www.googleapis.com/auth/drive.readonly');
   provider.addScope('https://www.googleapis.com/auth/drive.file');
   provider.addScope('https://www.googleapis.com/auth/spreadsheets');
   provider.addScope('https://www.googleapis.com/auth/forms.body');
-  provider.addScope('https://www.googleapis.com/auth/forms.responses.readonly');
   return provider;
 }
 
@@ -411,11 +409,10 @@ export const googleSignIn = async (): Promise<{
       const nativeScopes = [
         'email',
         'profile',
-        'https://www.googleapis.com/auth/drive',
+        'https://www.googleapis.com/auth/drive.readonly',
         'https://www.googleapis.com/auth/drive.file',
         'https://www.googleapis.com/auth/spreadsheets',
         'https://www.googleapis.com/auth/forms.body',
-        'https://www.googleapis.com/auth/forms.responses.readonly',
       ];
       const requestNativeLogin = () => SocialLogin.login({
         provider: 'google',
@@ -1144,7 +1141,10 @@ function toStageOneIntakeFields(record: StageOneIntakePayload | PPKSRecord) {
 }
 
 /** Public, write-only intake used by the separate respondent-facing SIPANDU form. */
-export async function submitPublicStageOneIntake(payload: StageOneIntakePayload): Promise<string> {
+export async function submitPublicStageOneIntake(
+  payload: StageOneIntakePayload,
+  turnstileToken: string,
+): Promise<string> {
   const normalized = toStageOneIntakeFields(payload);
   if (!normalized.namaLengkap || !/^\d{16}$/.test(normalized.nik)) {
     throw new Error('Nama lengkap dan NIK 16 digit wajib diisi dengan benar.');
@@ -1152,16 +1152,21 @@ export async function submitPublicStageOneIntake(payload: StageOneIntakePayload)
   if (!Number.isInteger(normalized.usia) || normalized.usia < 1 || normalized.usia > 100) {
     throw new Error('Usia responden harus berupa angka 1–100 tahun.');
   }
-  try {
-    const created = await addDoc(collection(db, 'stageOneIntake'), {
-      ...normalized,
-      source: 'respondent-link',
-      submittedAt: serverTimestamp(),
-    });
-    return created.id;
-  } catch (error) {
-    throw new Error('Gagal menyimpan ke Database PPKS Asesmen Tahap Awal. Pastikan aturan Firestore terbaru telah diterapkan dan koneksi tersedia. ' + describeConnectionError(error));
+  if (!turnstileToken || turnstileToken.length > 2048) {
+    throw new Error('Selesaikan verifikasi keamanan sebelum mengirim formulir.');
   }
+  const response = await fetch('https://sipandu-registration.aryprayoga139.workers.dev/public-stage-one-intake', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ payload: normalized, turnstileToken }),
+  }).catch(() => {
+    throw new Error('Layanan verifikasi SIPANDU tidak dapat dijangkau. Periksa koneksi internet lalu coba kembali.');
+  });
+  const result = await response.json().catch(() => ({})) as { ok?: boolean; id?: string; message?: string };
+  if (!response.ok || !result.ok || !result.id) {
+    throw new Error(result.message || 'Verifikasi keamanan atau penyimpanan asesmen tahap awal belum berhasil.');
+  }
+  return result.id;
 }
 
 /** Staff-entered stage-one forms are saved to the same dedicated intake feed. */
