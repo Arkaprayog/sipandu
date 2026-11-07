@@ -88,12 +88,13 @@ service cloud.firestore {
         && request.resource.data.updatedAt == request.time;
     }
 
-    // Public submissions may create only a validated stage-one record.
-    // The collection cannot be read by respondents; all read access remains staff-only.
+    // Public respondent submissions are accepted only by the Turnstile-verified
+    // Registration Worker using a narrowly-scoped server identity. Browser clients
+    // may create only staff-entered records after role validation.
     match /stageOneIntake/{recordId} {
-      allow create: if isValidStageOnePayload()
-        && (request.resource.data.source == 'respondent-link'
-          || (canWritePpks() && request.resource.data.source == 'staff-entry'));
+      allow create: if canWritePpks()
+        && isValidStageOnePayload()
+        && request.resource.data.source == 'staff-entry';
       allow read: if isStaff();
       allow update, delete: if canWritePpks();
     }
