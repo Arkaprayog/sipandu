@@ -1,9 +1,28 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import type { StageOneIntakePayload } from '../types';
 import { submitPublicStageOneIntake } from '../lib/firebase';
 import { compressImageForLocalStorage } from '../lib/imageCompression';
 import { PPKS_PHOTO_ACCEPT } from '../lib/photoFilePreview';
 import { publicAssetUrl } from '../lib/publicAssets';
+import { SIPANDU_TURNSTILE_SITE_KEY } from '../lib/turnstile';
+
+type TurnstileWidgetId = string | number;
+
+declare global {
+  interface Window {
+    turnstile?: {
+      render: (container: HTMLElement, options: {
+        sitekey: string;
+        action: string;
+        callback: (token: string) => void;
+        'expired-callback'?: () => void;
+        'error-callback'?: () => void;
+      }) => TurnstileWidgetId;
+      reset: (widgetId?: TurnstileWidgetId) => void;
+      remove: (widgetId: TurnstileWidgetId) => void;
+    };
+  }
+}
 
 type PhotoField = 'fotoDiri' | 'fotoKtp';
 const cities = ['Kota Medan', 'Kab. Deli Serdang', 'Kota Binjai', 'Kota Pematangsiantar', 'Kab. Asahan', 'Kab. Karo', 'Kab. Tapanuli Utara', 'Kota Tanjungbalai', 'Kab. Labuhanbatu', 'Kab. Simalungun', 'Kota Tebing Tinggi', 'Kab. Toba', 'Kab. Dairi', 'Kepulauan Nias'];
@@ -23,8 +42,50 @@ export const StageOneRespondentPage: React.FC = () => {
   const [error, setError] = useState('');
   const [successId, setSuccessId] = useState('');
   const [consent, setConsent] = useState(false);
+  const [turnstileToken, setTurnstileToken] = useState('');
+  const [turnstileReady, setTurnstileReady] = useState(false);
+  const turnstileContainerRef = useRef<HTMLDivElement | null>(null);
+  const turnstileWidgetIdRef = useRef<TurnstileWidgetId | null>(null);
 
   useEffect(() => { document.title = 'Asesmen Tahap Awal — SIPANDU'; }, []);
+
+  useEffect(() => {
+    let active = true;
+    const scriptUrl = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit';
+    const renderWidget = () => {
+      if (!active || !turnstileContainerRef.current || !window.turnstile || turnstileWidgetIdRef.current !== null) return;
+      turnstileWidgetIdRef.current = window.turnstile.render(turnstileContainerRef.current, {
+        sitekey: SIPANDU_TURNSTILE_SITE_KEY,
+        action: 'sipandu-stage-one',
+        callback: (token) => { if (active) setTurnstileToken(token); },
+        'expired-callback': () => { if (active) setTurnstileToken(''); },
+        'error-callback': () => { if (active) { setTurnstileToken(''); setError('Verifikasi keamanan belum berhasil dimuat. Muat ulang pemeriksaan keamanan lalu coba kembali.'); } },
+      });
+      setTurnstileReady(true);
+    };
+    const existing = document.querySelector<HTMLScriptElement>('script[src="' + scriptUrl + '"]');
+    if (window.turnstile) {
+      renderWidget();
+    } else if (existing) {
+      existing.addEventListener('load', renderWidget, { once: true });
+      existing.addEventListener('error', () => { if (active) setError('Layanan verifikasi keamanan tidak dapat dimuat.'); }, { once: true });
+    } else {
+      const script = document.createElement('script');
+      script.src = scriptUrl;
+      script.async = true;
+      script.defer = true;
+      script.addEventListener('load', renderWidget, { once: true });
+      script.addEventListener('error', () => { if (active) setError('Layanan verifikasi keamanan tidak dapat dimuat.'); }, { once: true });
+      document.head.appendChild(script);
+    }
+    return () => {
+      active = false;
+      if (turnstileWidgetIdRef.current !== null) {
+        try { window.turnstile?.remove(turnstileWidgetIdRef.current); } catch { /* Widget cleanup is best effort. */ }
+        turnstileWidgetIdRef.current = null;
+      }
+    };
+  }, []);
 
   const handlePhoto = async (event: React.ChangeEvent<HTMLInputElement>, field: PhotoField) => {
     const file = event.target.files?.[0];
@@ -55,6 +116,7 @@ export const StageOneRespondentPage: React.FC = () => {
     if (!jenisBantuan) { setError('Silakan pilih jenis bantuan yang diharapkan.'); return; }
     if (!fotoDiri || !fotoKtp) { setError('Foto diri dan foto KTP wajib diunggah sebelum mengirim asesmen.'); return; }
     if (!consent) { setError('Konfirmasi pemahaman penggunaan data wajib dicentang sebelum mengirim.'); return; }
+    if (!turnstileToken) { setError('Selesaikan verifikasi keamanan Cloudflare sebelum mengirim formulir.'); return; }
 
     setSaving(true);
     try {
@@ -74,8 +136,10 @@ export const StageOneRespondentPage: React.FC = () => {
         fotoKtp,
         statusAsesmen: 'Tahap Awal',
       };
-      setSuccessId(await submitPublicStageOneIntake(payload));
+      setSuccessId(await submitPublicStageOneIntake(payload, turnstileToken));
     } catch (submitError) {
+      setTurnstileToken('');
+      if (turnstileWidgetIdRef.current !== null) window.turnstile?.reset(turnstileWidgetIdRef.current);
       setError(submitError instanceof Error ? submitError.message : 'Formulir belum berhasil dikirim. Coba lagi.');
     } finally {
       setSaving(false);
@@ -88,7 +152,7 @@ export const StageOneRespondentPage: React.FC = () => {
         <div className="mb-4 flex justify-center"><img src={publicAssetUrl('uploads/logo-kemsos.webp')} alt="Logo Kementerian Sosial Republik Indonesia" className="h-20 w-auto object-contain" /></div>
         <div className="mb-4 flex justify-center"><span className="rounded-full border border-emerald-300/40 bg-emerald-900/60 px-4 py-3 text-emerald-200">✓</span></div>
         <h1 className="text-center text-2xl font-black">Asesmen Tahap Awal Terkirim</h1>
-        <p className="mt-3 text-center text-sm leading-relaxed text-emerald-100">Terima kasih sudah berpartisipasi dalam program bantuan Atensi dari Kementerian Sosial RI. Data anda akan kami simpan dan terjamin kerahasiaannya. Petugas kami akan memberikan link asesmen berikutnya kepada anda untuk verifikasi lebih lanjut. Mohon untuk tetap melanjutkan tahap selanjutnya. Terima kasih atas partisipasinya. Salam hangat, Deny Arifin M.S - DRSKPNO</p>
+        <p className="mt-3 text-center text-sm leading-relaxed text-emerald-100">Terima kasih sudah berpartisipasi dalam program bantuan Atensi dari Kementerian Sosial RI. Data anda akan kami simpan dan terjamin kerahasiaannya. Petugas kami akan memberikan link asesmen berikutnya kepada anda untuk verifikasi lebih lanjut. Mohon untuk tetap melanjutkan tahap selanjutnya. Terima kasih atas partisipasinya. Hormat kami, Tim SIPANDU ODHIV</p>
         <p className="mt-4 rounded-lg border border-white/10 bg-black/30 p-3 text-center text-xs text-neutral-300">ID referensi pengiriman: <span className="break-all font-mono text-emerald-200">{successId}</span></p>
         <p className="mt-5 text-center text-xs text-neutral-400">Terima kasih. Anda dapat menutup halaman ini.</p>
       </section>
@@ -127,8 +191,14 @@ export const StageOneRespondentPage: React.FC = () => {
           </div>
           {photoBusy && <p role="status" className="text-xs text-sky-200">Mengompres foto…</p>}
           <label className="flex items-start gap-2 rounded-lg border border-emerald-500/25 bg-emerald-950/20 p-3 text-xs leading-relaxed text-emerald-100"><input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} required className="mt-0.5" /><span>Saya memahami data ini digunakan untuk asesmen dan tindak lanjut program, dan hanya dapat diakses petugas yang berwenang.</span></label>
+          <section className="rounded-lg border border-sky-500/25 bg-slate-950/50 p-3" aria-label="Verifikasi keamanan">
+            <p className="mb-2 text-xs font-semibold text-sky-100">Verifikasi keamanan sebelum mengirim</p>
+            <div ref={turnstileContainerRef} />
+            {!turnstileReady && <p className="mt-2 text-[10px] text-neutral-400">Memuat verifikasi keamanan…</p>}
+            {turnstileToken && <p className="mt-2 text-[10px] text-emerald-200">Verifikasi selesai.</p>}
+          </section>
           <div aria-hidden="true" className="absolute -left-[10000px] h-px w-px overflow-hidden"><label>Website<input name="companyWebsite" tabIndex={-1} autoComplete="off" /></label></div>
-          <button type="submit" disabled={saving || photoBusy} className="flex w-full items-center justify-center gap-2 rounded-xl border border-rose-500/40 bg-gradient-to-r from-emerald-800 to-teal-800 px-5 py-3.5 text-sm font-bold text-white shadow-lg disabled:cursor-not-allowed disabled:opacity-50">{saving ? 'Mengirim dan menyimpan…' : 'Kirim Asesmen Tahap Awal'}</button>
+          <button type="submit" disabled={saving || photoBusy || !turnstileReady || !turnstileToken} className="flex w-full items-center justify-center gap-2 rounded-xl border border-rose-500/40 bg-gradient-to-r from-emerald-800 to-teal-800 px-5 py-3.5 text-sm font-bold text-white shadow-lg disabled:cursor-not-allowed disabled:opacity-50">{saving ? 'Mengirim dan menyimpan…' : 'Kirim Asesmen Tahap Awal'}</button>
           <p className="text-center text-[10px] leading-relaxed text-neutral-500">Jangan tutup halaman sebelum muncul konfirmasi bahwa data berhasil dikirim.</p>
         </form>
       </section>
