@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import worker, { missingActivationConfiguration, parseJson } from './index.runtime.js';
+import worker, { missingActivationConfiguration, parseJson } from './index.ts';
 
 function streamedJsonRequest(value: string): Request {
   const bytes = new TextEncoder().encode(value);
@@ -144,7 +144,7 @@ test('public intake refuses to run without a Turnstile secret', async () => {
 
 test('activation does not require the shared signup code once a pending invitation exists', () => {
   const env = {
-    FIREBASE_WEB_API_KEY: 'public-web-api-key',
+    FIREBASE_AUTH_API_KEY: 'worker-secret-api-key',
     FIREBASE_PROJECT_ID: 'gen-lang-client-0197631978',
     FIREBASE_SERVICE_ACCOUNT_JSON: '{"project_id":"gen-lang-client-0197631978"}',
     PENDING_REGISTRATIONS: {
@@ -158,7 +158,7 @@ test('activation does not require the shared signup code once a pending invitati
 
 test('activation reports missing Firebase service-account configuration', () => {
   const env = {
-    FIREBASE_WEB_API_KEY: 'public-web-api-key',
+    FIREBASE_AUTH_API_KEY: 'worker-secret-api-key',
     FIREBASE_PROJECT_ID: 'gen-lang-client-0197631978',
     PENDING_REGISTRATIONS: {
       get: async () => null,
@@ -220,7 +220,7 @@ test('restores an invitation for the same verified Firebase account without crea
       body: JSON.stringify({ code: 'team-recovery-code-0123456789' }),
     }), {
       TEAM_REGISTRATION_CODE: 'team-recovery-code-0123456789',
-      FIREBASE_WEB_API_KEY: 'test-web-api-key',
+      FIREBASE_AUTH_API_KEY: 'test-worker-secret-api-key',
       FIREBASE_PROJECT_ID: 'gen-lang-client-0197631978',
       FIREBASE_SERVICE_ACCOUNT_JSON: '{"project_id":"gen-lang-client-0197631978","client_email":"test@example.iam.gserviceaccount.com","private_key":"test"}',
       PENDING_REGISTRATIONS: kv,
@@ -272,7 +272,7 @@ test('does not restore an invitation before Firebase email verification', async 
       body: JSON.stringify({ code: 'team-recovery-code-0123456789' }),
     }), {
       TEAM_REGISTRATION_CODE: 'team-recovery-code-0123456789',
-      FIREBASE_WEB_API_KEY: 'test-web-api-key',
+      FIREBASE_AUTH_API_KEY: 'test-worker-secret-api-key',
       FIREBASE_PROJECT_ID: 'gen-lang-client-0197631978',
       FIREBASE_SERVICE_ACCOUNT_JSON: '{"project_id":"gen-lang-client-0197631978","client_email":"test@example.iam.gserviceaccount.com","private_key":"test"}',
       PENDING_REGISTRATIONS: kv,
