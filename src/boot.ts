@@ -21,26 +21,28 @@
             window.history.replaceState(window.history.state, '', initialUrl.pathname + initialUrl.search + initialUrl.hash);
           }
         } catch (_) { /* URL cleanup is optional and never blocks startup. */ }
-        var showError = function (message, isSpecific) {
+        var showError = function (message: unknown, isSpecific: boolean) {
           if (root && root.childElementCount > 0) return;
           // Keep a concrete asset/runtime error instead of replacing it with the
           // generic boot timeout after twenty seconds.
           if (hasSpecificError && !isSpecific) return;
           if (isSpecific) hasSpecificError = true;
+          if (!panel || !detail) return;
           panel.style.display = 'block';
           detail.textContent = String(message || 'Kesalahan tidak diketahui').slice(0, 3000);
         };
         // A wallpaper/logo is optional: its own component has a fallback, and an image
         // preload failing must never be reported as a fatal application boot failure.
-        var isNonCriticalImageAsset = function (target) {
+        var isNonCriticalImageAsset = function (target: EventTarget | null): boolean {
           if (!target) return false;
-          var tagName = String(target.tagName || '').toUpperCase();
+          var element = target as HTMLElement & { rel?: string; as?: string };
+          var tagName = String(element.tagName || '').toUpperCase();
           if (tagName === 'IMG') return true;
           if (tagName !== 'LINK') return false;
-          var relTokens = String(target.rel || '').toLowerCase().split(/\\s+/);
-          return relTokens.indexOf('preload') !== -1 && String(target.as || '').toLowerCase() === 'image';
+          var relTokens = String(element.rel || '').toLowerCase().split(/\\s+/);
+          return relTokens.indexOf('preload') !== -1 && String(element.as || '').toLowerCase() === 'image';
         };
-        var retryWithFreshDocument = function (assetUrl) {
+        var retryWithFreshDocument = function (assetUrl: string): boolean {
           // Only retry failed application scripts/styles, not images, APIs, or fonts.
           if (!/\.(?:m?js|css)(?:[?#]|$)/i.test(assetUrl)) return false;
           var assetPath = String(assetUrl).split(/[?#]/)[0];
@@ -63,7 +65,7 @@
           }
         };
         window.addEventListener('error', function (event) {
-          var target = event.target;
+          var target = event.target as (EventTarget & { src?: string; href?: string }) | null;
           if (target && target !== window && (target.src || target.href)) {
             // Keep non-critical image failures out of the boot error screen. LoginPage
             // retries the wallpaper with its source JPEG and hides it only as a last resort.
@@ -73,7 +75,7 @@
               }
               return;
             }
-            var assetUrl = target.src || target.href;
+            var assetUrl = target.src || target.href || '';
             if (retryWithFreshDocument(assetUrl)) return;
             showError('Aset aplikasi gagal dimuat: ' + assetUrl + '. Muat ulang halaman; jika berulang, periksa koneksi dan URL aset.', true);
           } else {
@@ -85,12 +87,12 @@
         });
         var observer = new MutationObserver(function () {
           if (root && root.childElementCount > 0) {
-            panel.style.display = 'none';
+            if (panel) panel.style.display = 'none';
             clearBootRetryMarkers();
             observer.disconnect();
           }
         });
-        observer.observe(root, { childList: true });
+        if (root) observer.observe(root, { childList: true });
         window.setTimeout(function () {
           if (!root || root.childElementCount === 0) {
             // Some stalled/mismatched module requests do not surface a useful
