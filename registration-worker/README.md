@@ -24,7 +24,7 @@ The KV namespace has already been created. The existing app Worker `sipandu` is 
 Open Cloudflare Dashboard → Workers & Pages → `sipandu-registration` → Settings → Variables and Secrets. Add these as **Secret** values:
 
 - `FIREBASE_SERVICE_ACCOUNT_JSON`: the complete JSON key downloaded from Google Cloud.
-- `FIREBASE_AUTH_API_KEY`: the Firebase Web API key used only by the server-side Identity Toolkit lookup. It is a Worker Secret, not a checked-in variable.
+- `FIREBASE_AUTH_API_KEY`: a **dedicated, separate** Google API key used only by the server-side Identity Toolkit lookup. It is stored as a Worker Secret, not checked into Git. The value currently provisioned during setup was copied from the public browser Firebase config only as a temporary bootstrap; it is not yet a separate restricted key and must be replaced before production with a key restricted to Identity Toolkit API. Do not reuse the browser key for the server after that replacement.
 - `TURNSTILE_SECRET_KEY`: the secret for the SIPANDU public intake Turnstile widget. It must never be placed in the browser bundle.
 - `TEAM_REGISTRATION_CODE`: one strong, random shared code (prefer 32 or more random characters) that the administrator shares only with SIPANDU team members.
 
