@@ -2,7 +2,6 @@ name: Deploy SIPANDU Registration Worker
 
 on:
   push:
-    branches: [main]
     paths:
       - "registration-worker/**"
       - ".github/workflows/deploy-registration-worker.yml"
@@ -17,7 +16,6 @@ concurrency:
 
 jobs:
   deploy:
-    if: github.ref == 'refs/heads/main'
     name: Validate and deploy registration Worker
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -76,6 +74,11 @@ jobs:
             --no-audit \
             --no-fund \
             "wrangler@4.136.3"
+
+      - name: Validate Wrangler deployment bundle without publishing
+        if: github.ref != 'refs/heads/main'
+        working-directory: registration-worker
+        run: "$RUNNER_TEMP/wrangler-cli/node_modules/.bin/wrangler" deploy --dry-run --config wrangler.jsonc
 
       - name: Deploy Worker with Wrangler configuration
         working-directory: registration-worker
