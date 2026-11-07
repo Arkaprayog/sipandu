@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: sipandu-native-apk-${{ github.ref }}
@@ -343,17 +343,44 @@ jobs:
           if-no-files-found: error
           retention-days: 90
 
-      - name: Prepare stable download assets
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+  publish-release:
+    name: Publish signed APK release
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: build-apk
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout the verified main commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Read app version
         shell: bash
         run: |
           set -euo pipefail
-          cp android/app/build/outputs/apk/release/app-release.apk "$RUNNER_TEMP/SIPANDU-ODHIV.apk"
-          cp android/app/build/outputs/apk/release/app-release.apk "$RUNNER_TEMP/SIPANDU-ODHIV-v${APP_VERSION}.apk"
-          sha256sum "$RUNNER_TEMP/SIPANDU-ODHIV.apk" | tee "$RUNNER_TEMP/SIPANDU-ODHIV.sha256"
+          echo "APP_VERSION=$(node -p "require('./package.json').version")" >> "$GITHUB_ENV"
+
+      - name: Download signed APK artifact from build job
+        uses: actions/download-artifact@v4
+        with:
+          name: SIPANDU-ODHIV-RELEASE-APK-v${{ env.APP_VERSION }}
+          path: ${{ runner.temp }}/release
+
+      - name: Prepare stable download assets and checksum
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK="${{ runner.temp }}/release/app-release.apk"
+          test -s "$APK"
+          cp "$APK" "${{ runner.temp }}/SIPANDU-ODHIV.apk"
+          cp "$APK" "${{ runner.temp }}/SIPANDU-ODHIV-v${APP_VERSION}.apk"
+          sha256sum "${{ runner.temp }}/SIPANDU-ODHIV.apk" | tee "${{ runner.temp }}/SIPANDU-ODHIV.sha256"
 
       - name: Publish versioned GitHub Release and stable APK download
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ env.APP_VERSION }}
