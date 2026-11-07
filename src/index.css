@@ -164,7 +164,7 @@ body,
 }
 
 /* Header and panel surfaces use pale sage. */
-.sipandu-navigation-shell[data-sipandu-theme="light"] .app-header-compact {
+.sipandu-navigation-shell[data-sipandu-theme="light"] .app-header-safe-area {
   background: #E8EFE3 !important;
   background-color: #E8EFE3 !important;
   background-image: none !important;
