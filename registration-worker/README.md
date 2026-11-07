@@ -45,7 +45,7 @@ This recovery path rejects accounts that already have the `owner` or `supervisor
 
 ## Deploy the Worker
 
-From the `registration-worker` directory in a trusted terminal with Wrangler installed. The checked-in `index.runtime.js` is the JavaScript Worker entry point uploaded to Cloudflare; `index.ts` is the typed source reference:
+From the `registration-worker` directory in a trusted terminal with Wrangler installed. Wrangler bundles the reviewed `index.ts` TypeScript source directly during deployment; no generated JavaScript entry point is checked in.
 
 ```sh
 bunx wrangler deploy --config wrangler.jsonc
