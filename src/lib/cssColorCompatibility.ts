@@ -64,7 +64,7 @@ export function normalizeOklchColor(input: string): string | null {
   const blue = linearToSrgb(-0.0041960863 * l - 0.7034186147 * m + 1.7076147010 * s);
   const alphaText = Number(alpha.toFixed(3)).toString();
 
-  return \`rgba(\${red}, \${green}, \${blue}, \${alphaText})\`;
+  return 'rgba(' + red + ', ' + green + ', ' + blue + ', ' + alphaText + ')';
 }
 
 /** Replace any oklch() color occurrences inside a CSS declaration or gradient. */
