@@ -6,6 +6,8 @@ interface KVBinding {
 
 interface Env {
   TEAM_REGISTRATION_CODE?: string;
+  FIREBASE_AUTH_API_KEY?: string;
+  /** Legacy fallback for environments not yet deployed from the hardened config. */
   FIREBASE_WEB_API_KEY?: string;
   FIREBASE_PROJECT_ID?: string;
   FIREBASE_DATABASE_ID?: string;
@@ -68,7 +70,7 @@ function safeEqual(left: string, right: string): boolean {
 function missingConfiguration(env: Env): string[] {
   const missing: string[] = [];
   if (!env.TEAM_REGISTRATION_CODE) missing.push('TEAM_REGISTRATION_CODE');
-  if (!env.FIREBASE_WEB_API_KEY) missing.push('FIREBASE_WEB_API_KEY');
+  if (!env.FIREBASE_AUTH_API_KEY && !env.FIREBASE_WEB_API_KEY) missing.push('FIREBASE_AUTH_API_KEY');
   if (!env.FIREBASE_PROJECT_ID) missing.push('FIREBASE_PROJECT_ID');
   if (!env.FIREBASE_SERVICE_ACCOUNT_JSON) missing.push('FIREBASE_SERVICE_ACCOUNT_JSON');
   if (!env.PENDING_REGISTRATIONS) missing.push('PENDING_REGISTRATIONS KV');
@@ -148,8 +150,9 @@ async function validateCode(env: Env, code: string): Promise<boolean> {
 }
 
 async function lookupFirebaseUser(env: Env, idToken: string): Promise<FirebaseUserLookup> {
-  if (!env.FIREBASE_WEB_API_KEY) throw new Error('Firebase Authentication API belum dikonfigurasi.');
-  const response = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${encodeURIComponent(env.FIREBASE_WEB_API_KEY)}`, {
+  const apiKey = env.FIREBASE_AUTH_API_KEY || env.FIREBASE_WEB_API_KEY;
+  if (!apiKey) throw new Error('Firebase Authentication API belum dikonfigurasi.');
+  const response = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${encodeURIComponent(apiKey)}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ idToken }),
