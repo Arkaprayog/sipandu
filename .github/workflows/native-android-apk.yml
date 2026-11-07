@@ -21,23 +21,23 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
 
       - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
           bun-version: latest
 
       - name: Setup Java for Android
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
         with:
           distribution: temurin
           java-version: '21'
 
       - name: Install Android SDK
-        uses: android-actions/setup-android@v3
+        uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3
         with:
           # The legacy "tools" SDK package is no longer published; requesting it
           # makes sdkmanager exit with "Failed to find package 'tools'".
@@ -189,7 +189,7 @@ jobs:
           grep -E "Signer #1 certificate SHA-1 digest|Signer #1 certificate SHA-256 digest" /tmp/sipandu-debug-signing.txt
 
       - name: Upload installable APK
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: SIPANDU-ODHIV-debug-APK-v${{ env.APP_VERSION }}
           path: android/app/build/outputs/apk/debug/app-debug.apk
@@ -338,7 +338,7 @@ jobs:
 
       - name: Upload native release APK
         if: github.event_name != 'pull_request'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: SIPANDU-ODHIV-RELEASE-APK-v${{ env.APP_VERSION }}
           path: android/app/build/outputs/apk/release/app-release.apk
@@ -355,7 +355,7 @@ jobs:
       contents: write
     steps:
       - name: Checkout the verified main commit
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           ref: ${{ github.sha }}
           persist-credentials: false
@@ -367,7 +367,7 @@ jobs:
           echo "APP_VERSION=$(node -e 'process.stdout.write(require("./package.json").version)')" >> "$GITHUB_ENV"
 
       - name: Download signed APK artifact from build job
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: SIPANDU-ODHIV-RELEASE-APK-v${{ env.APP_VERSION }}
           path: ${{ runner.temp }}/release
@@ -383,7 +383,7 @@ jobs:
           sha256sum "${{ runner.temp }}/SIPANDU-ODHIV.apk" | tee "${{ runner.temp }}/SIPANDU-ODHIV.sha256"
 
       - name: Publish versioned GitHub Release and stable APK download
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:
           tag_name: v${{ env.APP_VERSION }}
           name: SIPANDU ODHIV v${{ env.APP_VERSION }}
