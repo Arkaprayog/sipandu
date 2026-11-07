@@ -175,26 +175,18 @@ if (fs.existsSync(assetDirectory)) {
 }
 
 
-const editableSuratTugas = path.join(dist, 'uploads', 'Surat Tugas - Template Editable Terkunci.docx');
-if (!fs.existsSync(editableSuratTugas) || fs.statSync(editableSuratTugas).size < 50000) {
-  fail('Template Surat Tugas editable tidak ada atau kosong di dist/uploads. Periksa generator locked DOCX.');
-} else {
-  console.log(`Locked editable Surat Tugas template present: ${fs.statSync(editableSuratTugas).size} bytes.`);
-}
-
-const suratTugasOriginalPage = path.join(dist, 'uploads', 'surat-tugas-original-background.png');
-if (!fs.existsSync(suratTugasOriginalPage) || fs.statSync(suratTugasOriginalPage).size < 100000) {
-  fail('Gambar dasar halaman asli Surat Tugas tidak ada atau terlalu kecil pada hasil build.');
-} else {
-  console.log(`Original Surat Tugas page artwork present: ${fs.statSync(suratTugasOriginalPage).size} bytes.`);
-}
-// The current editor opens the original PDF with pdf-lib, so the actual PDF source
-// must be present in dist. A fingerprinted PNG import is no longer required.
-const originalSuratTugasPdf = path.join(dist, 'uploads', 'Surat Tugas.pdf');
-if (!fs.existsSync(originalSuratTugasPdf) || fs.statSync(originalSuratTugasPdf).size < 100000) {
-  fail('PDF sumber Surat Tugas tidak ada atau terlalu kecil pada hasil build.');
-} else {
-  console.log(`Original Surat Tugas PDF source present: ${fs.statSync(originalSuratTugasPdf).size} bytes.`);
+// Personal staff letters and digital-signature QR source files must never be
+// copied into the public production bundle. The retired editor has no public asset dependency.
+for (const forbidden of [
+  'uploads/Surat Tugas.pdf',
+  'uploads/Surat Tugas - Template Editable Terkunci.docx',
+  'uploads/surat-tugas-original-background.png',
+  'uploads/surat-tugas-header-locked.png',
+  'uploads/surat-tugas-barcode-locked.png',
+]) {
+  if (fs.existsSync(path.join(dist, forbidden))) {
+    fail('Aset dokumen pribadi tidak boleh dipublikasikan: dist/' + forbidden);
+  }
 }
 
 const loginBackground = path.join(dist, 'uploads', 'Wallpaper Background Landingpage.webp');
