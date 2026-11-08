@@ -240,10 +240,13 @@ test('Status layanan PPKS dan riwayat aktivitas dibatasi role staf serta riwayat
     updatedByUid: 'owner-001',
   }));
 
-  await assertFails(updateDoc(status, {
+  const assignedPendamping = environment.authenticatedContext(PENDAMPING_UID, {
+    role: 'pendamping',
+  }).firestore();
+  await assertFails(updateDoc(doc(assignedPendamping, 'ppksServiceStatus', 'ppks-demo'), {
     assignedToUid: 'pendamping-lain',
     updatedAt: serverTimestamp(),
-    updatedByUid: 'owner-001',
+    updatedByUid: PENDAMPING_UID,
   }));
   await assertFails(updateDoc(status, {
     clinicalDiagnosis: 'field tidak diizinkan',
@@ -252,7 +255,7 @@ test('Status layanan PPKS dan riwayat aktivitas dibatasi role staf serta riwayat
   }));
   await assertFails(setDoc(doc(firestore, 'ppksServiceStatus', 'invalid'), {
     ppksId: 'invalid',
-    nutritionStatus: 'diterima',
+    nutritionStatus: 'status-tidak-valid',
     entrepreneurshipStatus: 'belum-diverifikasi',
     psychosocialStatus: 'belum-dimulai',
     lastNutritionAt: '',
@@ -261,7 +264,7 @@ test('Status layanan PPKS dan riwayat aktivitas dibatasi role staf serta riwayat
     therapySessionCount: 0,
     followUpAt: '',
     followUpReason: '',
-    assignedToUid: 'another-staff',
+    assignedToUid: 'owner-001',
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
     updatedByUid: 'owner-001',
@@ -286,9 +289,6 @@ test('Status layanan PPKS dan riwayat aktivitas dibatasi role staf serta riwayat
   const outsider = environment.authenticatedContext('outsider-001').firestore();
   await assertFails(getDoc(doc(outsider, 'ppksServiceStatus', 'ppks-demo')));
 
-  const assignedPendamping = environment.authenticatedContext(PENDAMPING_UID, {
-    role: 'pendamping',
-  }).firestore();
   await assertSucceeds(getDoc(doc(assignedPendamping, 'ppksServiceStatus', 'ppks-demo')));
   await assertSucceeds(getDoc(doc(assignedPendamping, 'ppksServiceEvents', 'event-001')));
   const otherPendamping = environment.authenticatedContext('pendamping-002', {
