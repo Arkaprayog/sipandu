@@ -1,6 +1,12 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { buildGoogleDriveMultipartBody, buildGoogleDriveRequestUrl } from './googleDriveMultipart';
+import {
+  buildDriveUploadMetadata,
+  buildGoogleDriveMultipartBody,
+  buildGoogleDriveRequestUrl,
+  buildResumableContentRange,
+  parseResumableRangeOffset,
+} from './googleDriveMultipart';
 
 test('builds Google Drive multipart body with real CRLF delimiters', async () => {
   const boundary = 'sipandu-regression-boundary';
@@ -56,4 +62,48 @@ test('uses the dedicated Drive upload endpoint for multipart and resumable uploa
 test('rejects non-rooted and protocol-relative Drive API paths', () => {
   assert.throws(() => buildGoogleDriveRequestUrl('files'), /Invalid Google Drive API path/);
   assert.throws(() => buildGoogleDriveRequestUrl('//attacker.example/files'), /Invalid Google Drive API path/);
+});
+
+
+test('Drive upload metadata explicitly marks PDF files and keeps existing parent folders', () => {
+  const create = JSON.parse(buildDriveUploadMetadata({
+    name: 'Form-Asesmen-Terintegrasi-Responden.pdf',
+    mimeType: 'application/pdf',
+    folderId: 'respondent-folder',
+  }));
+  assert.equal(create.mimeType, 'application/pdf');
+  assert.deepEqual(create.parents, ['respondent-folder']);
+  assert.deepEqual(create.appProperties, {
+    sipanduManaged: 'true',
+    sipanduArchive: 'respondent-folder',
+  });
+
+  const update = JSON.parse(buildDriveUploadMetadata({
+    name: 'Form-Asesmen-Terintegrasi-Responden.pdf',
+    mimeType: 'application/pdf',
+    folderId: 'respondent-folder',
+    existingFileId: 'managed-pdf-id',
+  }));
+  assert.equal(update.mimeType, 'application/pdf');
+  assert.equal(update.parents, undefined);
+});
+
+test('Drive metadata rejects unsafe names, MIME types, and folder identifiers', () => {
+  const newline = String.fromCharCode(10);
+  assert.throws(() => buildDriveUploadMetadata({ name: 'bad' + newline + 'name.pdf', mimeType: 'application/pdf', folderId: 'f' }), /Nama file/);
+  assert.throws(() => buildDriveUploadMetadata({ name: 'file.pdf', mimeType: 'application/pdf' + newline + 'Injected', folderId: 'f' }), /Tipe file/);
+  assert.throws(() => buildDriveUploadMetadata({ name: 'file.pdf', mimeType: 'application/pdf', folderId: '' }), /Folder tujuan/);
+});
+
+test('builds valid resumable Content-Range headers using inclusive final byte', () => {
+  assert.equal(buildResumableContentRange(0, 8 * 1024 * 1024, 10 * 1024 * 1024), 'bytes 0-8388607/10485760');
+  assert.equal(buildResumableContentRange(8 * 1024 * 1024, 10 * 1024 * 1024, 10 * 1024 * 1024), 'bytes 8388608-10485759/10485760');
+  assert.throws(() => buildResumableContentRange(0, 0, 10), /Rentang byte/);
+  assert.throws(() => buildResumableContentRange(10, 11, 10), /Rentang byte/);
+});
+
+test('parses server acknowledged upload bytes and restarts at zero when no bytes were acknowledged', () => {
+  assert.equal(parseResumableRangeOffset('bytes=0-8388607'), 8388608);
+  assert.equal(parseResumableRangeOffset(null), 0);
+  assert.throws(() => parseResumableRangeOffset('bytes=5-10'), /Header Range/);
 });

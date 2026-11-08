@@ -30,3 +30,55 @@ export function buildGoogleDriveMultipartBody(
     `\r\n--${boundary}--\r\n`,
   ], { type: `multipart/related; boundary=${boundary}` });
 }
+
+
+/** Build Drive metadata explicitly, including the file MIME type. */
+export function buildDriveUploadMetadata(input: {
+  name: string;
+  mimeType: string;
+  folderId: string;
+  existingFileId?: string;
+}): string {
+  if (!input.name || /[\r\n]/.test(input.name)) {
+    throw new Error('Nama file Google Drive tidak valid.');
+  }
+  if (!input.mimeType || /[\r\n]/.test(input.mimeType)) {
+    throw new Error('Tipe file Google Drive tidak valid.');
+  }
+  if (!input.folderId || /[\r\n]/.test(input.folderId)) {
+    throw new Error('Folder tujuan Google Drive tidak valid.');
+  }
+  return JSON.stringify({
+    name: input.name,
+    mimeType: input.mimeType,
+    // Google Drive does not allow files.update to move an existing file.
+    ...(!input.existingFileId ? { parents: [input.folderId] } : {}),
+    appProperties: { sipanduManaged: 'true', sipanduArchive: input.folderId },
+  });
+}
+
+/** Return the inclusive Content-Range header for an exclusive end offset. */
+export function buildResumableContentRange(start: number, endExclusive: number, total: number): string {
+  if (
+    !Number.isSafeInteger(start) ||
+    !Number.isSafeInteger(endExclusive) ||
+    !Number.isSafeInteger(total) ||
+    total <= 0 ||
+    start < 0 ||
+    endExclusive <= start ||
+    endExclusive > total
+  ) throw new Error('Rentang byte upload Google Drive tidak valid.');
+  return 'bytes ' + start + '-' + (endExclusive - 1) + '/' + total;
+}
+
+/** Parse Google's Range response (bytes=0-N) to the next unsent byte offset. */
+export function parseResumableRangeOffset(range: string | null): number {
+  if (!range) return 0;
+  const match = range.trim().match(/^bytes=0-(\d+)$/i);
+  if (!match) throw new Error('Header Range dari Google Drive tidak valid.');
+  const lastReceived = Number(match[1]);
+  if (!Number.isSafeInteger(lastReceived) || lastReceived < 0) {
+    throw new Error('Posisi upload Google Drive tidak valid.');
+  }
+  return lastReceived + 1;
+}
