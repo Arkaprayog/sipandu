@@ -1,0 +1,1539 @@
+diff --git a/docs/APP-CHECK.md b/docs/APP-CHECK.md
+new file mode 100644
+index 0000000..09c9129
+--- /dev/null
++++ b/docs/APP-CHECK.md
+@@ -0,0 +1,36 @@
++# Firebase App Check untuk form publik SIPANDU
++
++Form respondent (`?mode=asesmen-tahap-awal`) menulis ke koleksi `stageOneIntake` tanpa login.
++Aturan Firestore sudah membatasi bentuk data, ukuran, dan ID dokumen, tetapi **tidak dapat**
++membedakan aplikasi SIPANDU asli dari skrip yang menyalin konfigurasi Firebase publik. App Check
++menambahkan bukti itu.
++
++Kode sudah siap (`src/lib/firebase.ts`) dan **tidak aktif sampai site key diisi**, sehingga
++men-deploy kode ini tidak mengubah perilaku aplikasi.
++
++## Langkah (urutan penting)
++
++1. Buat kunci reCAPTCHA di https://www.google.com/recaptcha/admin (reCAPTCHA v3, atau Enterprise).
++   Daftarkan domain: `arkaprayog.github.io`, `sipandu.aryprayoga139.workers.dev`,
++   `sipanduodhiv.my.id`, dan `localhost` (untuk APK Capacitor dan pengembangan).
++2. Firebase Console -> **App Check** -> aplikasi web `1:647774926620:web:2508dc7b82c73d748cacd9`
++   -> daftarkan dengan reCAPTCHA v3 (atau Enterprise) dan secret key dari langkah 1.
++3. Isi **site key** (bagian publik) di salah satu tempat:
++   - `firebase-applet-config.json` -> `"recaptchaSiteKey": "<site key>"`, atau
++   - variabel build `VITE_FIREBASE_APPCHECK_SITE_KEY`.
++   Jika memakai Enterprise, set juga `VITE_FIREBASE_APPCHECK_PROVIDER=enterprise`.
++4. Deploy aplikasi (Pages **dan** Worker `sipandu`), lalu buka form publik dan dashboard staf.
++5. Firebase Console -> App Check -> **Cloud Firestore** -> lihat metrik. Pastikan permintaan
++   dari web **dan APK** berstatus *verified*.
++6. Setelah metrik bersih beberapa hari, tekan **Enforce** untuk Cloud Firestore.
++   Sebelum enforce, versi APK lama yang belum memuat App Check akan ditolak, jadi rilis APK baru dahulu.
++
++## Pengembangan lokal
++
++Saat `npm run dev`, konsol browser mencetak *debug token*. Daftarkan di
++App Check -> Apps -> Manage debug tokens.
++
++## Alternatif yang lebih ketat
++
++Jika kelak spam masih lolos, pindahkan pengiriman form ke endpoint Worker dengan Cloudflare
++Turnstile dan rate limit, lalu tutup `create` anonim di `firestore.rules`.
+diff --git a/docs/DATA-PRIBADI-DAN-API-KEY.md b/docs/DATA-PRIBADI-DAN-API-KEY.md
+new file mode 100644
+index 0000000..565e12a
+--- /dev/null
++++ b/docs/DATA-PRIBADI-DAN-API-KEY.md
+@@ -0,0 +1,70 @@
++# Data pribadi di repositori dan pembatasan API key
++
++## Sudah dibersihkan dari kode
++Nama dan NIP pegawai yang sebelumnya tertanam di `src/App.tsx`, `src/utils/helpers.ts`,
++`src/components/SuratTugasEditor.tsx`, `src/components/StageOneRespondentPage.tsx`,
++`src/types/index.ts`, dan `scripts/generate_surat_tugas_template.py` sudah diganti dengan teks
++netral. Nama pengirim pesan WhatsApp kini diambil dari Pengaturan (`senderName`).
++
++## Belum dipindahkan: `public/uploads/Surat Tugas.pdf`
++File ini adalah surat tugas bertanda tangan elektronik yang memuat nama pegawai, nomor surat, dan
++nomor DIPA. File ini **tidak dihapus otomatis** karena dua bagian aplikasi bergantung padanya:
++- `SuratTugasEditor` membuka PDF ini dengan pdf-lib sebagai halaman dasar surat.
++- `scripts/generate_surat_tugas_template.py` dan `scripts/verify-dist.mjs` mewajibkannya ada.
++
++Keputusan yang perlu Anda ambil: siapkan versi **kosong** (tanpa nama, nomor, tanda tangan, dan
++QR) dengan nama file yang sama, lalu ganti file ini. Setelah itu editor dan build tetap berjalan.
++
++## Membersihkan riwayat git (wajib, repo ini publik)
++Menghapus file atau teks dari commit terbaru tidak menghapusnya dari riwayat. Contoh dengan
++[git filter-repo](https://github.com/newren/git-filter-repo):
++
++```bash
++git clone --mirror https://github.com/Arkaprayog/sipandu.git
++cd sipandu.git
++# 1) hapus PDF dari seluruh riwayat
++git filter-repo --path "public/uploads/Surat Tugas.pdf" --invert-paths
++# 2) ganti NIP/nama yang pernah tertanam di kode (isi file replace.txt: teks==>pengganti)
++git filter-repo --replace-text replace.txt
++git push --force --mirror
++```
++Setelah force-push: semua kolaborator harus meng-clone ulang, dan GitHub tetap menyimpan
++*cached view* serta fork. Hubungi GitHub Support untuk menghapus cache commit lama. NIP tidak
++dapat "diganti" seperti password, jadi anggap sudah pernah terpublikasi.
++
++## Membatasi API key Firebase (tidak dapat diperiksa dari kode)
++Key web Firebase (`apiKey` di `firebase-applet-config.json`) memang publik, tetapi harus dibatasi
++agar tidak bisa dipakai dari domain atau layanan lain.
++
++Google Cloud Console -> APIs & Services -> Credentials -> klik key tersebut:
++
++1. **Application restrictions -> Websites (HTTP referrers)**. Tambahkan:
++   - `https://sipandu.aryprayoga139.workers.dev/*`
++   - `https://sipanduodhiv.my.id/*`
++   - `https://arkaprayog.github.io/*`
++   - `https://gen-lang-client-0197631978.firebaseapp.com/*`
++   - `https://localhost/*` (APK Capacitor)
++   - `http://localhost:*/*` (pengembangan)
++2. **API restrictions -> Restrict key**. Izinkan hanya:
++   Identity Toolkit API, Token Service API, Cloud Firestore API,
++   Cloud Storage for Firebase API (`firebasestorage.googleapis.com`),
++   Firebase Installations API, Firebase App Check API.
++3. Uji: login web, login APK, form publik, unggah dokumen. Jika salah satu gagal dengan
++   `API_KEY_HTTP_REFERRER_BLOCKED`, tambahkan origin yang tampil pada pesan error.
++
++Dengan gcloud:
++```bash
++gcloud services api-keys list --project gen-lang-client-0197631978
++gcloud services api-keys update KEY_ID --project gen-lang-client-0197631978 \
++  --allowed-referrers="https://sipandu.aryprayoga139.workers.dev/*,https://sipanduodhiv.my.id/*,https://arkaprayog.github.io/*,https://gen-lang-client-0197631978.firebaseapp.com/*,https://localhost/*" \
++  --api-target=service=identitytoolkit.googleapis.com \
++  --api-target=service=securetoken.googleapis.com \
++  --api-target=service=firestore.googleapis.com \
++  --api-target=service=firebasestorage.googleapis.com \
++  --api-target=service=firebaseinstallations.googleapis.com \
++  --api-target=service=firebaseappcheck.googleapis.com
++```
++
++Periksa juga OAuth client (Credentials -> OAuth 2.0 Client IDs): hanya *Authorized JavaScript
++origins* dan *redirect URI* yang benar-benar dipakai, dan layar persetujuan OAuth tidak berstatus
++"Testing" jika semua pendamping perlu masuk.
+diff --git a/docs/SECURITY-HEADERS.md b/docs/SECURITY-HEADERS.md
+new file mode 100644
+index 0000000..c731d3e
+--- /dev/null
++++ b/docs/SECURITY-HEADERS.md
+@@ -0,0 +1,18 @@
++# Header keamanan (Cloudflare Worker `sipandu`)
++
++`bun run build` menjalankan `vite build` lalu `scripts/generate-headers.mjs`, yang menulis
++`dist/_headers`. Cloudflare Workers Static Assets membaca file itu.
++
++- **Aktif (enforce):** `X-Content-Type-Options`, `X-Frame-Options: DENY`, `Referrer-Policy`,
++  `Strict-Transport-Security`, `Cross-Origin-Opener-Policy: same-origin-allow-popups`,
++  `Permissions-Policy`, serta CSP minimal (`frame-ancestors 'none'`, `base-uri`, `object-src`, `form-action`).
++- **Mode laporan:** CSP penuh (`script-src` dengan hash skrip inline, `connect-src`, `frame-src`, dst.)
++  dikirim sebagai `Content-Security-Policy-Report-Only`. Pelanggaran hanya muncul di konsol browser.
++
++## Menjadikan CSP penuh aktif
++1. Deploy, buka aplikasi di Chrome (login, Google Workspace, form publik, Asesmen, cetak PDF).
++2. Buka DevTools -> Console. Catat setiap pesan "Content Security Policy ... violates".
++3. Tambahkan host yang sah ke `scripts/generate-headers.mjs`, build ulang, ulangi sampai bersih.
++4. Pindahkan isi `reportOnly` ke header `Content-Security-Policy` (satu baris) lalu deploy.
++
++Catatan: GitHub Pages (form publik di `arkaprayog.github.io`) tidak membaca `_headers`.
+diff --git a/firestore.rules b/firestore.rules
+index 90e1097..90561aa 100644
+--- a/firestore.rules
++++ b/firestore.rules
+@@ -91,8 +91,11 @@ service cloud.firestore {
+     // Public submissions may create only a validated stage-one record.
+     // The collection cannot be read by respondents; all read access remains staff-only.
+     match /stageOneIntake/{recordId} {
++      // Anonymous respondents must use a Firestore auto-generated ID (20 alphanumeric
++      // characters), so they cannot pre-claim or collide with IDs chosen by staff.
+       allow create: if isValidStageOnePayload()
+-        && (request.resource.data.source == 'respondent-link'
++        && ((request.resource.data.source == 'respondent-link'
++              && recordId.matches('^[A-Za-z0-9]{20}$'))
+           || (canWritePpks() && request.resource.data.source == 'staff-entry'));
+       allow read: if isStaff();
+       allow update, delete: if canWritePpks();
+diff --git a/package.json b/package.json
+index 53d0d5f..ab244df 100644
+--- a/package.json
++++ b/package.json
+@@ -5,8 +5,8 @@
+   "type": "module",
+   "scripts": {
+     "dev": "vite --port=3000 --host=0.0.0.0",
+-    "build": "vite build",
+-    "test": "tsx --test src/data/initialData.test.ts src/lib/nikNumeric.test.ts src/lib/ppksData.test.ts src/lib/atensiColumnMapping.test.ts src/lib/photoSources.test.ts src/utils/helpers.test.ts src/utils/whatsappTemplate.test.ts src/lib/lazyImportRecovery.test.ts src/lib/liveSyncPolicy.test.ts src/lib/integratedAssessmentArchive.test.ts src/lib/pinPolicy.test.ts src/lib/ppksRecordState.test.ts src/lib/interventionMapping.test.ts src/lib/stageOneRespondents.test.ts src/lib/photoFilePreview.test.ts src/lib/notificationPolicy.test.ts src/lib/locationPolicy.test.ts src/utils/primaryFormPrefill.test.ts src/lib/googleDriveMultipart.test.ts registration-worker/index.test.ts",
++    "build": "vite build && node scripts/generate-headers.mjs",
++    "test": "tsx --test src/data/initialData.test.ts src/lib/nikNumeric.test.ts src/lib/ppksData.test.ts src/lib/atensiColumnMapping.test.ts src/lib/photoSources.test.ts src/utils/helpers.test.ts src/utils/whatsappTemplate.test.ts src/lib/lazyImportRecovery.test.ts src/lib/liveSyncPolicy.test.ts src/lib/integratedAssessmentArchive.test.ts src/lib/pinPolicy.test.ts src/lib/ppksRecordState.test.ts src/lib/interventionMapping.test.ts src/lib/stageOneRespondents.test.ts src/lib/photoFilePreview.test.ts src/lib/notificationPolicy.test.ts src/lib/locationPolicy.test.ts src/utils/primaryFormPrefill.test.ts src/lib/googleDriveMultipart.test.ts src/lib/localCache.test.ts src/lib/googleScopes.test.ts src/lib/assessmentPdfAssembly.test.ts scripts/generate-headers.test.mjs registration-worker/index.test.ts",
+     "preview": "vite preview",
+     "clean": "rm -rf dist server.js",
+     "lint": "python3 scripts/generate_surat_tugas_template.py && tsc --noEmit",
+diff --git a/scripts/generate-headers.mjs b/scripts/generate-headers.mjs
+new file mode 100644
+index 0000000..0dc03ca
+--- /dev/null
++++ b/scripts/generate-headers.mjs
+@@ -0,0 +1,116 @@
++// Generates dist/_headers (Cloudflare Workers Static Assets) after `vite build`.
++//
++// The Content-Security-Policy needs SHA-256 hashes of the inline <script> blocks and inline
++// event-handler attributes in dist/index.html (the boot-error / stale-asset recovery code), so
++// the file is generated from the real build output instead of being hand-maintained.
++//
++// Rollout policy:
++//   - Content-Security-Policy        : low-risk directives only (framing, <base>, <object>, forms).
++//   - Content-Security-Policy-Report-Only : the full script/connect/frame policy. Watch the
++//     browser console for violations, then promote it to enforcing (see docs/SECURITY-HEADERS.md).
++//
++// Note: GitHub Pages ignores `_headers`; these headers apply to the Cloudflare Worker only.
++import crypto from 'node:crypto';
++import fs from 'node:fs';
++import path from 'node:path';
++import { fileURLToPath } from 'node:url';
++
++const FIREBASE_AUTH_DOMAIN_HOSTS = [
++  'https://gen-lang-client-0197631978.firebaseapp.com',
++  'https://gen-lang-client-0197631978.web.app',
++];
++const REGISTRATION_WORKER = 'https://sipandu-registration.aryprayoga139.workers.dev';
++
++/** Cloudflare limits every line of a _headers file to 2,000 characters. */
++export const MAX_HEADERS_LINE_LENGTH = 2000;
++
++const sha256 = (value) => `'sha256-${crypto.createHash('sha256').update(value, 'utf8').digest('base64')}'`;
++
++const decodeAttribute = (value) => value
++  .replace(/&quot;/g, '"')
++  .replace(/&#39;|&apos;/g, "'")
++  .replace(/&lt;/g, '<')
++  .replace(/&gt;/g, '>')
++  .replace(/&amp;/g, '&');
++
++export function collectInlineHashes(html) {
++  const scripts = [];
++  for (const match of html.matchAll(/<script\b(?![^>]*\bsrc\s*=)[^>]*>([\s\S]*?)<\/script>/gi)) {
++    if (match[1].trim()) scripts.push(sha256(match[1]));
++  }
++  const handlers = [];
++  for (const match of html.matchAll(/\son[a-z]+\s*=\s*"([^"]*)"/gi)) {
++    handlers.push(sha256(decodeAttribute(match[1])));
++  }
++  return { scripts: [...new Set(scripts)], handlers: [...new Set(handlers)] };
++}
++
++export function buildPolicies(html) {
++  const { scripts, handlers } = collectInlineHashes(html);
++  const alwaysOn = [
++    "frame-ancestors 'none'",
++    "base-uri 'self'",
++    "object-src 'none'",
++    "form-action 'self'",
++  ];
++  const full = [
++    "default-src 'self'",
++    ["script-src 'self'", ...scripts,
++      'https://apis.google.com', 'https://www.google.com/recaptcha/', 'https://www.gstatic.com/recaptcha/'].join(' '),
++    ["script-src-attr", handlers.length ? "'unsafe-hashes'" : "'none'", ...handlers].join(' '),
++    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
++    "font-src 'self' data: https://fonts.gstatic.com",
++    // Respondent/Drive photos arrive as https URLs, data: URLs or blob: URLs.
++    "img-src 'self' data: blob: https:",
++    "media-src 'self' blob: data:",
++    ["connect-src 'self'", 'https://*.googleapis.com', 'https://*.firebaseio.com', 'wss://*.firebaseio.com',
++      'https://www.google.com', 'https://accounts.google.com', REGISTRATION_WORKER].join(' '),
++    ['frame-src', 'https://accounts.google.com', 'https://www.google.com/recaptcha/', 'https://recaptcha.google.com',
++      ...FIREBASE_AUTH_DOMAIN_HOSTS].join(' '),
++    "worker-src 'self' blob:",
++    "manifest-src 'self'",
++    ...alwaysOn,
++  ];
++  return { enforced: alwaysOn.join('; '), reportOnly: full.join('; ') };
++}
++
++export function buildHeadersFile(html) {
++  const { enforced, reportOnly } = buildPolicies(html);
++  const lines = [
++    '# Generated by scripts/generate-headers.mjs — do not edit by hand.',
++    '/*',
++    '  X-Content-Type-Options: nosniff',
++    '  X-Frame-Options: DENY',
++    '  Referrer-Policy: strict-origin-when-cross-origin',
++    '  Strict-Transport-Security: max-age=31536000',
++    // allow-popups keeps Firebase/Google sign-in popups working (same-origin would break them).
++    '  Cross-Origin-Opener-Policy: same-origin-allow-popups',
++    '  Permissions-Policy: camera=(self), geolocation=(self), microphone=(), payment=(), usb=(), serial=(), bluetooth=()',
++    `  Content-Security-Policy: ${enforced}`,
++    `  Content-Security-Policy-Report-Only: ${reportOnly}`,
++    '',
++    // Vite emits content-hashed file names under /assets, so they can be cached forever.
++    '/assets/*',
++    '  Cache-Control: public, max-age=31536000, immutable',
++    '',
++  ];
++  for (const line of lines) {
++    if (line.length > MAX_HEADERS_LINE_LENGTH) {
++      throw new Error(`_headers line exceeds ${MAX_HEADERS_LINE_LENGTH} characters (${line.length}): ${line.slice(0, 60)}…`);
++    }
++  }
++  return lines.join('\n');
++}
++
++const isMain = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
++if (isMain) {
++  const dist = path.resolve('dist');
++  const indexPath = path.join(dist, 'index.html');
++  if (!fs.existsSync(indexPath)) {
++    console.error('generate-headers: dist/index.html tidak ditemukan. Jalankan `vite build` terlebih dahulu.');
++    process.exit(1);
++  }
++  const output = buildHeadersFile(fs.readFileSync(indexPath, 'utf8'));
++  fs.writeFileSync(path.join(dist, '_headers'), output, 'utf8');
++  console.log(`dist/_headers ditulis (${output.length} byte).`);
++}
+diff --git a/scripts/generate-headers.test.mjs b/scripts/generate-headers.test.mjs
+new file mode 100644
+index 0000000..a8660c2
+--- /dev/null
++++ b/scripts/generate-headers.test.mjs
+@@ -0,0 +1,46 @@
++import test from 'node:test';
++import assert from 'node:assert/strict';
++import crypto from 'node:crypto';
++import { MAX_HEADERS_LINE_LENGTH, buildHeadersFile, buildPolicies, collectInlineHashes } from './generate-headers.mjs';
++
++const sha = (value) => `'sha256-${crypto.createHash('sha256').update(value, 'utf8').digest('base64')}'`;
++const HTML = `<!doctype html><html><head>
++<link rel="stylesheet" href="x.css" media="print" onload="this.media='all'">
++<script type="module" crossorigin src="./assets/index-abc.js"></script>
++</head><body>
++<button onclick="doIt(&quot;a&quot;)">x</button>
++<script>
++  window.__boot = 1;
++</script>
++</body></html>`;
++
++test('inline scripts and event-handler attributes are hashed; external scripts are not', () => {
++  const { scripts, handlers } = collectInlineHashes(HTML);
++  assert.deepEqual(scripts, [sha('\n  window.__boot = 1;\n')]);
++  assert.deepEqual(handlers.sort(), [sha("this.media='all'"), sha('doIt("a")')].sort());
++});
++
++test('enforced CSP only carries directives that cannot break the app; full policy is report-only', () => {
++  const { enforced, reportOnly } = buildPolicies(HTML);
++  assert.match(enforced, /frame-ancestors 'none'/);
++  assert.ok(!/script-src|connect-src/.test(enforced));
++  assert.match(reportOnly, /script-src 'self' 'sha256-/);
++  assert.ok(!/script-src[^;]*'unsafe-inline'/.test(reportOnly), 'scripts must never allow unsafe-inline');
++  assert.ok(!/script-src[^;]*'unsafe-eval'/.test(reportOnly));
++  assert.match(reportOnly, /object-src 'none'/);
++});
++
++test('generated _headers has every required security header and respects the 2,000-character line limit', () => {
++  const file = buildHeadersFile(HTML);
++  for (const header of [
++    'X-Content-Type-Options: nosniff',
++    'X-Frame-Options: DENY',
++    'Referrer-Policy:',
++    'Strict-Transport-Security:',
++    'Cross-Origin-Opener-Policy: same-origin-allow-popups',
++    'Permissions-Policy:',
++    'Content-Security-Policy:',
++    'Content-Security-Policy-Report-Only:',
++  ]) assert.ok(file.includes(header), header);
++  assert.ok(file.split('\n').every((line) => line.length <= MAX_HEADERS_LINE_LENGTH));
++});
+diff --git a/scripts/generate_surat_tugas_template.py b/scripts/generate_surat_tugas_template.py
+index 664a36d..39a9431 100644
+--- a/scripts/generate_surat_tugas_template.py
++++ b/scripts/generate_surat_tugas_template.py
+@@ -262,7 +262,7 @@ p_menugaskan.paragraph_format.space_before = Pt(0)
+ p_menugaskan.paragraph_format.space_after = Pt(7)
+ set_run_font(p_menugaskan.add_run('MENUGASKAN'), size=11.5, bold=True)
+ add_body_row('Kepada', [
+-    '1. Deny Arifin Martyon Sikumbang / Psikolog Klinis Ahli Pertama'
++    '1. [Nama Pegawai] / Psikolog Klinis Ahli Pertama'
+ ], bottom=5)
+ add_body_row('Untuk', [
+     '1. Melaksanakan kegiatan koordinasi bersama Layanan PDP HIV terkait Program Atensi Klaster ODHIV di Kota Padang Sidempuan',
+diff --git a/scripts/verify-dist.mjs b/scripts/verify-dist.mjs
+index f73693a..2c6fb09 100644
+--- a/scripts/verify-dist.mjs
++++ b/scripts/verify-dist.mjs
+@@ -71,6 +71,21 @@ for (const marker of [
+   if (!html.includes(marker)) fail('Pemulihan aset awal tidak lengkap pada dist/index.html: ' + marker);
+ }
+ 
++// Cloudflare Workers serves dist/_headers (CSP, HSTS, framing protection). It is generated by
++// scripts/generate-headers.mjs as part of `npm run build`; a build without it ships no security headers.
++const headersPath = path.join(dist, '_headers');
++if (!fs.existsSync(headersPath)) {
++  fail('dist/_headers tidak ditemukan. Jalankan `bun run build` (vite build + scripts/generate-headers.mjs).');
++} else {
++  const headers = fs.readFileSync(headersPath, 'utf8');
++  for (const required of ['X-Content-Type-Options: nosniff', 'X-Frame-Options: DENY', 'Strict-Transport-Security:', 'Content-Security-Policy:', "frame-ancestors 'none'"]) {
++    if (!headers.includes(required)) fail('dist/_headers tidak memuat: ' + required);
++  }
++  if (headers.split('\n').some((line) => line.length > 2000)) {
++    fail('dist/_headers memiliki baris lebih dari 2.000 karakter; Cloudflare akan menolaknya.');
++  }
++}
++
+ const vercelConfigPath = path.resolve('vercel.json');
+ if (!fs.existsSync(vercelConfigPath)) {
+   fail('vercel.json wajib mengatur kebijakan cache agar HTML tidak tertinggal dari aset build.');
+diff --git a/src/App.tsx b/src/App.tsx
+index c2b88f3..5808b27 100644
+--- a/src/App.tsx
++++ b/src/App.tsx
+@@ -26,6 +26,7 @@ const SettingsModal = lazyWithRecovery('SettingsModal', () => import('./componen
+ const NotificationsModal = lazyWithRecovery('NotificationsModal', () => import('./components/NotificationsModal').then((module) => ({ default: module.NotificationsModal })));
+ const GoogleWorkspaceModal = lazyWithRecovery('GoogleWorkspaceModal', () => import('./components/GoogleWorkspaceModal').then((module) => ({ default: module.GoogleWorkspaceModal })));
+ import { onAuthStateChanged, signOut, getIdTokenResult } from 'firebase/auth';
++import { clearSensitiveLocalCache, readPpksCache, safeLocalStorage, sanitizeProfileForCache, writePpksCache } from './lib/localCache';
+ import { auth, getAccessToken, savePPKSToFirestore, saveIntegratedAssessmentToFirestore, replacePPKSCollectionFromSpreadsheet, googleLogout, subscribeToPPKSChanges, subscribeToIntegratedAssessmentAnswers, saveStageOneIntakeToFirestore, subscribeToStageOneIntake, staffAuthPersistenceReady, isWorkspaceAccountConnected, invalidateAccessToken, getSIPANDUUserProfile, saveSIPANDUUserProfile } from './lib/firebase';
+ import { activatePendingTeamMember, restorePendingTeamInvitation } from './lib/teamRegistration';
+ import { ensureSIPANDUDatabaseSheet, extractSpreadsheetId, getLinkedSpreadsheetUrlForForm, importPPKSFromSpreadsheet, upsertPPKSInSpreadsheet } from './lib/googleWorkspace';
+@@ -295,6 +296,10 @@ function StaffApp() {
+       setLocalCacheReady(false);
+       setAuthError('');
+       if (!user) {
++        // Signed out (explicit logout, expired session, or revoked account):
++        // personal data must not remain in this browser.
++        const cacheStorage = safeLocalStorage();
++        if (cacheStorage) clearSensitiveLocalCache(cacheStorage);
+         setIsAuthenticated(false);
+         setCurrentUserName('');
+         setCurrentUserRole('');
+@@ -545,16 +550,16 @@ function StaffApp() {
+     let nextProfile: ProfileUser = initialProfileUser;
+     let nextSettings: AppSettings = initialAppSettings;
+     try {
+-      const raw = localStorage.getItem('sipandu_ppks');
+-      if (raw) {
+-        const parsed: unknown = JSON.parse(raw);
+-        if (Array.isArray(parsed)) {
+-          nextRecords = sortPPKSRecordsByTimestamp(deduplicatePPKSRecords(
+-            (parsed as PPKSRecord[]).filter((record) => record && !isLegacySamplePPKS(record))
+-          ));
+-        } else {
+-          console.warn('Cached PPKS data is not an array; starting with the default roster.');
+-        }
++      const cacheStorage = safeLocalStorage();
++      const parsed: unknown = cacheStorage
++        ? readPpksCache(cacheStorage, auth.currentUser?.uid || currentUserUid)
++        : null;
++      if (Array.isArray(parsed)) {
++        nextRecords = sortPPKSRecordsByTimestamp(deduplicatePPKSRecords(
++          (parsed as PPKSRecord[]).filter((record) => record && !isLegacySamplePPKS(record))
++        ));
++      } else if (parsed) {
++        console.warn('Cached PPKS data is not an array; starting with the default roster.');
+       }
+     } catch (error) {
+       console.warn('SIPANDU could not read its local PPKS cache:', error);
+@@ -570,7 +575,7 @@ function StaffApp() {
+       }
+       if (raw) {
+         const parsed = JSON.parse(raw);
+-        if (!(parsed?.nama === 'Deny Arifin Martyon S.' && parsed?.nip === '19920315 202012 1 002')) nextProfile = parsed as ProfileUser;
++        if (parsed && typeof parsed === 'object') nextProfile = parsed as ProfileUser;
+       }
+     } catch (error) {
+       console.warn('SIPANDU could not read its local profile cache:', error);
+@@ -627,7 +632,11 @@ function StaffApp() {
+     if (!isAuthenticated || !localCacheReady) return;
+     const timer = window.setTimeout(() => {
+       try {
+-        localStorage.setItem('sipandu_ppks', JSON.stringify(ppksList));
++        // Never repopulate the cache after sign-out, and never store inline photos.
++        const uid = auth.currentUser?.uid;
++        const cacheStorage = safeLocalStorage();
++        if (!uid || !cacheStorage) return;
++        writePpksCache(cacheStorage, uid, ppksList);
+       } catch (error) {
+         console.error('SIPANDU PPKS cache could not be persisted:', error);
+         setCloudSyncNotice({ type: 'error', text: 'Browser kehabisan ruang penyimpanan untuk cache lokal. Pastikan data sudah tersinkron ke Firebase/Google Sheets sebelum menutup aplikasi.' });
+@@ -640,8 +649,9 @@ function StaffApp() {
+     if (!isAuthenticated || !localCacheReady) return;
+     const timer = window.setTimeout(() => {
+       try {
+-        const uid = auth.currentUser?.uid || 'anonymous';
+-        localStorage.setItem(`sipandu_profile_${uid}`, JSON.stringify(profile));
++        const uid = auth.currentUser?.uid;
++        if (!uid) return;
++        localStorage.setItem(`sipandu_profile_${uid}`, JSON.stringify(sanitizeProfileForCache(profile)));
+       } catch (error) { console.error('SIPANDU profile cache could not be persisted:', error); }
+     }, 250);
+     return () => window.clearTimeout(timer);
+@@ -712,6 +722,9 @@ function StaffApp() {
+       // explicit user action on the Keluar button.
+       await signOut(auth);
+       await googleLogout();
++      const cacheStorage = safeLocalStorage();
++      if (cacheStorage) clearSensitiveLocalCache(cacheStorage);
++      setPpksList([]);
+       setIsAuthenticated(false);
+       setCurrentUserName('');
+       setCurrentUserRole('');
+diff --git a/src/components/FromAsesmenTerintegrasiView.tsx b/src/components/FromAsesmenTerintegrasiView.tsx
+index a475055..6468603 100644
+--- a/src/components/FromAsesmenTerintegrasiView.tsx
++++ b/src/components/FromAsesmenTerintegrasiView.tsx
+@@ -6,7 +6,7 @@ import { formatPPKSTimestamp } from '../lib/ppksData';
+ import { publicAssetUrl } from '../lib/publicAssets';
+ import { backupAssessmentToCentralDrive, deleteCentralDriveFile, listLegacyIntegratedAssessmentDriveArchives } from '../lib/googleDriveBackup';
+ import { getIntegratedAssessmentBackupMetadata, saveIntegratedAssessmentBackupMetadata } from '../lib/firebase';
+-import { printPreparedAssessmentWebView } from '../lib/printing';
++import { printPreparedAssessmentWebView, savePdfToDevice } from '../lib/printing';
+ import { createOfficialAssessmentPdf } from '../lib/assessmentPdf';
+ import { createPhotoPreviewBlob, MAX_PPKS_PHOTO_FILE_BYTES } from '../lib/photoFilePreview';
+ import '../officialAssessment.css';
+@@ -262,6 +262,8 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
+   );
+   const [answers, setAnswers] = useState<Record<string, AnswerValue>>(() => answersForRecord(ppksList.find((record) => record.id === selectedPPKSId)));
+   const [statusMessage, setStatusMessage] = useState<{ type: 'success' | 'error'; text: string; driveUrl?: string } | null>(null);
++  // The most recent A4 PDF, kept so it can be saved to the device even if Google Drive backup failed.
++  const [lastPdf, setLastPdf] = useState<{ blob: Blob; fileName: string; ppksId: string } | null>(null);
+   const [isSaving, setIsSaving] = useState(false);
+   const [isMigratingArchives, setIsMigratingArchives] = useState(false);
+   const [driveArchive, setDriveArchive] = useState<{ status: 'complete' | 'failed'; error: string; fileId: string; webViewLink: string; savedAt: string } | null>(null);
+@@ -658,6 +660,7 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
+ 
+       // Google Drive receives the same A4 PDF that the user can print, never a JSON snapshot.
+       const archive = await createAndBackupAssessmentPdf(updated);
++      setLastPdf({ blob: archive.pdf, fileName: archive.fileName, ppksId: updated.id });
+       setStatusMessage(archive.backupError
+         ? {
+             type: 'success',
+@@ -844,6 +847,26 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
+     currentPPKS?.fotoRumah,
+   ]);
+ 
++  const handleSavePdfToDevice = async () => {
++    if (!lastPdf) return;
++    try {
++      const outcome = await savePdfToDevice(lastPdf.blob, lastPdf.fileName);
++      setStatusMessage({
++        type: 'success',
++        text: outcome === 'downloaded'
++          ? 'PDF A4 diunduh ke perangkat: ' + lastPdf.fileName
++          : 'Dialog sistem dibuka. Pilih “Simpan sebagai PDF” atau printer untuk menyimpan/mencetak file A4.',
++      });
++    } catch (error) {
++      setStatusMessage({ type: 'error', text: 'PDF tidak dapat disimpan ke perangkat: ' + (error instanceof Error ? error.message : String(error)) });
++    }
++  };
++
++  // Never offer a PDF that belongs to a different respondent.
++  useEffect(() => {
++    setLastPdf((current) => (current && current.ppksId !== currentPPKS?.id ? null : current));
++  }, [currentPPKS?.id]);
++
+   const handlePrint = async () => {
+     if (isSaving || preparingPrint || isMigratingArchives) return;
+     if (!currentPPKS) {
+@@ -879,6 +902,7 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
+       // Keep its rendered A4 pages mounted until the native print dialog has finished.
+       const archive = await createAndBackupAssessmentPdf(updated, { retainPrintRoot: true });
+       retainedPrintRootId = archive.printRootId;
++      setLastPdf({ blob: archive.pdf, fileName: archive.fileName, ppksId: updated.id });
+       if (archive.backupError) {
+         setStatusMessage({
+           type: 'success',
+@@ -1180,6 +1204,15 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
+         </section>
+       )}
+ 
++      {lastPdf && (
++        <div className="official-status mb-3 flex flex-wrap items-center gap-2 rounded-lg border border-sky-500/40 bg-sky-950/40 p-3 text-xs text-sky-100">
++          <span className="min-w-0 break-all">PDF A4 siap: {lastPdf.fileName} ({(lastPdf.blob.size / (1024 * 1024)).toFixed(2)} MB)</span>
++          <button type="button" onClick={() => { void handleSavePdfToDevice(); }} className="inline-flex items-center gap-1 rounded-md bg-sky-600 px-3 py-1.5 font-bold text-white hover:bg-sky-500">
++            <FileText className="h-4 w-4" /> Simpan PDF A4 ke perangkat
++          </button>
++        </div>
++      )}
++
+       {statusMessage && (
+         <div role="status" aria-live="polite" className={'official-status mb-3 rounded-lg border p-3 text-xs ' + (statusMessage.type === 'success' ? 'border-emerald-500/40 bg-emerald-950/50 text-emerald-100' : 'border-rose-500/40 bg-rose-950/50 text-rose-100')}>
+           {statusMessage.type === 'success' && <CheckCircle2 className="mr-1 inline h-4 w-4 align-middle" />}
+diff --git a/src/components/StageOneRespondentPage.tsx b/src/components/StageOneRespondentPage.tsx
+index 4fe32da..9410405 100644
+--- a/src/components/StageOneRespondentPage.tsx
++++ b/src/components/StageOneRespondentPage.tsx
+@@ -88,7 +88,7 @@ export const StageOneRespondentPage: React.FC = () => {
+         <div className="mb-4 flex justify-center"><img src={publicAssetUrl('uploads/logo-kemsos.webp')} alt="Logo Kementerian Sosial Republik Indonesia" className="h-20 w-auto object-contain" /></div>
+         <div className="mb-4 flex justify-center"><span className="rounded-full border border-emerald-300/40 bg-emerald-900/60 px-4 py-3 text-emerald-200">✓</span></div>
+         <h1 className="text-center text-2xl font-black">Asesmen Tahap Awal Terkirim</h1>
+-        <p className="mt-3 text-center text-sm leading-relaxed text-emerald-100">Terima kasih sudah berpartisipasi dalam program bantuan Atensi dari Kementerian Sosial RI. Data anda akan kami simpan dan terjamin kerahasiaannya. Petugas kami akan memberikan link asesmen berikutnya kepada anda untuk verifikasi lebih lanjut. Mohon untuk tetap melanjutkan tahap selanjutnya. Terima kasih atas partisipasinya. Salam hangat, Deny Arifin M.S - DRSKPNO</p>
++        <p className="mt-3 text-center text-sm leading-relaxed text-emerald-100">Terima kasih sudah berpartisipasi dalam program bantuan Atensi dari Kementerian Sosial RI. Data anda akan kami simpan dan terjamin kerahasiaannya. Petugas kami akan memberikan link asesmen berikutnya kepada anda untuk verifikasi lebih lanjut. Mohon untuk tetap melanjutkan tahap selanjutnya. Terima kasih atas partisipasinya. Salam hangat, Tim Pendamping SIPANDU - DRSKPNO</p>
+         <p className="mt-4 rounded-lg border border-white/10 bg-black/30 p-3 text-center text-xs text-neutral-300">ID referensi pengiriman: <span className="break-all font-mono text-emerald-200">{successId}</span></p>
+         <p className="mt-5 text-center text-xs text-neutral-400">Terima kasih. Anda dapat menutup halaman ini.</p>
+       </section>
+diff --git a/src/components/SuratTugasEditor.tsx b/src/components/SuratTugasEditor.tsx
+index f9b08aa..46102fd 100644
+--- a/src/components/SuratTugasEditor.tsx
++++ b/src/components/SuratTugasEditor.tsx
+@@ -13,7 +13,7 @@ const defaults: Fields = {
+   nomor: '985/4.21/RH.00.01/10/2026',
+   tanggal: '20 Oktober 2026',
+   kota: 'Jakarta',
+-  pegawai: '1. Deny Arifin Martyon Sikumbang',
++  pegawai: '1. [Nama Pegawai]',
+   jabatanPegawai: 'Psikolog Klinis Ahli Pertama',
+   kegiatan: 'a. Bahwa akan melaksanakan kegiatan koordinasi bersama Layanan PDP HIV terkait Program Atensi Klaster ODHIV di Kota Padang Sidempuan;\nb. sehubungan dengan poin a, dipandang perlu menugaskan pegawai Direktorat RSKPNO untuk melaksanakan kegiatan dimaksud.',
+   dasar: 'Daftar Isian Pelaksanaan Anggaran Direktorat RSKPNO Nomor : SP DIPA - 027.04.2.690589/2026 tanggal 1 Desember 2025.',
+diff --git a/src/lib/a4Layout.ts b/src/lib/a4Layout.ts
+new file mode 100644
+index 0000000..5b79096
+--- /dev/null
++++ b/src/lib/a4Layout.ts
+@@ -0,0 +1,29 @@
++/** ISO 216 A4 in PDF points (1 pt = 1/72 inch). */
++export const A4_WIDTH_PT = 595.276;
++export const A4_HEIGHT_PT = 841.89;
++export const PAGE_MARGIN_PT = (8 / 25.4) * 72;
++
++export interface A4Placement {
++  x: number;
++  y: number;
++  width: number;
++  height: number;
++}
++
++/** Fits a rendered page image inside the printable area of an A4 page (top aligned, centered). */
++export function fitImageToA4(imageWidth: number, imageHeight: number): A4Placement {
++  if (!(imageWidth > 0) || !(imageHeight > 0)) {
++    throw new Error('Ukuran gambar halaman tidak valid untuk PDF A4.');
++  }
++  const contentWidth = A4_WIDTH_PT - PAGE_MARGIN_PT * 2;
++  const contentHeight = A4_HEIGHT_PT - PAGE_MARGIN_PT * 2;
++  const fit = Math.min(contentWidth / imageWidth, contentHeight / imageHeight);
++  const width = imageWidth * fit;
++  const height = imageHeight * fit;
++  return {
++    x: (A4_WIDTH_PT - width) / 2,
++    y: A4_HEIGHT_PT - PAGE_MARGIN_PT - height,
++    width,
++    height,
++  };
++}
+diff --git a/src/lib/assessmentPdf.ts b/src/lib/assessmentPdf.ts
+index 9d54901..f18db87 100644
+--- a/src/lib/assessmentPdf.ts
++++ b/src/lib/assessmentPdf.ts
+@@ -1,15 +1,109 @@
+ import html2canvas from 'html2canvas';
+ import { PDFDocument } from 'pdf-lib';
+ 
+-const A4_WIDTH_PT = 595.276;
+-const A4_HEIGHT_PT = 841.89;
+-const PAGE_MARGIN_PT = (8 / 25.4) * 72;
+-const RENDER_SCALE = 2.5;
++import { A4_HEIGHT_PT, A4_WIDTH_PT, fitImageToA4 } from './a4Layout';
+ 
+ /**
+- * Renders each official assessment sheet separately at high resolution and
+- * assembles a true A4 PDF. Lossless PNG page images keep small text and lines crisp;
+- * one-page-at-a-time rendering limits peak canvas memory on Android devices.
++ * Preferred render scales, tried in order. The first value gives crisp small print;
++ * lower values are automatic fallbacks for phones that cannot allocate the larger canvas.
++ * There is deliberately no limit on the number of pages or on the size of the resulting PDF.
++ */
++export const RENDER_SCALES = [2.5, 2, 1.5, 1] as const;
++const JPEG_QUALITY = 0.92;
++
++function canvasToBlob(canvas: HTMLCanvasElement, type: 'image/jpeg' | 'image/png', quality?: number): Promise<Blob> {
++  return new Promise<Blob>((resolve, reject) => {
++    try {
++      canvas.toBlob((blob) => {
++        if (blob && blob.size > 0 && blob.type === type) resolve(blob);
++        else reject(new Error('Gambar halaman gagal dikompresi (' + type + ').'));
++      }, type, quality);
++    } catch (error) {
++      // A tainted canvas throws SecurityError synchronously.
++      reject(error instanceof Error ? error : new Error(String(error)));
++    }
++  });
++}
++
++async function renderPageCanvas(
++  element: HTMLElement,
++  renderRootId: string,
++  scale: number,
++): Promise<HTMLCanvasElement> {
++  const bounds = element.getBoundingClientRect();
++  const width = Math.ceil(Math.max(bounds.width, element.scrollWidth));
++  const height = Math.ceil(Math.max(bounds.height, element.scrollHeight));
++  if (width <= 0 || height <= 0) throw new Error('Halaman kosong.');
++
++  return html2canvas(element, {
++    backgroundColor: '#ffffff',
++    scale,
++    useCORS: true,
++    allowTaint: false,
++    logging: false,
++    width,
++    height,
++    windowWidth: Math.max(window.innerWidth, width),
++    windowHeight: Math.max(window.innerHeight, Math.ceil(bounds.bottom + 32)),
++    scrollX: 0,
++    scrollY: 0,
++    onclone: (clonedDocument) => {
++      const root = clonedDocument.getElementById(renderRootId);
++      if (root) {
++        root.style.setProperty('opacity', '1', 'important');
++        root.style.setProperty('visibility', 'visible', 'important');
++      }
++    },
++  });
++}
++
++interface EncodedPage {
++  bytes: Uint8Array;
++  kind: 'jpg' | 'png';
++}
++
++/** Renders one sheet, retrying with a smaller canvas when the device runs out of memory. */
++async function renderPageToImage(
++  element: HTMLElement,
++  renderRootId: string,
++  pageNumber: number,
++): Promise<EncodedPage> {
++  let lastError: unknown = null;
++  for (const scale of RENDER_SCALES) {
++    let canvas: HTMLCanvasElement | null = null;
++    try {
++      canvas = await renderPageCanvas(element, renderRootId, scale);
++      if (canvas.width <= 0 || canvas.height <= 0) throw new Error('Kanvas halaman kosong.');
++      let blob: Blob;
++      let kind: EncodedPage['kind'];
++      try {
++        // JPEG is embedded by pdf-lib as-is (no re-compression), which is far faster and
++        // lighter on memory than PNG, and keeps A4 pages a few hundred KB each.
++        blob = await canvasToBlob(canvas, 'image/jpeg', JPEG_QUALITY);
++        kind = 'jpg';
++      } catch (jpegError) {
++        if (jpegError instanceof DOMException && jpegError.name === 'SecurityError') throw jpegError;
++        blob = await canvasToBlob(canvas, 'image/png');
++        kind = 'png';
++      }
++      return { bytes: new Uint8Array(await blob.arrayBuffer()), kind };
++    } catch (error) {
++      lastError = error;
++    } finally {
++      if (canvas) {
++        // Release the large raster allocation before the next attempt/page.
++        canvas.width = 0;
++        canvas.height = 0;
++      }
++    }
++  }
++  const reason = lastError instanceof Error ? lastError.message : String(lastError);
++  throw new Error('Halaman ' + pageNumber + ' gagal dirender menjadi gambar PDF: ' + reason);
++}
++
++/**
++ * Renders each official assessment sheet separately and assembles a true A4 PDF.
++ * Pages are rendered one at a time to keep peak memory low on Android.
+  */
+ export async function createOfficialAssessmentPdf(
+   pages: HTMLElement[],
+@@ -20,72 +114,19 @@ export async function createOfficialAssessmentPdf(
+   }
+ 
+   const pdf = await PDFDocument.create();
+-  const contentWidth = A4_WIDTH_PT - PAGE_MARGIN_PT * 2;
+-  const contentHeight = A4_HEIGHT_PT - PAGE_MARGIN_PT * 2;
+-
+   for (let index = 0; index < pages.length; index += 1) {
+-    const element = pages[index];
+-    const bounds = element.getBoundingClientRect();
+-    const width = Math.ceil(Math.max(bounds.width, element.scrollWidth));
+-    const height = Math.ceil(Math.max(bounds.height, element.scrollHeight));
+-    if (width <= 0 || height <= 0) {
+-      throw new Error('Halaman ' + (index + 1) + ' kosong dan tidak dapat dimasukkan ke PDF.');
+-    }
+-
+-    const canvas = await html2canvas(element, {
+-      backgroundColor: '#ffffff',
+-      scale: RENDER_SCALE,
+-      useCORS: true,
+-      allowTaint: false,
+-      logging: false,
+-      width,
+-      height,
+-      windowWidth: Math.max(window.innerWidth, width),
+-      windowHeight: Math.max(window.innerHeight, Math.ceil(bounds.bottom + 32)),
+-      scrollX: 0,
+-      scrollY: 0,
+-      onclone: (clonedDocument) => {
+-        const root = clonedDocument.getElementById(renderRootId);
+-        if (root) {
+-          root.style.setProperty('opacity', '1', 'important');
+-          root.style.setProperty('visibility', 'visible', 'important');
+-        }
+-      },
+-    });
+-
+-    try {
+-      if (canvas.width <= 0 || canvas.height <= 0) {
+-        throw new Error('Halaman ' + (index + 1) + ' gagal dirender.');
+-      }
+-      const pngBlob = await new Promise<Blob>((resolve, reject) => {
+-        canvas.toBlob((blob) => {
+-          if (blob) resolve(blob);
+-          else reject(new Error('Gambar halaman ' + (index + 1) + ' gagal dikompresi.'));
+-        }, 'image/png');
+-      });
+-      const pngBytes = new Uint8Array(await pngBlob.arrayBuffer());
+-      const embeddedImage = await pdf.embedPng(pngBytes);
+-      const pdfPage = pdf.addPage([A4_WIDTH_PT, A4_HEIGHT_PT]);
+-      const fit = Math.min(
+-        contentWidth / embeddedImage.width,
+-        contentHeight / embeddedImage.height,
+-      );
+-      const drawWidth = embeddedImage.width * fit;
+-      const drawHeight = embeddedImage.height * fit;
+-      pdfPage.drawImage(embeddedImage, {
+-        x: (A4_WIDTH_PT - drawWidth) / 2,
+-        y: A4_HEIGHT_PT - PAGE_MARGIN_PT - drawHeight,
+-        width: drawWidth,
+-        height: drawHeight,
+-      });
+-    } finally {
+-      // Release the large raster allocation before rendering the next page.
+-      canvas.width = 0;
+-      canvas.height = 0;
+-    }
++    const encoded = await renderPageToImage(pages[index], renderRootId, index + 1);
++    const embedded = encoded.kind === 'jpg'
++      ? await pdf.embedJpg(encoded.bytes)
++      : await pdf.embedPng(encoded.bytes);
++    const placement = fitImageToA4(embedded.width, embedded.height);
++    const pdfPage = pdf.addPage([A4_WIDTH_PT, A4_HEIGHT_PT]);
++    pdfPage.drawImage(embedded, placement);
+   }
+ 
+   const bytes = await pdf.save({ useObjectStreams: true });
+   const output = new Uint8Array(bytes);
+-  return new Blob([output.buffer as ArrayBuffer], { type: 'application/pdf' });
++  const blob = new Blob([output.buffer as ArrayBuffer], { type: 'application/pdf' });
++  if (blob.size < 8) throw new Error('PDF asesmen kosong setelah dibuat.');
++  return blob;
+ }
+diff --git a/src/lib/assessmentPdfAssembly.test.ts b/src/lib/assessmentPdfAssembly.test.ts
+new file mode 100644
+index 0000000..33783c7
+--- /dev/null
++++ b/src/lib/assessmentPdfAssembly.test.ts
+@@ -0,0 +1,62 @@
++import test from 'node:test';
++import assert from 'node:assert/strict';
++import { PDFDocument } from 'pdf-lib';
++import { A4_HEIGHT_PT, A4_WIDTH_PT, PAGE_MARGIN_PT, fitImageToA4 } from './a4Layout';
++import { buildDriveUploadMetadata } from './googleDriveMultipart';
++
++// 16x23 px baseline JPEG, generated once so the test needs no image library.
++const TINY_JPEG_BASE64 = '/9j/2wBDAAYEBQYFBAYGBQYHBwYIChAKCgkJChQODwwQFxQYGBcUFhYaHSUfGhsjHBYWICwgIyYnKSopGR8tMC0oMCUoKSj/2wBDAQcHBwoIChMKChMoGhYaKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCj/wAARCAAXABADASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAj/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFAEBAAAAAAAAAAAAAAAAAAAAAP/EABQRAQAAAAAAAAAAAAAAAAAAAAD/2gAMAwEAAhEDEQA/AKpAAAB//9k=';
++
++test('A4 constants match ISO 216 (210 x 297 mm)', () => {
++  assert.ok(Math.abs(A4_WIDTH_PT - (210 / 25.4) * 72) < 0.1);
++  assert.ok(Math.abs(A4_HEIGHT_PT - (297 / 25.4) * 72) < 0.1);
++});
++
++test('rendered sheets are fitted inside the A4 margins without distortion', () => {
++  // The app renders a 194 x 281 mm sheet.
++  const placement = fitImageToA4(194, 281);
++  assert.ok(placement.x >= PAGE_MARGIN_PT - 0.01);
++  assert.ok(placement.x + placement.width <= A4_WIDTH_PT - PAGE_MARGIN_PT + 0.01);
++  assert.ok(placement.y >= PAGE_MARGIN_PT - 0.01);
++  assert.ok(placement.y + placement.height <= A4_HEIGHT_PT - PAGE_MARGIN_PT + 0.01);
++  assert.ok(Math.abs(placement.width / placement.height - 194 / 281) < 1e-9);
++  // Very tall and very wide inputs still fit (no page-size dependency on the content).
++  for (const [w, h] of [[10, 5000], [5000, 10], [1833, 2655]] as const) {
++    const p = fitImageToA4(w, h);
++    assert.ok(p.width <= A4_WIDTH_PT && p.height <= A4_HEIGHT_PT);
++  }
++  assert.throws(() => fitImageToA4(0, 10));
++});
++
++test('a 12-page assessment becomes a real A4 PDF, with no size cap on the output', async () => {
++  const jpeg = Buffer.from(TINY_JPEG_BASE64, 'base64');
++  const pdf = await PDFDocument.create();
++  const image = await pdf.embedJpg(jpeg);
++  for (let index = 0; index < 12; index += 1) {
++    const page = pdf.addPage([A4_WIDTH_PT, A4_HEIGHT_PT]);
++    page.drawImage(image, fitImageToA4(image.width, image.height));
++  }
++  const bytes = await pdf.save({ useObjectStreams: true });
++  assert.equal(Buffer.from(bytes.slice(0, 5)).toString('latin1'), '%PDF-');
++
++  const reopened = await PDFDocument.load(bytes);
++  assert.equal(reopened.getPageCount(), 12);
++  for (const page of reopened.getPages()) {
++    const { width, height } = page.getSize();
++    assert.ok(Math.abs(width - A4_WIDTH_PT) < 0.01 && Math.abs(height - A4_HEIGHT_PT) < 0.01);
++  }
++});
++
++test('Drive metadata always declares application/pdf so a replaced JSON archive becomes a PDF', () => {
++  const replace = JSON.parse(buildDriveUploadMetadata({
++    name: 'Form-Asesmen-Terintegrasi-Contoh.pdf', mimeType: 'application/pdf', folderId: 'folder1', existingFileId: 'oldJson',
++  }));
++  assert.equal(replace.mimeType, 'application/pdf');
++  assert.equal(replace.name, 'Form-Asesmen-Terintegrasi-Contoh.pdf');
++  assert.equal(replace.parents, undefined, 'files.update cannot change parents');
++  assert.deepEqual(replace.appProperties, { sipanduManaged: 'true', sipanduArchive: 'folder1' });
++
++  const created = JSON.parse(buildDriveUploadMetadata({ name: 'a.pdf', mimeType: 'application/pdf', folderId: 'folder1' }));
++  assert.deepEqual(created.parents, ['folder1']);
++  assert.throws(() => buildDriveUploadMetadata({ name: 'a\nb.pdf', mimeType: 'application/pdf', folderId: 'f' }));
++});
+diff --git a/src/lib/firebase.ts b/src/lib/firebase.ts
+index 045939b..318a39d 100644
+--- a/src/lib/firebase.ts
++++ b/src/lib/firebase.ts
+@@ -1,4 +1,5 @@
+ import { initializeApp, getApps } from 'firebase/app';
++import { initializeAppCheck, ReCaptchaEnterpriseProvider, ReCaptchaV3Provider } from 'firebase/app-check';
+ import { Capacitor } from '@capacitor/core';
+ import { SocialLogin } from '@capgo/capacitor-social-login';
+ import {
+@@ -37,6 +38,7 @@ import {
+ } from 'firebase/auth';
+ import firebaseConfig from '../../firebase-applet-config.json';
+ import { PPKSRecord, ProfileUser, StageOneIntakePayload } from '../types';
++import { GOOGLE_SIGN_IN_SCOPES } from './googleScopes';
+ import { deduplicatePPKSRecords, EXPECTED_REAL_PPKS_COUNT, parsePPKSTimestamp, samePPKSIdentity } from './ppksData';
+ import { isLegacySamplePPKS } from '../data/initialData';
+ import { GOOGLE_WORKSPACE_EMAIL } from './googleSIPANDUResources';
+@@ -46,6 +48,39 @@ import { isIntegratedAssessmentAnswerKey } from './integratedAssessmentArchive';
+ // Initialize Firebase
+ const app = initializeApp(firebaseConfig);
+ 
++// Firebase App Check proves that Firestore requests come from the genuine SIPANDU web
++// app / APK instead of a script that merely copied the public Firebase config. This is
++// the main bot/abuse control for the public, unauthenticated Stage-One intake form.
++//
++// It stays inactive until a reCAPTCHA site key is configured, so deploying this code
++// cannot break the app by itself. Configure the (public) site key in either:
++//   - firebase-applet-config.json  -> "recaptchaSiteKey", or
++//   - VITE_FIREBASE_APPCHECK_SITE_KEY at build time.
++// Set VITE_FIREBASE_APPCHECK_PROVIDER=enterprise when the key is a reCAPTCHA Enterprise key.
++// Enforcement is switched on separately in Firebase Console -> App Check -> Cloud Firestore
++// (see docs/APP-CHECK.md); run in "monitor" mode first.
++const appCheckSiteKey = String(
++  import.meta.env.VITE_FIREBASE_APPCHECK_SITE_KEY || firebaseConfig.recaptchaSiteKey || ''
++).trim();
++export const isAppCheckConfigured = appCheckSiteKey.length > 0;
++if (isAppCheckConfigured && typeof window !== 'undefined') {
++  try {
++    if (import.meta.env.DEV) {
++      // Local development: Firebase prints a debug token to the console; register it in
++      // Firebase Console -> App Check -> Apps -> Manage debug tokens.
++      (self as unknown as { FIREBASE_APPCHECK_DEBUG_TOKEN?: boolean | string }).FIREBASE_APPCHECK_DEBUG_TOKEN = true;
++    }
++    initializeAppCheck(app, {
++      provider: import.meta.env.VITE_FIREBASE_APPCHECK_PROVIDER === 'enterprise'
++        ? new ReCaptchaEnterpriseProvider(appCheckSiteKey)
++        : new ReCaptchaV3Provider(appCheckSiteKey),
++      isTokenAutoRefreshEnabled: true,
++    });
++  } catch (error) {
++    console.warn('Firebase App Check tidak dapat diaktifkan:', error);
++  }
++}
++
+ // Initialize Firestore with custom databaseId if provided
+ export const db = firebaseConfig.firestoreDatabaseId
+   ? getFirestore(app, firebaseConfig.firestoreDatabaseId)
+@@ -88,13 +123,7 @@ googleAuthProvider.setCustomParameters({
+   prompt: 'select_account',
+ });
+ // Ask explicitly for identity scopes in addition to the Google API scopes.
+-googleAuthProvider.addScope('email');
+-googleAuthProvider.addScope('profile');
+-googleAuthProvider.addScope('https://www.googleapis.com/auth/drive');
+-googleAuthProvider.addScope('https://www.googleapis.com/auth/drive.file');
+-googleAuthProvider.addScope('https://www.googleapis.com/auth/spreadsheets');
+-googleAuthProvider.addScope('https://www.googleapis.com/auth/forms.body');
+-googleAuthProvider.addScope('https://www.googleapis.com/auth/forms.responses.readonly');
++for (const scope of GOOGLE_SIGN_IN_SCOPES) googleAuthProvider.addScope(scope);
+ 
+ // Google access tokens are short-lived. Keep them only in sessionStorage (not
+ // localStorage) so a page reload in the same tab does not force an immediate
+@@ -363,13 +392,7 @@ function buildWorkspaceProvider(prompt?: 'none' | 'select_account'): GoogleAuthP
+     login_hint: GOOGLE_WORKSPACE_EMAIL,
+     ...(prompt ? { prompt } : {}),
+   });
+-  provider.addScope('email');
+-  provider.addScope('profile');
+-  provider.addScope('https://www.googleapis.com/auth/drive');
+-  provider.addScope('https://www.googleapis.com/auth/drive.file');
+-  provider.addScope('https://www.googleapis.com/auth/spreadsheets');
+-  provider.addScope('https://www.googleapis.com/auth/forms.body');
+-  provider.addScope('https://www.googleapis.com/auth/forms.responses.readonly');
++  for (const scope of GOOGLE_SIGN_IN_SCOPES) provider.addScope(scope);
+   return provider;
+ }
+ 
+@@ -408,15 +431,7 @@ export const googleSignIn = async (): Promise<{
+   // Firebase identity and a scoped Google API access token for Drive/Sheets/Forms.
+   if (Capacitor.isNativePlatform()) {
+     try {
+-      const nativeScopes = [
+-        'email',
+-        'profile',
+-        'https://www.googleapis.com/auth/drive',
+-        'https://www.googleapis.com/auth/drive.file',
+-        'https://www.googleapis.com/auth/spreadsheets',
+-        'https://www.googleapis.com/auth/forms.body',
+-        'https://www.googleapis.com/auth/forms.responses.readonly',
+-      ];
++      const nativeScopes = [...GOOGLE_SIGN_IN_SCOPES];
+       const requestNativeLogin = () => SocialLogin.login({
+         provider: 'google',
+         options: {
+diff --git a/src/lib/firebaseRules.test.ts b/src/lib/firebaseRules.test.ts
+index 6fe7550..a13ede0 100644
+--- a/src/lib/firebaseRules.test.ts
++++ b/src/lib/firebaseRules.test.ts
+@@ -336,3 +336,45 @@ test('Profil anggota hanya dapat dibaca dan diubah oleh pemilik UID serta tidak
+     updatedAt: serverTimestamp(),
+   }));
+ });
++
++function stageOnePayload(source: 'respondent-link' | 'staff-entry') {
++  return {
++    timestamp: '2026-11-07T10:00:00.000Z',
++    namaLengkap: 'Responden Contoh',
++    nik: '1234567890123456',
++    usia: 30,
++    jenisKelamin: 'Laki-laki',
++    kotaDomisili: 'Kota Medan',
++    alamatLengkap: 'Jl. Contoh No. 1',
++    noHpWa: '081234567890',
++    jenisBantuan: 'Bantuan contoh',
++    intervensiMental: '-',
++    desil: 1,
++    fotoDiri: 'data:image/jpeg;base64,AAAA',
++    fotoKtp: 'data:image/jpeg;base64,BBBB',
++    statusAsesmen: 'Tahap Awal',
++    source,
++    submittedAt: serverTimestamp(),
++  };
++}
++
++test('Form publik Tahap Awal: anonim hanya dapat membuat dokumen ber-ID otomatis dan tidak dapat membaca', async () => {
++  const anonymous = environment.unauthenticatedContext().firestore();
++  const autoId = 'AbCdEfGhIjKlMnOpQrSt'; // 20 alphanumeric characters, like addDoc()
++
++  await assertSucceeds(setDoc(doc(anonymous, 'stageOneIntake', autoId), stageOnePayload('respondent-link')));
++  // Custom / guessable IDs are rejected so respondents cannot pre-claim staff-chosen IDs.
++  await assertFails(setDoc(doc(anonymous, 'stageOneIntake', 'ppks-demo'), stageOnePayload('respondent-link')));
++  // An anonymous caller cannot impersonate a staff entry.
++  await assertFails(setDoc(doc(anonymous, 'stageOneIntake', 'ZyXwVuTsRqPoNmLkJiHg'), stageOnePayload('staff-entry')));
++  // Intake data is never readable by respondents.
++  await assertFails(getDoc(doc(anonymous, 'stageOneIntake', autoId)));
++});
++
++test('Form publik Tahap Awal: pendamping tidak dapat membuat entri staf, supervisor dapat', async () => {
++  const pendamping = environment.authenticatedContext(PENDAMPING_UID, { role: 'pendamping' }).firestore();
++  const supervisor = environment.authenticatedContext('supervisor-001', { role: 'supervisor' }).firestore();
++
++  await assertFails(setDoc(doc(pendamping, 'stageOneIntake', 'staff-entry-001'), stageOnePayload('staff-entry')));
++  await assertSucceeds(setDoc(doc(supervisor, 'stageOneIntake', 'staff-entry-001'), stageOnePayload('staff-entry')));
++});
+diff --git a/src/lib/googleDriveBackup.ts b/src/lib/googleDriveBackup.ts
+index 46dda7b..9c383b6 100644
+--- a/src/lib/googleDriveBackup.ts
++++ b/src/lib/googleDriveBackup.ts
+@@ -1,6 +1,6 @@
+ import { getAccessToken, invalidateAccessToken, refreshWorkspaceAccessToken } from './firebase';
+ import type { SuratRecord } from '../types';
+-import { buildGoogleDriveMultipartBody, buildGoogleDriveRequestUrl } from './googleDriveMultipart';
++import { buildDriveUploadMetadata, buildGoogleDriveMultipartBody, buildGoogleDriveRequestUrl } from './googleDriveMultipart';
+ import { isIntegratedAssessmentAnswerKey, isManagedIntegratedAssessmentArchiveFile } from './integratedAssessmentArchive';
+ 
+ const ROOT_FOLDER_NAME = 'SIPANDU';
+@@ -73,13 +73,7 @@ async function uploadMultipart(
+   data: Blob,
+   existingFileId?: string,
+ ): Promise<{ id: string; webViewLink?: string }> {
+-  const metadata = JSON.stringify({
+-    name: fileName,
+-    // Drive files.update does not allow changing parent folders here; keep
+-    // the existing file in its current archive folder during in-place migration.
+-    ...(!existingFileId ? { parents: [folderId] } : {}),
+-    appProperties: { sipanduManaged: 'true', sipanduArchive: folderId },
+-  });
++  const metadata = buildDriveUploadMetadata({ name: fileName, mimeType, folderId, existingFileId });
+ 
+   let uploaded: { id: string; webViewLink?: string };
+   const uploadPath = existingFileId
+@@ -226,9 +220,39 @@ export async function backupAssessmentToCentralDrive(input: {
+     input.pdf,
+     replaceFileId,
+   );
++  await ensureDriveFileIsPdf(uploaded.id, fileName);
+   return { ...uploaded, replacedExisting: Boolean(replaceFileId) };
+ }
+ 
++/**
++ * Confirms that Drive stored the archive as a PDF. If a replaced legacy file kept its old
++ * application/json type, correct it explicitly; fail loudly rather than report success for
++ * a file that Drive would show (and download) as JSON.
++ */
++async function ensureDriveFileIsPdf(fileId: string, fileName: string): Promise<void> {
++  const fields = '?fields=id,name,mimeType&supportsAllDrives=true';
++  const read = async () => {
++    const response = await driveFetch('/files/' + encodeURIComponent(fileId) + fields);
++    if (!response.ok) throw new Error('Tipe file arsip Google Drive tidak dapat diperiksa (HTTP ' + response.status + ').');
++    return await response.json() as { mimeType?: string; name?: string };
++  };
++  let file = await read();
++  if (file.mimeType === 'application/pdf' && /\.pdf$/i.test(file.name || '')) return;
++
++  const fixed = await driveFetch('/files/' + encodeURIComponent(fileId) + fields, {
++    method: 'PATCH',
++    headers: { 'Content-Type': 'application/json' },
++    body: JSON.stringify({ name: fileName, mimeType: 'application/pdf' }),
++  });
++  if (!fixed.ok) {
++    throw new Error('Arsip Google Drive tersimpan sebagai ' + (file.mimeType || 'tipe tidak dikenal') + ' dan tidak dapat dikoreksi menjadi PDF (HTTP ' + fixed.status + ').');
++  }
++  file = await read();
++  if (file.mimeType !== 'application/pdf') {
++    throw new Error('Arsip Google Drive tetap bertipe ' + (file.mimeType || 'tidak dikenal') + ', bukan PDF.');
++  }
++}
++
+ export interface LegacyIntegratedAssessmentDriveArchive {
+   fileId: string;
+   fileName: string;
+diff --git a/src/lib/googleDriveMultipart.ts b/src/lib/googleDriveMultipart.ts
+index 047b500..af7c778 100644
+--- a/src/lib/googleDriveMultipart.ts
++++ b/src/lib/googleDriveMultipart.ts
+@@ -30,3 +30,25 @@ export function buildGoogleDriveMultipartBody(
+     `\r\n--${boundary}--\r\n`,
+   ], { type: `multipart/related; boundary=${boundary}` });
+ }
++
++/**
++ * Drive file metadata for a SIPANDU upload. `mimeType` is always sent explicitly: when an
++ * existing file (e.g. a legacy JSON archive) is replaced in place, Drive does not reliably
++ * change its type from the uploaded media alone, which left PDFs labelled application/json.
++ */
++export function buildDriveUploadMetadata(input: {
++  name: string;
++  mimeType: string;
++  folderId: string;
++  existingFileId?: string;
++}): string {
++  if (!input.name || /[\r\n]/.test(input.name)) throw new Error('Nama file Google Drive tidak valid.');
++  if (!input.mimeType || /[\r\n]/.test(input.mimeType)) throw new Error('Tipe file Google Drive tidak valid.');
++  return JSON.stringify({
++    name: input.name,
++    mimeType: input.mimeType,
++    // files.update cannot move a file; keep the existing parent during in-place replacement.
++    ...(!input.existingFileId ? { parents: [input.folderId] } : {}),
++    appProperties: { sipanduManaged: 'true', sipanduArchive: input.folderId },
++  });
++}
+diff --git a/src/lib/googleScopes.test.ts b/src/lib/googleScopes.test.ts
+new file mode 100644
+index 0000000..578286f
+--- /dev/null
++++ b/src/lib/googleScopes.test.ts
+@@ -0,0 +1,21 @@
++import test from 'node:test';
++import assert from 'node:assert/strict';
++import { readFileSync } from 'node:fs';
++import { GOOGLE_SIGN_IN_SCOPES, GOOGLE_WORKSPACE_API_SCOPES } from './googleScopes';
++
++test('Google scopes have no duplicates and never request Forms write access', () => {
++  assert.equal(new Set(GOOGLE_SIGN_IN_SCOPES).size, GOOGLE_SIGN_IN_SCOPES.length);
++  assert.ok(!GOOGLE_SIGN_IN_SCOPES.includes('https://www.googleapis.com/auth/forms.body'));
++  assert.ok(GOOGLE_WORKSPACE_API_SCOPES.includes('https://www.googleapis.com/auth/forms.body.readonly'));
++  assert.ok(GOOGLE_SIGN_IN_SCOPES.includes('email') && GOOGLE_SIGN_IN_SCOPES.includes('profile'));
++});
++
++test('SIPANDU only reads from the Google Forms API (justifies the read-only Forms scope)', () => {
++  const source = readFileSync('src/lib/googleWorkspace.ts', 'utf8');
++  const calls = [...source.matchAll(/forms\.googleapis\.com\/v1\/forms[^`'"]*[`'"]([^;]*?)\);/gs)];
++  assert.ok(calls.length >= 3, 'expected the known Forms API calls');
++  for (const call of calls) {
++    assert.ok(!/method:\s*'(POST|PUT|PATCH|DELETE)'/.test(call[1]), `Forms write call found: ${call[0].slice(0, 120)}`);
++  }
++  assert.ok(!/forms\.googleapis\.com[^\n]*:batchUpdate/.test(source));
++});
+diff --git a/src/lib/googleScopes.ts b/src/lib/googleScopes.ts
+new file mode 100644
+index 0000000..30897eb
+--- /dev/null
++++ b/src/lib/googleScopes.ts
+@@ -0,0 +1,28 @@
++/**
++ * Google OAuth scopes requested for the SIPANDU central Workspace account.
++ *
++ * Why each scope is needed (verified against src/lib/googleWorkspace.ts and
++ * src/lib/googleDriveBackup.ts):
++ *  - drive:          reads respondent photo files uploaded through Google Forms (files
++ *                    SIPANDU did not create), moves them into SIPANDU folders, and removes
++ *                    demo/obsolete files. `drive.file` alone cannot do this.
++ *  - spreadsheets:   reads the response sheet and writes the dedicated "SIPANDU" tab.
++ *  - forms.body.readonly / forms.responses.readonly:
++ *                    SIPANDU only ever GETs forms and responses. Write access to the form
++ *                    structure (`forms.body`) is intentionally NOT requested.
++ *
++ * `drive.file` is not listed because it is a strict subset of `drive`.
++ */
++export const GOOGLE_IDENTITY_SCOPES = ['email', 'profile'] as const;
++
++export const GOOGLE_WORKSPACE_API_SCOPES = [
++  'https://www.googleapis.com/auth/drive',
++  'https://www.googleapis.com/auth/spreadsheets',
++  'https://www.googleapis.com/auth/forms.body.readonly',
++  'https://www.googleapis.com/auth/forms.responses.readonly',
++] as const;
++
++export const GOOGLE_SIGN_IN_SCOPES: readonly string[] = [
++  ...GOOGLE_IDENTITY_SCOPES,
++  ...GOOGLE_WORKSPACE_API_SCOPES,
++];
+diff --git a/src/lib/localCache.test.ts b/src/lib/localCache.test.ts
+new file mode 100644
+index 0000000..a62646d
+--- /dev/null
++++ b/src/lib/localCache.test.ts
+@@ -0,0 +1,98 @@
++import test from 'node:test';
++import assert from 'node:assert/strict';
++import type { PPKSRecord } from '../types';
++import {
++  LEGACY_PPKS_CACHE_KEY,
++  clearSensitiveLocalCache,
++  ppksCacheKey,
++  readPpksCache,
++  sanitizeProfileForCache,
++  stripInlinePhotoData,
++  writePpksCache,
++  type CacheStorage,
++} from './localCache';
++
++class MemoryStorage implements CacheStorage {
++  private readonly map = new Map<string, string>();
++  get length() { return this.map.size; }
++  key(index: number) { return [...this.map.keys()][index] ?? null; }
++  getItem(key: string) { return this.map.has(key) ? this.map.get(key)! : null; }
++  setItem(key: string, value: string) { this.map.set(key, String(value)); }
++  removeItem(key: string) { this.map.delete(key); }
++  keys() { return [...this.map.keys()]; }
++}
++
++const DATA_URL = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQ';
++
++function record(overrides: Partial<PPKSRecord> = {}): PPKSRecord {
++  return {
++    id: 'p1', timestamp: '2026-11-01', namaLengkap: 'Contoh Nama', nik: '1234567890123456', usia: 30,
++    jenisKelamin: 'Laki-laki', kotaDomisili: 'Medan', alamatLengkap: 'Jl. Contoh', noHpWa: '0812345678',
++    jenisBantuan: '-', intervensiMental: '-', desil: 1,
++    fotoDiri: DATA_URL, fotoKtp: 'https://drive.google.com/file/d/abc/view', statusAsesmen: 'Tahap Awal',
++    ...overrides,
++  } as PPKSRecord;
++}
++
++test('inline photo data is removed but Drive/HTTPS links are kept', () => {
++  const stripped = stripInlinePhotoData(record({
++    fotoKk: DATA_URL,
++    manualPhotoOverrides: { fotoDiri: DATA_URL, fotoKtp: 'https://example.org/ktp.jpg' },
++  }));
++  assert.equal(stripped.fotoDiri, '');
++  assert.equal(stripped.fotoKk, '');
++  assert.equal(stripped.fotoKtp, 'https://drive.google.com/file/d/abc/view');
++  assert.deepEqual(stripped.manualPhotoOverrides, { fotoKtp: 'https://example.org/ktp.jpg' });
++  assert.equal(stripped.nik, '1234567890123456');
++});
++
++test('records without inline photos are returned unchanged (same reference)', () => {
++  const clean = record({ fotoDiri: 'https://example.org/a.jpg' });
++  assert.equal(stripInlinePhotoData(clean), clean);
++});
++
++test('written cache never contains a data: URL and is scoped to the UID', () => {
++  const storage = new MemoryStorage();
++  writePpksCache(storage, 'uid-A', [record()]);
++  const raw = storage.getItem(ppksCacheKey('uid-A'))!;
++  assert.ok(!raw.includes('data:image'));
++  assert.equal(storage.getItem(ppksCacheKey('uid-B')), null);
++  assert.equal(readPpksCache(storage, 'uid-B'), null);
++});
++
++test('legacy global cache is migrated once, photo-free, and deleted', () => {
++  const storage = new MemoryStorage();
++  storage.setItem(LEGACY_PPKS_CACHE_KEY, JSON.stringify([record()]));
++  const migrated = readPpksCache(storage, 'uid-A') as PPKSRecord[];
++  assert.equal(migrated[0].fotoDiri, '');
++  assert.equal(storage.getItem(LEGACY_PPKS_CACHE_KEY), null);
++  assert.ok(storage.getItem(ppksCacheKey('uid-A')));
++  assert.ok(!storage.getItem(ppksCacheKey('uid-A'))!.includes('data:image'));
++});
++
++test('sign-out wipe removes roster, profile and notification history but keeps device settings', () => {
++  const storage = new MemoryStorage();
++  writePpksCache(storage, 'uid-A', [record()]);
++  storage.setItem(LEGACY_PPKS_CACHE_KEY, '[]');
++  storage.setItem('sipandu_profile', '{}');
++  storage.setItem('sipandu_profile_uid-A', '{}');
++  storage.setItem('sipandu_respondent_notifications_v1:uid-A', '[]');
++  storage.setItem('sipandu_settings', '{}');
++  storage.setItem('sipandu_app_pin_hash_v1', 'x');
++  storage.setItem('sipandu_respondent_notification_baseline_v1:uid-A', '{}');
++
++  const removed = clearSensitiveLocalCache(storage);
++  assert.equal(removed, 5);
++  assert.deepEqual(storage.keys().sort(), [
++    'sipandu_app_pin_hash_v1',
++    'sipandu_respondent_notification_baseline_v1:uid-A',
++    'sipandu_settings',
++  ]);
++  assert.equal(clearSensitiveLocalCache(storage), 0);
++});
++
++test('profile photo data URL is not cached', () => {
++  assert.equal(sanitizeProfileForCache({ nama: 'A', photoUrl: DATA_URL }).photoUrl, '');
++  const withLink = { nama: 'A', photoUrl: 'https://example.org/p.png' };
++  assert.equal(sanitizeProfileForCache(withLink), withLink);
++});
+diff --git a/src/lib/localCache.ts b/src/lib/localCache.ts
+new file mode 100644
+index 0000000..09e2492
+--- /dev/null
++++ b/src/lib/localCache.ts
+@@ -0,0 +1,122 @@
++import type { PPKSRecord } from '../types';
++
++/**
++ * Browser-side cache policy for personal data.
++ *
++ * - Inline photos (data: URLs of face / KTP / KK / house) are never written to
++ *   localStorage. The canonical copy lives in Firestore / Google Drive and is
++ *   re-hydrated from there after sign-in.
++ * - The PPKS roster cache is scoped to one Firebase UID.
++ * - Everything that can hold personal data is removed on sign-out.
++ */
++
++export const LEGACY_PPKS_CACHE_KEY = 'sipandu_ppks';
++export const PPKS_CACHE_KEY_PREFIX = 'sipandu_ppks_v2:';
++
++/** Key prefixes (matched with startsWith) that are wiped on sign-out. */
++const SENSITIVE_KEY_PREFIXES = [
++  'sipandu_ppks',                           // legacy + per-UID roster cache
++  'sipandu_profile',                        // staff profile cache (name, NIP, phone, photo)
++  'sipandu_respondent_notifications_v1',    // notification history (respondent names)
++];
++
++const PHOTO_FIELDS = ['fotoDiri', 'fotoKtp', 'fotoKk', 'fotoRumah'] as const;
++
++export type CacheStorage = Pick<Storage, 'getItem' | 'setItem' | 'removeItem' | 'key' | 'length'>;
++
++export function isInlineImageData(value: unknown): boolean {
++  return typeof value === 'string' && /^\s*data:/i.test(value);
++}
++
++function stripPhotoMap(map: unknown): { value: unknown; changed: boolean } {
++  if (!map || typeof map !== 'object' || Array.isArray(map)) return { value: map, changed: false };
++  let changed = false;
++  const next: Record<string, unknown> = {};
++  for (const [key, entry] of Object.entries(map as Record<string, unknown>)) {
++    if (isInlineImageData(entry)) {
++      changed = true;
++      continue;
++    }
++    next[key] = entry;
++  }
++  return { value: changed ? next : map, changed };
++}
++
++/** Returns the record without inline image data. Links (https / Drive) are kept. */
++export function stripInlinePhotoData<T extends Partial<PPKSRecord>>(record: T): T {
++  if (!record || typeof record !== 'object') return record;
++  let result: Record<string, unknown> | null = null;
++  const ensure = () => (result ??= { ...(record as Record<string, unknown>) });
++
++  for (const field of PHOTO_FIELDS) {
++    if (isInlineImageData((record as Record<string, unknown>)[field])) ensure()[field] = '';
++  }
++  const overrides = stripPhotoMap((record as Record<string, unknown>).manualPhotoOverrides);
++  if (overrides.changed) ensure().manualPhotoOverrides = overrides.value;
++
++  return (result ?? record) as T;
++}
++
++export function stripInlinePhotoDataFromList<T extends Partial<PPKSRecord>>(records: T[]): T[] {
++  return records.map((record) => stripInlinePhotoData(record));
++}
++
++/** Staff profile cache: the profile photo may be a large data: URL. */
++export function sanitizeProfileForCache<T extends { photoUrl?: unknown }>(profile: T): T {
++  if (profile && isInlineImageData(profile.photoUrl)) return { ...profile, photoUrl: '' };
++  return profile;
++}
++
++export function ppksCacheKey(uid: string): string {
++  return `${PPKS_CACHE_KEY_PREFIX}${uid || 'anonymous'}`;
++}
++
++/**
++ * Reads the roster cache for this UID. A cache written by an older app version
++ * (single global key) is migrated once — with photos removed — and then deleted.
++ */
++export function readPpksCache(storage: CacheStorage, uid: string): unknown {
++  const key = ppksCacheKey(uid);
++  const current = storage.getItem(key);
++  if (current) return JSON.parse(current);
++
++  const legacy = storage.getItem(LEGACY_PPKS_CACHE_KEY);
++  if (!legacy) return null;
++  let parsed: unknown;
++  try {
++    parsed = JSON.parse(legacy);
++  } finally {
++    storage.removeItem(LEGACY_PPKS_CACHE_KEY);
++  }
++  if (!Array.isArray(parsed)) return parsed;
++  const sanitized = stripInlinePhotoDataFromList(parsed as Partial<PPKSRecord>[]);
++  try { storage.setItem(key, JSON.stringify(sanitized)); } catch { /* quota: cache is optional */ }
++  return sanitized;
++}
++
++export function writePpksCache(storage: CacheStorage, uid: string, records: PPKSRecord[]): void {
++  storage.setItem(ppksCacheKey(uid), JSON.stringify(stripInlinePhotoDataFromList(records)));
++  // Never leave a pre-upgrade global copy (with photos) behind.
++  storage.removeItem(LEGACY_PPKS_CACHE_KEY);
++}
++
++/** Removes every cached roster, profile and notification history. Safe to call repeatedly. */
++export function clearSensitiveLocalCache(storage: CacheStorage): number {
++  const doomed: string[] = [];
++  for (let index = 0; index < storage.length; index += 1) {
++    const key = storage.key(index);
++    if (key && SENSITIVE_KEY_PREFIXES.some((prefix) => key.startsWith(prefix))) doomed.push(key);
++  }
++  for (const key of doomed) {
++    try { storage.removeItem(key); } catch { /* continue wiping the remaining keys */ }
++  }
++  return doomed.length;
++}
++
++export function safeLocalStorage(): CacheStorage | null {
++  try {
++    return typeof window !== 'undefined' && window.localStorage ? window.localStorage : null;
++  } catch {
++    return null;
++  }
++}
+diff --git a/src/lib/printing.ts b/src/lib/printing.ts
+index dc517c7..13cf21f 100644
+--- a/src/lib/printing.ts
++++ b/src/lib/printing.ts
+@@ -1,3 +1,4 @@
++import { Capacitor } from '@capacitor/core';
+ import { Printer } from '@capgo/capacitor-printer';
+ 
+ /** Uses native Android/iOS print UI and the browser print dialog for PWA. */
+@@ -75,3 +76,30 @@ export async function printPreparedAssessmentWebView(name: string, rootId: strin
+     printStyle.remove();
+   }
+ }
++
++
++/**
++ * Saves an already generated PDF on the user's device. Browsers/PWA download the file with
++ * its A4 PDF name; inside the Android/iOS WebView (where blob downloads are not supported)
++ * the system print sheet is opened, which offers "Save as PDF" and printing.
++ */
++export async function savePdfToDevice(blob: Blob, fileName: string): Promise<'downloaded' | 'system-dialog'> {
++  if (blob.size <= 0) throw new Error('File PDF kosong dan tidak dapat disimpan.');
++  if (Capacitor.isNativePlatform()) {
++    await printPdfBlob(blob, fileName);
++    return 'system-dialog';
++  }
++  const objectUrl = URL.createObjectURL(new Blob([blob], { type: 'application/pdf' }));
++  try {
++    const link = document.createElement('a');
++    link.href = objectUrl;
++    link.download = fileName.toLowerCase().endsWith('.pdf') ? fileName : fileName + '.pdf';
++    link.rel = 'noopener';
++    document.body.appendChild(link);
++    link.click();
++    link.remove();
++  } finally {
++    window.setTimeout(() => URL.revokeObjectURL(objectUrl), 120_000);
++  }
++  return 'downloaded';
++}
+diff --git a/src/types/index.ts b/src/types/index.ts
+index 2bfe210..bc1fc77 100644
+--- a/src/types/index.ts
++++ b/src/types/index.ts
+@@ -94,7 +94,7 @@ export interface ProfileUser {
+ 
+ export interface UserAccount {
+   id: string;
+-  username: string; // e.g. "deny" or "Deny Arifin Martyon"
++  username: string; // e.g. "petugas1" or "Nama Petugas"
+   displayName: string;
+   password: string; // e.g. "kemensos123"
+   nip: string;
+diff --git a/src/utils/helpers.test.ts b/src/utils/helpers.test.ts
+index 03ea38e..fb36b06 100644
+--- a/src/utils/helpers.test.ts
++++ b/src/utils/helpers.test.ts
+@@ -76,11 +76,11 @@ test('buildWhatsAppMessage includes respondent name and official Kemensos templa
+     statusAsesmen: 'Tahap Awal',
+   };
+ 
+-  const message = buildWhatsAppMessage(mockPpks);
++  const message = buildWhatsAppMessage(mockPpks, { senderName: 'Petugas Contoh S.' });
+   assert.match(message, /Halo Budi Santoso/);
+-  assert.match(message, /Saya Deny Arifin Martyon dari Tim Administrasi/);
++  assert.match(message, /Saya Petugas Contoh dari Tim Administrasi/);
+   assert.match(message, /Program Atensi Kementerian Sosial Tahap Awal/);
+-  assert.match(message, /Deny Arifin Martyon S\./);
++  assert.match(message, /Petugas Contoh S\./);
+   assert.match(message, /Direktorat Rehabilitasi Sosial Korban Penyalahgunaan Narkoba & ODHIV/);
+ });
+ 
+@@ -89,3 +89,13 @@ test('getDesilDescription formats desil labels correctly', () => {
+   assert.match(getDesilDescription(0), /Belum Terdaftar/);
+ });
+ 
++
++test('buildWhatsAppMessage uses a neutral sender when no sender name is configured', () => {
++  const message = buildWhatsAppMessage({
++    id: 'PPKS-SU-002', timestamp: '2026-10-24 10:00:00', namaLengkap: 'Responden Contoh', nik: '1271011505920004',
++    usia: 30, jenisKelamin: 'Perempuan', kotaDomisili: 'Kota Medan', alamatLengkap: 'Jl. Contoh', noHpWa: '081234567891',
++    jenisBantuan: '-', intervensiMental: '-', desil: 1, fotoDiri: '', fotoKtp: '', statusAsesmen: 'Tahap Awal',
++  } as PPKSRecord);
++  assert.match(message, /Petugas SIPANDU/);
++  assert.ok(!/Deny|Martyon|Sikumbang/.test(message));
++});
+diff --git a/src/utils/helpers.ts b/src/utils/helpers.ts
+index 0ddc9bb..99abfe8 100644
+--- a/src/utils/helpers.ts
++++ b/src/utils/helpers.ts
+@@ -171,7 +171,7 @@ export function buildWhatsAppMessage(
+ ): string {
+   const waktu = getWaktuGreeting().toLowerCase();
+   const namaResponden = ppks.namaLengkap || 'Bapak/Ibu';
+-  const senderName = settings.senderName || 'Deny Arifin Martyon S.';
++  const senderName = settings.senderName || 'Petugas SIPANDU';
+   const senderShortName = senderName.endsWith(' S.') ? senderName.slice(0, -3) : senderName;
+   const senderRole = settings.senderRole || 'Pendamping ODHIV';
+   const senderUnit =
