@@ -1125,7 +1125,7 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
 
   return (
     <div
-      className="official-assessment-shell workspace-page min-h-full text-neutral-900"
+      className="sipandu-workspace-motion official-assessment-shell workspace-page min-h-full text-neutral-900"
       data-no-app-swipe="true"
       aria-label="Area Form Asesmen Terintegrasi. Geser lembar ke kiri atau kanan untuk melihat kolom."
     >
