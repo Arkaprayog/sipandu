@@ -5,7 +5,6 @@ import {
   BriefcaseBusiness,
   CalendarClock,
   CheckCircle2,
-  ChevronDown,
   ClipboardList,
   Download,
   FileClock,
@@ -39,6 +38,7 @@ interface ServiceCenterViewProps {
   ppksList: PPKSRecord[];
   serviceStatuses: PPKSServiceStatus[];
   serviceStatusLoading: boolean;
+  serviceStatusError?: string;
   currentUserUid: string;
   onSaveUpdate: (input: PPKSServiceUpdateInput) => Promise<void>;
 }
@@ -93,6 +93,7 @@ export const ServiceCenterView: React.FC<ServiceCenterViewProps> = ({
   ppksList,
   serviceStatuses,
   serviceStatusLoading,
+  serviceStatusError = '',
   currentUserUid,
   onSaveUpdate,
 }) => {
@@ -296,6 +297,7 @@ export const ServiceCenterView: React.FC<ServiceCenterViewProps> = ({
         </div>
 
         {serviceStatusLoading && <p className="sipandu-service-loading">Menyinkronkan status layanan dari Firestore…</p>}
+        {!serviceStatusLoading && serviceStatusError && <p className="sipandu-service-error" role="alert">Status layanan belum dapat dimuat dari Firestore: {serviceStatusError}</p>}
         {!serviceStatusLoading && serviceStatuses.length === 0 && (
           <div className="sipandu-service-info"><Activity className="h-4 w-4"/> Belum ada riwayat perubahan layanan yang dicatat. Kebutuhan awal diturunkan hanya dari permintaan bantuan yang sudah tercatat pada data PPKS.</div>
         )}
