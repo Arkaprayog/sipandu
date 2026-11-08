@@ -1,12 +1,12 @@
 {
   "name": "sipandu-odhiv",
   "private": true,
-  "version": "4.1.0",
+  "version": "4.2.0",
   "type": "module",
   "scripts": {
     "dev": "vite --port=3000 --host=0.0.0.0",
     "build": "vite build",
-    "test": "tsx --test src/data/initialData.test.ts src/lib/nikNumeric.test.ts src/lib/ppksData.test.ts src/lib/atensiColumnMapping.test.ts src/lib/photoSources.test.ts src/utils/helpers.test.ts src/utils/whatsappTemplate.test.ts src/lib/lazyImportRecovery.test.ts src/lib/liveSyncPolicy.test.ts src/lib/integratedAssessmentArchive.test.ts src/lib/pinPolicy.test.ts src/lib/ppksRecordState.test.ts src/lib/interventionMapping.test.ts src/lib/stageOneRespondents.test.ts src/lib/photoFilePreview.test.ts src/lib/notificationPolicy.test.ts src/lib/locationPolicy.test.ts src/utils/primaryFormPrefill.test.ts src/lib/googleDriveMultipart.test.ts src/lib/localCacheSanitizer.test.ts src/lib/serviceManagement.test.ts registration-worker/index.test.ts",
+    "test": "tsx --test src/data/initialData.test.ts src/lib/nikNumeric.test.ts src/lib/ppksData.test.ts src/lib/atensiColumnMapping.test.ts src/lib/photoSources.test.ts src/utils/helpers.test.ts src/utils/whatsappTemplate.test.ts src/lib/lazyImportRecovery.test.ts src/lib/liveSyncPolicy.test.ts src/lib/integratedAssessmentArchive.test.ts src/lib/pinPolicy.test.ts src/lib/ppksRecordState.test.ts src/lib/interventionMapping.test.ts src/lib/stageOneRespondents.test.ts src/lib/photoFilePreview.test.ts src/lib/notificationPolicy.test.ts src/lib/locationPolicy.test.ts src/utils/primaryFormPrefill.test.ts src/lib/googleDriveMultipart.test.ts src/lib/localCacheSanitizer.test.ts src/lib/serviceManagement.test.ts src/lib/dataQuality.test.ts src/lib/platformCompatibility.test.ts registration-worker/index.test.ts",
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",
