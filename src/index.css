@@ -412,3 +412,199 @@ body,
 @media print {
   .sipandu-navigation-shell { background: #FFFFFF !important; color: #111827 !important; }
 }
+
+/* --------------------------------------------------------------------------
+   MODERN LIVING SIPANDU
+   Presentation-only polish: no component structure, event, data, or flow changes.
+   -------------------------------------------------------------------------- */
+
+.sipandu-navigation-shell {
+  --sipandu-motion-ease: cubic-bezier(0.22, 0.68, 0, 1);
+  --sipandu-motion-fast: 160ms;
+  --sipandu-motion-base: 240ms;
+  --sipandu-motion-page: 360ms;
+}
+
+/* Consistent, soft feedback for controls without changing their behavior. */
+.sipandu-navigation-shell :is(button, a, input, select, textarea, [role="button"]) {
+  transition-timing-function: var(--sipandu-motion-ease);
+  transition-duration: var(--sipandu-motion-base);
+}
+
+.sipandu-navigation-shell :is(button, a, [role="button"]) {
+  -webkit-tap-highlight-color: transparent;
+}
+
+.sipandu-navigation-shell button:not(:disabled):hover {
+  filter: saturate(1.06);
+}
+
+.sipandu-navigation-shell button:not(:disabled):active {
+  transform: scale(0.985);
+}
+
+.sipandu-navigation-shell :is(button, a, input, select, textarea, [role="button"]):focus-visible {
+  outline: 2px solid var(--sipandu-accent);
+  outline-offset: 3px;
+}
+
+/* A short entrance animation makes page changes feel intentional, not abrupt. */
+.sipandu-navigation-shell .workspace-page,
+.sipandu-navigation-shell > main > .space-y-3 {
+  animation: sipandu-page-enter var(--sipandu-motion-page) var(--sipandu-motion-ease) both;
+}
+
+@keyframes sipandu-page-enter {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Softer, more cohesive surfaces while preserving the existing theme palettes. */
+.sipandu-navigation-shell .workspace-panel {
+  border-radius: 1.35rem;
+  transition:
+    background-color var(--sipandu-motion-base) var(--sipandu-motion-ease),
+    border-color var(--sipandu-motion-base) var(--sipandu-motion-ease),
+    box-shadow var(--sipandu-motion-base) var(--sipandu-motion-ease);
+}
+
+.sipandu-navigation-shell:not([data-sipandu-theme="light"]) .workspace-panel {
+  border-color: rgba(220, 232, 213, 0.14);
+  box-shadow: 0 16px 42px rgba(0, 0, 0, 0.2);
+}
+
+.sipandu-navigation-shell[data-sipandu-theme="light"] .workspace-panel {
+  border-color: #DCE8D5;
+  box-shadow: 0 12px 32px rgba(45, 70, 42, 0.07);
+}
+
+/* Dashboard cards receive the same calm depth as the other workspace panels. */
+.sipandu-navigation-shell:not([data-sipandu-theme="light"]) > main > .space-y-3 > div[class*="rounded-2xl"],
+.sipandu-navigation-shell:not([data-sipandu-theme="light"]) > main > .space-y-3 > div[class*="grid"] > div[class*="rounded-2xl"] {
+  border-color: rgba(220, 232, 213, 0.14);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.16);
+}
+
+.sipandu-navigation-shell[data-sipandu-theme="light"] > main > .space-y-3 > div[class*="rounded-2xl"],
+.sipandu-navigation-shell[data-sipandu-theme="light"] > main > .space-y-3 > div[class*="grid"] > div[class*="rounded-2xl"] {
+  background: #FFFFFF !important;
+  background-color: #FFFFFF !important;
+  border-color: #E8EFE3 !important;
+  box-shadow: 0 10px 28px rgba(45, 70, 42, 0.06);
+}
+
+/* Glass-like header and bottom navigation; the light theme keeps its sage surfaces. */
+.sipandu-navigation-shell:not([data-sipandu-theme="light"]) .app-header-safe-area {
+  border-bottom-color: rgba(220, 232, 213, 0.14) !important;
+  box-shadow: 0 8px 26px rgba(0, 0, 0, 0.18) !important;
+  -webkit-backdrop-filter: blur(16px) saturate(125%);
+  backdrop-filter: blur(16px) saturate(125%);
+}
+
+.sipandu-navigation-shell:not([data-sipandu-theme="light"]) .app-nav-bar {
+  background: rgba(13, 24, 15, 0.88) !important;
+  border-top-color: rgba(220, 232, 213, 0.16) !important;
+  box-shadow: 0 -10px 30px rgba(0, 0, 0, 0.2) !important;
+  -webkit-backdrop-filter: blur(18px) saturate(130%);
+  backdrop-filter: blur(18px) saturate(130%);
+}
+
+.sipandu-navigation-shell .app-nav-bar button {
+  min-height: 42px;
+  border-radius: 15px;
+}
+
+.sipandu-navigation-shell .app-nav-bar button svg {
+  transition: transform var(--sipandu-motion-base) var(--sipandu-motion-ease);
+}
+
+.sipandu-navigation-shell .app-nav-bar button[class*="bg-gradient-to-r"] svg {
+  transform: translateY(-1px) scale(1.04);
+}
+
+.sipandu-navigation-shell:not([data-sipandu-theme="light"]) .app-nav-bar button[class*="bg-gradient-to-r"] {
+  border-color: rgba(100, 214, 174, 0.32);
+  box-shadow: 0 6px 18px rgba(16, 185, 129, 0.12);
+}
+
+.sipandu-navigation-shell[data-sipandu-theme="light"] .app-nav-bar button[class*="bg-gradient-to-r"] {
+  box-shadow: 0 7px 18px rgba(100, 149, 237, 0.18) !important;
+}
+
+/* Forms feel responsive while keeping their current field order and validation. */
+.sipandu-navigation-shell :is(input, select, textarea) {
+  transition:
+    border-color var(--sipandu-motion-base) var(--sipandu-motion-ease),
+    box-shadow var(--sipandu-motion-base) var(--sipandu-motion-ease),
+    background-color var(--sipandu-motion-base) var(--sipandu-motion-ease);
+}
+
+.sipandu-navigation-shell :is(input, select, textarea):focus {
+  box-shadow: 0 0 0 3px rgba(100, 149, 237, 0.14);
+}
+
+.sipandu-navigation-shell .sipandu-assessment-subnav {
+  transition:
+    color var(--sipandu-motion-base) var(--sipandu-motion-ease),
+    background-color var(--sipandu-motion-base) var(--sipandu-motion-ease),
+    border-color var(--sipandu-motion-base) var(--sipandu-motion-ease),
+    box-shadow var(--sipandu-motion-base) var(--sipandu-motion-ease),
+    transform var(--sipandu-motion-fast) var(--sipandu-motion-ease);
+}
+
+.sipandu-navigation-shell .sipandu-assessment-subnav:hover {
+  transform: translateY(-1px);
+}
+
+/* Data tables and the map get restrained motion rather than distracting effects. */
+.sipandu-navigation-shell .workspace-page table tbody tr {
+  transition: background-color var(--sipandu-motion-fast) var(--sipandu-motion-ease);
+}
+
+.sipandu-navigation-shell .sumut-map-hotspot-halo {
+  animation: sipandu-map-breathe 3.2s ease-in-out infinite;
+}
+
+@keyframes sipandu-map-breathe {
+  0%, 100% { opacity: 0.3; }
+  50% { opacity: 0.72; }
+}
+
+/* Replace the default perpetual bounce with a single, gentle success entrance. */
+.sipandu-navigation-shell .animate-bounce {
+  animation: sipandu-toast-enter 280ms var(--sipandu-motion-ease) both !important;
+}
+
+@keyframes sipandu-toast-enter {
+  from { opacity: 0; transform: translateY(6px) scale(0.985); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* Respect device accessibility settings and keep printed documents unchanged. */
+@media (prefers-reduced-motion: reduce) {
+  .sipandu-navigation-shell *,
+  .sipandu-navigation-shell *::before,
+  .sipandu-navigation-shell *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+@media print {
+  .sipandu-navigation-shell *,
+  .sipandu-navigation-shell *::before,
+  .sipandu-navigation-shell *::after {
+    animation: none !important;
+    transition: none !important;
+    box-shadow: none !important;
+    filter: none !important;
+  }
+}
