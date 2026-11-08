@@ -11,7 +11,7 @@ on:
       - "docs/SIPANDU_AI_COPILOT.md"
       - ".github/workflows/sipandu-ai-worker.yml"
   push:
-    branches: [main]
+    branches: ["**"]
     paths:
       - "sipandu-ai-worker/**"
       - "src/App.tsx"
