@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { CheckCircle2, Printer, RotateCcw, Save, Search } from 'lucide-react';
+import { CheckCircle2, FileText, Printer, RotateCcw, Save, Search } from 'lucide-react';
 import { PPKSRecord } from '../types';
 import { getAccessToken, invalidateAccessToken, refreshWorkspaceAccessToken } from '../lib/firebase';
 import { formatPPKSTimestamp } from '../lib/ppksData';
