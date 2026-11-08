@@ -327,14 +327,9 @@ service cloud.firestore {
       allow delete: if false;
     }
 
-
-
-    // Service-center data is separate from the spreadsheet-owned PPKS roster.
-    // Operational records contain structured statuses only: no NIK, diagnosis,
-    // ART regimen, free-text clinical notes, or other medical narrative.
+    // Service-center status is isolated from the spreadsheet-owned PPKS roster.
     function validServiceDate(value) {
-      return value is string
-        && value.size() <= 10
+      return value is string && value.size() <= 10
         && (value == '' || value.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}
     match /{document=**} {
       allow read, write: if false;
@@ -345,10 +340,7 @@ service cloud.firestore {
     }
 
     function validAssistanceStatus(value) {
-      return value in [
-        'belum-diverifikasi', 'dibutuhkan', 'dalam-proses',
-        'diterima', 'tidak-dibutuhkan'
-      ];
+      return value in ['belum-diverifikasi', 'dibutuhkan', 'dalam-proses', 'diterima', 'tidak-dibutuhkan'];
     }
 
     function validTherapyStatus(value) {
@@ -356,32 +348,21 @@ service cloud.firestore {
     }
 
     function validFollowUpReason(value) {
-      return value in [
-        '', 'konfirmasi-penerimaan-bantuan', 'penjadwalan-penyaluran',
-        'monitoring-pendampingan', 'evaluasi-terapi',
-        'verifikasi-dokumen', 'lainnya'
-      ];
+      return value in ['', 'konfirmasi-penerimaan-bantuan', 'penjadwalan-penyaluran',
+        'monitoring-pendampingan', 'evaluasi-terapi', 'verifikasi-dokumen', 'lainnya'];
     }
 
     function validServiceStatusDocument(data, ppksId) {
-      return data.keys().hasAll([
-          'ppksId', 'nutritionStatus', 'entrepreneurshipStatus',
-          'psychosocialStatus', 'lastNutritionAt', 'lastEntrepreneurshipAt',
-          'lastTherapyAt', 'therapySessionCount', 'followUpAt',
-          'followUpReason', 'assignedToUid', 'createdAt', 'updatedAt',
-          'updatedByUid'
-        ])
-        && data.keys().hasOnly([
-          'ppksId', 'nutritionStatus', 'entrepreneurshipStatus',
-          'psychosocialStatus', 'lastNutritionAt', 'lastEntrepreneurshipAt',
-          'lastTherapyAt', 'therapySessionCount', 'followUpAt',
-          'followUpReason', 'assignedToUid', 'createdAt', 'updatedAt',
-          'updatedByUid'
-        ])
+      return data.keys().hasAll(['ppksId', 'nutritionStatus', 'entrepreneurshipStatus',
+          'psychosocialStatus', 'lastNutritionAt', 'lastEntrepreneurshipAt', 'lastTherapyAt',
+          'therapySessionCount', 'followUpAt', 'followUpReason', 'assignedToUid',
+          'createdAt', 'updatedAt', 'updatedByUid'])
+        && data.keys().hasOnly(['ppksId', 'nutritionStatus', 'entrepreneurshipStatus',
+          'psychosocialStatus', 'lastNutritionAt', 'lastEntrepreneurshipAt', 'lastTherapyAt',
+          'therapySessionCount', 'followUpAt', 'followUpReason', 'assignedToUid',
+          'createdAt', 'updatedAt', 'updatedByUid'])
         && data.ppksId == ppksId
-        && data.ppksId is string
-        && data.ppksId.size() > 0
-        && data.ppksId.size() <= 150
+        && data.ppksId is string && data.ppksId.size() > 0 && data.ppksId.size() <= 150
         && validAssistanceStatus(data.nutritionStatus)
         && validAssistanceStatus(data.entrepreneurshipStatus)
         && validTherapyStatus(data.psychosocialStatus)
@@ -389,14 +370,12 @@ service cloud.firestore {
         && validServiceDate(data.lastEntrepreneurshipAt)
         && validServiceDate(data.lastTherapyAt)
         && data.therapySessionCount is int
-        && data.therapySessionCount >= 0
-        && data.therapySessionCount <= 5000
+        && data.therapySessionCount >= 0 && data.therapySessionCount <= 5000
         && validServiceDate(data.followUpAt)
         && validFollowUpReason(data.followUpReason)
         && ((data.followUpAt == '' && data.followUpReason == '')
           || (data.followUpAt != '' && data.followUpReason != ''))
-        && data.assignedToUid is string
-        && data.assignedToUid.size() <= 128
+        && data.assignedToUid is string && data.assignedToUid.size() <= 128
         && (canWritePpks() || data.assignedToUid == request.auth.uid)
         && data.createdAt is timestamp
         && data.updatedAt == request.time
@@ -422,26 +401,17 @@ service cloud.firestore {
       allow read: if canWritePpks()
         || (hasRole('pendamping') && resource.data.assignedToUid == request.auth.uid);
       allow create: if isStaff()
-        && request.resource.data.keys().hasAll([
-          'id', 'ppksId', 'eventType', 'status', 'serviceDate',
-          'followUpAt', 'followUpReason', 'createdByUid', 'assignedToUid', 'createdAt'
-        ])
-        && request.resource.data.keys().hasOnly([
-          'id', 'ppksId', 'eventType', 'status', 'serviceDate',
-          'followUpAt', 'followUpReason', 'createdByUid', 'assignedToUid', 'createdAt'
-        ])
+        && request.resource.data.keys().hasAll(['id', 'ppksId', 'eventType', 'status',
+          'serviceDate', 'followUpAt', 'followUpReason', 'createdByUid', 'assignedToUid', 'createdAt'])
+        && request.resource.data.keys().hasOnly(['id', 'ppksId', 'eventType', 'status',
+          'serviceDate', 'followUpAt', 'followUpReason', 'createdByUid', 'assignedToUid', 'createdAt'])
         && request.resource.data.id == eventId
         && request.resource.data.ppksId is string
-        && request.resource.data.ppksId.size() > 0
-        && request.resource.data.ppksId.size() <= 150
-        && (
-          (request.resource.data.eventType == 'nutrition-assistance'
-            && validAssistanceStatus(request.resource.data.status))
-          || (request.resource.data.eventType == 'entrepreneurship-assistance'
-            && validAssistanceStatus(request.resource.data.status))
+        && request.resource.data.ppksId.size() > 0 && request.resource.data.ppksId.size() <= 150
+        && ((request.resource.data.eventType in ['nutrition-assistance', 'entrepreneurship-assistance']
+              && validAssistanceStatus(request.resource.data.status))
           || (request.resource.data.eventType == 'psychosocial-therapy'
-            && validTherapyStatus(request.resource.data.status))
-        )
+              && validTherapyStatus(request.resource.data.status)))
         && validServiceDate(request.resource.data.serviceDate)
         && validServiceDate(request.resource.data.followUpAt)
         && validFollowUpReason(request.resource.data.followUpReason)
@@ -452,10 +422,9 @@ service cloud.firestore {
         && request.resource.data.assignedToUid.size() <= 128
         && (canWritePpks() || request.resource.data.assignedToUid == request.auth.uid)
         && request.resource.data.createdAt == request.time;
-      // The service timeline is append-only so staff cannot silently rewrite history.
+      // The activity timeline is append-only; staff cannot silently rewrite history.
       allow update, delete: if false;
     }
-
     // Deny all collections unless a collection-specific policy is added.
     match /{document=**} {
       allow read, write: if false;
