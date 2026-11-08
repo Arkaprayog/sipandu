@@ -18,8 +18,8 @@ test("aggregate summary groups allowed demographics and normalized assistance ca
 
   assert.equal(summary.totalPpks, 10);
   assert.deepEqual(summary.byGender, [
-    { gender: "Perempuan", count: 5 },
     { gender: "Laki-laki", count: 5 },
+    { gender: "Perempuan", count: 5 },
   ]);
   assert.equal(summary.byRegion.find((item) => item.region === "Kota Medan")?.count, 5);
   assert.equal(summary.byRegion.find((item) => item.region === "Kabupaten Deli Serdang")?.count, 5);
@@ -35,9 +35,9 @@ test("small demographic groups are suppressed without echoing raw values", () =>
     { usia: 20, jenisKelamin: "Perempuan", kotaDomisili: "Medan", jenisBantuan: "Bantuan nutrisi" },
   ], []);
   const output = JSON.stringify(summary);
-  assert.equal(summary.dataQuality.missingOrInvalidAge, 1);
-  assert.equal(summary.dataQuality.unknownGender, 1);
-  assert.equal(summary.dataQuality.unclassifiedRegion, 1);
+  assert.equal(summary.dataQuality.missingOrInvalidAge, null);
+  assert.equal(summary.dataQuality.unknownGender, null);
+  assert.equal(summary.dataQuality.unclassifiedRegion, null);
   assert.equal(summary.byGender.length, 0);
   assert.equal(summary.byRegion.length, 0);
   assert.equal(summary.requestedAssistance.length, 0);
