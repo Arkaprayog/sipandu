@@ -89,8 +89,9 @@ test('Drive upload metadata explicitly marks PDF files and keeps existing parent
 });
 
 test('Drive metadata rejects unsafe names, MIME types, and folder identifiers', () => {
-  assert.throws(() => buildDriveUploadMetadata({ name: 'bad\\nname.pdf', mimeType: 'application/pdf', folderId: 'f' }), /Nama file/);
-  assert.throws(() => buildDriveUploadMetadata({ name: 'file.pdf', mimeType: 'application/pdf\\nInjected', folderId: 'f' }), /Tipe file/);
+  const newline = String.fromCharCode(10);
+  assert.throws(() => buildDriveUploadMetadata({ name: 'bad' + newline + 'name.pdf', mimeType: 'application/pdf', folderId: 'f' }), /Nama file/);
+  assert.throws(() => buildDriveUploadMetadata({ name: 'file.pdf', mimeType: 'application/pdf' + newline + 'Injected', folderId: 'f' }), /Tipe file/);
   assert.throws(() => buildDriveUploadMetadata({ name: 'file.pdf', mimeType: 'application/pdf', folderId: '' }), /Folder tujuan/);
 });
 
