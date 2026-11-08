@@ -157,8 +157,9 @@ const FIREBASE_JWKS_URL = "https://www.googleapis.com/service_accounts/v1/jwk/se
 
 /** Cache only Google's public verification keys; never cache user tokens or account data. */
 async function loadFirebasePublicKeys(): Promise<FirebaseJwk[]> {
+  const keyCache = await caches.open("sipandu-ai-firebase-public-jwks-v1");
   const cacheKey = new Request(FIREBASE_JWKS_URL, { method: "GET" });
-  const cached = await caches.default.match(cacheKey);
+  const cached = await keyCache.match(cacheKey);
   if (cached) {
     try {
       const cachedSet = await cached.json() as { keys?: FirebaseJwk[] };
@@ -187,7 +188,7 @@ async function loadFirebasePublicKeys(): Promise<FirebaseJwk[]> {
       "Cache-Control": "public, max-age=" + maxAgeSeconds,
     },
   });
-  await caches.default.put(cacheKey, cachedResponse);
+  await keyCache.put(cacheKey, cachedResponse);
   return keySet.keys;
 }
 
