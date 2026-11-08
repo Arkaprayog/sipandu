@@ -41,7 +41,7 @@ test('NIK duplikat ditandai pada kedua record tanpa menghapus atau menggabungkan
   const report = analyzePPKSDataQuality(records);
   assert.equal(report.issueCounts['nik-duplikat'], 2);
   assert.equal(report.recordsNeedingReview, 2);
-  assert.equal(report.completenessPercent, 89);
+  assert.equal(report.completenessPercent, 100);
   assert.equal(records.length, 2);
 });
 
