@@ -28,8 +28,9 @@ const GoogleWorkspaceModal = lazyWithRecovery('GoogleWorkspaceModal', () => impo
 const SIPANDUAICopilot = lazyWithRecovery('SIPANDUAICopilot', () => import('./components/SIPANDUAICopilot').then((module) => ({ default: module.SIPANDUAICopilot })));
 const ServiceCenterView = lazyWithRecovery('ServiceCenterView', () => import('./components/ServiceCenterView').then((module) => ({ default: module.ServiceCenterView })));
 const RegionalIntelligenceView = lazyWithRecovery('RegionalIntelligenceView', () => import('./components/RegionalIntelligenceView').then((module) => ({ default: module.RegionalIntelligenceView })));
+const FieldAssistanceView = lazyWithRecovery('FieldAssistanceView', () => import('./components/FieldAssistanceView').then((module) => ({ default: module.FieldAssistanceView })));
 import { onAuthStateChanged, signOut, getIdTokenResult } from 'firebase/auth';
-import { auth, getAccessToken, savePPKSToFirestore, saveIntegratedAssessmentToFirestore, replacePPKSCollectionFromSpreadsheet, googleLogout, subscribeToPPKSChanges, subscribeToPPKSServiceStatus, savePPKSServiceUpdate, subscribeToIntegratedAssessmentAnswers, saveStageOneIntakeToFirestore, subscribeToStageOneIntake, staffAuthPersistenceReady, isWorkspaceAccountConnected, invalidateAccessToken, getSIPANDUUserProfile, saveSIPANDUUserProfile } from './lib/firebase';
+import { auth, getAccessToken, savePPKSToFirestore, saveIntegratedAssessmentToFirestore, replacePPKSCollectionFromSpreadsheet, googleLogout, subscribeToPPKSChanges, subscribeToPPKSServiceStatus, savePPKSServiceUpdate, subscribeToFieldVisits, createFieldVisit, subscribeToIntegratedAssessmentAnswers, saveStageOneIntakeToFirestore, subscribeToStageOneIntake, staffAuthPersistenceReady, isWorkspaceAccountConnected, invalidateAccessToken, getSIPANDUUserProfile, saveSIPANDUUserProfile } from './lib/firebase';
 import { activatePendingTeamMember, restorePendingTeamInvitation } from './lib/teamRegistration';
 import { ensureSIPANDUDatabaseSheet, extractSpreadsheetId, getLinkedSpreadsheetUrlForForm, importPPKSFromSpreadsheet, upsertPPKSInSpreadsheet } from './lib/googleWorkspace';
 import { GOOGLE_SIPANDU_RESOURCES } from './lib/googleSIPANDUResources';
@@ -411,6 +412,8 @@ function StaffApp() {
 
   // Defer parsing potentially large PPKS/photo data until Firebase confirms authorization.
   const [ppksList, setPpksList] = useState<PPKSRecord[]>([]);
+  const [fieldVisits, setFieldVisits] = useState<import('./types').FieldVisitRecord[]>([]);
+  const [fieldVisitError, setFieldVisitError] = useState('');
   const [serviceStatuses, setServiceStatuses] = useState<PPKSServiceStatus[]>([]);
   const [serviceStatusLoading, setServiceStatusLoading] = useState(true);
   const [serviceStatusError, setServiceStatusError] = useState('');
@@ -1229,6 +1232,23 @@ function StaffApp() {
     };
   }, [authReady, isAuthenticated, localCacheReady, ppksList, currentUserRole, currentUserUid]);
 
+  useEffect(() => {
+    if (!authReady || !isAuthenticated || !localCacheReady || !['owner', 'supervisor', 'pendamping'].includes(currentUserRole)) {
+      setFieldVisits([]);
+      return;
+    }
+    let active = true;
+    let unsubscribe: (() => void) | undefined;
+    try {
+      unsubscribe = subscribeToFieldVisits(currentUserRole, currentUserUid, (visits) => {
+        if (active) { setFieldVisits(visits); setFieldVisitError(''); }
+      }, (error) => { if (active) setFieldVisitError(error.message); });
+    } catch (error) {
+      setFieldVisitError(error instanceof Error ? error.message : String(error));
+    }
+    return () => { active = false; unsubscribe?.(); };
+  }, [authReady, isAuthenticated, localCacheReady, currentUserRole, currentUserUid]);
+
   // Realtime Firestore sync: apply cloud edits to records already in the selected
   // source roster. This prevents stale Firestore-only rows from reappearing after
   // Google Sheets has identified the current master roster. No automatic writes/deletes.
@@ -1810,6 +1830,7 @@ function StaffApp() {
     'from-asesmen-terintegrasi',
     'dokumen',
     'layanan-ppks',
+    'pendampingan-lapangan',
   ].includes(activeTab);
 
   return (
@@ -1877,6 +1898,17 @@ function StaffApp() {
                   text: 'Status layanan tersimpan di Firestore dan riwayat aktivitas telah ditambahkan.',
                 });
               }}
+            />
+          )}
+
+          {activeTab === 'pendampingan-lapangan' && (
+            <FieldAssistanceView
+              ppksList={ppksList}
+              visits={fieldVisits}
+              currentUserUid={currentUserUid}
+              currentUserRole={currentUserRole}
+              error={fieldVisitError}
+              onCreateVisit={createFieldVisit}
             />
           )}
 
