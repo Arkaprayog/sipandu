@@ -59,6 +59,13 @@ test('NIK kosong, usia tidak valid, dan foto yang hilang ditandai', () => {
   assert.equal(report.recordsNeedingReview, 1);
 });
 
+test('NIK warisan menjadi fallback saat kolom NIK utama tidak valid', () => {
+  const record = makeRecord({ nik: 'nilai lama', officialAssessment: { q23: sampleNIK } });
+  const report = analyzePPKSDataQuality([record]);
+  assert.equal(report.issueCounts['nik-tidak-valid'], 0);
+  assert.equal(record.nik, 'nilai lama');
+});
+
 test('NIK warisan dibaca tanpa mengubah profil utama', () => {
   const record = makeRecord({ nik: '', officialAssessment: { q23: sampleNIK } });
   const report = analyzePPKSDataQuality([record]);
