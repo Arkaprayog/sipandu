@@ -1,0 +1,32 @@
+name: Terapkan perbaikan (sekali pakai)
+
+# Menerapkan file sipandu-perbaikan.patch yang ada di root repo ke cabang baru,
+# lalu mendorong cabang tersebut. Jalankan manual dari tab Actions di GitHub.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Terapkan patch ke cabang baru
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f sipandu-perbaikan.patch || { echo "::error::sipandu-perbaikan.patch tidak ada di root repo."; exit 1; }
+          git apply --check sipandu-perbaikan.patch
+          git checkout -b perbaikan-keamanan-pdf
+          git apply sipandu-perbaikan.patch
+          git rm -q sipandu-perbaikan.patch
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Perbaikan keamanan dan PDF A4 Form Asesmen Terintegrasi"
+          git push -u origin perbaikan-keamanan-pdf
