@@ -64,6 +64,121 @@ export function decodeFirebaseClaims(token: string, projectId: string, nowSecond
   return { sub, aud, iss, exp, role };
 }
 
+type FirebaseJwk = JsonWebKey & { kid: string; alg?: string };
+type FirebaseLookupAccount = { localId?: unknown; disabled?: unknown; validSince?: unknown };
+
+function decodeBase64UrlBytes(segment: string): Uint8Array | null {
+  try {
+    const normalized = segment.replace(/-/g, "+").replace(/_/g, "/");
+    const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, "=");
+    const binary = atob(padded);
+    return Uint8Array.from(binary, (character) => character.charCodeAt(0));
+  } catch {
+    return null;
+  }
+}
+
+/** Verify Firebase ID-token signature and all required issuer/audience/time claims. */
+export async function verifyFirebaseIdToken(
+  token: string,
+  projectId: string,
+  keys: FirebaseJwk[],
+  nowSeconds = Math.floor(Date.now() / 1000),
+): Promise<FirebaseClaims | null> {
+  const parts = token.split(".");
+  if (parts.length !== 3) return null;
+  const header = decodeBase64UrlJson(parts[0]);
+  const payload = decodeBase64UrlJson(parts[1]);
+  const signature = decodeBase64UrlBytes(parts[2]);
+  if (!header || !payload || !signature || header.alg !== "RS256" || typeof header.kid !== "string") return null;
+
+  const key = keys.find((candidate) => candidate.kid === header.kid && (candidate.alg === undefined || candidate.alg === "RS256"));
+  if (!key) return null;
+
+  const role = payload.role;
+  const sub = payload.sub;
+  const exp = Number(payload.exp);
+  const iat = Number(payload.iat);
+  const authTime = Number(payload.auth_time);
+  if (
+    typeof sub !== "string" || !sub || sub.length > 128 ||
+    payload.aud !== projectId ||
+    payload.iss !== "https://securetoken.google.com/" + projectId ||
+    !Number.isFinite(exp) || exp <= nowSeconds ||
+    !Number.isFinite(iat) || iat > nowSeconds + 60 || iat <= 0 ||
+    !Number.isFinite(authTime) || authTime > nowSeconds + 60 || authTime <= 0 ||
+    (role !== "owner" && role !== "supervisor" && role !== "pendamping")
+  ) return null;
+
+  try {
+    const publicKey = await crypto.subtle.importKey(
+      "jwk",
+      key,
+      { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
+      false,
+      ["verify"],
+    );
+    const signedData = new TextEncoder().encode(parts[0] + "." + parts[1]);
+    const valid = await crypto.subtle.verify(
+      { name: "RSASSA-PKCS1-v1_5" },
+      publicKey,
+      signature,
+      signedData,
+    );
+    if (!valid) return null;
+  } catch {
+    return null;
+  }
+
+  return {
+    sub,
+    aud: projectId,
+    iss: "https://securetoken.google.com/" + projectId,
+    exp,
+    iat,
+    auth_time: authTime,
+    role,
+  };
+}
+
+/**
+ * Cryptographically verify the token, then check the live Firebase account for
+ * disabled/revoked state. The signed role claim is authoritative; accounts:lookup
+ * is used only to confirm account UID and revocation state.
+ */
+async function verifyStaffToken(token: string, env: Env): Promise<FirebaseClaims | null> {
+  if (!env.FIREBASE_WEB_API_KEY) throw new Error("AUTH_PROVIDER_NOT_CONFIGURED");
+  const keyResponse = await fetch(
+    "https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com",
+    { headers: { Accept: "application/json" }, signal: AbortSignal.timeout(8000) },
+  );
+  if (!keyResponse.ok) throw new Error("AUTH_KEYS_UNAVAILABLE");
+  const keySet = await keyResponse.json() as { keys?: FirebaseJwk[] };
+  if (!Array.isArray(keySet.keys) || keySet.keys.length === 0) throw new Error("AUTH_KEYS_UNAVAILABLE");
+
+  const claims = await verifyFirebaseIdToken(token, env.FIREBASE_PROJECT_ID, keySet.keys);
+  if (!claims) return null;
+
+  const accountResponse = await fetch(
+    "https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=" + encodeURIComponent(env.FIREBASE_WEB_API_KEY),
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify({ idToken: token }),
+      signal: AbortSignal.timeout(8000),
+    },
+  );
+  if (accountResponse.status === 400 || accountResponse.status === 401) return null;
+  if (!accountResponse.ok) throw new Error("AUTH_ACCOUNT_LOOKUP_UNAVAILABLE");
+
+  const lookup = await accountResponse.json() as { users?: FirebaseLookupAccount[] };
+  const account = Array.isArray(lookup.users) ? lookup.users[0] : undefined;
+  if (!account || account.localId !== claims.sub || account.disabled === true) return null;
+  const validSince = Number(account.validSince || 0);
+  if (Number.isFinite(validSince) && validSince > claims.auth_time) return null;
+  return claims;
+}
+
 function fieldValue(fields: FirestoreDocument["fields"], name: string): unknown {
   const value = fields?.[name];
   if (!value) return undefined;
@@ -324,15 +439,39 @@ async function generateAnswer(
 }
 
 async function handleChat(request: Request, env: Env, origin: string | null): Promise<Response> {
+  // Guard anonymous traffic first, then apply the tighter per-UID budget
+  // only after the Firebase JWT signature and live account have been verified.
+  const ipKey = (request.headers.get("CF-Connecting-IP") || "unknown").slice(0, 128);
+  const ipBudget = await env.SIPANDU_AI_IP_RATE_LIMIT.limit({ key: ipKey });
+  if (!ipBudget.success) {
+    return jsonResponse({ error: "RATE_LIMITED", message: "Terlalu banyak permintaan dari jaringan ini. Coba kembali dalam satu menit." }, 429, origin);
+  }
+
   const authorization = request.headers.get("Authorization") || "";
-  const tokenMatch = authorization.match(/^Bearer\s+([A-Za-z0-9._-]{100,8192})$/);
+  const tokenMatch = authorization.match(/^Bearer\\s+([A-Za-z0-9._-]{100,8192})$/);
   if (!tokenMatch) {
     return jsonResponse({ error: "AUTH_REQUIRED", message: "Masuk ke akun SIPANDU untuk menggunakan AI." }, 401, origin);
   }
-  const claims = decodeFirebaseClaims(tokenMatch[1], env.FIREBASE_PROJECT_ID);
+
+  let claims: FirebaseClaims | null;
+  try {
+    claims = await verifyStaffToken(tokenMatch[1], env);
+  } catch (error) {
+    const code = error instanceof Error ? error.message : "";
+    if (code === "AUTH_PROVIDER_NOT_CONFIGURED") {
+      return jsonResponse({ error: code, message: "Verifikasi akun AI belum dikonfigurasi administrator." }, 503, origin);
+    }
+    return jsonResponse({ error: "AUTH_PROVIDER_UNAVAILABLE", message: "Verifikasi keamanan akun SIPANDU sementara tidak tersedia. Coba kembali nanti." }, 503, origin);
+  }
   if (!claims) {
     return jsonResponse({ error: "STAFF_ACCESS_REQUIRED", message: "AI hanya tersedia untuk akun petugas SIPANDU yang memiliki peran resmi." }, 403, origin);
   }
+
+  const userBudget = await env.SIPANDU_AI_USER_RATE_LIMIT.limit({ key: claims.sub });
+  if (!userBudget.success) {
+    return jsonResponse({ error: "RATE_LIMITED", message: "Batas penggunaan AI akun ini tercapai. Coba kembali dalam satu menit." }, 429, origin);
+  }
+
   const body = await readJsonBody(request);
   const prompt = typeof body?.prompt === "string" ? body.prompt.trim() : "";
   if (!body || !prompt || prompt.length > MAX_PROMPT_LENGTH) {
@@ -414,7 +553,9 @@ export default {
       return jsonResponse({
         service: "SIPANDU AI Copilot",
         mode: "read-only",
-        configured: Boolean(env.GEMINI_API_KEY),
+        configured: Boolean(env.GEMINI_API_KEY && env.FIREBASE_WEB_API_KEY),
+        authentication: "verified-firebase-id-token",
+        rateLimited: true,
       }, 200, origin);
     }
     if (url.pathname === "/api/chat" && request.method === "POST") {
