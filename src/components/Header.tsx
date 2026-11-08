@@ -46,6 +46,7 @@ export const Header: React.FC<HeaderProps> = ({
     asesmen: 'ASESMEN',
     'from-asesmen-terintegrasi': 'FORM ASESMEN TERINTEGRASI',
     dokumen: 'DOKUMEN',
+    'layanan-ppks': 'LAYANAN PPKS',
   };
   const isCompactDashboard = Boolean(compactPageTitles[activeTab]);
 

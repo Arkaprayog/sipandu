@@ -1,10 +1,13 @@
 import React from 'react';
-import { PPKSRecord } from '../types';
+import { PPKSRecord, PPKSServiceStatus } from '../types';
 import { SUMUT_DISTRICTS } from '../data/initialData';
 import { normalizeNorthSumatraRegion } from '../lib/ppksData';
+import { calculatePPKSServiceMetrics } from '../lib/serviceManagement';
 import {
-  FileSpreadsheet,
-  ExternalLink,
+  Activity,
+  Apple,
+  ArrowRight,
+  CalendarClock,
   UsersRound,
   Building2,
   HeartHandshake,
@@ -19,11 +22,10 @@ import {
 
 interface BerandaViewProps {
   ppksList: PPKSRecord[];
-  googleSpreadsheetUrl?: string;
-  googleSpreadsheetName?: string;
-  onSyncGoogleSpreadsheet?: () => Promise<{ records: number; sourceDataRows: number; sourceRowsWithName: number; sampleRecordsFiltered: number }>;
-  liveSyncStatus?: 'idle' | 'success' | 'paused' | 'error';
-  liveSyncLastUpdatedAt?: string;
+  serviceStatuses: PPKSServiceStatus[];
+  serviceStatusLoading?: boolean;
+  serviceStatusError?: string;
+  onOpenServices?: () => void;
 }
 
 type DistributionItem = { label: string; count: number };
@@ -38,10 +40,10 @@ const safeAge = (value: unknown) => {
 
 export const BerandaView: React.FC<BerandaViewProps> = ({
   ppksList,
-  googleSpreadsheetUrl = '',
-  googleSpreadsheetName = '',
-  liveSyncStatus = 'idle',
-  liveSyncLastUpdatedAt,
+  serviceStatuses,
+  serviceStatusLoading = false,
+  serviceStatusError = '',
+  onOpenServices,
 }) => {
   // Every dashboard number is derived from the current SIPANDU respondent list.
   // No sample rows or illustrative counts are introduced in this component.
@@ -111,16 +113,7 @@ export const BerandaView: React.FC<BerandaViewProps> = ({
   ];
   const maxAgeCount = Math.max(...ageBrackets.map((item) => item.count), 1);
   const maxAssistanceCount = Math.max(...assistanceItems.map((item) => item.count), 1);
-
-  const syncLabel = !googleSpreadsheetUrl
-    ? 'Sumber belum dikonfigurasi'
-    : liveSyncStatus === 'success'
-      ? 'Tersambung · otomatis'
-      : liveSyncStatus === 'error'
-        ? 'Mencoba ulang otomatis'
-        : liveSyncStatus === 'paused'
-          ? 'Menunggu koneksi/izin'
-          : 'Menghubungkan otomatis…';
+  const serviceMetrics = calculatePPKSServiceMetrics(ppksList, serviceStatuses);
 
   const renderBar = (
     item: DistributionItem,
@@ -154,42 +147,47 @@ export const BerandaView: React.FC<BerandaViewProps> = ({
 
   return (
     <div className="sipandu-dashboard-motion space-y-4 pb-24">
-      <section className="sipandu-dashboard-sync sipandu-dashboard-panel">
-        <div className="sipandu-dashboard-sync-main">
-          <div className="sipandu-dashboard-icon sipandu-dashboard-icon--sync">
-            <FileSpreadsheet className="h-6 w-6" aria-hidden="true" />
+      <section className="sipandu-dashboard-command-center sipandu-dashboard-panel">
+        <div className="sipandu-dashboard-command-heading">
+          <div>
+            <span className="sipandu-dashboard-eyebrow"><Activity className="inline h-3.5 w-3.5 mr-1" /> COMMAND CENTER</span>
+            <h2>Pusat Monitoring Layanan PPKS</h2>
+            <p>Ringkasan kebutuhan bantuan, terapi psikososial, dan tindak lanjut berdasarkan data PPKS.</p>
           </div>
-          <div className="min-w-0">
-            <div className="sipandu-dashboard-eyebrow-row">
-              <span className="sipandu-dashboard-eyebrow">Google Spreadsheet Live Sync</span>
-              <span className={'sipandu-sync-pill sipandu-sync-pill--' + liveSyncStatus}>
-                <span className="sipandu-sync-dot" />
-                {syncLabel}
-              </span>
-            </div>
-            <h2 className="sipandu-dashboard-sync-title">
-              {googleSpreadsheetName || (googleSpreadsheetUrl ? 'Spreadsheet sumber SIPANDU' : 'Spreadsheet belum dipilih')}
-            </h2>
-            <p className="sipandu-dashboard-muted">
-              Pembaruan otomatis terakhir: {liveSyncLastUpdatedAt || 'Menunggu pembaruan pertama'}
-              <span className="sipandu-dashboard-dot-separator">•</span>
-              {totalPPKS.toLocaleString('id-ID')} PPKS pada aplikasi
-            </p>
-          </div>
+          <button type="button" className="sipandu-dashboard-command-action" onClick={onOpenServices}>
+            Kelola layanan <ArrowRight className="h-4 w-4" />
+          </button>
         </div>
-        {googleSpreadsheetUrl ? (
-          <a
-            href={googleSpreadsheetUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="sipandu-dashboard-link"
-          >
-            Buka Spreadsheet
-            <ExternalLink className="h-4 w-4" aria-hidden="true" />
-          </a>
-        ) : (
-          <span className="sipandu-dashboard-muted sipandu-dashboard-source-hint">Sumber otomatis belum dikonfigurasi</span>
-        )}
+        <div className="sipandu-dashboard-command-grid">
+          <article>
+            <span className="sipandu-dashboard-command-icon sipandu-dashboard-command-icon--blue"><UsersRound className="h-4 w-4" /></span>
+            <small>PPKS terdata</small>
+            <strong>{serviceMetrics.total.toLocaleString('id-ID')}</strong>
+            <em>Daftar PPKS aktif</em>
+          </article>
+          <article>
+            <span className="sipandu-dashboard-command-icon sipandu-dashboard-command-icon--sage"><Apple className="h-4 w-4" /></span>
+            <small>Butuh bantuan nutrisi</small>
+            <strong>{serviceMetrics.nutritionNeeds.toLocaleString('id-ID')}</strong>
+            <em>{serviceMetrics.nutritionReceived} tercatat menerima</em>
+          </article>
+          <article>
+            <span className="sipandu-dashboard-command-icon sipandu-dashboard-command-icon--blue"><BriefcaseBusiness className="h-4 w-4" /></span>
+            <small>Butuh kewirausahaan</small>
+            <strong>{serviceMetrics.entrepreneurshipNeeds.toLocaleString('id-ID')}</strong>
+            <em>{serviceMetrics.entrepreneurshipReceived} tercatat menerima</em>
+          </article>
+          <article>
+            <span className="sipandu-dashboard-command-icon sipandu-dashboard-command-icon--teal"><CalendarClock className="h-4 w-4" /></span>
+            <small>Perlu tindak lanjut</small>
+            <strong>{serviceMetrics.followUpRequired.toLocaleString('id-ID')}</strong>
+            <em>{serviceMetrics.followUpScheduled} jadwal tersimpan</em>
+          </article>
+        </div>
+        <div className="sipandu-dashboard-command-footer">
+          <span><HeartHandshake className="h-4 w-4" /> Terapi psikososial: {serviceMetrics.therapyScheduled} terjadwal · {serviceMetrics.therapyActive} berjalan · {serviceMetrics.therapyCompleted} memiliki sesi selesai</span>
+          <span>{serviceStatusLoading ? 'Memuat status layanan…' : serviceStatusError ? 'Sinkronisasi status layanan bermasalah; periksa menu Layanan PPKS.' : serviceStatuses.length ? serviceStatuses.length.toLocaleString('id-ID') + ' status layanan tersinkron' : 'Status awal mengikuti permintaan bantuan yang tercatat; penerimaan belum diasumsikan.'}</span>
+        </div>
       </section>
 
       <section className="sipandu-dashboard-kpis" aria-label="Ringkasan PPKS">

@@ -7,7 +7,7 @@ import {
   initializeTestEnvironment,
   type RulesTestEnvironment,
 } from '@firebase/rules-unit-testing';
-import { doc, getDoc, serverTimestamp, setDoc, updateDoc } from 'firebase/firestore';
+import { deleteDoc, doc, getDoc, serverTimestamp, setDoc, updateDoc } from 'firebase/firestore';
 import { getBytes, ref, uploadBytes } from 'firebase/storage';
 
 const PROJECT_ID = 'demo-sipandu-rules';
@@ -205,6 +205,125 @@ test('Metadata arsip asesmen dan surat dibuat hanya dengan skema yang diizinkan'
     driveWebViewLink: '',
     driveBackupAt: null,
     driveBackupUpdatedAt: serverTimestamp(),
+  }));
+});
+
+
+
+test('Status layanan PPKS dan riwayat aktivitas dibatasi role staf serta riwayat bersifat append-only', async () => {
+  const firestore = environment.authenticatedContext('owner-001', {
+    role: 'owner',
+  }).firestore();
+  const status = doc(firestore, 'ppksServiceStatus', 'ppks-demo');
+
+  await assertSucceeds(setDoc(status, {
+    ppksId: 'ppks-demo',
+    nutritionStatus: 'dibutuhkan',
+    entrepreneurshipStatus: 'belum-diverifikasi',
+    psychosocialStatus: 'belum-dimulai',
+    lastNutritionAt: '',
+    lastEntrepreneurshipAt: '',
+    lastTherapyAt: '',
+    therapySessionCount: 0,
+    followUpAt: '2026-11-15',
+    followUpReason: 'konfirmasi-penerimaan-bantuan',
+    assignedToUid: PENDAMPING_UID,
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+    updatedByUid: 'owner-001',
+  }));
+
+  await assertSucceeds(updateDoc(status, {
+    nutritionStatus: 'diterima',
+    lastNutritionAt: '2026-11-08',
+    updatedAt: serverTimestamp(),
+    updatedByUid: 'owner-001',
+  }));
+
+  await assertFails(updateDoc(status, {
+    assignedToUid: 'pendamping-lain',
+    updatedAt: serverTimestamp(),
+    updatedByUid: 'owner-001',
+  }));
+  await assertFails(updateDoc(status, {
+    clinicalDiagnosis: 'field tidak diizinkan',
+    updatedAt: serverTimestamp(),
+    updatedByUid: 'owner-001',
+  }));
+  await assertFails(setDoc(doc(firestore, 'ppksServiceStatus', 'invalid'), {
+    ppksId: 'invalid',
+    nutritionStatus: 'diterima',
+    entrepreneurshipStatus: 'belum-diverifikasi',
+    psychosocialStatus: 'belum-dimulai',
+    lastNutritionAt: '',
+    lastEntrepreneurshipAt: '',
+    lastTherapyAt: '',
+    therapySessionCount: 0,
+    followUpAt: '',
+    followUpReason: '',
+    assignedToUid: 'another-staff',
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+    updatedByUid: 'owner-001',
+  }));
+
+  const event = doc(firestore, 'ppksServiceEvents', 'event-001');
+  await assertSucceeds(setDoc(event, {
+    id: 'event-001',
+    ppksId: 'ppks-demo',
+    eventType: 'nutrition-assistance',
+    status: 'diterima',
+    serviceDate: '2026-11-08',
+    followUpAt: '',
+    followUpReason: '',
+    createdByUid: 'owner-001',
+    assignedToUid: PENDAMPING_UID,
+    createdAt: serverTimestamp(),
+  }));
+  await assertFails(updateDoc(event, { status: 'dibutuhkan' }));
+  await assertFails(deleteDoc(event));
+
+  const outsider = environment.authenticatedContext('outsider-001').firestore();
+  await assertFails(getDoc(doc(outsider, 'ppksServiceStatus', 'ppks-demo')));
+
+  const assignedPendamping = environment.authenticatedContext(PENDAMPING_UID, {
+    role: 'pendamping',
+  }).firestore();
+  await assertSucceeds(getDoc(doc(assignedPendamping, 'ppksServiceStatus', 'ppks-demo')));
+  await assertSucceeds(getDoc(doc(assignedPendamping, 'ppksServiceEvents', 'event-001')));
+  const otherPendamping = environment.authenticatedContext('pendamping-002', {
+    role: 'pendamping',
+  }).firestore();
+  await assertFails(getDoc(doc(otherPendamping, 'ppksServiceStatus', 'ppks-demo')));
+  await assertFails(getDoc(doc(otherPendamping, 'ppksServiceEvents', 'event-001')));
+  await assertFails(setDoc(doc(assignedPendamping, 'ppksServiceStatus', 'self-assigned'), {
+    ppksId: 'self-assigned',
+    nutritionStatus: 'dibutuhkan',
+    entrepreneurshipStatus: 'belum-diverifikasi',
+    psychosocialStatus: 'belum-dimulai',
+    lastNutritionAt: '',
+    lastEntrepreneurshipAt: '',
+    lastTherapyAt: '',
+    therapySessionCount: 0,
+    followUpAt: '',
+    followUpReason: '',
+    assignedToUid: PENDAMPING_UID,
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+    updatedByUid: PENDAMPING_UID,
+  }));
+
+  await assertFails(setDoc(doc(outsider, 'ppksServiceEvents', 'event-outsider'), {
+    id: 'event-outsider',
+    ppksId: 'ppks-demo',
+    eventType: 'nutrition-assistance',
+    status: 'diterima',
+    serviceDate: '2026-11-08',
+    followUpAt: '',
+    followUpReason: '',
+    createdByUid: 'outsider-001',
+    assignedToUid: 'outsider-001',
+    createdAt: serverTimestamp(),
   }));
 });
 

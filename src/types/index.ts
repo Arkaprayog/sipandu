@@ -92,6 +92,76 @@ export interface ProfileUser {
   photoUrl: string;
 }
 
+
+
+export type AssistanceServiceStatus =
+  | 'belum-diverifikasi'
+  | 'dibutuhkan'
+  | 'dalam-proses'
+  | 'diterima'
+  | 'tidak-dibutuhkan';
+
+export type PsychosocialTherapyStatus =
+  | 'belum-dimulai'
+  | 'terjadwal'
+  | 'aktif'
+  | 'selesai';
+
+export type PPKSServiceEventType =
+  | 'nutrition-assistance'
+  | 'entrepreneurship-assistance'
+  | 'psychosocial-therapy';
+
+export type PPKSFollowUpReason =
+  | ''
+  | 'konfirmasi-penerimaan-bantuan'
+  | 'penjadwalan-penyaluran'
+  | 'monitoring-pendampingan'
+  | 'evaluasi-terapi'
+  | 'verifikasi-dokumen'
+  | 'lainnya';
+
+/** Compact operational status. No NIK, diagnosis, or clinical narrative is stored here. */
+export interface PPKSServiceStatus {
+  ppksId: string;
+  nutritionStatus: AssistanceServiceStatus;
+  entrepreneurshipStatus: AssistanceServiceStatus;
+  psychosocialStatus: PsychosocialTherapyStatus;
+  lastNutritionAt: string;
+  lastEntrepreneurshipAt: string;
+  lastTherapyAt: string;
+  therapySessionCount: number;
+  followUpAt: string;
+  followUpReason: PPKSFollowUpReason;
+  assignedToUid: string;
+  createdAt: string;
+  updatedAt: string;
+  updatedByUid: string;
+}
+
+/** Append-only activity record; intentionally contains only structured service metadata. */
+export interface PPKSServiceEvent {
+  id: string;
+  ppksId: string;
+  eventType: PPKSServiceEventType;
+  status: AssistanceServiceStatus | PsychosocialTherapyStatus;
+  serviceDate: string;
+  followUpAt: string;
+  followUpReason: PPKSFollowUpReason;
+  createdByUid: string;
+  createdAt: string;
+}
+
+export interface PPKSServiceUpdateInput {
+  ppksId: string;
+  eventType: PPKSServiceEventType;
+  status: AssistanceServiceStatus | PsychosocialTherapyStatus;
+  serviceDate: string;
+  followUpAt: string;
+  followUpReason: PPKSFollowUpReason;
+  initialStatus: PPKSServiceStatus;
+}
+
 export interface SuratRecord {
   id: string;
   nomorSurat: string;

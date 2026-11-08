@@ -16,6 +16,8 @@ import {
   writeBatch,
   query,
   limit,
+  where,
+  runTransaction,
 } from 'firebase/firestore';
 import {
   getAuth,
@@ -36,7 +38,7 @@ import {
   getIdTokenResult,
 } from 'firebase/auth';
 import firebaseConfig from '../../firebase-applet-config.json';
-import { PPKSRecord, ProfileUser, StageOneIntakePayload } from '../types';
+import { PPKSRecord, ProfileUser, StageOneIntakePayload, PPKSServiceStatus, PPKSServiceEvent, PPKSServiceUpdateInput } from '../types';
 import { deduplicatePPKSRecords, EXPECTED_REAL_PPKS_COUNT, parsePPKSTimestamp, samePPKSIdentity } from './ppksData';
 import { isLegacySamplePPKS } from '../data/initialData';
 import { GOOGLE_WORKSPACE_EMAIL } from './googleSIPANDUResources';
@@ -1597,5 +1599,203 @@ export async function saveSIPANDUUserProfile(uid: string, profile: ProfileUser):
       );
     }
     throw error;
+  }
+}
+
+
+const serviceDateIsValid = (value: string): boolean =>
+  value === '' || /^\d{4}-\d{2}-\d{2}$/.test(value);
+
+const toISODate = (value: any): string => {
+  if (!value) return '';
+  if (typeof value === 'string') return value;
+  if (typeof value.toDate === 'function') return value.toDate().toISOString();
+  if (value instanceof Date) return value.toISOString();
+  return '';
+};
+
+/** Read only the active roster's compact service-status records in bounded batches. */
+export function subscribeToPPKSServiceStatus(
+  ppksIds: string[],
+  role: string,
+  userUid: string,
+  onStatuses: (statuses: PPKSServiceStatus[], info: { fromCache: boolean }) => void,
+  onError: (error: Error) => void,
+): () => void {
+  if (!auth.currentUser) throw new Error('Sesi SIPANDU belum aktif untuk membaca status layanan.');
+  const ids = [...new Set(ppksIds.map((id) => String(id || '').trim()).filter((id) => id && !id.includes('/')))];
+  if (!ids.length) {
+    onStatuses([], { fromCache: false });
+    return () => undefined;
+  }
+
+  const statusById = new Map<string, PPKSServiceStatus>();
+  const unsubscribers: Array<() => void> = [];
+  const chunks: string[][] = [];
+  for (let index = 0; index < ids.length; index += 30) chunks.push(ids.slice(index, index + 30));
+  const cacheFlags = new Array(chunks.length).fill(false);
+
+  try {
+    const statusCollection = collection(db, 'ppksServiceStatus');
+    const queries = role === 'pendamping'
+      ? [query(statusCollection, where('assignedToUid', '==', userUid))]
+      : chunks.map((chunk) => query(statusCollection, where('ppksId', 'in', chunk)));
+    queries.forEach((statusQuery, queryIndex) => {
+      const unsubscribe = onSnapshot(
+        statusQuery,
+        (snapshot) => {
+          cacheFlags[queryIndex] = snapshot.metadata.fromCache;
+          const allowedIds = new Set(ids);
+          if (role !== 'pendamping') {
+            const queryIds = new Set(chunks[queryIndex] || []);
+            for (const [id] of statusById) {
+              if (queryIds.has(id)) statusById.delete(id);
+            }
+          } else {
+            statusById.clear();
+          }
+          for (const document of snapshot.docs) {
+            if (!allowedIds.has(document.id)) continue;
+            const data = document.data();
+            statusById.set(document.id, {
+              ...data,
+              ppksId: document.id,
+              lastNutritionAt: toISODate(data.lastNutritionAt),
+              lastEntrepreneurshipAt: toISODate(data.lastEntrepreneurshipAt),
+              lastTherapyAt: toISODate(data.lastTherapyAt),
+              followUpAt: toISODate(data.followUpAt),
+              createdAt: toISODate(data.createdAt),
+              updatedAt: toISODate(data.updatedAt),
+            } as PPKSServiceStatus);
+          }
+          onStatuses([...statusById.values()], { fromCache: cacheFlags.some(Boolean) });
+        },
+        (error) => onError(new Error(describeConnectionError(error))),
+      );
+      unsubscribers.push(unsubscribe);
+    });
+  } catch (error) {
+    unsubscribers.forEach((unsubscribe) => unsubscribe());
+    throw new Error(describeConnectionError(error));
+  }
+
+  return () => unsubscribers.forEach((unsubscribe) => unsubscribe());
+}
+
+/** Save one status change and its immutable audit event in the same transaction. */
+export async function savePPKSServiceUpdate(input: PPKSServiceUpdateInput): Promise<void> {
+  const user = auth.currentUser;
+  if (!user) throw new Error('Sesi SIPANDU berakhir. Masuk kembali sebelum memperbarui layanan.');
+  if (!input.ppksId.trim() || input.ppksId.includes('/')) throw new Error('ID PPKS tidak valid.');
+  if (!serviceDateIsValid(input.serviceDate) || !serviceDateIsValid(input.followUpAt)) {
+    throw new Error('Tanggal layanan atau tindak lanjut tidak valid.');
+  }
+  const token = await getIdTokenResult(user);
+  if (!['owner', 'supervisor', 'pendamping'].includes(String(token.claims.role || ''))) {
+    throw new Error('Peran akun tidak memiliki akses ke modul layanan PPKS.');
+  }
+
+  const assistanceStatuses = ['belum-diverifikasi', 'dibutuhkan', 'dalam-proses', 'diterima', 'tidak-dibutuhkan'];
+  const therapyStatuses = ['belum-dimulai', 'terjadwal', 'aktif', 'selesai'];
+  const validStatus = input.eventType === 'psychosocial-therapy'
+    ? therapyStatuses.includes(input.status)
+    : assistanceStatuses.includes(input.status);
+  if (!validStatus) throw new Error('Status layanan tidak sesuai dengan jenis layanan yang dipilih.');
+  if ((input.status === 'diterima' || input.status === 'selesai') && !input.serviceDate) {
+    throw new Error('Tanggal wajib dicatat untuk bantuan yang diterima atau terapi yang selesai.');
+  }
+  const reasons = [
+    '', 'konfirmasi-penerimaan-bantuan', 'penjadwalan-penyaluran',
+    'monitoring-pendampingan', 'evaluasi-terapi', 'verifikasi-dokumen', 'lainnya',
+  ];
+  if (!reasons.includes(input.followUpReason) || (!!input.followUpAt !== !!input.followUpReason)) {
+    throw new Error('Alasan tindak lanjut harus dipilih saat tanggal tindak lanjut diisi.');
+  }
+
+  const statusRef = doc(db, 'ppksServiceStatus', input.ppksId);
+  const eventRef = doc(collection(db, 'ppksServiceEvents'));
+  try {
+    await runTransaction(db, async (transaction) => {
+      const existingSnapshot = await transaction.get(statusRef);
+      const existing = existingSnapshot.exists()
+        ? existingSnapshot.data() as Partial<PPKSServiceStatus>
+        : input.initialStatus;
+      if (token.claims.role === 'pendamping' &&
+          (!existingSnapshot.exists() || existing.assignedToUid !== user.uid)) {
+        throw new Error('Pendamping hanya dapat memperbarui layanan PPKS yang sudah ditugaskan kepadanya.');
+      }
+      const next: Record<string, unknown> = {
+        ppksId: input.ppksId,
+        nutritionStatus: existing.nutritionStatus || input.initialStatus.nutritionStatus,
+        entrepreneurshipStatus: existing.entrepreneurshipStatus || input.initialStatus.entrepreneurshipStatus,
+        psychosocialStatus: existing.psychosocialStatus || input.initialStatus.psychosocialStatus,
+        lastNutritionAt: existing.lastNutritionAt || '',
+        lastEntrepreneurshipAt: existing.lastEntrepreneurshipAt || '',
+        lastTherapyAt: existing.lastTherapyAt || '',
+        therapySessionCount: Number(existing.therapySessionCount || 0),
+        followUpAt: input.followUpAt,
+        followUpReason: input.followUpReason,
+        assignedToUid: String(existing.assignedToUid || user.uid),
+        createdAt: existingSnapshot.exists() ? existing.createdAt : serverTimestamp(),
+        updatedAt: serverTimestamp(),
+        updatedByUid: user.uid,
+      };
+
+      if (input.eventType === 'nutrition-assistance') {
+        next.nutritionStatus = input.status;
+        if (input.status === 'diterima' && input.serviceDate) next.lastNutritionAt = input.serviceDate;
+      } else if (input.eventType === 'entrepreneurship-assistance') {
+        next.entrepreneurshipStatus = input.status;
+        if (input.status === 'diterima' && input.serviceDate) next.lastEntrepreneurshipAt = input.serviceDate;
+      } else {
+        next.psychosocialStatus = input.status;
+        if (input.status === 'selesai' && input.serviceDate) {
+          next.lastTherapyAt = input.serviceDate;
+          next.therapySessionCount = Number(next.therapySessionCount || 0) + 1;
+        }
+      }
+
+      transaction.set(statusRef, next, { merge: true });
+      transaction.set(eventRef, {
+        id: eventRef.id,
+        ppksId: input.ppksId,
+        eventType: input.eventType,
+        status: input.status,
+        serviceDate: input.serviceDate,
+        followUpAt: input.followUpAt,
+        followUpReason: input.followUpReason,
+        createdByUid: user.uid,
+        assignedToUid: String(next.assignedToUid || user.uid),
+        createdAt: serverTimestamp(),
+      });
+    });
+  } catch (error) {
+    throw new Error(describeConnectionError(error));
+  }
+}
+
+/** Read the structured, append-only history for a single PPKS. */
+export async function fetchPPKSServiceEvents(ppksId: string): Promise<PPKSServiceEvent[]> {
+  const user = auth.currentUser;
+  if (!user) throw new Error('Sesi SIPANDU belum aktif.');
+  if (!ppksId.trim() || ppksId.includes('/')) throw new Error('ID PPKS tidak valid.');
+  try {
+    const role = (await getIdTokenResult(user)).claims.role;
+    const eventQuery = role === 'pendamping'
+      ? query(collection(db, 'ppksServiceEvents'), where('assignedToUid', '==', user.uid))
+      : query(collection(db, 'ppksServiceEvents'), where('ppksId', '==', ppksId));
+    const snapshot = await getDocs(eventQuery);
+    return snapshot.docs
+      .filter((document) => document.data().ppksId === ppksId)
+      .map((document) => {
+      const data = document.data();
+      return {
+        ...data,
+        id: document.id,
+        createdAt: toISODate(data.createdAt),
+      } as PPKSServiceEvent;
+    }).sort((left, right) => right.createdAt.localeCompare(left.createdAt));
+  } catch (error) {
+    throw new Error(describeConnectionError(error));
   }
 }

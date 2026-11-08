@@ -5,6 +5,7 @@ import {
   ClipboardCheck,
   FileSpreadsheet,
   FolderArchive,
+  HandHeart,
 } from 'lucide-react';
 
 export type TabKey =
@@ -12,7 +13,8 @@ export type TabKey =
   | 'database-ppks'
   | 'asesmen'
   | 'from-asesmen-terintegrasi'
-  | 'dokumen';
+  | 'dokumen'
+  | 'layanan-ppks';
 
 interface BottomNavProps {
   activeTab: TabKey;
@@ -45,6 +47,11 @@ export const BottomNav: React.FC<BottomNavProps> = ({ activeTab, onSelectTab }) 
       key: 'dokumen',
       label: 'DOKUMEN',
       icon: <FolderArchive className="w-4 h-4 md:w-5 md:h-5" />,
+    },
+    {
+      key: 'layanan-ppks',
+      label: 'LAYANAN PPKS',
+      icon: <HandHeart className="w-4 h-4 md:w-5 md:h-5" />,
     },
   ];
 
