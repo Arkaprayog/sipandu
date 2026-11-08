@@ -38,7 +38,7 @@ import {
   getIdTokenResult,
 } from 'firebase/auth';
 import firebaseConfig from '../../firebase-applet-config.json';
-import { PPKSRecord, ProfileUser, StageOneIntakePayload, PPKSServiceStatus, PPKSServiceEvent, PPKSServiceUpdateInput } from '../types';
+import { PPKSRecord, ProfileUser, StageOneIntakePayload, PPKSServiceStatus, PPKSServiceEvent, PPKSServiceUpdateInput, FieldVisitRecord } from '../types';
 import { deduplicatePPKSRecords, EXPECTED_REAL_PPKS_COUNT, parsePPKSTimestamp, samePPKSIdentity } from './ppksData';
 import { isLegacySamplePPKS } from '../data/initialData';
 import { GOOGLE_WORKSPACE_EMAIL } from './googleSIPANDUResources';
