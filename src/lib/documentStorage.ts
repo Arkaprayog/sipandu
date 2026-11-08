@@ -15,6 +15,7 @@ import {
 import {
   deleteObject,
   getDownloadURL,
+  getBlob,
   getStorage,
   ref,
   uploadBytesResumable,
@@ -391,4 +392,12 @@ export async function deleteStaffDocument(documentId: string, storagePath: strin
   } catch (error) {
     throw explainDocumentError(error);
   }
+}
+
+/** Downloads through Firebase Storage Rules; does not expose a bearer download URL. */
+export async function downloadStaffDocument(storagePath: string): Promise<Blob> {
+  await getVerifiedStaff();
+  if (!storagePath.startsWith('staff-documents/')) throw new Error('Lokasi dokumen tidak valid.');
+  try { return await getBlob(ref(storage, storagePath)); }
+  catch (error) { throw explainDocumentError(error); }
 }
