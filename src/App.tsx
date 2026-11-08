@@ -1,7 +1,7 @@
 import React, { lazy, Suspense, useState, useEffect, useRef, useCallback } from 'react';
 import { Capacitor } from '@capacitor/core';
 import { App as CapacitorApp } from '@capacitor/app';
-import { PPKSRecord, ProfileUser, AppSettings } from './types';
+import { PPKSRecord, ProfileUser, AppSettings, PPKSServiceStatus } from './types';
 import { importLazyModuleWithRecovery } from './lib/lazyImportRecovery';
 import { initialPPKSList, initialProfileUser, initialAppSettings, isLegacySamplePPKS } from './data/initialData';
 import { LoginPage } from './components/LoginPage';
@@ -25,8 +25,9 @@ const EditProfileModal = lazyWithRecovery('EditProfileModal', () => import('./co
 const SettingsModal = lazyWithRecovery('SettingsModal', () => import('./components/SettingsModal').then((module) => ({ default: module.SettingsModal })));
 const NotificationsModal = lazyWithRecovery('NotificationsModal', () => import('./components/NotificationsModal').then((module) => ({ default: module.NotificationsModal })));
 const GoogleWorkspaceModal = lazyWithRecovery('GoogleWorkspaceModal', () => import('./components/GoogleWorkspaceModal').then((module) => ({ default: module.GoogleWorkspaceModal })));
+const ServiceCenterView = lazyWithRecovery('ServiceCenterView', () => import('./components/ServiceCenterView').then((module) => ({ default: module.ServiceCenterView })));
 import { onAuthStateChanged, signOut, getIdTokenResult } from 'firebase/auth';
-import { auth, getAccessToken, savePPKSToFirestore, saveIntegratedAssessmentToFirestore, replacePPKSCollectionFromSpreadsheet, googleLogout, subscribeToPPKSChanges, subscribeToIntegratedAssessmentAnswers, saveStageOneIntakeToFirestore, subscribeToStageOneIntake, staffAuthPersistenceReady, isWorkspaceAccountConnected, invalidateAccessToken, getSIPANDUUserProfile, saveSIPANDUUserProfile } from './lib/firebase';
+import { auth, getAccessToken, savePPKSToFirestore, saveIntegratedAssessmentToFirestore, replacePPKSCollectionFromSpreadsheet, googleLogout, subscribeToPPKSChanges, subscribeToPPKSServiceStatus, savePPKSServiceUpdate, subscribeToIntegratedAssessmentAnswers, saveStageOneIntakeToFirestore, subscribeToStageOneIntake, staffAuthPersistenceReady, isWorkspaceAccountConnected, invalidateAccessToken, getSIPANDUUserProfile, saveSIPANDUUserProfile } from './lib/firebase';
 import { activatePendingTeamMember, restorePendingTeamInvitation } from './lib/teamRegistration';
 import { ensureSIPANDUDatabaseSheet, extractSpreadsheetId, getLinkedSpreadsheetUrlForForm, importPPKSFromSpreadsheet, upsertPPKSInSpreadsheet } from './lib/googleWorkspace';
 import { GOOGLE_SIPANDU_RESOURCES } from './lib/googleSIPANDUResources';
@@ -408,6 +409,9 @@ function StaffApp() {
 
   // Defer parsing potentially large PPKS/photo data until Firebase confirms authorization.
   const [ppksList, setPpksList] = useState<PPKSRecord[]>([]);
+  const [serviceStatuses, setServiceStatuses] = useState<PPKSServiceStatus[]>([]);
+  const [serviceStatusLoading, setServiceStatusLoading] = useState(true);
+  const [serviceStatusError, setServiceStatusError] = useState('');
   const [integratedAssessmentAnswers, setIntegratedAssessmentAnswers] = useState<IntegratedAssessmentAnswersById>({});
   // A separate feed for submissions made through the stage-one Form link/barcode.
   // This state must never be populated from googleSpreadsheetSourceUrl.
@@ -757,6 +761,9 @@ function StaffApp() {
       setCurrentUserRole('');
       setCurrentUserUid('');
       setPpksList([]);
+      setServiceStatuses([]);
+      setServiceStatusLoading(true);
+      setServiceStatusError('');
       setProfile(initialProfileUser);
       setSettings(initialAppSettings);
       setRespondentNotifications([]);
@@ -1147,6 +1154,40 @@ function StaffApp() {
       photoCounts: imported.photoCounts,
     };
   };
+
+  // Service Center uses a separate Firestore collection; the spreadsheet remains
+  // authoritative for PPKS identity and demographic data.
+  useEffect(() => {
+    if (!authReady || !isAuthenticated || !localCacheReady) {
+      setServiceStatuses([]);
+      setServiceStatusLoading(false);
+      setServiceStatusError('');
+      return;
+    }
+    let active = true;
+    setServiceStatusLoading(true);
+    setServiceStatusError('');
+    let unsubscribe: (() => void) | null = null;
+    try {
+      unsubscribe = subscribeToPPKSServiceStatus((statuses) => {
+        if (!active) return;
+        setServiceStatuses(statuses);
+        setServiceStatusLoading(false);
+        setServiceStatusError('');
+      }, (error) => {
+        if (!active) return;
+        setServiceStatusLoading(false);
+        setServiceStatusError(error.message);
+      });
+    } catch (error) {
+      setServiceStatusLoading(false);
+      setServiceStatusError(error instanceof Error ? error.message : String(error));
+    }
+    return () => {
+      active = false;
+      unsubscribe?.();
+    };
+  }, [authReady, isAuthenticated, localCacheReady]);
 
   // Realtime Firestore sync: apply cloud edits to records already in the selected
   // source roster. This prevents stale Firestore-only rows from reappearing after
@@ -1728,6 +1769,7 @@ function StaffApp() {
     'asesmen',
     'from-asesmen-terintegrasi',
     'dokumen',
+    'layanan-ppks',
   ].includes(activeTab);
 
   return (
@@ -1774,11 +1816,26 @@ function StaffApp() {
           {activeTab === 'beranda' && (
             <BerandaView
               ppksList={ppksList}
-              googleSpreadsheetUrl={settings.googleSpreadsheetSourceUrl || ''}
-              googleSpreadsheetName={settings.googleSpreadsheetSourceName || ''}
-              onSyncGoogleSpreadsheet={handleSyncGoogleSpreadsheet}
-              liveSyncStatus={liveSyncState.type}
-              liveSyncLastUpdatedAt={liveSyncState.lastUpdatedAt}
+              serviceStatuses={serviceStatuses}
+              serviceStatusLoading={serviceStatusLoading}
+              onOpenServices={() => navigateToTab('layanan-ppks')}
+            />
+          )}
+
+          {activeTab === 'layanan-ppks' && (
+            <ServiceCenterView
+              ppksList={ppksList}
+              serviceStatuses={serviceStatuses}
+              serviceStatusLoading={serviceStatusLoading}
+              serviceStatusError={serviceStatusError}
+              currentUserUid={currentUserUid}
+              onSaveUpdate={async (input) => {
+                await savePPKSServiceUpdate(input);
+                setCloudSyncNotice({
+                  type: 'success',
+                  text: 'Status layanan tersimpan di Firestore dan riwayat aktivitas telah ditambahkan.',
+                });
+              }}
             />
           )}
 
