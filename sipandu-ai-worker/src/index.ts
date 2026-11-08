@@ -161,7 +161,7 @@ const SENSITIVE_PROMPT_PATTERNS = [
   /\b(?:nik|nomor induk kependudukan|nama lengkap|nama ppks|nomor telepon|no\.?\s*hp|alamat lengkap|foto ktp|foto kk)\b/i,
   /\b(?:diagnosis|diagnosa|viral\s*load|cd4|regimen\s*arv|kepatuhan\s*arv|status hiv individual|hasil lab|depresi|bunuh diri)\b/i,
 ];
-function containsSensitivePrompt(value: string): boolean {
+export function containsSensitivePrompt(value: string): boolean {
   return SENSITIVE_PROMPT_PATTERNS.some((pattern) => pattern.test(value));
 }
 
