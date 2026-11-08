@@ -8,6 +8,7 @@ import {
   HandHeart,
   MapPinned,
   Footprints,
+  ChartNoAxesCombined,
 } from 'lucide-react';
 
 export type TabKey =
@@ -18,7 +19,8 @@ export type TabKey =
   | 'dokumen'
   | 'layanan-ppks'
   | 'intelijen-wilayah'
-  | 'pendampingan-lapangan';
+  | 'pendampingan-lapangan'
+  | 'laporan-kinerja';
 
 interface BottomNavProps {
   activeTab: TabKey;
@@ -66,6 +68,11 @@ export const BottomNav: React.FC<BottomNavProps> = ({ activeTab, onSelectTab }) 
       key: 'pendampingan-lapangan',
       label: 'PENDAMPINGAN',
       icon: <Footprints className="w-4 h-4 md:w-5 md:h-5" />,
+    },
+    {
+      key: 'laporan-kinerja',
+      label: 'LAPORAN',
+      icon: <ChartNoAxesCombined className="w-4 h-4 md:w-5 md:h-5" />,
     },
   ];
 

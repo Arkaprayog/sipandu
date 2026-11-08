@@ -28,6 +28,7 @@ const GoogleWorkspaceModal = lazyWithRecovery('GoogleWorkspaceModal', () => impo
 const SIPANDUAICopilot = lazyWithRecovery('SIPANDUAICopilot', () => import('./components/SIPANDUAICopilot').then((module) => ({ default: module.SIPANDUAICopilot })));
 const ServiceCenterView = lazyWithRecovery('ServiceCenterView', () => import('./components/ServiceCenterView').then((module) => ({ default: module.ServiceCenterView })));
 const RegionalIntelligenceView = lazyWithRecovery('RegionalIntelligenceView', () => import('./components/RegionalIntelligenceView').then((module) => ({ default: module.RegionalIntelligenceView })));
+const ProgramPerformanceView = lazyWithRecovery('ProgramPerformanceView', () => import('./components/ProgramPerformanceView').then((module) => ({ default: module.ProgramPerformanceView })));
 const FieldAssistanceView = lazyWithRecovery('FieldAssistanceView', () => import('./components/FieldAssistanceView').then((module) => ({ default: module.FieldAssistanceView })));
 import { onAuthStateChanged, signOut, getIdTokenResult } from 'firebase/auth';
 import { auth, getAccessToken, savePPKSToFirestore, saveIntegratedAssessmentToFirestore, replacePPKSCollectionFromSpreadsheet, googleLogout, subscribeToPPKSChanges, subscribeToPPKSServiceStatus, savePPKSServiceUpdate, subscribeToFieldVisits, createFieldVisit, subscribeToIntegratedAssessmentAnswers, saveStageOneIntakeToFirestore, subscribeToStageOneIntake, staffAuthPersistenceReady, isWorkspaceAccountConnected, invalidateAccessToken, getSIPANDUUserProfile, saveSIPANDUUserProfile } from './lib/firebase';
@@ -1913,6 +1914,7 @@ function StaffApp() {
           )}
 
           {activeTab === 'intelijen-wilayah' && <RegionalIntelligenceView ppksList={ppksList} />}
+          {activeTab === 'laporan-kinerja' && <ProgramPerformanceView ppksList={ppksList} serviceStatuses={serviceStatuses} visits={fieldVisits} />}
 
           {activeTab === 'database-ppks' && (
             <DatabasePpksView
