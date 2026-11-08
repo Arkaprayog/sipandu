@@ -25,6 +25,7 @@ const EditProfileModal = lazyWithRecovery('EditProfileModal', () => import('./co
 const SettingsModal = lazyWithRecovery('SettingsModal', () => import('./components/SettingsModal').then((module) => ({ default: module.SettingsModal })));
 const NotificationsModal = lazyWithRecovery('NotificationsModal', () => import('./components/NotificationsModal').then((module) => ({ default: module.NotificationsModal })));
 const GoogleWorkspaceModal = lazyWithRecovery('GoogleWorkspaceModal', () => import('./components/GoogleWorkspaceModal').then((module) => ({ default: module.GoogleWorkspaceModal })));
+const SIPANDUAICopilot = lazyWithRecovery('SIPANDUAICopilot', () => import('./components/SIPANDUAICopilot').then((module) => ({ default: module.SIPANDUAICopilot })));
 const ServiceCenterView = lazyWithRecovery('ServiceCenterView', () => import('./components/ServiceCenterView').then((module) => ({ default: module.ServiceCenterView })));
 import { onAuthStateChanged, signOut, getIdTokenResult } from 'firebase/auth';
 import { auth, getAccessToken, savePPKSToFirestore, saveIntegratedAssessmentToFirestore, replacePPKSCollectionFromSpreadsheet, googleLogout, subscribeToPPKSChanges, subscribeToPPKSServiceStatus, savePPKSServiceUpdate, subscribeToIntegratedAssessmentAnswers, saveStageOneIntakeToFirestore, subscribeToStageOneIntake, staffAuthPersistenceReady, isWorkspaceAccountConnected, invalidateAccessToken, getSIPANDUUserProfile, saveSIPANDUUserProfile } from './lib/firebase';
@@ -444,6 +445,7 @@ function StaffApp() {
   const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState<boolean>(false);
   const [isGoogleWorkspaceOpen, setIsGoogleWorkspaceOpen] = useState<boolean>(false);
+  const [isAICopilotOpen, setIsAICopilotOpen] = useState<boolean>(false);
 
   const lastBackNavigationAtRef = useRef(0);
   const handleBackNavigation = useCallback(() => {
@@ -452,6 +454,7 @@ function StaffApp() {
     if (now - lastBackNavigationAtRef.current < 220) return;
     lastBackNavigationAtRef.current = now;
     if (!isAuthenticated) return;
+    if (isAICopilotOpen) { setIsAICopilotOpen(false); return; }
 
     // Close the top-most application modal before moving between menus.
     if (isGoogleWorkspaceOpen) { setIsGoogleWorkspaceOpen(false); return; }
@@ -475,6 +478,7 @@ function StaffApp() {
   }, [
     activeTab,
     isAuthenticated,
+    isAICopilotOpen,
     isEditProfileOpen,
     isGoogleWorkspaceOpen,
     isNotificationsOpen,
@@ -1879,6 +1883,20 @@ function StaffApp() {
       </main>
 
       {/* Bottom Navigation Bar: BERANDA - DATABASE PPKS - ASESMEN - FROM ASESMEN TERINTEGRASI - DOKUMEN */}
+      {isAuthenticated && ["owner", "supervisor", "pendamping"].includes(currentUserRole) && (
+        <button
+          type="button"
+          onClick={() => setIsAICopilotOpen(true)}
+          aria-label="Buka SIPANDU AI Copilot"
+          className="fixed bottom-[calc(5rem+env(safe-area-inset-bottom,0px))] right-4 z-40 inline-flex items-center gap-2 rounded-full border border-emerald-200/30 bg-emerald-500 px-4 py-3 text-xs font-extrabold text-[#052216] shadow-[0_8px_28px_rgba(16,185,129,0.28)] transition hover:-translate-y-0.5 hover:bg-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-200 focus:ring-offset-2 focus:ring-offset-[#0a140b]"
+        >
+          <span aria-hidden="true" className="text-base">✦</span> SIPANDU AI
+        </button>
+      )}
+      <Suspense fallback={null}>
+        {isAICopilotOpen && <SIPANDUAICopilot onClose={() => setIsAICopilotOpen(false)} />}
+      </Suspense>
+
       <BottomNav activeTab={activeTab} onSelectTab={navigateToTab} />
 
       {/* Load rarely used modal code only after the user opens that modal. */}
