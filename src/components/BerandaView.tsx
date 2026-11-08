@@ -134,7 +134,7 @@ export const BerandaView: React.FC<BerandaViewProps> = ({
               <span className="text-xs font-bold text-sky-300 uppercase tracking-wider">
                 Google Spreadsheet Live Sync
               </span>
-              <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] border ${!googleSpreadsheetUrl ? 'bg-neutral-900 text-neutral-300 border-neutral-700' : liveSyncStatus === 'success' ? 'bg-emerald-950 text-emerald-300 border-emerald-500/30' : liveSyncStatus === 'error' ? 'bg-amber-950 text-amber-200 border-amber-500/30' : liveSyncStatus === 'paused' ? 'bg-amber-950 text-amber-200 border-amber-500/30' : 'bg-sky-950 text-sky-200 border-sky-500/30'}`}>
+              <span className={`sipandu-live-sync-status inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] border ${!googleSpreadsheetUrl ? 'bg-neutral-900 text-neutral-300 border-neutral-700' : liveSyncStatus === 'success' ? 'bg-emerald-950 text-emerald-300 border-emerald-500/30' : liveSyncStatus === 'error' ? 'bg-amber-950 text-amber-200 border-amber-500/30' : liveSyncStatus === 'paused' ? 'bg-amber-950 text-amber-200 border-amber-500/30' : 'bg-sky-950 text-sky-200 border-sky-500/30'}`}>
                 {!googleSpreadsheetUrl ? 'Sumber belum dikonfigurasi' : liveSyncStatus === 'success' ? 'Tersambung · otomatis' : liveSyncStatus === 'error' ? 'Mencoba ulang otomatis' : liveSyncStatus === 'paused' ? 'Menunggu koneksi/izin' : 'Menghubungkan otomatis…'}
               </span>
             </div>
@@ -199,7 +199,7 @@ export const BerandaView: React.FC<BerandaViewProps> = ({
             {/* SVG stylized map of North Sumatra */}
             <svg
               viewBox="60 40 560 340"
-              className="w-full h-full max-h-none drop-shadow-[0_4px_12px_rgba(0,0,0,0.6)]"
+              className="sumut-map-svg w-full h-full max-h-none drop-shadow-[0_4px_12px_rgba(0,0,0,0.6)]"
             >
               {/* Mainland Sumut silhouette */}
               <path
@@ -208,7 +208,7 @@ export const BerandaView: React.FC<BerandaViewProps> = ({
                 stroke="#f43f5e"
                 strokeWidth="1.5"
                 strokeOpacity="0.4"
-                className="transition duration-300"
+                className="sumut-map-landmass transition duration-300"
               />
 
               {/* Lake Toba in center */}
@@ -221,8 +221,9 @@ export const BerandaView: React.FC<BerandaViewProps> = ({
                 stroke="#38bdf8"
                 strokeWidth="1.5"
                 strokeDasharray="3 3"
+                className="sumut-map-lake"
               />
-              <text x="340" y="204" textAnchor="middle" fill="#87CEEB" fontSize="10" fontWeight="bold">
+              <text x="340" y="204" textAnchor="middle" fill="#87CEEB" fontSize="10" fontWeight="bold" className="sumut-map-lake-label">
                 Danau Toba
               </text>
 
@@ -237,8 +238,9 @@ export const BerandaView: React.FC<BerandaViewProps> = ({
                 strokeWidth="1"
                 strokeOpacity="0.3"
                 transform="rotate(-25 100 320)"
+                className="sumut-map-island"
               />
-              <text x="100" y="325" textAnchor="middle" fill="#9ca3af" fontSize="9">
+              <text x="100" y="325" textAnchor="middle" fill="#9ca3af" fontSize="9" className="sumut-map-island-label">
                 P. Nias
               </text>
 
@@ -246,13 +248,14 @@ export const BerandaView: React.FC<BerandaViewProps> = ({
               {mapHotspots.map((loc, idx) => (
                 <g
                   key={idx}
-                  className="cursor-pointer transition-transform hover:scale-110"
+                  className="sumut-map-hotspot cursor-pointer transition-transform hover:scale-110"
                   onClick={() => setSelectedDistrict(loc.name)}
                 >
                   <circle
                     cx={loc.x}
                     cy={loc.y}
                     r={loc.main ? 10 : 7}
+                    className="sumut-map-hotspot-point"
                     fill={selectedDistrict === loc.name ? '#f43f5e' : '#22c55e'}
                     stroke="#ffffff"
                     strokeWidth="1.5"
@@ -265,7 +268,7 @@ export const BerandaView: React.FC<BerandaViewProps> = ({
                     stroke={selectedDistrict === loc.name ? '#f43f5e' : '#22c55e'}
                     strokeWidth="1"
                     strokeOpacity="0.4"
-                    className="animate-ping"
+                    className="sumut-map-hotspot-halo animate-ping"
                     style={{ animationDuration: `${2 + idx * 0.3}s` }}
                   />
                   <text
@@ -274,7 +277,7 @@ export const BerandaView: React.FC<BerandaViewProps> = ({
                     fill="#ffffff"
                     fontSize="10"
                     fontWeight="600"
-                    className="drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)]"
+                    className="sumut-map-hotspot-label drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)]"
                   >
                     {loc.name} ({loc.count})
                   </text>
@@ -283,11 +286,11 @@ export const BerandaView: React.FC<BerandaViewProps> = ({
             </svg>
 
             {/* Selected District Overlay Box */}
-            <div className="absolute bottom-3 left-3 right-3 bg-black/75 p-2 rounded-lg border border-rose-500/30 flex items-center justify-between text-xs">
-              <span className="text-neutral-300">
+            <div className="sumut-map-selection-overlay absolute bottom-3 left-3 right-3 bg-black/75 p-2 rounded-lg border border-rose-500/30 flex items-center justify-between text-xs">
+              <span className="sumut-map-selection-hint text-neutral-300">
                 Pilih titik di peta untuk memfilter data:
               </span>
-              <span className="font-bold text-sky-300">
+              <span className="sumut-map-selection-district font-bold text-sky-300">
                 {selectedDistrict ? `Wilayah: ${selectedDistrict}` : 'Semua Wilayah Sumatera Utara'}
               </span>
               {selectedDistrict && (
