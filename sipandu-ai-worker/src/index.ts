@@ -367,7 +367,7 @@ function isAllowedOrigin(origin: string): boolean {
 function corsHeaders(origin: string | null): Record<string, string> {
   const headers: Record<string, string> = {
     "Vary": "Origin",
-    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
     "Access-Control-Allow-Headers": "Authorization, Content-Type",
     "Access-Control-Max-Age": "600",
   };
