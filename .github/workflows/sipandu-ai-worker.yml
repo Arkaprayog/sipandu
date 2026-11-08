@@ -1,0 +1,48 @@
+name: SIPANDU AI Worker Validation
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main, "feature/**"]
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Test and dry-run isolated AI Worker
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: 1.4.4
+      - name: Install locked dependencies
+        run: bun install --frozen-lockfile
+      - name: Run AI privacy and authorization tests
+        run: bunx tsx --test sipandu-ai-worker/src/analytics.test.ts sipandu-ai-worker/src/index.test.ts
+      - name: Install isolated Wrangler
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/wrangler-cli"
+          npm install --prefix "$RUNNER_TEMP/wrangler-cli" --no-audit --no-fund --no-save wrangler@4.136.3
+      - name: Generate Worker binding types
+        working-directory: sipandu-ai-worker
+        run: "$RUNNER_TEMP/wrangler-cli/node_modules/.bin/wrangler" types
+      - name: Type-check Worker
+        working-directory: sipandu-ai-worker
+        run: bunx tsc --noEmit -p tsconfig.json
+      - name: Dry-run Worker bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf 'GEMINI_API_KEY=ci-dry-run-placeholder\n' > sipandu-ai-worker/.dev.vars
+          "$RUNNER_TEMP/wrangler-cli/node_modules/.bin/wrangler" deploy --dry-run --config sipandu-ai-worker/wrangler.jsonc --outdir "$RUNNER_TEMP/sipandu-ai-dry-run"
+          rm -f sipandu-ai-worker/.dev.vars
