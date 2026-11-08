@@ -135,21 +135,18 @@ test('supplemental assessment fields survive the Firestore answer overlay', () =
 });
 
 
-test('legacy integrated-assessment JSON is migratable only in its SIPANDU-managed respondent folder', () => {
+test('legacy integrated-assessment JSON is not accepted by the current PDF-only archive flow', () => {
   const legacyJson = {
     id: 'drive-file-legacy-json',
     name: 'asesmen-2026-11-06T15-06-35-123Z.json',
     mimeType: 'application/json',
     appProperties: { sipanduManaged: 'true', sipanduArchive: 'person-folder-123' },
   };
-  assert.equal(isManagedIntegratedAssessmentArchiveFile(legacyJson, 'person-folder-123'), true);
+  assert.equal(isManagedIntegratedAssessmentArchiveFile(legacyJson, 'person-folder-123'), false);
   assert.equal(isManagedIntegratedAssessmentArchiveFile(legacyJson, 'another-person-folder'), false);
-  assert.equal(isManagedIntegratedAssessmentArchiveFile({ ...legacyJson, appProperties: {} }, 'person-folder-123'), false);
-  assert.equal(isManagedIntegratedAssessmentArchiveFile({ ...legacyJson, name: 'catatan.json' }, 'person-folder-123'), false);
-  assert.equal(isManagedIntegratedAssessmentArchiveFile({ ...legacyJson, trashed: true }, 'person-folder-123'), false);
 });
 
-test('current integrated-assessment PDF archive is migratable but unrelated PDFs are not', () => {
+test('current integrated-assessment PDF archive is reusable but unrelated PDFs are not', () => {
   const managedPdf = {
     id: 'drive-file-pdf',
     name: 'Form-Asesmen-Terintegrasi-Responden-1234567890123456-2026-11-06.pdf',
