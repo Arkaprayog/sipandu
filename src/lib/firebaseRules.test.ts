@@ -285,6 +285,34 @@ test('Status layanan PPKS dan riwayat aktivitas dibatasi role staf serta riwayat
 
   const outsider = environment.authenticatedContext('outsider-001').firestore();
   await assertFails(getDoc(doc(outsider, 'ppksServiceStatus', 'ppks-demo')));
+
+  const assignedPendamping = environment.authenticatedContext(PENDAMPING_UID, {
+    role: 'pendamping',
+  }).firestore();
+  await assertSucceeds(getDoc(doc(assignedPendamping, 'ppksServiceStatus', 'ppks-demo')));
+  await assertSucceeds(getDoc(doc(assignedPendamping, 'ppksServiceEvents', 'event-001')));
+  const otherPendamping = environment.authenticatedContext('pendamping-002', {
+    role: 'pendamping',
+  }).firestore();
+  await assertFails(getDoc(doc(otherPendamping, 'ppksServiceStatus', 'ppks-demo')));
+  await assertFails(getDoc(doc(otherPendamping, 'ppksServiceEvents', 'event-001')));
+  await assertFails(setDoc(doc(assignedPendamping, 'ppksServiceStatus', 'self-assigned'), {
+    ppksId: 'self-assigned',
+    nutritionStatus: 'dibutuhkan',
+    entrepreneurshipStatus: 'belum-diverifikasi',
+    psychosocialStatus: 'belum-dimulai',
+    lastNutritionAt: '',
+    lastEntrepreneurshipAt: '',
+    lastTherapyAt: '',
+    therapySessionCount: 0,
+    followUpAt: '',
+    followUpReason: '',
+    assignedToUid: PENDAMPING_UID,
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+    updatedByUid: PENDAMPING_UID,
+  }));
+
   await assertFails(setDoc(doc(outsider, 'ppksServiceEvents', 'event-outsider'), {
     id: 'event-outsider',
     ppksId: 'ppks-demo',
