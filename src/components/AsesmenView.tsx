@@ -262,7 +262,7 @@ export const AsesmenView: React.FC<AsesmenViewProps> = ({
   };
 
   return (
-    <div className="workspace-page min-h-full space-y-4 text-white">
+    <div className="sipandu-workspace-motion workspace-page min-h-full space-y-4 text-white">
       {/* Bingkai Luar: Judul ASESMEN tepat di tengah */}
       <div className="workspace-panel min-h-full p-3 sm:p-4 md:p-6 rounded-2xl bg-black/25 border border-white/10 shadow-[0_12px_36px_rgba(0,0,0,0.18)]">
         {/* Judul ASESMEN tepat di tengah */}
