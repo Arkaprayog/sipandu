@@ -557,8 +557,7 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
         .normalize('NFKC').replace(/[\\/:*?"<>|]+/g, '_').replace(/\s+/g, '-').slice(0, 80);
       const nikValue = String(record.nik || record.formAsesmenTerintegrasi?.q23 || '');
       const safeNik = nikValue.replace(/\D/g, '') || 'tanpa-NIK';
-      const archiveDate = options.savedAt ? new Date(options.savedAt) : new Date();
-      const stamp = (Number.isNaN(archiveDate.getTime()) ? new Date() : archiveDate).toISOString().replace(/[:.]/g, '-');
+      const stamp = new Date().toISOString().replace(/[:.]/g, '-');
       fileName = `Form-Asesmen-Terintegrasi-${safeRespondent}-${safeNik}-${stamp}.pdf`;
 
       try {
