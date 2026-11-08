@@ -1,5 +1,13 @@
 import { buildAggregateSummary, type DemographicRecord, type ServiceStatusRecord } from "./analytics";
 
+// The Gemini key is supplied only as a Cloudflare Worker Secret at runtime.
+// It is intentionally absent from vars and from the committed Wrangler config.
+declare global {
+  interface Env {
+    GEMINI_API_KEY?: string;
+  }
+}
+
 const PAGE_SIZE = 1000;
 const MAX_DOCUMENTS_PER_COLLECTION = 10000;
 const MAX_REQUEST_BYTES = 12000;
@@ -119,10 +127,14 @@ export async function verifyFirebaseIdToken(
       ["verify"],
     );
     const signedData = new TextEncoder().encode(parts[0] + "." + parts[1]);
+    // Copy the signature to an ArrayBuffer-backed view. TypeScript's newer
+    // typed-array generics otherwise widen the WebCrypto input to ArrayBufferLike.
+    const signatureBuffer = new ArrayBuffer(signature.byteLength);
+    new Uint8Array(signatureBuffer).set(signature);
     const valid = await crypto.subtle.verify(
       { name: "RSASSA-PKCS1-v1_5" },
       publicKey,
-      signature,
+      signatureBuffer,
       signedData,
     );
     if (!valid) return null;
