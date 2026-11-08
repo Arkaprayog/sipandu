@@ -18,7 +18,7 @@ export interface SIPANDUAggregateSummary {
   byGender: Array<{ gender: string; count: number }>;
   requestedAssistance: Array<{ category: string; count: number }>;
   serviceMonitoring: {
-    recordsWithStatus: number;
+    recordsWithStatus: number | null;
     nutrition: Array<{ status: string; count: number }>;
     entrepreneurship: Array<{ status: string; count: number }>;
     psychosocial: Array<{ status: string; count: number }>;
