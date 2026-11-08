@@ -748,3 +748,94 @@ body,
     transform: none !important;
   }
 }
+
+
+/* --------------------------------------------------------------------------
+   EXPRESSIVE MOTION — WORKSPACE SIGNATURE
+   Scoped presentation polish for Database, Assessment and Integrated Assessment.
+   No data, handlers, navigation, or touch/swipe behavior is changed.
+   -------------------------------------------------------------------------- */
+.sipandu-workspace-motion {
+  --sipandu-workspace-ease: cubic-bezier(.2, .78, .22, 1);
+}
+
+.sipandu-workspace-motion > .workspace-panel,
+.sipandu-workspace-motion > .official-toolbar {
+  animation: sipandu-workspace-arrive 520ms var(--sipandu-workspace-ease) both;
+}
+
+@keyframes sipandu-workspace-arrive {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Lift only non-document workspace panels; assessment sheets keep their exact geometry. */
+.sipandu-workspace-motion > .workspace-panel {
+  transition: box-shadow 280ms var(--sipandu-workspace-ease), border-color 240ms ease;
+}
+
+.sipandu-navigation-shell[data-sipandu-theme="light"] .sipandu-workspace-motion > .workspace-panel {
+  box-shadow: 0 14px 34px rgba(45, 70, 42, .075);
+}
+
+.sipandu-navigation-shell:not([data-sipandu-theme="light"]) .sipandu-workspace-motion > .workspace-panel {
+  box-shadow: 0 16px 38px rgba(0, 0, 0, .2);
+}
+
+.sipandu-workspace-motion :is(button, a, select, input, textarea) {
+  transition:
+    color 180ms ease,
+    background-color 220ms ease,
+    border-color 220ms ease,
+    box-shadow 240ms ease,
+    transform 180ms var(--sipandu-workspace-ease);
+}
+
+.sipandu-workspace-motion :is(button, a):active {
+  transform: scale(.975);
+}
+
+.sipandu-workspace-motion :is(button, a):focus-visible,
+.sipandu-workspace-motion :is(select, input, textarea):focus-visible {
+  outline: 2px solid #6495ED;
+  outline-offset: 3px;
+}
+
+.sipandu-workspace-motion :is(select, input, textarea):focus {
+  box-shadow: 0 0 0 3px rgba(100, 149, 237, .18);
+}
+
+/* Keep From Asesmen Terintegrasi's horizontal paper swipe and page layout untouched. */
+.sipandu-workspace-motion.official-assessment-shell {
+  touch-action: pan-y;
+}
+
+.sipandu-workspace-motion.official-assessment-shell .official-toolbar {
+  transition: box-shadow 260ms ease, border-color 220ms ease;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .sipandu-workspace-motion > .workspace-panel:hover {
+    border-color: rgba(100, 149, 237, .32);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sipandu-workspace-motion *,
+  .sipandu-workspace-motion *::before,
+  .sipandu-workspace-motion *::after {
+    animation: none !important;
+    transition-duration: .01ms !important;
+  }
+}
+
+@media print {
+  .sipandu-workspace-motion *,
+  .sipandu-workspace-motion *::before,
+  .sipandu-workspace-motion *::after {
+    animation: none !important;
+    transition: none !important;
+    transform: none !important;
+    box-shadow: none !important;
+  }
+}
