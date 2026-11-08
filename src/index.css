@@ -304,6 +304,76 @@ body,
   color: #000000 !important;
 }
 
+/* Light-mode sage palette for the dashboard map and status indicators. */
+.sipandu-navigation-shell[data-sipandu-theme="light"] .sipandu-live-sync-status,
+.sipandu-navigation-shell[data-sipandu-theme="light"] .sipandu-database-title-badge {
+  background: #DCE8D5 !important;
+  background-color: #DCE8D5 !important;
+  background-image: none !important;
+  border-color: #C5D5BC !important;
+  color: #000000 !important;
+}
+
+/* Recolor the dashboard map without changing its interactive hotspots. */
+.sipandu-navigation-shell[data-sipandu-theme="light"] .sumut-map-canvas {
+  background: #E8EFE3 !important;
+  background-color: #E8EFE3 !important;
+  background-image: none !important;
+  border-color: #C5D5BC !important;
+  box-shadow: none !important;
+}
+
+.sipandu-navigation-shell[data-sipandu-theme="light"] .sumut-map-canvas > div.absolute.inset-0 {
+  background-image: radial-gradient(circle at 1px 1px, rgba(100,149,237,.28) 1px, transparent 0) !important;
+  background-size: 24px 24px !important;
+  opacity: .45 !important;
+}
+
+.sipandu-navigation-shell[data-sipandu-theme="light"] .sumut-map-svg {
+  filter: none !important;
+}
+
+.sipandu-navigation-shell[data-sipandu-theme="light"] .sumut-map-landmass,
+.sipandu-navigation-shell[data-sipandu-theme="light"] .sumut-map-island {
+  fill: #DCE8D5 !important;
+  stroke: #9BAF91 !important;
+  stroke-opacity: 1 !important;
+}
+
+.sipandu-navigation-shell[data-sipandu-theme="light"] .sumut-map-lake {
+  fill: #FFFFFF !important;
+  stroke: #6495ED !important;
+}
+
+.sipandu-navigation-shell[data-sipandu-theme="light"] .sumut-map-lake-label,
+.sipandu-navigation-shell[data-sipandu-theme="light"] .sumut-map-island-label,
+.sipandu-navigation-shell[data-sipandu-theme="light"] .sumut-map-hotspot-label {
+  fill: #000000 !important;
+  filter: none !important;
+}
+
+.sipandu-navigation-shell[data-sipandu-theme="light"] .sumut-map-hotspot-point {
+  fill: #6495ED !important;
+  stroke: #FFFFFF !important;
+}
+
+.sipandu-navigation-shell[data-sipandu-theme="light"] .sumut-map-hotspot-halo {
+  stroke: #6495ED !important;
+  stroke-opacity: .45 !important;
+}
+
+.sipandu-navigation-shell[data-sipandu-theme="light"] .sumut-map-selection-overlay {
+  background: #FFFFFF !important;
+  background-color: #FFFFFF !important;
+  border-color: #C5D5BC !important;
+  color: #000000 !important;
+}
+
+.sipandu-navigation-shell[data-sipandu-theme="light"] .sumut-map-selection-overlay .sumut-map-selection-hint,
+.sipandu-navigation-shell[data-sipandu-theme="light"] .sumut-map-selection-overlay .sumut-map-selection-district {
+  color: #000000 !important;
+}
+
 /* Printing remains neutral and independent of the selected app theme. */
 @media print {
   .sipandu-navigation-shell { background: #FFFFFF !important; color: #111827 !important; }
