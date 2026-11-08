@@ -6,12 +6,36 @@
   "vars": {
     "FIREBASE_PROJECT_ID": "gen-lang-client-0197631978",
     "FIRESTORE_DATABASE_ID": "ai-studio-sipanduodhiv-985a0308-7693-46e1-b6d3-fdbce52371a8",
-    "GEMINI_MODEL": "gemini-3.8-flash"
+    "GEMINI_MODEL": "gemini-3.8-flash",
+    "FIREBASE_WEB_API_KEY": "AIzaSyCPQq7qsAXUvpW1LHE_5IB_Xs9drioH-o8"
   },
-  "secrets": { "required": ["GEMINI_API_KEY"] },
   "observability": {
     "enabled": true,
-    "logs": { "enabled": true, "head_sampling_rate": 0.1 },
-    "traces": { "enabled": true, "head_sampling_rate": 0.05 }
-  }
+    "logs": {
+      "enabled": true,
+      "head_sampling_rate": 0.1
+    },
+    "traces": {
+      "enabled": true,
+      "head_sampling_rate": 0.05
+    }
+  },
+  "ratelimits": [
+    {
+      "name": "SIPANDU_AI_IP_RATE_LIMIT",
+      "namespace_id": "81108001",
+      "simple": {
+        "limit": 60,
+        "period": 60
+      }
+    },
+    {
+      "name": "SIPANDU_AI_USER_RATE_LIMIT",
+      "namespace_id": "81108002",
+      "simple": {
+        "limit": 10,
+        "period": 60
+      }
+    }
+  ]
 }
