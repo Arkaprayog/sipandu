@@ -267,7 +267,7 @@ export const AsesmenView: React.FC<AsesmenViewProps> = ({
       <div className="workspace-panel min-h-full p-3 sm:p-4 md:p-6 rounded-2xl bg-black/25 border border-white/10 shadow-[0_12px_36px_rgba(0,0,0,0.18)]">
         {/* Judul ASESMEN tepat di tengah */}
         <div className="text-center mb-6 pb-4 border-b border-rose-500/25">
-          <h2 className="text-xl md:text-2xl font-black text-white tracking-widest uppercase inline-block px-6 py-1.5 rounded-xl bg-emerald-950/90 border border-emerald-500/40 shadow-md">
+          <h2 className="sipandu-assessment-title text-xl md:text-2xl font-black text-white tracking-widest uppercase inline-block px-6 py-1.5 rounded-xl bg-emerald-950/90 border border-emerald-500/40 shadow-md">
             ASESMEN
           </h2>
           <p className="text-xs text-sky-200 mt-2">
@@ -280,7 +280,7 @@ export const AsesmenView: React.FC<AsesmenViewProps> = ({
           <button
             type="button"
             onClick={() => setActiveSubMenu('tahap-awal')}
-            className={`py-3 px-4 rounded-xl font-bold text-xs md:text-sm uppercase tracking-wider transition cursor-pointer flex items-center justify-center gap-2 ${
+            className={`sipandu-assessment-subnav py-3 px-4 rounded-xl font-bold text-xs md:text-sm uppercase tracking-wider transition cursor-pointer flex items-center justify-center gap-2 ${
               activeSubMenu === 'tahap-awal'
                 ? 'bg-gradient-to-r from-emerald-800 to-teal-800 text-white border-2 border-rose-500/60 shadow-[0_0_15px_rgba(244,63,94,0.25)]'
                 : 'bg-black/50 text-neutral-300 hover:text-white border border-rose-500/25 hover:bg-emerald-950/40'
@@ -323,7 +323,7 @@ export const AsesmenView: React.FC<AsesmenViewProps> = ({
             <div className="p-5 rounded-2xl bg-[#112415]/70 border border-rose-500/35 flex flex-col md:flex-row items-center justify-between gap-6">
               <div className="flex-1 space-y-3">
                 <div className="flex items-center gap-2">
-                  <span className="px-2.5 py-0.5 rounded text-[10px] font-bold bg-emerald-900 text-emerald-200 border border-emerald-400">
+                  <span className="sipandu-assessment-kemensos-badge px-2.5 py-0.5 rounded text-[10px] font-bold bg-emerald-900 text-emerald-200 border border-emerald-400">
                     KEMENSOS RI TAHAP AWAL
                   </span>
                   <span className={`text-xs font-mono ${stageOneRespondentUrl ? 'text-sky-300' : 'text-amber-200'}`}>
@@ -662,7 +662,7 @@ export const AsesmenView: React.FC<AsesmenViewProps> = ({
                 <div className="pt-2 text-center">
                   <button
                     type="submit"
-                    className="w-full md:w-80 py-3.5 px-6 rounded-xl font-bold text-sm tracking-wider uppercase text-white bg-gradient-to-r from-emerald-800 via-emerald-700 to-teal-800 hover:from-emerald-700 hover:to-teal-700 active:scale-[0.99] transition border border-rose-500/60 shadow-[0_0_20px_rgba(244,63,94,0.3)] flex items-center justify-center gap-2 mx-auto cursor-pointer"
+                    className="sipandu-assessment-submit w-full md:w-80 py-3.5 px-6 rounded-xl font-bold text-sm tracking-wider uppercase text-white bg-gradient-to-r from-emerald-800 via-emerald-700 to-teal-800 hover:from-emerald-700 hover:to-teal-700 active:scale-[0.99] transition border border-rose-500/60 shadow-[0_0_20px_rgba(244,63,94,0.3)] flex items-center justify-center gap-2 mx-auto cursor-pointer"
                   >
                     <Send className="w-4 h-4" />
                     <span>Kirim Formulir Asesmen</span>
@@ -677,7 +677,7 @@ export const AsesmenView: React.FC<AsesmenViewProps> = ({
         {activeSubMenu === 'google-form' && (
           <div className="p-5 md:p-7 rounded-2xl bg-black/50 border border-rose-500/40 space-y-5">
             <div className="flex flex-col items-center text-center">
-              <div className="p-3 rounded-full bg-emerald-950/80 border border-emerald-500/40">
+              <div className="sipandu-google-form-icon p-3 rounded-full bg-emerald-950/80 border border-emerald-500/40">
                 <Link className="w-8 h-8 text-sky-300" />
               </div>
               <h3 className="mt-3 text-lg md:text-xl font-black text-white uppercase tracking-wider">
