@@ -608,3 +608,143 @@ body,
     filter: none !important;
   }
 }
+
+
+/* --------------------------------------------------------------------------
+   EXPRESSIVE MOTION — DASHBOARD SIGNATURE
+   Dashboard-only expressive motion. Keeps palette, structure, data and actions intact.
+   -------------------------------------------------------------------------- */
+.sipandu-dashboard-motion {
+  --sipandu-dashboard-ease: cubic-bezier(.2, .78, .22, 1);
+  --sipandu-dashboard-duration: 620ms;
+  isolation: isolate;
+}
+
+.sipandu-dashboard-motion > div:nth-child(1),
+.sipandu-dashboard-motion > div:nth-child(2) > div:nth-child(1),
+.sipandu-dashboard-motion > div:nth-child(2) > div:nth-child(2),
+.sipandu-dashboard-motion > div:nth-child(3) > div:nth-child(1),
+.sipandu-dashboard-motion > div:nth-child(3) > div:nth-child(2),
+.sipandu-dashboard-motion > div:nth-child(4) {
+  animation: sipandu-dashboard-arrive var(--sipandu-dashboard-duration) var(--sipandu-dashboard-ease) both;
+}
+
+.sipandu-dashboard-motion > div:nth-child(1) { animation-delay: 20ms; }
+.sipandu-dashboard-motion > div:nth-child(2) > div:nth-child(1) { animation-delay: 90ms; }
+.sipandu-dashboard-motion > div:nth-child(2) > div:nth-child(2) { animation-delay: 150ms; }
+.sipandu-dashboard-motion > div:nth-child(3) > div:nth-child(1) { animation-delay: 210ms; }
+.sipandu-dashboard-motion > div:nth-child(3) > div:nth-child(2) { animation-delay: 270ms; }
+.sipandu-dashboard-motion > div:nth-child(4) { animation-delay: 330ms; }
+
+@keyframes sipandu-dashboard-arrive {
+  0% { opacity: 0; transform: translate3d(0, 16px, 0) scale(.985); }
+  72% { opacity: 1; transform: translate3d(0, -2px, 0) scale(1.002); }
+  100% { opacity: 1; transform: translate3d(0, 0, 0) scale(1); }
+}
+
+/* Dashboard panels gain depth on pointer devices; touch layouts remain stable. */
+.sipandu-dashboard-motion > div:nth-child(1),
+.sipandu-dashboard-motion > div:nth-child(2) > div,
+.sipandu-dashboard-motion > div:nth-child(3) > div,
+.sipandu-dashboard-motion > div:nth-child(4) {
+  transition:
+    transform 260ms var(--sipandu-dashboard-ease),
+    box-shadow 320ms var(--sipandu-dashboard-ease),
+    border-color 260ms var(--sipandu-dashboard-ease);
+  transform-origin: center;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .sipandu-dashboard-motion > div:nth-child(1):hover,
+  .sipandu-dashboard-motion > div:nth-child(2) > div:hover,
+  .sipandu-dashboard-motion > div:nth-child(3) > div:hover,
+  .sipandu-dashboard-motion > div:nth-child(4):hover {
+    transform: translateY(-3px);
+  }
+}
+
+.sipandu-navigation-shell[data-sipandu-theme="light"] .sipandu-dashboard-motion > div:nth-child(1),
+.sipandu-navigation-shell[data-sipandu-theme="light"] .sipandu-dashboard-motion > div:nth-child(2) > div,
+.sipandu-navigation-shell[data-sipandu-theme="light"] .sipandu-dashboard-motion > div:nth-child(3) > div,
+.sipandu-navigation-shell[data-sipandu-theme="light"] .sipandu-dashboard-motion > div:nth-child(4) {
+  box-shadow: 0 12px 30px rgba(45, 70, 42, .075);
+}
+
+.sipandu-navigation-shell:not([data-sipandu-theme="light"]) .sipandu-dashboard-motion > div:nth-child(1),
+.sipandu-navigation-shell:not([data-sipandu-theme="light"]) .sipandu-dashboard-motion > div:nth-child(2) > div,
+.sipandu-navigation-shell:not([data-sipandu-theme="light"]) .sipandu-dashboard-motion > div:nth-child(3) > div,
+.sipandu-navigation-shell:not([data-sipandu-theme="light"]) .sipandu-dashboard-motion > div:nth-child(4) {
+  box-shadow: 0 16px 36px rgba(0, 0, 0, .2);
+}
+
+/* The map's ambient grid drifts slowly while its clickable hotspots remain intact. */
+.sipandu-dashboard-motion .sumut-map-canvas > div.absolute.inset-0 {
+  animation: sipandu-map-grid-drift 24s linear infinite;
+}
+
+@keyframes sipandu-map-grid-drift {
+  from { background-position: 0 0; }
+  to { background-position: 48px 24px; }
+}
+
+.sipandu-dashboard-motion .sumut-map-hotspot-point {
+  transition: filter 220ms ease, opacity 220ms ease;
+}
+
+.sipandu-dashboard-motion .sumut-map-hotspot:hover .sumut-map-hotspot-point {
+  filter: drop-shadow(0 0 5px rgba(100, 149, 237, .8));
+}
+
+/* Animated chart fills keep their existing data-driven widths and colors. */
+.sipandu-dashboard-motion > div:nth-child(3) .h-full.rounded-full,
+.sipandu-dashboard-motion > div:nth-child(4) .h-full {
+  transform-origin: left center;
+  animation: sipandu-chart-fill 820ms cubic-bezier(.16, 1, .3, 1) both;
+}
+
+@keyframes sipandu-chart-fill {
+  from { transform: scaleX(.04); opacity: .55; }
+  to { transform: scaleX(1); opacity: 1; }
+}
+
+.sipandu-dashboard-motion .relative.w-48.h-48 svg circle {
+  transition: stroke-dasharray 850ms var(--sipandu-dashboard-ease), stroke-dashoffset 850ms var(--sipandu-dashboard-ease);
+}
+
+/* Subtle press feedback for the existing dashboard links and map reset action. */
+.sipandu-dashboard-motion :is(a, button) {
+  transition:
+    transform 180ms var(--sipandu-dashboard-ease),
+    box-shadow 240ms var(--sipandu-dashboard-ease),
+    filter 240ms ease;
+}
+
+.sipandu-dashboard-motion :is(a, button):active {
+  transform: scale(.97);
+}
+
+.sipandu-dashboard-motion :is(a, button):focus-visible {
+  outline: 2px solid #6495ED;
+  outline-offset: 3px;
+}
+
+/* Respect system accessibility preferences and avoid motion in print. */
+@media (prefers-reduced-motion: reduce) {
+  .sipandu-dashboard-motion *,
+  .sipandu-dashboard-motion *::before,
+  .sipandu-dashboard-motion *::after {
+    animation: none !important;
+    transition-duration: .01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+@media print {
+  .sipandu-dashboard-motion *,
+  .sipandu-dashboard-motion *::before,
+  .sipandu-dashboard-motion *::after {
+    animation: none !important;
+    transition: none !important;
+    transform: none !important;
+  }
+}
