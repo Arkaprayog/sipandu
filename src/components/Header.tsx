@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { ProfileUser } from '../types';
-import { Bell, Settings, LogOut, Edit3, Cloud, User, Sunrise, Sun, Sunset, Moon, MapPin, Thermometer } from 'lucide-react';
+import { BellRing, Settings2, LogOut, Edit3, Cloud, User, Sunrise, Sun, Sunset, Moon, MapPin, Thermometer } from 'lucide-react';
 import { SipanduLogo } from './SipanduLogo';
 import { getPreciseDevicePosition } from '../lib/deviceGeolocation';
 
@@ -363,7 +363,7 @@ export const Header: React.FC<HeaderProps> = ({
               title="Notifikasi & Peringatan Asesmen"
               aria-label="Lonceng Notifikasi"
             >
-              <Bell className="w-5 h-5 text-sky-300 hover:text-sky-100" />
+              <BellRing className="sipandu-action-icon sipandu-action-icon--notify w-5 h-5" aria-hidden="true" />
               {unreadNotificationsCount > 0 && (
                 <span className="absolute top-1 right-1 flex h-4 w-4 items-center justify-center rounded-full bg-rose-600 text-[9px] font-bold text-white shadow-sm ring-1 ring-black">
                   {unreadNotificationsCount}
@@ -392,7 +392,7 @@ export const Header: React.FC<HeaderProps> = ({
               title="Pengaturan Integrasi Google & WhatsApp"
               aria-label="Gear Pengaturan"
             >
-              <Settings className="w-5 h-5 text-sky-300 hover:text-sky-100" />
+              <Settings2 className="sipandu-action-icon sipandu-action-icon--settings w-5 h-5" aria-hidden="true" />
             </button>
 
             {/* 3. Pintu untuk Keluar */}
@@ -403,7 +403,7 @@ export const Header: React.FC<HeaderProps> = ({
               title="Keluar dari Aplikasi (Logout)"
               aria-label="Pintu Keluar"
             >
-              <LogOut className="w-5 h-5 text-rose-400 hover:text-rose-200" />
+              <LogOut className="sipandu-action-icon sipandu-action-icon--logout w-5 h-5" aria-hidden="true" />
             </button>
           </div>
         </div>
