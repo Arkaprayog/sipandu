@@ -113,16 +113,6 @@ export const BerandaView: React.FC<BerandaViewProps> = ({
   const maxAssistanceCount = Math.max(...assistanceItems.map((item) => item.count), 1);
   const serviceMetrics = calculatePPKSServiceMetrics(ppksList, serviceStatuses);
 
-  const syncLabel = !googleSpreadsheetUrl
-    ? 'Sumber belum dikonfigurasi'
-    : liveSyncStatus === 'success'
-      ? 'Tersambung · otomatis'
-      : liveSyncStatus === 'error'
-        ? 'Mencoba ulang otomatis'
-        : liveSyncStatus === 'paused'
-          ? 'Menunggu koneksi/izin'
-          : 'Menghubungkan otomatis…';
-
   const renderBar = (
     item: DistributionItem,
     maxValue: number,
