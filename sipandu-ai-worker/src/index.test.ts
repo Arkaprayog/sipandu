@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { decodeFirebaseClaims, containsSensitivePrompt, verifyFirebaseIdToken } from "./index";
+import { decodeFirebaseClaims, containsSensitivePrompt, verifyFirebaseIdToken, isActiveFirebaseAccount } from "./index";
 
 function makeToken(payload: Record<string, unknown>): string {
   const encode = (value: unknown) => btoa(JSON.stringify(value)).replace(/=/g, "").replace(/\+/g, "-").replace(/\//g, "_");
@@ -70,4 +70,22 @@ test("verifies Firebase ID-token RS256 signature and all required claims", async
   assert.equal(await verifyFirebaseIdToken(token, projectId, [], now), null);
   assert.equal(await verifyFirebaseIdToken(token, "different-project", [key], now), null);
   assert.equal(await verifyFirebaseIdToken(token, projectId, [key], now + 4000), null);
+});
+
+test("rejects disabled, mismatched, or revoked Firebase accounts", () => {
+  const claims = {
+    sub: "staff-uid",
+    aud: "sipandu-project",
+    iss: "https://securetoken.google.com/sipandu-project",
+    exp: 1_800_003_600,
+    iat: 1_800_000_000,
+    auth_time: 1_799_999_900,
+    role: "pendamping" as const,
+  };
+  assert.equal(isActiveFirebaseAccount({ localId: "staff-uid", disabled: false, validSince: "1799999800" }, claims), true);
+  assert.equal(isActiveFirebaseAccount({ localId: "another-uid", disabled: false }, claims), false);
+  assert.equal(isActiveFirebaseAccount({ localId: "staff-uid", disabled: true }, claims), false);
+  assert.equal(isActiveFirebaseAccount({ localId: "staff-uid", validSince: "1800000001" }, claims), false);
+  assert.equal(isActiveFirebaseAccount({ localId: "staff-uid", validSince: "invalid" }, claims), false);
+  assert.equal(isActiveFirebaseAccount(undefined, claims), false);
 });
