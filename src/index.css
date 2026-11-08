@@ -1485,3 +1485,152 @@ body,
 @media(max-width:850px){.sipandu-service-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.sipandu-service-filters{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}.sipandu-service-search{grid-column:1/-1}}
 @media(max-width:640px){.sipandu-dashboard-command-center{padding:14px}.sipandu-dashboard-command-heading{flex-direction:column;align-items:stretch}.sipandu-dashboard-command-action{justify-content:center}.sipandu-dashboard-command-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.sipandu-service-hero{flex-direction:column;align-items:stretch;padding:17px}.sipandu-service-export{justify-content:center}.sipandu-service-record{flex-direction:column;align-items:stretch}.sipandu-service-record-actions{justify-content:flex-end}.sipandu-service-workspace{padding:12px}.sipandu-service-filters{grid-template-columns:minmax(0,1fr)}.sipandu-service-search{grid-column:auto}}
 @media(max-width:380px){.sipandu-service-kpis{grid-template-columns:minmax(0,1fr)}.sipandu-dashboard-command-grid strong{font-size:19px}}
+
+
+/* SIPANDU UI/UX refresh — Hybrid Glass Executive + Frosted Workspace.
+   Presentation-only layer: existing React handlers, data, routes and APIs remain untouched. */
+.sipandu-navigation-shell {
+  background:
+    radial-gradient(ellipse at 88% 4%, rgba(0,128,128,.16), transparent 34%),
+    radial-gradient(ellipse at 8% 82%, rgba(100,149,237,.10), transparent 38%),
+    #0a140b !important;
+  color: #f4f7f4;
+}
+.sipandu-navigation-shell[data-sipandu-theme="light"] {
+  background:
+    radial-gradient(ellipse at 88% 4%, rgba(100,149,237,.13), transparent 34%),
+    radial-gradient(ellipse at 8% 82%, rgba(163,177,138,.15), transparent 38%),
+    #f3f6f4 !important;
+  color: #26332d;
+}
+.sipandu-navigation-shell .app-header {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  background: rgba(12, 30, 24, .76);
+  border-bottom: 1px solid rgba(255,255,255,.11);
+  box-shadow: 0 12px 34px rgba(0,0,0,.10);
+  -webkit-backdrop-filter: blur(22px) saturate(145%);
+  backdrop-filter: blur(22px) saturate(145%);
+}
+.sipandu-navigation-shell[data-sipandu-theme="light"] .app-header {
+  background: rgba(255,255,255,.82);
+  border-bottom-color: rgba(80,110,95,.16);
+  box-shadow: 0 10px 30px rgba(35,65,50,.07);
+}
+.sipandu-navigation-shell .app-header-safe-area {
+  border-bottom-color: rgba(255,255,255,.10) !important;
+  box-shadow: 0 10px 32px rgba(0,0,0,.10) !important;
+}
+.sipandu-navigation-shell[data-sipandu-theme="light"] .app-header-safe-area {
+  background: rgba(255,255,255,.80) !important;
+  border-bottom-color: rgba(80,110,95,.16) !important;
+}
+.sipandu-navigation-shell .app-header .bg-black\/40,
+.sipandu-navigation-shell .app-header .bg-black\/\[\.4\] {
+  background: rgba(255,255,255,.07) !important;
+  border-color: rgba(255,255,255,.13) !important;
+}
+.sipandu-navigation-shell[data-sipandu-theme="light"] .app-header .bg-black\/40,
+.sipandu-navigation-shell[data-sipandu-theme="light"] .app-header .bg-black\/\[\.4\] {
+  background: rgba(245,248,246,.88) !important;
+  border-color: rgba(90,115,100,.18) !important;
+}
+.sipandu-navigation-shell .app-nav-bar {
+  background: rgba(9, 27, 21, .86) !important;
+  border-top: 1px solid rgba(255,255,255,.12) !important;
+  box-shadow: 0 -12px 36px rgba(0,0,0,.16) !important;
+  -webkit-backdrop-filter: blur(24px) saturate(150%);
+  backdrop-filter: blur(24px) saturate(150%);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+.sipandu-navigation-shell[data-sipandu-theme="light"] .app-nav-bar {
+  background: rgba(255,255,255,.88) !important;
+  border-top-color: rgba(80,110,95,.18) !important;
+  box-shadow: 0 -10px 30px rgba(35,65,50,.08) !important;
+}
+.sipandu-navigation-shell .app-nav-bar button {
+  min-height: 44px;
+  border-radius: 13px;
+  transition: background-color .18s ease, color .18s ease, transform .18s ease;
+}
+.sipandu-navigation-shell .app-nav-bar button:focus-visible,
+.sipandu-navigation-shell .app-header button:focus-visible,
+.sipandu-navigation-shell main button:focus-visible,
+.sipandu-navigation-shell main a:focus-visible {
+  outline: 2px solid #63d6c5 !important;
+  outline-offset: 3px;
+}
+.sipandu-navigation-shell .sipandu-dashboard-panel,
+.sipandu-navigation-shell .sipandu-service-workspace,
+.sipandu-navigation-shell .sipandu-dashboard-command-center,
+.sipandu-navigation-shell .sipandu-dashboard-kpi,
+.sipandu-navigation-shell .sipandu-dashboard-chart-card {
+  border-color: rgba(255,255,255,.12);
+  background-color: rgba(255,255,255,.055);
+  -webkit-backdrop-filter: blur(18px) saturate(135%);
+  backdrop-filter: blur(18px) saturate(135%);
+  box-shadow: 0 14px 38px rgba(0,0,0,.10), inset 0 1px 0 rgba(255,255,255,.045);
+}
+.sipandu-navigation-shell[data-sipandu-theme="light"] .sipandu-dashboard-panel,
+.sipandu-navigation-shell[data-sipandu-theme="light"] .sipandu-service-workspace,
+.sipandu-navigation-shell[data-sipandu-theme="light"] .sipandu-dashboard-command-center,
+.sipandu-navigation-shell[data-sipandu-theme="light"] .sipandu-dashboard-kpi,
+.sipandu-navigation-shell[data-sipandu-theme="light"] .sipandu-dashboard-chart-card {
+  border-color: rgba(88,115,98,.17);
+  background-color: rgba(255,255,255,.78);
+  box-shadow: 0 12px 32px rgba(44,70,54,.055), inset 0 1px 0 rgba(255,255,255,.85);
+}
+.sipandu-navigation-shell .sipandu-dashboard-command-grid article,
+.sipandu-navigation-shell .sipandu-service-record {
+  border-radius: 16px;
+  transition: transform .18s ease, border-color .18s ease, background-color .18s ease;
+}
+.sipandu-navigation-shell .sipandu-dashboard-command-grid article:hover,
+.sipandu-navigation-shell .sipandu-service-record:hover {
+  transform: translateY(-1px);
+  border-color: rgba(0,128,128,.38);
+}
+.sipandu-navigation-shell .sipandu-dashboard-command-action,
+.sipandu-navigation-shell .sipandu-service-primary,
+.sipandu-navigation-shell .sipandu-service-export {
+  min-height: 42px;
+  border-radius: 12px;
+  box-shadow: 0 8px 22px rgba(0,128,128,.15);
+}
+.sipandu-navigation-shell[data-sipandu-theme="light"] .sipandu-dashboard-command-action,
+.sipandu-navigation-shell[data-sipandu-theme="light"] .sipandu-service-primary,
+.sipandu-navigation-shell[data-sipandu-theme="light"] .sipandu-service-export {
+  color: #142b29 !important;
+}
+.sipandu-navigation-shell .sipandu-service-modal-backdrop {
+  background: rgba(5,16,12,.58);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+}
+.sipandu-navigation-shell .sipandu-service-modal {
+  border-radius: 22px;
+  box-shadow: 0 28px 90px rgba(0,0,0,.30);
+}
+@media (max-width: 767px) {
+  .sipandu-navigation-shell .app-header-safe-area { padding-top: max(8px, env(safe-area-inset-top, 0px)); }
+  .sipandu-navigation-shell .app-header-safe-area > div { gap: 8px; }
+  .sipandu-navigation-shell .app-nav-bar > div > div { gap: 3px; padding: 6px 4px max(7px, env(safe-area-inset-bottom, 0px)); }
+  .sipandu-navigation-shell .app-nav-bar button { min-width: 0; padding: 8px 3px; }
+  .sipandu-navigation-shell .app-nav-bar button span:last-child { font-size: 8px; line-height: 1.2; }
+  .sipandu-navigation-shell main { scroll-padding-bottom: calc(6.5rem + env(safe-area-inset-bottom, 0px)); }
+}
+@media (max-width: 380px) {
+  .sipandu-navigation-shell .app-nav-bar button span:last-child { font-size: 7px; }
+  .sipandu-navigation-shell .app-header-safe-area .app-header-sipandu-brand { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sipandu-navigation-shell *,
+  .sipandu-navigation-shell *::before,
+  .sipandu-navigation-shell *::after {
+    scroll-behavior: auto !important;
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+  }
+}
