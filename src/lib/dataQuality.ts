@@ -57,7 +57,7 @@ export function analyzePPKSDataQuality(records: PPKSRecord[]): PPKSDataQualityRe
     const age = Number(record.usia);
     const validFields = {
       name: String(record.namaLengkap || '').trim().length > 1,
-      nik: /^\d{16}$/.test(nik) && !duplicateNIK,
+      nik: /^\d{16}$/.test(nik),
       age: Number.isInteger(age) && age > 0 && age <= 120,
       sex: record.jenisKelamin === 'Laki-laki' || record.jenisKelamin === 'Perempuan',
       region: String(record.kotaDomisili || '').trim().length > 0,
