@@ -16,6 +16,8 @@ import {
   writeBatch,
   query,
   limit,
+  where,
+  runTransaction,
 } from 'firebase/firestore';
 import {
   getAuth,
@@ -36,7 +38,7 @@ import {
   getIdTokenResult,
 } from 'firebase/auth';
 import firebaseConfig from '../../firebase-applet-config.json';
-import { PPKSRecord, ProfileUser, StageOneIntakePayload } from '../types';
+import { PPKSRecord, ProfileUser, StageOneIntakePayload, PPKSServiceStatus, PPKSServiceEvent, PPKSServiceUpdateInput } from '../types';
 import { deduplicatePPKSRecords, EXPECTED_REAL_PPKS_COUNT, parsePPKSTimestamp, samePPKSIdentity } from './ppksData';
 import { isLegacySamplePPKS } from '../data/initialData';
 import { GOOGLE_WORKSPACE_EMAIL } from './googleSIPANDUResources';
@@ -1597,5 +1599,154 @@ export async function saveSIPANDUUserProfile(uid: string, profile: ProfileUser):
       );
     }
     throw error;
+  }
+}
+
+
+const serviceDateIsValid = (value: string): boolean =>
+  value === '' || /^\d{4}-\d{2}-\d{2}$/.test(value);
+
+const toISODate = (value: any): string => {
+  if (!value) return '';
+  if (typeof value === 'string') return value;
+  if (typeof value.toDate === 'function') return value.toDate().toISOString();
+  if (value instanceof Date) return value.toISOString();
+  return '';
+};
+
+/** Read compact service-status documents only; the master PPKS roster stays separate. */
+export function subscribeToPPKSServiceStatus(
+  onStatuses: (statuses: PPKSServiceStatus[], info: { fromCache: boolean }) => void,
+  onError: (error: Error) => void,
+): () => void {
+  if (!auth.currentUser) throw new Error('Sesi SIPANDU belum aktif untuk membaca status layanan.');
+  return onSnapshot(
+    collection(db, 'ppksServiceStatus'),
+    (snapshot) => {
+      const statuses = snapshot.docs.map((document) => {
+        const data = document.data();
+        return {
+          ...data,
+          ppksId: document.id,
+          lastNutritionAt: toISODate(data.lastNutritionAt),
+          lastEntrepreneurshipAt: toISODate(data.lastEntrepreneurshipAt),
+          lastTherapyAt: toISODate(data.lastTherapyAt),
+          followUpAt: toISODate(data.followUpAt),
+          createdAt: toISODate(data.createdAt),
+          updatedAt: toISODate(data.updatedAt),
+        } as PPKSServiceStatus;
+      });
+      onStatuses(statuses, { fromCache: snapshot.metadata.fromCache });
+    },
+    (error) => onError(new Error(describeConnectionError(error))),
+  );
+}
+
+/** Save one status change and its immutable audit event in the same transaction. */
+export async function savePPKSServiceUpdate(input: PPKSServiceUpdateInput): Promise<void> {
+  const user = auth.currentUser;
+  if (!user) throw new Error('Sesi SIPANDU berakhir. Masuk kembali sebelum memperbarui layanan.');
+  if (!input.ppksId.trim() || input.ppksId.includes('/')) throw new Error('ID PPKS tidak valid.');
+  if (!serviceDateIsValid(input.serviceDate) || !serviceDateIsValid(input.followUpAt)) {
+    throw new Error('Tanggal layanan atau tindak lanjut tidak valid.');
+  }
+  const token = await getIdTokenResult(user);
+  if (!['owner', 'supervisor', 'pendamping'].includes(String(token.claims.role || ''))) {
+    throw new Error('Peran akun tidak memiliki akses ke modul layanan PPKS.');
+  }
+
+  const assistanceStatuses = ['belum-diverifikasi', 'dibutuhkan', 'dalam-proses', 'diterima', 'tidak-dibutuhkan'];
+  const therapyStatuses = ['belum-dimulai', 'terjadwal', 'aktif', 'selesai'];
+  const validStatus = input.eventType === 'psychosocial-therapy'
+    ? therapyStatuses.includes(input.status)
+    : assistanceStatuses.includes(input.status);
+  if (!validStatus) throw new Error('Status layanan tidak sesuai dengan jenis layanan yang dipilih.');
+  if ((input.status === 'diterima' || input.status === 'selesai') && !input.serviceDate) {
+    throw new Error('Tanggal wajib dicatat untuk bantuan yang diterima atau terapi yang selesai.');
+  }
+  const reasons = [
+    '', 'konfirmasi-penerimaan-bantuan', 'penjadwalan-penyaluran',
+    'monitoring-pendampingan', 'evaluasi-terapi', 'verifikasi-dokumen', 'lainnya',
+  ];
+  if (!reasons.includes(input.followUpReason) || (!!input.followUpAt !== !!input.followUpReason)) {
+    throw new Error('Alasan tindak lanjut harus dipilih saat tanggal tindak lanjut diisi.');
+  }
+
+  const statusRef = doc(db, 'ppksServiceStatus', input.ppksId);
+  const eventRef = doc(collection(db, 'ppksServiceEvents'));
+  try {
+    await runTransaction(db, async (transaction) => {
+      const existingSnapshot = await transaction.get(statusRef);
+      const existing = existingSnapshot.exists()
+        ? existingSnapshot.data() as Partial<PPKSServiceStatus>
+        : input.initialStatus;
+      const next: Record<string, unknown> = {
+        ppksId: input.ppksId,
+        nutritionStatus: existing.nutritionStatus || input.initialStatus.nutritionStatus,
+        entrepreneurshipStatus: existing.entrepreneurshipStatus || input.initialStatus.entrepreneurshipStatus,
+        psychosocialStatus: existing.psychosocialStatus || input.initialStatus.psychosocialStatus,
+        lastNutritionAt: existing.lastNutritionAt || '',
+        lastEntrepreneurshipAt: existing.lastEntrepreneurshipAt || '',
+        lastTherapyAt: existing.lastTherapyAt || '',
+        therapySessionCount: Number(existing.therapySessionCount || 0),
+        followUpAt: input.followUpAt,
+        followUpReason: input.followUpReason,
+        assignedToUid: String(existing.assignedToUid || user.uid),
+        createdAt: existingSnapshot.exists() ? existing.createdAt : serverTimestamp(),
+        updatedAt: serverTimestamp(),
+        updatedByUid: user.uid,
+      };
+
+      if (input.eventType === 'nutrition-assistance') {
+        next.nutritionStatus = input.status;
+        if (input.status === 'diterima' && input.serviceDate) next.lastNutritionAt = input.serviceDate;
+      } else if (input.eventType === 'entrepreneurship-assistance') {
+        next.entrepreneurshipStatus = input.status;
+        if (input.status === 'diterima' && input.serviceDate) next.lastEntrepreneurshipAt = input.serviceDate;
+      } else {
+        next.psychosocialStatus = input.status;
+        if (input.status === 'selesai' && input.serviceDate) {
+          next.lastTherapyAt = input.serviceDate;
+          next.therapySessionCount = Number(next.therapySessionCount || 0) + 1;
+        }
+      }
+
+      transaction.set(statusRef, next, { merge: true });
+      transaction.set(eventRef, {
+        id: eventRef.id,
+        ppksId: input.ppksId,
+        eventType: input.eventType,
+        status: input.status,
+        serviceDate: input.serviceDate,
+        followUpAt: input.followUpAt,
+        followUpReason: input.followUpReason,
+        createdByUid: user.uid,
+        createdAt: serverTimestamp(),
+      });
+    });
+  } catch (error) {
+    throw new Error(describeConnectionError(error));
+  }
+}
+
+/** Read the structured, append-only history for a single PPKS. */
+export async function fetchPPKSServiceEvents(ppksId: string): Promise<PPKSServiceEvent[]> {
+  if (!auth.currentUser) throw new Error('Sesi SIPANDU belum aktif.');
+  if (!ppksId.trim() || ppksId.includes('/')) throw new Error('ID PPKS tidak valid.');
+  try {
+    const snapshot = await getDocs(query(
+      collection(db, 'ppksServiceEvents'),
+      where('ppksId', '==', ppksId),
+    ));
+    return snapshot.docs.map((document) => {
+      const data = document.data();
+      return {
+        ...data,
+        id: document.id,
+        createdAt: toISODate(data.createdAt),
+      } as PPKSServiceEvent;
+    }).sort((left, right) => right.createdAt.localeCompare(left.createdAt));
+  } catch (error) {
+    throw new Error(describeConnectionError(error));
   }
 }
