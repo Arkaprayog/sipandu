@@ -6,6 +6,7 @@ import {
   Moon,
   RefreshCw,
   ShieldCheck,
+  Smartphone,
   Sun,
   X,
 } from 'lucide-react';
@@ -18,6 +19,7 @@ import {
 } from '../lib/biometricLock';
 import { auth } from '../lib/firebase';
 import { AppSettings } from '../types';
+import { detectPwaRuntimeCapabilities } from '../lib/platformCompatibility';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -118,6 +120,17 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, s
   };
 
   const biometricAvailable = Boolean(biometricDiagnostics?.isAvailable);
+
+  const standaloneNavigator = typeof navigator !== 'undefined'
+    && (navigator as Navigator & { standalone?: boolean }).standalone === true;
+  const runtimeCapabilities = detectPwaRuntimeCapabilities({
+    userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : '',
+    serviceWorkerAvailable: typeof navigator !== 'undefined' && 'serviceWorker' in navigator,
+    browserNotificationsAvailable: typeof window !== 'undefined' && 'Notification' in window,
+    standaloneMode: standaloneNavigator
+      || (typeof window !== 'undefined' && typeof window.matchMedia === 'function'
+        && window.matchMedia('(display-mode: standalone)').matches),
+  });
 
   return (
     <div
@@ -239,6 +252,46 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, s
               </button>
             </div>
           </section>
+          <section className="rounded-2xl border border-cyan-300/20 bg-cyan-950/20 p-4">
+            <div className="mb-3 flex items-center gap-2">
+              <Smartphone className="h-5 w-5 text-cyan-200" />
+              <div className="min-w-0">
+                <h3 className="text-sm font-bold text-cyan-100">Huawei & HarmonyOS</h3>
+                <p className="mt-0.5 text-[11px] text-neutral-400">Panduan akses PWA dan pemeriksaan kemampuan browser perangkat.</p>
+              </div>
+              <span className="ml-auto shrink-0 rounded-full bg-cyan-300/10 px-2 py-1 text-[10px] font-bold text-cyan-100">
+                {runtimeCapabilities.isHuaweiDevice ? 'Huawei terdeteksi' : 'Panduan lintas perangkat'}
+              </span>
+            </div>
+            <p className="mb-3 text-[11px] leading-relaxed text-neutral-300">
+              Perkiraan perangkat: <strong className="text-cyan-100">{runtimeCapabilities.platformLabel}</strong>.
+              User-agent dapat disederhanakan browser; hasil ini bukan verifikasi model atau versi OS.
+            </p>
+            <div className="mb-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
+              <div className="rounded-xl border border-white/10 bg-black/20 p-2.5">
+                <p className="text-[10px] text-neutral-400">Service Worker</p>
+                <strong className="text-xs">{runtimeCapabilities.serviceWorkerAvailable ? 'API tersedia' : 'Tidak tersedia'}</strong>
+              </div>
+              <div className="rounded-xl border border-white/10 bg-black/20 p-2.5">
+                <p className="text-[10px] text-neutral-400">Notification API</p>
+                <strong className="text-xs">{runtimeCapabilities.browserNotificationsAvailable ? 'API tersedia' : 'Tidak tersedia'}</strong>
+              </div>
+              <div className="rounded-xl border border-white/10 bg-black/20 p-2.5">
+                <p className="text-[10px] text-neutral-400">Mode tampilan</p>
+                <strong className="text-xs">{runtimeCapabilities.standaloneMode ? 'Standalone' : 'Browser / pintasan'}</strong>
+              </div>
+            </div>
+            <ol className="space-y-2 text-[11px] leading-relaxed text-neutral-300">
+              <li><strong className="text-white">1.</strong> Buka <span className="font-semibold text-cyan-100">https://sipanduodhiv.my.id</span> melalui Huawei Browser.</li>
+              <li><strong className="text-white">2.</strong> Pada HarmonyOS sebelum versi 5 atau EMUI, buka menu browser lalu pilih <strong className="text-white">Tambahkan ke → Desktop / Layar utama</strong> bila tersedia.</li>
+              <li><strong className="text-white">3.</strong> Pada HarmonyOS 5 ke atas, buka menu browser lalu pilih <strong className="text-white">Tambahkan ke layar utama / Buat pintasan</strong> apabila tersedia. Nama menu dapat berbeda menurut versi dan wilayah.</li>
+              <li><strong className="text-white">4.</strong> Buka ikon pintasan SIPANDU dan masuk dengan akun resmi.</li>
+            </ol>
+            <div className="mt-3 rounded-xl border border-amber-300/20 bg-amber-950/25 p-3 text-[10px] leading-relaxed text-amber-100">
+              <strong>Batas kompatibilitas:</strong> HarmonyOS NEXT tidak boleh diasumsikan menjalankan APK Android secara native. Pintasan web mungkin membuka Huawei Browser dan belum tentu menjadi jendela PWA standalone. APK ini bukan paket HarmonyOS native / AppGallery. Notifikasi sistem bergantung pada dukungan browser dan izin OS; notifikasi dalam aplikasi menjadi jalur cadangan.
+            </div>
+          </section>
+
         </div>
       </section>
     </div>

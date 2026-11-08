@@ -15,6 +15,10 @@ if (!fs.existsSync(indexPath)) {
 }
 
 const html = fs.readFileSync(indexPath, 'utf8');
+const packageVersion = JSON.parse(fs.readFileSync(path.resolve('package.json'), 'utf8')).version;
+if (!html.includes(`<meta name="application-version" content="${packageVersion}"`)) {
+  fail('Versi index.html harus sama dengan package.json: ' + packageVersion);
+}
 const sha256File = (file) => crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
 
 // The launcher/notification icon must be the exact original project asset recovered
@@ -48,6 +52,10 @@ if (!fs.existsSync(manifestPath)) {
 } else {
   try {
     const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+    if (manifest.version !== packageVersion) fail('Versi manifest harus sama dengan package.json: ' + packageVersion);
+    if (manifest.display !== 'standalone' || !manifest.scope || !manifest.start_url) {
+      fail('Manifest PWA harus mempertahankan display standalone, scope, dan start_url.');
+    }
     for (const size of ['192x192', '512x512']) {
       if (!manifest.icons?.some((icon) => icon.sizes === size && icon.type === 'image/png')) {
         fail('Manifest tidak memiliki ikon PNG ukuran ' + size + '.');
@@ -228,6 +236,11 @@ if (!fs.existsSync(loginBackground) || fs.statSync(loginBackground).size === 0) 
   // Its byte size can exceed JPEG because the source JPEG is already lossy-compressed;
   // never force lossy recompression just to satisfy an arbitrary size threshold.
   console.log(`Login background lossless WebP present: JPEG ${originalBytes} bytes; WebP ${webpBytes} bytes (${Math.round((1 - webpBytes / originalBytes) * 100)}% size reduction).`);
+}
+
+const serviceWorkerSource = fs.readFileSync(path.resolve('public', 'sw.js'), 'utf8');
+for (const marker of ["addEventListener('install'", "addEventListener('activate'", "addEventListener('notificationclick'"]) {
+  if (!serviceWorkerSource.includes(marker)) fail('Service worker kehilangan handler lifecycle/notifikasi: ' + marker);
 }
 
 for (const required of ['manifest.webmanifest', 'sw.js']) {

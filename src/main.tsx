@@ -4,6 +4,20 @@ import './index.css';
 import { BiometricGate } from './components/BiometricGate';
 import { importLazyModuleWithRecovery, reloadSIPANDUWithFreshDocument } from './lib/lazyImportRecovery';
 
+// Register the lightweight PWA worker on secure browser contexts.
+// It manages lifecycle/notification clicks only; private PPKS data is never cached.
+if (typeof window !== 'undefined' && window.isSecureContext && 'serviceWorker' in navigator) {
+  const basePath = import.meta.env.BASE_URL || './';
+  const workerPath = basePath.endsWith('/') ? `${basePath}sw.js` : `${basePath}/sw.js`;
+  const serviceWorkerUrl = new URL(workerPath, window.location.href);
+  void navigator.serviceWorker.register(serviceWorkerUrl, {
+    scope: basePath,
+    updateViaCache: 'none',
+  }).catch((error: unknown) => {
+    console.warn('SIPANDU PWA service worker registration failed:', error);
+  });
+}
+
 const rootElement = document.getElementById('root');
 
 if (!rootElement) {
