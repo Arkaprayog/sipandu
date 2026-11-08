@@ -7,6 +7,7 @@ import {
   FolderArchive,
   HandHeart,
   MapPinned,
+  Footprints,
 } from 'lucide-react';
 
 export type TabKey =
@@ -16,7 +17,8 @@ export type TabKey =
   | 'from-asesmen-terintegrasi'
   | 'dokumen'
   | 'layanan-ppks'
-  | 'intelijen-wilayah';
+  | 'intelijen-wilayah'
+  | 'pendampingan-lapangan';
 
 interface BottomNavProps {
   activeTab: TabKey;
@@ -59,6 +61,11 @@ export const BottomNav: React.FC<BottomNavProps> = ({ activeTab, onSelectTab }) 
       key: 'intelijen-wilayah',
       label: 'PETA WILAYAH',
       icon: <MapPinned className="w-4 h-4 md:w-5 md:h-5" />,
+    },
+    {
+      key: 'pendampingan-lapangan',
+      label: 'PENDAMPINGAN',
+      icon: <Footprints className="w-4 h-4 md:w-5 md:h-5" />,
     },
   ];
 
