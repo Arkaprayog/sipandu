@@ -153,6 +153,44 @@ export async function verifyFirebaseIdToken(
   };
 }
 
+const FIREBASE_JWKS_URL = "https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com";
+
+/** Cache only Google's public verification keys; never cache user tokens or account data. */
+async function loadFirebasePublicKeys(): Promise<FirebaseJwk[]> {
+  const cacheKey = new Request(FIREBASE_JWKS_URL, { method: "GET" });
+  const cached = await caches.default.match(cacheKey);
+  if (cached) {
+    try {
+      const cachedSet = await cached.json() as { keys?: FirebaseJwk[] };
+      if (Array.isArray(cachedSet.keys) && cachedSet.keys.length > 0) return cachedSet.keys;
+    } catch {
+      // Discard malformed cached public-key material and fetch a fresh key set.
+    }
+  }
+
+  const response = await fetch(FIREBASE_JWKS_URL, {
+    headers: { Accept: "application/json" },
+    signal: AbortSignal.timeout(8000),
+  });
+  if (!response.ok) throw new Error("AUTH_KEYS_UNAVAILABLE");
+  const keySet = await response.json() as { keys?: FirebaseJwk[] };
+  if (!Array.isArray(keySet.keys) || keySet.keys.length === 0) throw new Error("AUTH_KEYS_UNAVAILABLE");
+
+  const maxAgeMatch = response.headers.get("Cache-Control")?.match(/max-age=(\\d+)/i);
+  const maxAgeSeconds = maxAgeMatch
+    ? Math.max(60, Math.min(Number(maxAgeMatch[1]), 21600))
+    : 3600;
+  const cachedResponse = new Response(JSON.stringify(keySet), {
+    status: 200,
+    headers: {
+      "Content-Type": "application/json",
+      "Cache-Control": "public, max-age=" + maxAgeSeconds,
+    },
+  });
+  await caches.default.put(cacheKey, cachedResponse);
+  return keySet.keys;
+}
+
 /**
  * Cryptographically verify the token, then check the live Firebase account for
  * disabled/revoked state. The signed role claim is authoritative; accounts:lookup
@@ -160,15 +198,8 @@ export async function verifyFirebaseIdToken(
  */
 async function verifyStaffToken(token: string, env: Env): Promise<FirebaseClaims | null> {
   if (!env.FIREBASE_WEB_API_KEY) throw new Error("AUTH_PROVIDER_NOT_CONFIGURED");
-  const keyResponse = await fetch(
-    "https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com",
-    { headers: { Accept: "application/json" }, signal: AbortSignal.timeout(8000) },
-  );
-  if (!keyResponse.ok) throw new Error("AUTH_KEYS_UNAVAILABLE");
-  const keySet = await keyResponse.json() as { keys?: FirebaseJwk[] };
-  if (!Array.isArray(keySet.keys) || keySet.keys.length === 0) throw new Error("AUTH_KEYS_UNAVAILABLE");
-
-  const claims = await verifyFirebaseIdToken(token, env.FIREBASE_PROJECT_ID, keySet.keys);
+  const publicKeys = await loadFirebasePublicKeys();
+  const claims = await verifyFirebaseIdToken(token, env.FIREBASE_PROJECT_ID, publicKeys);
   if (!claims) return null;
 
   const accountResponse = await fetch(
