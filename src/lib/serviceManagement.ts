@@ -36,6 +36,13 @@ const emptyStatus = (ppksId: string): PPKSServiceStatus => ({
   updatedByUid: '',
 });
 
+const hasExplicitRecommendation = (value: unknown): boolean => {
+  const normalized = Array.isArray(value)
+    ? value.map((item) => String(item ?? '').trim()).join(' ').toLocaleLowerCase('id-ID')
+    : String(value ?? '').trim().toLocaleLowerCase('id-ID');
+  return /^(ya|iya|yes|true|1|butuh|dibutuhkan|direkomendasikan|direkomendasikan untuk bantuan)$/i.test(normalized);
+};
+
 const textHasNeed = (value: unknown, pattern: RegExp): boolean =>
   pattern.test(String(value ?? '').toLocaleLowerCase('id-ID'));
 
@@ -44,10 +51,10 @@ export function getInitialPPKSServiceStatus(record: PPKSRecord): PPKSServiceStat
   const requested = String(record.jenisBantuan || '');
   const nutritionRecommended =
     record.integratedForm?.rekomendasiBantuanNutrisi === true ||
-    textHasNeed(record.officialAssessment?.rekomendasiBantuanNutrisi, /ya|true|setuju|butuh|direkomendasikan/);
+    hasExplicitRecommendation(record.officialAssessment?.rekomendasiBantuanNutrisi);
   const entrepreneurshipRecommended =
     record.integratedForm?.rekomendasiBantuanModalUsaha === true ||
-    textHasNeed(record.officialAssessment?.rekomendasiBantuanModalUsaha, /ya|true|setuju|butuh|direkomendasikan/);
+    hasExplicitRecommendation(record.officialAssessment?.rekomendasiBantuanModalUsaha);
 
   if (nutritionRecommended || textHasNeed(requested, /nutrisi|gizi|pemenuhan makanan/)) {
     initial.nutritionStatus = 'dibutuhkan';
