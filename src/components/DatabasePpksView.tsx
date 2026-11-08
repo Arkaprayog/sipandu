@@ -56,6 +56,10 @@ export const DatabasePpksView: React.FC<DatabasePpksViewProps> = ({
   const [editingIntervensi, setEditingIntervensi] = useState<string>('');
   const [saveSuccess, setSaveSuccess] = useState<boolean>(false);
   const [showWaPreview, setShowWaPreview] = useState<boolean>(false);
+  const [databaseSearch, setDatabaseSearch] = useState('');
+  const [regionFilter, setRegionFilter] = useState('');
+  const [genderFilter, setGenderFilter] = useState('');
+  const [ageFilter, setAgeFilter] = useState('');
 
   // Keep the database chooser in the same alphabetical order as the source roster.
   const displayPPKSList = useMemo(
@@ -67,6 +71,28 @@ export const DatabasePpksView: React.FC<DatabasePpksViewProps> = ({
     () => analyzePPKSDataQuality(displayPPKSList),
     [displayPPKSList]
   );
+
+  const regionOptions = useMemo(
+    () => [...new Set(displayPPKSList.map((record) => String(record.kotaDomisili || '').trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'id-ID')),
+    [displayPPKSList]
+  );
+  const filteredPPKSList = useMemo(() => {
+    const search = databaseSearch.trim().toLocaleLowerCase('id-ID');
+    return displayPPKSList.filter((record) => {
+      const searchable = [record.namaLengkap, record.id, record.kotaDomisili, record.noHpWa]
+        .map((value) => String(value || '').toLocaleLowerCase('id-ID'));
+      const matchesSearch = !search || searchable.some((value) => value.includes(search));
+      const matchesRegion = !regionFilter || record.kotaDomisili === regionFilter;
+      const matchesGender = !genderFilter || record.jenisKelamin === genderFilter;
+      const age = Number(record.usia);
+      const matchesAge = !ageFilter || (Number.isFinite(age) && (
+        ageFilter === '0-17' ? age >= 0 && age <= 17 :
+        ageFilter === '18-35' ? age >= 18 && age <= 35 :
+        ageFilter === '36-59' ? age >= 36 && age <= 59 : age >= 60
+      ));
+      return matchesSearch && matchesRegion && matchesGender && matchesAge;
+    });
+  }, [displayPPKSList, databaseSearch, regionFilter, genderFilter, ageFilter]);
 
   // Currently selected PPKS
   const currentPPKS = displayPPKSList.find((p) => p.id === selectedPPKSId);
@@ -216,30 +242,64 @@ export const DatabasePpksView: React.FC<DatabasePpksViewProps> = ({
           <p className="mt-3 text-[9px] leading-relaxed text-neutral-500">Pemeriksaan hanya membaca roster yang dimuat. SIPANDU tidak mengubah, menghapus, atau menggabungkan data otomatis. Potensi duplikasi harus diverifikasi sebelum memperbaiki sumber.</p>
         </section>
 
-        {/* Kotak Horizontal: Pemilihan Data PPKS yang akan dilihat */}
-        <div className="mb-6">
-          <label className="block text-xs font-bold text-sky-200 mb-2 uppercase tracking-wider flex items-center gap-2">
-            <Search className="w-4 h-4 text-sky-300" />
-            <span>Pilih Data PPKS Untuk Ditampilkan:</span>
-          </label>
-          <div className="relative">
+        {/* Smart Database: search and filter the loaded, de-duplicated roster without mutating source data. */}
+        <section className="mb-6 rounded-2xl border border-white/10 bg-black/20 p-4 sm:p-5" aria-label="Pencarian dan filter database PPKS">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <label htmlFor="sipandu-database-search" className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-sky-200">
+              <Search className="h-4 w-4 text-sky-300" /> Smart Database PPKS
+            </label>
+            <span className="rounded-lg border border-emerald-300/20 bg-emerald-950/30 px-2.5 py-1 text-[10px] font-bold text-emerald-200">
+              {filteredPPKSList.length.toLocaleString('id-ID')} hasil / {displayPPKSList.length.toLocaleString('id-ID')} data
+            </span>
+          </div>
+          <input
+            id="sipandu-database-search"
+            type="search"
+            value={databaseSearch}
+            onChange={(event) => setDatabaseSearch(event.target.value)}
+            placeholder="Cari nama, ID PPKS, wilayah, atau nomor kontak…"
+            className="mb-3 min-h-11 w-full rounded-xl border border-white/15 bg-[#142618] px-3 py-2 text-sm text-white placeholder:text-neutral-400 focus:border-sky-400 focus:outline-none focus:ring-1 focus:ring-sky-400"
+            autoComplete="off"
+          />
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+            <label className="text-[10px] font-semibold text-neutral-300">Kabupaten / kota
+              <select value={regionFilter} onChange={(event) => setRegionFilter(event.target.value)} className="mt-1 min-h-10 w-full rounded-lg border border-white/10 bg-[#142618] px-2 text-xs text-white">
+                <option value="">Semua wilayah</option>
+                {regionOptions.map((region) => <option key={region} value={region}>{region}</option>)}
+              </select>
+            </label>
+            <label className="text-[10px] font-semibold text-neutral-300">Jenis kelamin
+              <select value={genderFilter} onChange={(event) => setGenderFilter(event.target.value)} className="mt-1 min-h-10 w-full rounded-lg border border-white/10 bg-[#142618] px-2 text-xs text-white">
+                <option value="">Semua</option><option value="Laki-laki">Laki-laki</option><option value="Perempuan">Perempuan</option>
+              </select>
+            </label>
+            <label className="text-[10px] font-semibold text-neutral-300">Kelompok usia
+              <select value={ageFilter} onChange={(event) => setAgeFilter(event.target.value)} className="mt-1 min-h-10 w-full rounded-lg border border-white/10 bg-[#142618] px-2 text-xs text-white">
+                <option value="">Semua usia</option><option value="0-17">0–17 tahun</option><option value="18-35">18–35 tahun</option><option value="36-59">36–59 tahun</option><option value="60+">60 tahun ke atas</option>
+              </select>
+            </label>
+          </div>
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+            <p className="text-[10px] text-neutral-400">Daftar pilihan dibatasi 100 hasil teratas agar tetap ringan di ponsel. Persempit pencarian untuk menemukan data lainnya.</p>
+            <button type="button" onClick={() => { setDatabaseSearch(''); setRegionFilter(''); setGenderFilter(''); setAgeFilter(''); }} className="rounded-lg border border-white/15 px-3 py-2 text-[10px] font-bold text-sky-200 hover:bg-white/5">Reset filter</button>
+          </div>
+          <label className="mt-3 block text-xs font-bold text-sky-200">Pilih profil PPKS
             <select
               value={selectedPPKSId}
-              onChange={(e) => handleSelectPPKS(e.target.value)}
+              onChange={(event) => handleSelectPPKS(event.target.value)}
               disabled={displayPPKSList.length === 0}
-              className="w-full py-3.5 px-4 rounded-xl bg-[#142618] border border-rose-500/45 text-white font-medium text-sm focus:outline-none focus:border-sky-400 focus:ring-1 focus:ring-sky-400 shadow-md cursor-pointer transition disabled:opacity-60"
+              className="mt-2 w-full min-h-11 rounded-xl border border-rose-500/45 bg-[#142618] px-3 py-2 text-xs font-medium text-white focus:border-sky-400 focus:outline-none focus:ring-1 focus:ring-sky-400 disabled:opacity-60"
             >
-              <option value="" className="bg-[#0f1d12] text-neutral-400">
-                {displayPPKSList.length === 0 ? 'Belum ada data PPKS dimuat — gunakan Google Workspace & Cloud Hub' : '-- Silakan Klik Untuk Memilih Data PPKS --'}
-              </option>
-              {displayPPKSList.map((p) => (
-                <option key={p.id} value={p.id} className="bg-[#0f1d12] text-white py-1">
-                  {formatPPKSTimestamp(p.timestamp)} • {p.namaLengkap} • NIK: {resolveProfileNIK(p) || 'belum terpetakan'} • {p.kotaDomisili} (Desil {p.desil})
+              <option value="">{displayPPKSList.length === 0 ? 'Belum ada data PPKS dimuat — gunakan Google Workspace & Cloud Hub' : '-- Pilih profil PPKS --'}</option>
+              {filteredPPKSList.slice(0, 100).map((record) => (
+                <option key={record.id} value={record.id}>
+                  {record.namaLengkap} • {record.kotaDomisili || 'Wilayah belum tersedia'} • ID {record.id}
                 </option>
               ))}
             </select>
-          </div>
-        </div>
+          </label>
+          {filteredPPKSList.length === 0 && <p className="mt-2 rounded-lg border border-amber-300/20 bg-amber-950/20 p-2 text-[10px] text-amber-100">Tidak ada data yang cocok. Ubah kata kunci atau reset filter.</p>}
+        </section>
 
         {/* Halaman Kosong jika belum memilih */}
         {!currentPPKS && (
