@@ -1,7 +1,7 @@
 import { getAccessToken, invalidateAccessToken, refreshWorkspaceAccessToken } from './firebase';
 import type { SuratRecord } from '../types';
-import { buildGoogleDriveMultipartBody, buildGoogleDriveRequestUrl } from './googleDriveMultipart';
-import { isIntegratedAssessmentAnswerKey, isManagedIntegratedAssessmentArchiveFile } from './integratedAssessmentArchive';
+import { buildDriveUploadMetadata, buildGoogleDriveMultipartBody, buildGoogleDriveRequestUrl, buildResumableContentRange, parseResumableRangeOffset } from './googleDriveMultipart';
+import { isManagedIntegratedAssessmentArchiveFile } from './integratedAssessmentArchive';
 
 const ROOT_FOLDER_NAME = 'SIPANDU';
 const DOCUMENTS_FOLDER_NAME = 'Dokumen';
@@ -66,29 +66,159 @@ async function ensureFolderPath(parts: string[]): Promise<string> {
   return parentId!;
 }
 
+const GOOGLE_DRIVE_MULTIPART_LIMIT = 5 * 1024 * 1024;
+const GOOGLE_DRIVE_RESUMABLE_CHUNK_SIZE = 8 * 1024 * 1024; // 32 x 256 KiB
+const MAX_RESUMABLE_RETRIES = 3;
+type UploadedDriveFile = { id: string; name?: string; mimeType?: string; size?: string; webViewLink?: string };
+
+async function readDriveError(response: Response, fallback: string): Promise<string> {
+  try {
+    const payload = await response.json() as { error?: { message?: string }; message?: string };
+    return payload.error?.message || payload.message || fallback + ' (HTTP ' + response.status + ').';
+  } catch {
+    return fallback + ' (HTTP ' + response.status + ').';
+  }
+}
+
+async function getWorkspaceUploadToken(forceRefresh = false): Promise<string> {
+  if (forceRefresh) invalidateAccessToken();
+  let token = forceRefresh ? await refreshWorkspaceAccessToken(true) : await getAccessToken();
+  if (!token) token = await refreshWorkspaceAccessToken(forceRefresh);
+  if (!token) {
+    throw new Error('Sesi Google Drive kedaluwarsa. Hubungkan kembali akun Google Workspace, lalu ulangi penyimpanan PDF.');
+  }
+  return token;
+}
+
+async function queryResumableUploadStatus(
+  uploadUrl: string,
+  totalSize: number,
+  token: string,
+): Promise<{ offset: number; completed?: UploadedDriveFile }> {
+  const response = await fetch(uploadUrl, {
+    method: 'PUT',
+    headers: {
+      Authorization: 'Bearer ' + token,
+      'Content-Range': 'bytes */' + totalSize,
+    },
+  });
+  if (response.status === 308) {
+    return { offset: parseResumableRangeOffset(response.headers.get('Range')) };
+  }
+  if (response.ok) {
+    return { offset: totalSize, completed: await response.json() as UploadedDriveFile };
+  }
+  if (response.status === 404 || response.status === 410) {
+    throw new Error('Sesi upload Google Drive telah kedaluwarsa. Ulangi penyimpanan PDF.');
+  }
+  throw new Error(await readDriveError(response, 'Status upload resumable Google Drive tidak dapat diperiksa.'));
+}
+
+/**
+ * Upload in 8 MiB chunks (multiples of 256 KiB) and resume at bytes confirmed
+ * by Google's Range response. No SIPANDU-specific maximum file size is imposed.
+ */
+async function uploadResumableChunks(
+  uploadUrl: string,
+  mimeType: string,
+  data: Blob,
+): Promise<UploadedDriveFile> {
+  let offset = 0;
+  let token = await getWorkspaceUploadToken();
+  let retries = 0;
+  let noProgressRetries = 0;
+
+  while (offset < data.size) {
+    const endExclusive = Math.min(offset + GOOGLE_DRIVE_RESUMABLE_CHUNK_SIZE, data.size);
+    let response: Response;
+    try {
+      response = await fetch(uploadUrl, {
+        method: 'PUT',
+        headers: {
+          Authorization: 'Bearer ' + token,
+          'Content-Type': mimeType,
+          'Content-Range': buildResumableContentRange(offset, endExclusive, data.size),
+        },
+        body: data.slice(offset, endExclusive, mimeType),
+      });
+    } catch (networkError) {
+      if (retries >= MAX_RESUMABLE_RETRIES) {
+        throw new Error('Koneksi terputus saat mengunggah PDF ke Google Drive: ' +
+          (networkError instanceof Error ? networkError.message : String(networkError)));
+      }
+      retries += 1;
+      const status = await queryResumableUploadStatus(uploadUrl, data.size, token);
+      if (status.completed) return status.completed;
+      offset = status.offset;
+      continue;
+    }
+
+    if (response.status === 401) {
+      if (retries >= MAX_RESUMABLE_RETRIES) throw new Error('Otorisasi Google Drive terus ditolak saat upload PDF.');
+      token = await getWorkspaceUploadToken(true);
+      retries += 1;
+      continue;
+    }
+
+    if (response.status === 308) {
+      const nextOffset = parseResumableRangeOffset(response.headers.get('Range'));
+      if (nextOffset > data.size) throw new Error('Google Drive mengembalikan posisi upload di luar ukuran PDF.');
+      if (nextOffset <= offset) {
+        noProgressRetries += 1;
+        if (noProgressRetries > MAX_RESUMABLE_RETRIES) {
+          throw new Error('Google Drive belum mengonfirmasi byte PDF yang terkirim. Ulangi penyimpanan saat koneksi stabil.');
+        }
+        const status = await queryResumableUploadStatus(uploadUrl, data.size, token);
+        if (status.completed) return status.completed;
+        offset = status.offset;
+        continue;
+      }
+      noProgressRetries = 0;
+      retries = 0;
+      offset = nextOffset;
+      continue;
+    }
+
+    if (response.ok) {
+      const completed = await response.json() as UploadedDriveFile;
+      if (completed.id) return completed;
+      throw new Error('Google Drive menyelesaikan upload tetapi tidak mengembalikan ID berkas.');
+    }
+
+    if (response.status >= 500 && retries < MAX_RESUMABLE_RETRIES) {
+      retries += 1;
+      const status = await queryResumableUploadStatus(uploadUrl, data.size, token);
+      if (status.completed) return status.completed;
+      offset = status.offset;
+      continue;
+    }
+
+    throw new Error(await readDriveError(response, 'Upload PDF resumable ke Google Drive gagal.'));
+  }
+
+  const finalStatus = await queryResumableUploadStatus(uploadUrl, data.size, token);
+  if (finalStatus.completed) return finalStatus.completed;
+  throw new Error('Upload PDF belum dikonfirmasi selesai oleh Google Drive.');
+}
+
 async function uploadMultipart(
   folderId: string,
   fileName: string,
   mimeType: string,
   data: Blob,
   existingFileId?: string,
-): Promise<{ id: string; webViewLink?: string }> {
-  const metadata = JSON.stringify({
-    name: fileName,
-    // Drive files.update does not allow changing parent folders here; keep
-    // the existing file in its current archive folder during in-place migration.
-    ...(!existingFileId ? { parents: [folderId] } : {}),
-    appProperties: { sipanduManaged: 'true', sipanduArchive: folderId },
-  });
-
-  let uploaded: { id: string; webViewLink?: string };
-  const uploadPath = existingFileId
-    ? '/files/' + encodeURIComponent(existingFileId)
-    : '/files';
+): Promise<UploadedDriveFile> {
+  if (!(data instanceof Blob) || data.size <= 0) {
+    throw new Error('Berkas kosong dan tidak dapat diunggah ke Google Drive.');
+  }
+  const metadata = buildDriveUploadMetadata({ name: fileName, mimeType, folderId, existingFileId });
+  const uploadPath = existingFileId ? '/files/' + encodeURIComponent(existingFileId) : '/files';
   const uploadMethod = existingFileId ? 'PATCH' : 'POST';
-  if (data.size > 5 * 1024 * 1024) {
-    // Resumable upload avoids holding a second multipart copy in mobile memory.
-    const session = await driveFetch(uploadPath + '?uploadType=resumable&fields=id,name,webViewLink', {
+  const fields = 'id,name,mimeType,size,webViewLink';
+
+  let uploaded: UploadedDriveFile;
+  if (data.size > GOOGLE_DRIVE_MULTIPART_LIMIT) {
+    const session = await driveFetch(uploadPath + '?uploadType=resumable&fields=' + fields, {
       method: uploadMethod,
       headers: {
         'Content-Type': 'application/json; charset=UTF-8',
@@ -98,51 +228,36 @@ async function uploadMultipart(
       body: metadata,
     }, true, true);
     if (!session.ok) {
-      const error = await session.json().catch(() => ({}));
-      throw new Error((error as { error?: { message?: string } }).error?.message || 'Sesi upload Google Drive gagal dibuat.');
+      throw new Error(await readDriveError(session, 'Sesi upload resumable Google Drive gagal dibuat.'));
     }
     const uploadUrl = session.headers.get('Location');
-    if (!uploadUrl) throw new Error('Google Drive tidak mengembalikan alamat sesi upload.');
-    let token = await getAccessToken();
-    if (!token) token = await refreshWorkspaceAccessToken();
-    if (!token) throw new Error('Sesi Google Drive kedaluwarsa. Hubungkan kembali akun Google Workspace, lalu ulangi backup.');
-    let response = await fetch(uploadUrl, {
-      method: 'PUT',
-      headers: { Authorization: 'Bearer ' + token, 'Content-Type': mimeType },
-      body: data,
-    });
-    if (response.status === 401) {
-      invalidateAccessToken();
-      token = await refreshWorkspaceAccessToken(true);
-      if (token) {
-        response = await fetch(uploadUrl, {
-          method: 'PUT',
-          headers: { Authorization: 'Bearer ' + token, 'Content-Type': mimeType },
-          body: data,
-        });
-      }
+    if (!uploadUrl || !/^https:\/\/www\.googleapis\.com\/upload\/drive\/v3\//i.test(uploadUrl)) {
+      throw new Error('Google Drive tidak mengembalikan alamat sesi upload yang valid.');
     }
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({}));
-      throw new Error((error as { error?: { message?: string } }).error?.message || 'Upload resumable Google Drive gagal (HTTP ' + response.status + ').');
-    }
-    uploaded = await response.json() as { id: string; webViewLink?: string };
+    uploaded = await uploadResumableChunks(uploadUrl, mimeType, data);
   } else {
-    const boundary = 'sipandu-' + Math.random().toString(36).slice(2);
+    const boundary = 'sipandu-' + crypto.randomUUID().replace(/-/g, '');
     const body = buildGoogleDriveMultipartBody(metadata, mimeType, data, boundary);
-
-    const response = await driveFetch(uploadPath + '?uploadType=multipart&fields=id,name,webViewLink', {
-      method: uploadMethod,
-      headers: { 'Content-Type': 'multipart/related; boundary=' + boundary },
-      body,
-    }, true, true);
+    const response = await driveFetch(
+      uploadPath + '?uploadType=multipart&fields=' + fields,
+      {
+        method: uploadMethod,
+        headers: { 'Content-Type': 'multipart/related; boundary=' + boundary },
+        body,
+      },
+      true,
+      true,
+    );
     if (!response.ok) {
-      const error = await response.json().catch(() => ({}));
-      throw new Error((error as { error?: { message?: string } }).error?.message || 'File gagal disalin ke Google Drive.');
+      throw new Error(await readDriveError(response, 'File gagal disalin ke Google Drive.'));
     }
-    uploaded = await response.json() as { id: string; webViewLink?: string };
+    uploaded = await response.json() as UploadedDriveFile;
   }
+
   if (!uploaded.id) throw new Error('Google Drive menerima upload tetapi tidak mengembalikan ID file.');
+  if (uploaded.mimeType && uploaded.mimeType !== mimeType) {
+    throw new Error('Google Drive menyimpan berkas dengan tipe ' + uploaded.mimeType + ', bukan ' + mimeType + '.');
+  }
   return {
     ...uploaded,
     webViewLink: uploaded.webViewLink || 'https://drive.google.com/open?id=' + encodeURIComponent(uploaded.id),
