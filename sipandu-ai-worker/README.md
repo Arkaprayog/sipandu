@@ -9,7 +9,7 @@ Worker Cloudflare terpisah untuk SIPANDU AI Copilot. Layanan ini hanya membaca d
 - Peran yang diterima: owner, supervisor, pendamping.
 - Untuk pendamping, query status layanan dibatasi dengan assignedToUid sama dengan UID akun. Firestore Rules tetap menjadi otoritas final.
 - Hanya field demografi minimum dan status layanan terstruktur yang dibaca.
-- Nama, NIK, alamat, nomor telepon, foto, asesmen klinis, dan catatan bebas tidak diteruskan ke Gemini.
+- Field nama, NIK, alamat, nomor telepon, foto, asesmen klinis, dan catatan bebas tidak pernah dipilih dari Firestore atau diteruskan sebagai konteks data. Worker juga menolak pola umum NIK, nomor telepon, dan istilah klinis pada pertanyaan/riwayat; pemeriksaan pola ini bukan deteksi PII yang sempurna, sehingga petugas tetap dilarang memasukkan informasi individu.
 - Teks bebas jenis bantuan dipetakan ke kategori aman; teks aslinya tidak dikirim ke Gemini.
 - Tidak ada penyimpanan percakapan atau endpoint mutasi data.
 
@@ -39,4 +39,4 @@ Batas input: prompt maksimum 1.200 karakter dan body maksimum 12 KB. Jangan sert
 
 ## Operasional
 
-Pasang Cloudflare rate limiting pada POST /api/chat sebelum layanan dibuka untuk penggunaan luas. Batas panjang input dan output bukan pengganti rate limiting per akun/IP.
+Kelompok statistik dengan jumlah 1–4 disembunyikan untuk mengurangi risiko identifikasi. Teks bebas jenis bantuan dipetakan ke kategori tetap, dan satu PPKS dapat masuk lebih dari satu kategori. Pasang Cloudflare rate limiting pada POST /api/chat sebelum layanan dibuka untuk penggunaan luas. Batas panjang input dan output bukan pengganti rate limiting per akun/IP.
