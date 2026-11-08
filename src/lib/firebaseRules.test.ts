@@ -289,9 +289,6 @@ test('Status layanan PPKS dan riwayat aktivitas dibatasi role staf serta riwayat
   const outsider = environment.authenticatedContext('outsider-001').firestore();
   await assertFails(getDoc(doc(outsider, 'ppksServiceStatus', 'ppks-demo')));
 
-  const assignedPendamping = environment.authenticatedContext(PENDAMPING_UID, {
-    role: 'pendamping',
-  }).firestore();
   await assertSucceeds(getDoc(doc(assignedPendamping, 'ppksServiceStatus', 'ppks-demo')));
   await assertSucceeds(getDoc(doc(assignedPendamping, 'ppksServiceEvents', 'event-001')));
   const otherPendamping = environment.authenticatedContext('pendamping-002', {
