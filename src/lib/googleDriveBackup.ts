@@ -207,6 +207,28 @@ export async function backupAssessmentToCentralDrive(input: {
   return { ...uploaded, replacedExisting: Boolean(replaceFileId) };
 }
 
+/** Reuse only an explicitly tracked, managed assessment PDF. */
+async function isReplaceableAssessmentArchive(fileId: string, folderId: string): Promise<boolean> {
+  if (!fileId) return false;
+  try {
+    const response = await driveFetch(
+      '/files/' + encodeURIComponent(fileId) + '?fields=id,name,mimeType,appProperties,trashed',
+    );
+    if (!response.ok) return false;
+    const file = await response.json() as {
+      id?: string;
+      name?: string;
+      mimeType?: string;
+      trashed?: boolean;
+      appProperties?: Record<string, string>;
+    };
+    return file.id === fileId && isManagedIntegratedAssessmentArchiveFile(file, folderId);
+  } catch {
+    // A stale pointer creates a new PDF; it never triggers a JSON archive lookup.
+    return false;
+  }
+}
+
 /** Deletes a SIPANDU archive copy from the central Google Drive account. */
 export async function deleteCentralDriveFile(fileId: string): Promise<void> {
   if (!fileId) return;
