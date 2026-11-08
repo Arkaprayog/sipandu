@@ -445,7 +445,7 @@ export const DatabasePpksView: React.FC<DatabasePpksViewProps> = ({
               <button
                 type="button"
                 onClick={handleSave}
-                className="w-full py-2.5 px-4 rounded-xl font-bold text-xs tracking-wider uppercase text-white bg-gradient-to-r from-[#1b3d1f] to-[#122e15] hover:from-[#234f29] hover:to-[#1a401e] active:scale-[0.99] transition border border-rose-500/45 shadow-[0_0_12px_rgba(244,63,94,0.2)] flex items-center justify-center gap-2 cursor-pointer"
+                className="sipandu-database-save w-full py-2.5 px-4 rounded-xl font-bold text-xs tracking-wider uppercase text-white bg-gradient-to-r from-[#1b3d1f] to-[#122e15] hover:from-[#234f29] hover:to-[#1a401e] active:scale-[0.99] transition border border-rose-500/45 shadow-[0_0_12px_rgba(244,63,94,0.2)] flex items-center justify-center gap-2 cursor-pointer"
               >
                 <Save className="w-4 h-4 text-sky-300" />
                 <span>Simpan Perubahan Database</span>
