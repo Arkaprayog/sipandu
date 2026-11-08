@@ -448,7 +448,7 @@ async function handleChat(request: Request, env: Env, origin: string | null): Pr
   }
 
   const authorization = request.headers.get("Authorization") || "";
-  const tokenMatch = authorization.match(/^Bearer\\s+([A-Za-z0-9._-]{100,8192})$/);
+  const tokenMatch = authorization.match(/^Bearer\s+([A-Za-z0-9._-]{100,8192})$/);
   if (!tokenMatch) {
     return jsonResponse({ error: "AUTH_REQUIRED", message: "Masuk ke akun SIPANDU untuk menggunakan AI." }, 401, origin);
   }
