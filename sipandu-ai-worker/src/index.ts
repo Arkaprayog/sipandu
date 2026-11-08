@@ -191,6 +191,19 @@ async function loadFirebasePublicKeys(): Promise<FirebaseJwk[]> {
   return keySet.keys;
 }
 
+/** Fail closed on disabled, mismatched, or malformed/revoked Firebase account state. */
+export function isActiveFirebaseAccount(
+  account: FirebaseLookupAccount | undefined,
+  claims: FirebaseClaims,
+): boolean {
+  if (!account || account.localId !== claims.sub || account.disabled === true) return false;
+  if (account.validSince !== undefined && account.validSince !== null && account.validSince !== "") {
+    const validSince = Number(account.validSince);
+    if (!Number.isFinite(validSince) || validSince > claims.auth_time) return false;
+  }
+  return true;
+}
+
 /**
  * Cryptographically verify the token, then check the live Firebase account for
  * disabled/revoked state. The signed role claim is authoritative; accounts:lookup
@@ -216,10 +229,7 @@ async function verifyStaffToken(token: string, env: Env): Promise<FirebaseClaims
 
   const lookup = await accountResponse.json() as { users?: FirebaseLookupAccount[] };
   const account = Array.isArray(lookup.users) ? lookup.users[0] : undefined;
-  if (!account || account.localId !== claims.sub || account.disabled === true) return null;
-  const validSince = Number(account.validSince || 0);
-  if (Number.isFinite(validSince) && validSince > claims.auth_time) return null;
-  return claims;
+  return isActiveFirebaseAccount(account, claims) ? claims : null;
 }
 
 function fieldValue(fields: FirestoreDocument["fields"], name: string): unknown {
