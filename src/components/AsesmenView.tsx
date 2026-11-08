@@ -293,7 +293,7 @@ export const AsesmenView: React.FC<AsesmenViewProps> = ({
           <button
             type="button"
             onClick={() => setActiveSubMenu('google-form')}
-            className={`py-3 px-4 rounded-xl font-bold text-xs md:text-sm uppercase tracking-wider transition cursor-pointer flex items-center justify-center gap-2 ${
+            className={`sipandu-assessment-subnav py-3 px-4 rounded-xl font-bold text-xs md:text-sm uppercase tracking-wider transition cursor-pointer flex items-center justify-center gap-2 ${
               activeSubMenu === 'google-form'
                 ? 'bg-gradient-to-r from-emerald-800 to-teal-800 text-white border-2 border-rose-500/60 shadow-[0_0_15px_rgba(244,63,94,0.25)]'
                 : 'bg-black/50 text-neutral-300 hover:text-white border border-rose-500/25 hover:bg-emerald-950/40'
