@@ -362,7 +362,11 @@ async function handleChat(request: Request, env: Env, origin: string | null): Pr
         : "Statistik roster dan status layanan sesuai cakupan akses owner/supervisor.",
       truncated: ppksResult.truncated || statusResult.truncated,
     });
-    const answer = await generateAnswer(prompt, extractHistory(body.history), summary, env);
+    const history = extractHistory(body.history);
+    if (history.some((item) => containsSensitivePrompt(item.text))) {
+      return jsonResponse({ error: "SENSITIVE_PROMPT_BLOCKED", message: "Riwayat pertanyaan memuat pola identitas atau informasi kesehatan sensitif. Hapus riwayat tersebut dan lanjutkan dengan pertanyaan agregat." }, 400, origin);
+    }
+    const answer = await generateAnswer(prompt, history, summary, env);
     return jsonResponse({
       answer,
       metadata: {
