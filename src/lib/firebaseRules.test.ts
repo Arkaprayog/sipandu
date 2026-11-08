@@ -211,8 +211,8 @@ test('Metadata arsip asesmen dan surat dibuat hanya dengan skema yang diizinkan'
 
 
 test('Status layanan PPKS dan riwayat aktivitas dibatasi role staf serta riwayat bersifat append-only', async () => {
-  const firestore = environment.authenticatedContext(PENDAMPING_UID, {
-    role: 'pendamping',
+  const firestore = environment.authenticatedContext('owner-001', {
+    role: 'owner',
   }).firestore();
   const status = doc(firestore, 'ppksServiceStatus', 'ppks-demo');
 
@@ -230,25 +230,25 @@ test('Status layanan PPKS dan riwayat aktivitas dibatasi role staf serta riwayat
     assignedToUid: PENDAMPING_UID,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
-    updatedByUid: PENDAMPING_UID,
+    updatedByUid: 'owner-001',
   }));
 
   await assertSucceeds(updateDoc(status, {
     nutritionStatus: 'diterima',
     lastNutritionAt: '2026-11-08',
     updatedAt: serverTimestamp(),
-    updatedByUid: PENDAMPING_UID,
+    updatedByUid: 'owner-001',
   }));
 
   await assertFails(updateDoc(status, {
     assignedToUid: 'pendamping-lain',
     updatedAt: serverTimestamp(),
-    updatedByUid: PENDAMPING_UID,
+    updatedByUid: 'owner-001',
   }));
   await assertFails(updateDoc(status, {
     clinicalDiagnosis: 'field tidak diizinkan',
     updatedAt: serverTimestamp(),
-    updatedByUid: PENDAMPING_UID,
+    updatedByUid: 'owner-001',
   }));
   await assertFails(setDoc(doc(firestore, 'ppksServiceStatus', 'invalid'), {
     ppksId: 'invalid',
@@ -264,7 +264,7 @@ test('Status layanan PPKS dan riwayat aktivitas dibatasi role staf serta riwayat
     assignedToUid: 'another-staff',
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
-    updatedByUid: PENDAMPING_UID,
+    updatedByUid: 'owner-001',
   }));
 
   const event = doc(firestore, 'ppksServiceEvents', 'event-001');
@@ -276,7 +276,8 @@ test('Status layanan PPKS dan riwayat aktivitas dibatasi role staf serta riwayat
     serviceDate: '2026-11-08',
     followUpAt: '',
     followUpReason: '',
-    createdByUid: PENDAMPING_UID,
+    createdByUid: 'owner-001',
+    assignedToUid: PENDAMPING_UID,
     createdAt: serverTimestamp(),
   }));
   await assertFails(updateDoc(event, { status: 'dibutuhkan' }));
@@ -293,6 +294,7 @@ test('Status layanan PPKS dan riwayat aktivitas dibatasi role staf serta riwayat
     followUpAt: '',
     followUpReason: '',
     createdByUid: 'outsider-001',
+    assignedToUid: 'outsider-001',
     createdAt: serverTimestamp(),
   }));
 });
