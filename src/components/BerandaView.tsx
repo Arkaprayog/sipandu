@@ -122,7 +122,7 @@ export const BerandaView: React.FC<BerandaViewProps> = ({
   }));
 
   return (
-    <div className="space-y-3 pb-24 text-white">
+    <div className="sipandu-dashboard-motion space-y-3 pb-24 text-white">
       {/* Top Banner: Sumber Google Spreadsheet */}
       <div className="p-3 rounded-2xl bg-black/40 border border-rose-500/35 shadow-[0_0_20px_rgba(244,63,94,0.15)] flex flex-col md:flex-row md:items-center justify-between gap-2">
         <div className="flex items-center gap-3">
