@@ -1,28 +1,13 @@
-name: SIPANDU AI Worker
+name: SIPANDU AI Worker Validation
 
 on:
   pull_request:
     branches: [main]
-    paths:
-      - "sipandu-ai-worker/**"
-      - "src/components/SIPANDUAICopilot.tsx"
-      - "src/App.tsx"
-      - "package.json"
-      - "tsconfig.json"
-      - ".github/workflows/sipandu-ai-worker.yml"
   push:
     branches: [main]
-    paths:
-      - "sipandu-ai-worker/**"
-      - ".github/workflows/sipandu-ai-worker.yml"
-  workflow_dispatch:
 
 permissions:
   contents: read
-
-concurrency:
-  group: sipandu-ai-worker-${{ github.ref }}
-  cancel-in-progress: false
 
 jobs:
   validate:
@@ -61,30 +46,3 @@ jobs:
           printf 'GEMINI_API_KEY=ci-dry-run-placeholder\n' > sipandu-ai-worker/.dev.vars
           "$RUNNER_TEMP/wrangler-cli/node_modules/.bin/wrangler" deploy --dry-run --config sipandu-ai-worker/wrangler.jsonc --outdir "$RUNNER_TEMP/sipandu-ai-dry-run"
           rm -f sipandu-ai-worker/.dev.vars
-
-  deploy:
-    name: Deploy isolated SIPANDU AI Worker
-    if: github.ref == 'refs/heads/main' && vars.SIPANDU_AI_DEPLOY_ENABLED == 'true'
-    needs: validate
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - name: Checkout
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-        with:
-          persist-credentials: false
-      - name: Install isolated Wrangler
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p "$RUNNER_TEMP/wrangler-cli"
-          npm install --prefix "$RUNNER_TEMP/wrangler-cli" --no-audit --no-fund --no-save wrangler@4.136.3
-      - name: Deploy AI Worker
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: 0f751dca493cdf222b4c7cd084647f67
-        shell: bash
-        run: |
-          set -euo pipefail
-          test -n "${CLOUDFLARE_API_TOKEN:-}" || { echo "::error::Missing CLOUDFLARE_API_TOKEN"; exit 1; }
-          "$RUNNER_TEMP/wrangler-cli/node_modules/.bin/wrangler" deploy --config sipandu-ai-worker/wrangler.jsonc
