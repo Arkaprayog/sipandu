@@ -149,6 +149,7 @@ export interface PPKSServiceEvent {
   followUpAt: string;
   followUpReason: PPKSFollowUpReason;
   createdByUid: string;
+  assignedToUid: string;
   createdAt: string;
 }
 
