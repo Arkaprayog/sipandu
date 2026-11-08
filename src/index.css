@@ -374,6 +374,40 @@ body,
   color: #000000 !important;
 }
 
+/* Light-mode sage for assessment controls and database save action. */
+.sipandu-navigation-shell[data-sipandu-theme="light"] .sipandu-assessment-title,
+.sipandu-navigation-shell[data-sipandu-theme="light"] .sipandu-assessment-subnav,
+.sipandu-navigation-shell[data-sipandu-theme="light"] .sipandu-assessment-kemensos-badge,
+.sipandu-navigation-shell[data-sipandu-theme="light"] .sipandu-google-form-icon,
+.sipandu-navigation-shell[data-sipandu-theme="light"] .sipandu-assessment-submit,
+.sipandu-navigation-shell[data-sipandu-theme="light"] .sipandu-database-save {
+  background: #DCE8D5 !important;
+  background-color: #DCE8D5 !important;
+  background-image: none !important;
+  border-color: #C5D5BC !important;
+  color: #000000 !important;
+  box-shadow: none !important;
+}
+
+.sipandu-navigation-shell[data-sipandu-theme="light"] .sipandu-assessment-subnav:hover,
+.sipandu-navigation-shell[data-sipandu-theme="light"] .sipandu-assessment-submit:hover,
+.sipandu-navigation-shell[data-sipandu-theme="light"] .sipandu-database-save:hover {
+  background: #E8EFE3 !important;
+  background-color: #E8EFE3 !important;
+  background-image: none !important;
+  border-color: #C5D5BC !important;
+  color: #000000 !important;
+}
+
+.sipandu-navigation-shell[data-sipandu-theme="light"] .sipandu-assessment-title *,
+.sipandu-navigation-shell[data-sipandu-theme="light"] .sipandu-assessment-subnav *,
+.sipandu-navigation-shell[data-sipandu-theme="light"] .sipandu-assessment-kemensos-badge *,
+.sipandu-navigation-shell[data-sipandu-theme="light"] .sipandu-google-form-icon *,
+.sipandu-navigation-shell[data-sipandu-theme="light"] .sipandu-assessment-submit *,
+.sipandu-navigation-shell[data-sipandu-theme="light"] .sipandu-database-save * {
+  color: #000000 !important;
+}
+
 /* Printing remains neutral and independent of the selected app theme. */
 @media print {
   .sipandu-navigation-shell { background: #FFFFFF !important; color: #111827 !important; }
