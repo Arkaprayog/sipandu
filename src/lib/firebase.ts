@@ -1617,6 +1617,8 @@ const toISODate = (value: any): string => {
 /** Read only the active roster's compact service-status records in bounded batches. */
 export function subscribeToPPKSServiceStatus(
   ppksIds: string[],
+  role: string,
+  userUid: string,
   onStatuses: (statuses: PPKSServiceStatus[], info: { fromCache: boolean }) => void,
   onError: (error: Error) => void,
 ): () => void {
@@ -1634,20 +1636,26 @@ export function subscribeToPPKSServiceStatus(
   const cacheFlags = new Array(chunks.length).fill(false);
 
   try {
-    chunks.forEach((chunk, chunkIndex) => {
-      const statusQuery = query(
-        collection(db, 'ppksServiceStatus'),
-        where('ppksId', 'in', chunk),
-      );
+    const statusCollection = collection(db, 'ppksServiceStatus');
+    const queries = role === 'pendamping'
+      ? [query(statusCollection, where('assignedToUid', '==', userUid))]
+      : chunks.map((chunk) => query(statusCollection, where('ppksId', 'in', chunk)));
+    queries.forEach((statusQuery, queryIndex) => {
       const unsubscribe = onSnapshot(
         statusQuery,
         (snapshot) => {
-          cacheFlags[chunkIndex] = snapshot.metadata.fromCache;
-          const chunkIds = new Set(chunk);
-          for (const [id, status] of statusById) {
-            if (chunkIds.has(id)) statusById.delete(id);
+          cacheFlags[queryIndex] = snapshot.metadata.fromCache;
+          const allowedIds = new Set(ids);
+          if (role !== 'pendamping') {
+            const queryIds = new Set(chunks[queryIndex] || []);
+            for (const [id] of statusById) {
+              if (queryIds.has(id)) statusById.delete(id);
+            }
+          } else {
+            statusById.clear();
           }
           for (const document of snapshot.docs) {
+            if (!allowedIds.has(document.id)) continue;
             const data = document.data();
             statusById.set(document.id, {
               ...data,
@@ -1712,6 +1720,10 @@ export async function savePPKSServiceUpdate(input: PPKSServiceUpdateInput): Prom
       const existing = existingSnapshot.exists()
         ? existingSnapshot.data() as Partial<PPKSServiceStatus>
         : input.initialStatus;
+      if (token.claims.role === 'pendamping' &&
+          (!existingSnapshot.exists() || existing.assignedToUid !== user.uid)) {
+        throw new Error('Pendamping hanya dapat memperbarui layanan PPKS yang sudah ditugaskan kepadanya.');
+      }
       const next: Record<string, unknown> = {
         ppksId: input.ppksId,
         nutritionStatus: existing.nutritionStatus || input.initialStatus.nutritionStatus,
@@ -1753,6 +1765,7 @@ export async function savePPKSServiceUpdate(input: PPKSServiceUpdateInput): Prom
         followUpAt: input.followUpAt,
         followUpReason: input.followUpReason,
         createdByUid: user.uid,
+        assignedToUid: String(next.assignedToUid || user.uid),
         createdAt: serverTimestamp(),
       });
     });
@@ -1763,13 +1776,14 @@ export async function savePPKSServiceUpdate(input: PPKSServiceUpdateInput): Prom
 
 /** Read the structured, append-only history for a single PPKS. */
 export async function fetchPPKSServiceEvents(ppksId: string): Promise<PPKSServiceEvent[]> {
-  if (!auth.currentUser) throw new Error('Sesi SIPANDU belum aktif.');
+  const user = auth.currentUser;
+  if (!user) throw new Error('Sesi SIPANDU belum aktif.');
   if (!ppksId.trim() || ppksId.includes('/')) throw new Error('ID PPKS tidak valid.');
   try {
-    const snapshot = await getDocs(query(
-      collection(db, 'ppksServiceEvents'),
-      where('ppksId', '==', ppksId),
-    ));
+    const role = (await getIdTokenResult(user)).claims.role;
+    const filters = [where('ppksId', '==', ppksId)];
+    if (role === 'pendamping') filters.push(where('assignedToUid', '==', user.uid));
+    const snapshot = await getDocs(query(collection(db, 'ppksServiceEvents'), ...filters));
     return snapshot.docs.map((document) => {
       const data = document.data();
       return {
