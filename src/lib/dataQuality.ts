@@ -25,14 +25,18 @@ const issueKeys: PPKSDataQualityIssue[] = [
   'kontak-tidak-valid', 'foto-diri-kosong', 'foto-ktp-kosong',
 ];
 
-function resolveCandidateNIK(record: PPKSRecord): string {
-  const legacy = record.officialAssessment?.q23;
-  const raw = String(record.nik || (Array.isArray(legacy) ? legacy.join(' ') : legacy) || '').trim();
+function normalizeCandidateNIK(value: unknown): string {
+  const raw = String(Array.isArray(value) ? value.join(' ') : value ?? '').trim();
   if (!raw || /^[+-]?\d+(?:[.,]\d+)?e[+-]?\d+$/i.test(raw)) return '';
   const digits = raw.replace(/\D/g, '');
   if (/^\d{16}$/.test(digits)) return digits;
   const matches = [...raw.matchAll(/\d{16}/g)].map((match) => match[0]);
   return matches.length === 1 ? matches[0] : '';
+}
+
+function resolveCandidateNIK(record: PPKSRecord): string {
+  return normalizeCandidateNIK(record.nik)
+    || normalizeCandidateNIK(record.officialAssessment?.q23);
 }
 
 /** Read-only audit of loaded roster records. It never edits or merges PPKS data. */
