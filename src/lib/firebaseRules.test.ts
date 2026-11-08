@@ -455,3 +455,25 @@ test('Profil anggota hanya dapat dibaca dan diubah oleh pemilik UID serta tidak 
     updatedAt: serverTimestamp(),
   }));
 });
+
+test('field visit documents are scoped to the assigned pendamping and immutable', async () => {
+  const own = environment.authenticatedContext(PENDAMPING_UID, { role: 'pendamping' }).firestore();
+  const other = environment.authenticatedContext('pendamping-002', { role: 'pendamping' }).firestore();
+  const record = {
+    id: 'visit-001', ppksId: 'ppks-demo', visitDate: '2026-11-09',
+    visitType: 'pendampingan-sosial', outcome: 'selesai',
+    summary: 'Kunjungan dilakukan dan tindak lanjut disepakati.',
+    nextAction: 'Koordinasi jadwal berikutnya.', followUpAt: '2026-11-12',
+    assignedToUid: PENDAMPING_UID, createdByUid: PENDAMPING_UID,
+    createdAt: serverTimestamp(),
+  };
+  const visit = doc(own, 'fieldVisits', 'visit-001');
+  await assertSucceeds(setDoc(visit, record));
+  await assertSucceeds(getDoc(visit));
+  await assertFails(getDoc(doc(other, 'fieldVisits', 'visit-001')));
+  await assertFails(updateDoc(visit, { summary: 'Catatan diubah' }));
+  await assertFails(deleteDoc(visit));
+  await assertFails(setDoc(doc(own, 'fieldVisits', 'visit-spoof'), {
+    ...record, id: 'visit-spoof', assignedToUid: 'pendamping-002',
+  }));
+});
