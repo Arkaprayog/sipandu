@@ -311,7 +311,7 @@ export const ServiceCenterView: React.FC<ServiceCenterViewProps> = ({
                   <div className="sipandu-service-avatar"><UserRound className="h-5 w-5"/></div>
                   <div className="min-w-0">
                     <h4>{record.namaLengkap || 'Nama belum tersedia'}</h4>
-                    <p>{record.kotaDomisili || 'Wilayah belum dicatat'} <span>·</span> ID {record.id}</p>
+                    <p>{record.kotaDomisili || 'Wilayah belum dicatat'}</p>
                     <div className="sipandu-service-statuses">
                       <span className={'sipandu-service-status ' + statusTone(status.nutritionStatus)}><Apple className="h-3 w-3"/> Nutrisi: {assistanceLabel(status.nutritionStatus)}</span>
                       <span className={'sipandu-service-status ' + statusTone(status.entrepreneurshipStatus)}><BriefcaseBusiness className="h-3 w-3"/> Kewirausahaan: {assistanceLabel(status.entrepreneurshipStatus)}</span>
@@ -347,7 +347,7 @@ export const ServiceCenterView: React.FC<ServiceCenterViewProps> = ({
         <div className="sipandu-service-modal-backdrop" role="presentation" onClick={(event) => { if (event.target === event.currentTarget && !saving) setEditingRecord(null); }}>
           <section className="sipandu-service-modal" role="dialog" aria-modal="true" aria-labelledby="sipandu-service-modal-title">
             <div className="sipandu-service-modal-heading">
-              <div><span>PEMBARUAN CATATAN LAYANAN</span><h3 id="sipandu-service-modal-title">{editingRecord.namaLengkap}</h3><p>{editingRecord.kotaDomisili} · ID {editingRecord.id}</p></div>
+              <div><span>PEMBARUAN CATATAN LAYANAN</span><h3 id="sipandu-service-modal-title">{editingRecord.namaLengkap}</h3><p>{editingRecord.kotaDomisili}</p></div>
               <button type="button" aria-label="Tutup" disabled={saving} onClick={() => setEditingRecord(null)}><X className="h-5 w-5"/></button>
             </div>
             <form onSubmit={handleSubmit} className="sipandu-service-form">
@@ -392,7 +392,7 @@ export const ServiceCenterView: React.FC<ServiceCenterViewProps> = ({
         <div className="sipandu-service-modal-backdrop" role="presentation" onClick={(event) => { if (event.target === event.currentTarget) setHistoryRecord(null); }}>
           <section className="sipandu-service-modal" role="dialog" aria-modal="true" aria-labelledby="sipandu-service-history-title">
             <div className="sipandu-service-modal-heading">
-              <div><span>RIWAYAT AKTIVITAS</span><h3 id="sipandu-service-history-title">{historyRecord.namaLengkap}</h3><p>{historyRecord.kotaDomisili} · ID {historyRecord.id}</p></div>
+              <div><span>RIWAYAT AKTIVITAS</span><h3 id="sipandu-service-history-title">{historyRecord.namaLengkap}</h3><p>{historyRecord.kotaDomisili}</p></div>
               <button type="button" aria-label="Tutup riwayat" onClick={() => setHistoryRecord(null)}><X className="h-5 w-5"/></button>
             </div>
             <div className="sipandu-service-history">
