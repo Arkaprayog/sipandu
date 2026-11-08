@@ -404,8 +404,9 @@ service cloud.firestore {
     }
 
     match /ppksServiceStatus/{ppksId} {
-      allow read: if isStaff();
-      allow create: if isStaff()
+      allow read: if canWritePpks()
+        || (hasRole('pendamping') && resource.data.assignedToUid == request.auth.uid);
+      allow create: if canWritePpks()
         && validServiceStatusDocument(request.resource.data, ppksId)
         && request.resource.data.therapySessionCount <= 1;
       allow update: if isStaff()
@@ -413,22 +414,21 @@ service cloud.firestore {
         && request.resource.data.createdAt == resource.data.createdAt
         && request.resource.data.therapySessionCount >= resource.data.therapySessionCount
         && request.resource.data.therapySessionCount <= resource.data.therapySessionCount + 1
-        && (canWritePpks()
-          || resource.data.assignedToUid == request.auth.uid
-          || resource.data.assignedToUid == '');
+        && (canWritePpks() || resource.data.assignedToUid == request.auth.uid);
       allow delete: if false;
     }
 
     match /ppksServiceEvents/{eventId} {
-      allow read: if isStaff();
+      allow read: if canWritePpks()
+        || (hasRole('pendamping') && resource.data.assignedToUid == request.auth.uid);
       allow create: if isStaff()
         && request.resource.data.keys().hasAll([
           'id', 'ppksId', 'eventType', 'status', 'serviceDate',
-          'followUpAt', 'followUpReason', 'createdByUid', 'createdAt'
+          'followUpAt', 'followUpReason', 'createdByUid', 'assignedToUid', 'createdAt'
         ])
         && request.resource.data.keys().hasOnly([
           'id', 'ppksId', 'eventType', 'status', 'serviceDate',
-          'followUpAt', 'followUpReason', 'createdByUid', 'createdAt'
+          'followUpAt', 'followUpReason', 'createdByUid', 'assignedToUid', 'createdAt'
         ])
         && request.resource.data.id == eventId
         && request.resource.data.ppksId is string
@@ -448,6 +448,9 @@ service cloud.firestore {
         && ((request.resource.data.followUpAt == '' && request.resource.data.followUpReason == '')
           || (request.resource.data.followUpAt != '' && request.resource.data.followUpReason != ''))
         && request.resource.data.createdByUid == request.auth.uid
+        && request.resource.data.assignedToUid is string
+        && request.resource.data.assignedToUid.size() <= 128
+        && (canWritePpks() || request.resource.data.assignedToUid == request.auth.uid)
         && request.resource.data.createdAt == request.time;
       // The service timeline is append-only so staff cannot silently rewrite history.
       allow update, delete: if false;
