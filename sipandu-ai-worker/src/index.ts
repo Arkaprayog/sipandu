@@ -8,12 +8,16 @@ const MAX_HISTORY_ITEMS = 6;
 const MAX_HISTORY_TEXT = 700;
 
 type StaffRole = "owner" | "supervisor" | "pendamping";
-type FirebaseClaims = {
+type FirebaseClaimsHint = {
   sub: string;
   aud: string;
   iss: string;
   exp: number;
   role: StaffRole;
+};
+type FirebaseClaims = FirebaseClaimsHint & {
+  iat: number;
+  auth_time: number;
 };
 type FirestoreDocument = {
   name: string;
@@ -37,12 +41,8 @@ function decodeBase64UrlJson(segment: string): Record<string, unknown> | null {
   }
 }
 
-/**
- * Decoding is used only to choose a narrower query. It is NOT signature
- * verification. Firestore REST validates the original Firebase ID token and
- * enforces the project's Firestore Security Rules on every protected read.
- */
-export function decodeFirebaseClaims(token: string, projectId: string, nowSeconds = Math.floor(Date.now() / 1000)): FirebaseClaims | null {
+/** Decode an untrusted payload for unit-test hints only. Never authorize from this result. */
+export function decodeFirebaseClaims(token: string, projectId: string, nowSeconds = Math.floor(Date.now() / 1000)): FirebaseClaimsHint | null {
   const parts = token.split(".");
   if (parts.length !== 3) return null;
   const payload = decodeBase64UrlJson(parts[1]);
