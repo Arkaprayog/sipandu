@@ -749,8 +749,8 @@ export const GoogleWorkspaceModal: React.FC<GoogleWorkspaceModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 md:p-6 bg-black/85 backdrop-blur-none select-none text-white">
-      <div className="relative w-full max-w-3xl bg-[#0c180e] border border-rose-500/40 rounded-2xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden">
+    <div className="sipandu-google-workspace-backdrop fixed inset-0 z-50 flex items-center justify-center p-3 md:p-6 bg-white backdrop-blur-none select-none text-[#26332D]">
+      <div className="sipandu-google-workspace-panel relative w-full max-w-3xl bg-white border border-[#DCE4DC] rounded-2xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden">
         {/* Header */}
         <div className="p-4 md:p-5 border-b border-rose-500/30 flex items-center justify-between bg-black/40">
           <div className="flex items-center gap-2.5">
@@ -855,7 +855,7 @@ export const GoogleWorkspaceModal: React.FC<GoogleWorkspaceModalProps> = ({
         </div>
 
         {/* Content Body */}
-        <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-5 text-xs">
+        <div className="sipandu-google-workspace-body flex-1 overflow-y-auto p-4 md:p-6 space-y-5 text-xs bg-white">
           {/* TAB 1: OVERVIEW & GOOGLE SIGN-IN */}
           {activeTab === 'overview' && (
             <div className="space-y-4">
