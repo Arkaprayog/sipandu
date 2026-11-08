@@ -163,6 +163,24 @@ export interface PPKSServiceUpdateInput {
   initialStatus: PPKSServiceStatus;
 }
 
+export type FieldVisitType = 'kunjungan-rumah' | 'kunjungan-faskes' | 'pendampingan-sosial' | 'monitoring-bantuan' | 'koordinasi-rujukan';
+export type FieldVisitOutcome = 'selesai' | 'perlu-tindak-lanjut' | 'tidak-bertemu' | 'dijadwalkan-ulang';
+
+/** Immutable field-visit note. Contains no GPS or medical/diagnostic fields. */
+export interface FieldVisitRecord {
+  id: string;
+  ppksId: string;
+  visitDate: string;
+  visitType: FieldVisitType;
+  outcome: FieldVisitOutcome;
+  summary: string;
+  nextAction: string;
+  followUpAt: string;
+  assignedToUid: string;
+  createdByUid: string;
+  createdAt: string;
+}
+
 export interface SuratRecord {
   id: string;
   nomorSurat: string;
