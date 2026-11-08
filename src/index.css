@@ -806,10 +806,6 @@ body,
 }
 
 /* Keep From Asesmen Terintegrasi's horizontal paper swipe and page layout untouched. */
-.sipandu-workspace-motion.official-assessment-shell {
-  touch-action: pan-y;
-}
-
 .sipandu-workspace-motion.official-assessment-shell .official-toolbar {
   transition: box-shadow 260ms ease, border-color 220ms ease;
 }
