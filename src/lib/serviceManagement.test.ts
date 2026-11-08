@@ -83,3 +83,16 @@ test('service metrics use actual statuses and count assistance needs separately'
   assert.equal(metrics.nutritionUnverified, 2);
   assert.equal(metrics.followUpRequired, 1);
 });
+
+
+test('does not classify explicit negative recommendations as a need', () => {
+  const negative = record({
+    officialAssessment: {
+      rekomendasiBantuanNutrisi: 'Tidak direkomendasikan',
+      rekomendasiBantuanModalUsaha: 'Tidak',
+    },
+  });
+  const status = getInitialPPKSServiceStatus(negative);
+  assert.equal(status.nutritionStatus, 'belum-diverifikasi');
+  assert.equal(status.entrepreneurshipStatus, 'belum-diverifikasi');
+});
