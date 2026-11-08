@@ -523,7 +523,6 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
   type AssessmentPdfOptions = {
     retainPrintRoot?: boolean;
     existingFileId?: string;
-    existingFolderId?: string;
   };
 
   const createAndBackupAssessmentPdf = async (record: PPKSRecord, options: AssessmentPdfOptions = {}): Promise<{
@@ -572,7 +571,6 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
           nik: nikValue,
           fileName,
           existingFileId: options.existingFileId || previousArchive?.fileId || undefined,
-          existingFolderId: options.existingFolderId,
           pdf,
         });
         replacedExisting = driveCopy.replacedExisting;
