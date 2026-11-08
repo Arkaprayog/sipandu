@@ -4,6 +4,7 @@ import type { PPKSRecord, PPKSServiceStatus } from '../types';
 import {
   calculatePPKSServiceMetrics,
   getInitialPPKSServiceStatus,
+  getFollowUpReminderUrgency,
   isFollowUpRequired,
   resolvePPKSServiceStatus,
 } from './serviceManagement';
@@ -95,4 +96,15 @@ test('does not classify explicit negative recommendations as a need', () => {
   const status = getInitialPPKSServiceStatus(negative);
   assert.equal(status.nutritionStatus, 'belum-diverifikasi');
   assert.equal(status.entrepreneurshipStatus, 'belum-diverifikasi');
+});
+
+
+test('follow-up reminders distinguish overdue, due today, upcoming, unscheduled, and invalid dates', () => {
+  const base = getInitialPPKSServiceStatus(record({ jenisBantuan: 'BANTUAN PEMENUHAN NUTRISI' }));
+  assert.equal(getFollowUpReminderUrgency({ ...base, followUpAt: '2026-11-08', followUpReason: 'monitoring-pendampingan' }, '2026-11-09'), 'overdue');
+  assert.equal(getFollowUpReminderUrgency({ ...base, followUpAt: '2026-11-09', followUpReason: 'monitoring-pendampingan' }, '2026-11-09'), 'today');
+  assert.equal(getFollowUpReminderUrgency({ ...base, followUpAt: '2026-11-16', followUpReason: 'monitoring-pendampingan' }, '2026-11-09'), 'upcoming');
+  assert.equal(getFollowUpReminderUrgency({ ...base, followUpAt: '', followUpReason: '' }, '2026-11-09'), 'unscheduled');
+  assert.equal(getFollowUpReminderUrgency({ ...base, followUpAt: '2026-02-30', followUpReason: 'monitoring-pendampingan' }, '2026-11-09'), 'none');
+  assert.equal(getFollowUpReminderUrgency({ ...getInitialPPKSServiceStatus(record()), followUpAt: '', followUpReason: '' }, '2026-11-09'), 'none');
 });

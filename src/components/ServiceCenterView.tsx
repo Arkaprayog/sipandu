@@ -28,6 +28,7 @@ import type {
 import {
   calculatePPKSServiceMetrics,
   getInitialPPKSServiceStatus,
+  getFollowUpReminderUrgency,
   isAssistancePending,
   isFollowUpRequired,
   resolvePPKSServiceStatus,
@@ -121,6 +122,22 @@ export const ServiceCenterView: React.FC<ServiceCenterViewProps> = ({
   const metrics = useMemo(() => calculatePPKSServiceMetrics(ppksList, serviceStatuses), [ppksList, serviceStatuses]);
   const cities = useMemo(() => [...new Set(ppksList.map((record) => String(record.kotaDomisili || '').trim()).filter(Boolean))]
     .sort((a, b) => a.localeCompare(b, 'id')), [ppksList]);
+
+  // Automatic reminders are derived from explicitly saved follow-up dates and
+  // outstanding tasks. A missing delivery record is never counted as non-receipt.
+  const followUpQueue = useMemo(() => {
+    const urgencyOrder = { overdue: 0, today: 1, unscheduled: 2, upcoming: 3, none: 4 };
+    return ppksList.map((record) => {
+      const status = resolvedStatuses.get(record.id) || getInitialPPKSServiceStatus(record);
+      return { record, status, urgency: getFollowUpReminderUrgency(status, dateToday()) };
+    }).filter((item) => item.urgency !== 'none')
+      .sort((left, right) => urgencyOrder[left.urgency] - urgencyOrder[right.urgency]
+        || String(left.status.followUpAt || '9999-12-31').localeCompare(String(right.status.followUpAt || '9999-12-31'))
+        || left.record.namaLengkap.localeCompare(right.record.namaLengkap, 'id'));
+  }, [ppksList, resolvedStatuses]);
+  const overdueFollowUps = followUpQueue.filter((item) => item.urgency === 'overdue').length;
+  const dueTodayFollowUps = followUpQueue.filter((item) => item.urgency === 'today').length;
+  const unscheduledFollowUps = followUpQueue.filter((item) => item.urgency === 'unscheduled').length;
 
   const filteredRecords = useMemo(() => {
     const needle = searchText.trim().toLocaleLowerCase('id-ID');
@@ -273,6 +290,53 @@ export const ServiceCenterView: React.FC<ServiceCenterViewProps> = ({
         <article className="sipandu-service-kpi"><span><Apple className="h-4 w-4"/></span><small>Butuh bantuan nutrisi</small><strong>{metrics.nutritionNeeds.toLocaleString('id-ID')}</strong><em>{metrics.nutritionReceived} telah tercatat menerima</em></article>
         <article className="sipandu-service-kpi"><span><BriefcaseBusiness className="h-4 w-4"/></span><small>Butuh kewirausahaan</small><strong>{metrics.entrepreneurshipNeeds.toLocaleString('id-ID')}</strong><em>{metrics.entrepreneurshipReceived} telah tercatat menerima</em></article>
         <article className="sipandu-service-kpi"><span><CalendarClock className="h-4 w-4"/></span><small>Perlu tindak lanjut</small><strong>{metrics.followUpRequired.toLocaleString('id-ID')}</strong><em>{metrics.followUpScheduled} memiliki jadwal tercatat</em></article>
+      </section>
+
+      <section className="rounded-2xl border border-amber-300/15 bg-amber-950/15 p-4 shadow-sm sm:p-5" aria-labelledby="sipandu-follow-up-reminders">
+        <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <span className="text-[10px] font-black uppercase tracking-[0.16em] text-amber-200">PENGINGAT TINDAK LANJUT</span>
+            <h3 id="sipandu-follow-up-reminders" className="mt-1 text-base font-extrabold text-white">Agenda pendampingan otomatis</h3>
+            <p className="mt-1 text-[11px] leading-relaxed text-neutral-300">Dihitung dari tanggal tindak lanjut yang tersimpan. Pekerjaan yang belum dijadwalkan ditampilkan terpisah.</p>
+          </div>
+          <div className="grid grid-cols-3 gap-2 text-center">
+            <div className="min-w-[62px] rounded-xl border border-rose-300/20 bg-rose-400/10 px-2 py-2"><strong className="block text-xl text-rose-200">{overdueFollowUps}</strong><span className="text-[9px] text-neutral-300">Terlambat</span></div>
+            <div className="min-w-[62px] rounded-xl border border-amber-300/20 bg-amber-400/10 px-2 py-2"><strong className="block text-xl text-amber-100">{dueTodayFollowUps}</strong><span className="text-[9px] text-neutral-300">Hari ini</span></div>
+            <div className="min-w-[62px] rounded-xl border border-sky-300/20 bg-sky-400/10 px-2 py-2"><strong className="block text-xl text-sky-100">{unscheduledFollowUps}</strong><span className="text-[9px] text-neutral-300">Belum dijadwalkan</span></div>
+          </div>
+        </div>
+        {followUpQueue.length === 0 ? (
+          <p className="rounded-xl border border-dashed border-white/15 bg-black/15 px-3 py-5 text-center text-xs text-neutral-400">Tidak ada tindak lanjut yang jatuh tempo dalam 7 hari ke depan.</p>
+        ) : (
+          <div className="grid gap-2 md:grid-cols-2">
+            {followUpQueue.slice(0, 8).map(({ record, status, urgency }) => {
+              const nextType: PPKSServiceEventType = isAssistancePending(status.nutritionStatus)
+                ? 'nutrition-assistance'
+                : isAssistancePending(status.entrepreneurshipStatus)
+                  ? 'entrepreneurship-assistance'
+                  : 'psychosocial-therapy';
+              const reminderText = urgency === 'overdue' ? 'Terlambat'
+                : urgency === 'today' ? 'Jatuh tempo hari ini'
+                  : urgency === 'unscheduled' ? 'Belum memiliki jadwal'
+                    : 'Dalam 7 hari ke depan';
+              const tone = urgency === 'overdue' ? 'border-rose-300/20 bg-rose-400/10 text-rose-100'
+                : urgency === 'today' ? 'border-amber-300/20 bg-amber-400/10 text-amber-100'
+                  : urgency === 'unscheduled' ? 'border-sky-300/20 bg-sky-400/10 text-sky-100'
+                    : 'border-white/10 bg-white/[0.04] text-neutral-200';
+              return (
+                <article key={record.id} className="flex flex-col justify-between gap-3 rounded-xl border border-white/10 bg-black/15 p-3 sm:flex-row sm:items-center">
+                  <div className="min-w-0">
+                    <strong className="block truncate text-xs text-white">{record.namaLengkap || 'Nama belum tersedia'}</strong>
+                    <span className="mt-0.5 block text-[10px] text-neutral-400">{record.kotaDomisili || 'Wilayah belum dicatat'} · {status.followUpAt ? formatDate(status.followUpAt) : 'Atur tanggal tindak lanjut'}</span>
+                    <span className={"mt-2 inline-flex rounded-full border px-2 py-1 text-[9px] font-bold " + tone}>{reminderText}</span>
+                  </div>
+                  <button type="button" onClick={() => openEditor(record, nextType)} className="shrink-0 rounded-lg border border-emerald-300/25 bg-emerald-400/10 px-3 py-2 text-[10px] font-bold text-emerald-100 transition hover:bg-emerald-400/20">Tindak lanjuti</button>
+                </article>
+              );
+            })}
+          </div>
+        )}
+        {followUpQueue.length > 8 && <p className="mt-3 text-right text-[10px] text-neutral-400">Menampilkan 8 dari {followUpQueue.length.toLocaleString('id-ID')} agenda. Gunakan filter tindak lanjut di bawah untuk melihat seluruh daftar.</p>}
       </section>
 
       <section className="sipandu-service-workspace">
