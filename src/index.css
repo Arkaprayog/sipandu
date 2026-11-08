@@ -279,6 +279,31 @@ body,
   }
 }
 
+/* Light-mode sage overrides for legacy forest-green table and form cells. */
+.sipandu-navigation-shell[data-sipandu-theme="light"] [class*="bg-[#112415]"],
+.sipandu-navigation-shell[data-sipandu-theme="light"] [class*="bg-[#0f1d12]"] {
+  background: #DCE8D5 !important;
+  background-color: #DCE8D5 !important;
+  background-image: none !important;
+  color: #000000 !important;
+}
+
+.sipandu-navigation-shell[data-sipandu-theme="light"] [class*="bg-[#142618]"] {
+  background: #E8EFE3 !important;
+  background-color: #E8EFE3 !important;
+  background-image: none !important;
+  color: #000000 !important;
+}
+
+/* Keep table-row hover states sage instead of flashing back to dark emerald. */
+.sipandu-navigation-shell[data-sipandu-theme="light"] [class*="hover:bg-emerald-950/"]:hover,
+.sipandu-navigation-shell[data-sipandu-theme="light"] [class*="hover:bg-emerald-900"]:hover {
+  background: #E8EFE3 !important;
+  background-color: #E8EFE3 !important;
+  background-image: none !important;
+  color: #000000 !important;
+}
+
 /* Printing remains neutral and independent of the selected app theme. */
 @media print {
   .sipandu-navigation-shell { background: #FFFFFF !important; color: #111827 !important; }
