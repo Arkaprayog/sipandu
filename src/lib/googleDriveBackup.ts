@@ -1,7 +1,7 @@
 import { getAccessToken, invalidateAccessToken, refreshWorkspaceAccessToken } from './firebase';
 import type { SuratRecord } from '../types';
-import { buildGoogleDriveMultipartBody, buildGoogleDriveRequestUrl } from './googleDriveMultipart';
-import { isIntegratedAssessmentAnswerKey, isManagedIntegratedAssessmentArchiveFile } from './integratedAssessmentArchive';
+import { buildGoogleDriveRequestUrl } from './googleDriveMultipart';
+import { isManagedIntegratedAssessmentArchiveFile } from './integratedAssessmentArchive';
 
 const ROOT_FOLDER_NAME = 'SIPANDU';
 const DOCUMENTS_FOLDER_NAME = 'Dokumen';
@@ -66,82 +66,70 @@ async function ensureFolderPath(parts: string[]): Promise<string> {
   return parentId!;
 }
 
-async function uploadMultipart(
+async function uploadToDriveResumable(
   folderId: string,
   fileName: string,
   mimeType: string,
   data: Blob,
   existingFileId?: string,
 ): Promise<{ id: string; webViewLink?: string }> {
+  if (!(data instanceof Blob) || data.size <= 0) {
+    throw new Error('Berkas kosong dan tidak dapat diunggah ke Google Drive.');
+  }
   const metadata = JSON.stringify({
     name: fileName,
-    // Drive files.update does not allow changing parent folders here; keep
-    // the existing file in its current archive folder during in-place migration.
     ...(!existingFileId ? { parents: [folderId] } : {}),
     appProperties: { sipanduManaged: 'true', sipanduArchive: folderId },
   });
-
-  let uploaded: { id: string; webViewLink?: string };
   const uploadPath = existingFileId
     ? '/files/' + encodeURIComponent(existingFileId)
     : '/files';
   const uploadMethod = existingFileId ? 'PATCH' : 'POST';
-  if (data.size > 5 * 1024 * 1024) {
-    // Resumable upload avoids holding a second multipart copy in mobile memory.
-    const session = await driveFetch(uploadPath + '?uploadType=resumable&fields=id,name,webViewLink', {
-      method: uploadMethod,
-      headers: {
-        'Content-Type': 'application/json; charset=UTF-8',
-        'X-Upload-Content-Type': mimeType,
-        'X-Upload-Content-Length': String(data.size),
-      },
-      body: metadata,
-    }, true, true);
-    if (!session.ok) {
-      const error = await session.json().catch(() => ({}));
-      throw new Error((error as { error?: { message?: string } }).error?.message || 'Sesi upload Google Drive gagal dibuat.');
-    }
-    const uploadUrl = session.headers.get('Location');
-    if (!uploadUrl) throw new Error('Google Drive tidak mengembalikan alamat sesi upload.');
-    let token = await getAccessToken();
-    if (!token) token = await refreshWorkspaceAccessToken();
-    if (!token) throw new Error('Sesi Google Drive kedaluwarsa. Hubungkan kembali akun Google Workspace, lalu ulangi backup.');
-    let response = await fetch(uploadUrl, {
-      method: 'PUT',
-      headers: { Authorization: 'Bearer ' + token, 'Content-Type': mimeType },
-      body: data,
-    });
-    if (response.status === 401) {
-      invalidateAccessToken();
-      token = await refreshWorkspaceAccessToken(true);
-      if (token) {
-        response = await fetch(uploadUrl, {
-          method: 'PUT',
-          headers: { Authorization: 'Bearer ' + token, 'Content-Type': mimeType },
-          body: data,
-        });
-      }
-    }
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({}));
-      throw new Error((error as { error?: { message?: string } }).error?.message || 'Upload resumable Google Drive gagal (HTTP ' + response.status + ').');
-    }
-    uploaded = await response.json() as { id: string; webViewLink?: string };
-  } else {
-    const boundary = 'sipandu-' + Math.random().toString(36).slice(2);
-    const body = buildGoogleDriveMultipartBody(metadata, mimeType, data, boundary);
 
-    const response = await driveFetch(uploadPath + '?uploadType=multipart&fields=id,name,webViewLink', {
-      method: uploadMethod,
-      headers: { 'Content-Type': 'multipart/related; boundary=' + boundary },
-      body,
-    }, true, true);
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({}));
-      throw new Error((error as { error?: { message?: string } }).error?.message || 'File gagal disalin ke Google Drive.');
-    }
-    uploaded = await response.json() as { id: string; webViewLink?: string };
+  // Always use the resumable protocol, including small files. This avoids the
+  // multipart JSON-boundary parsing failure seen in some mobile WebViews and
+  // keeps one upload path for PDFs of every size (no SIPANDU-side size ceiling).
+  const session = await driveFetch(uploadPath + '?uploadType=resumable&fields=id,name,webViewLink', {
+    method: uploadMethod,
+    headers: {
+      'Content-Type': 'application/json; charset=UTF-8',
+      'X-Upload-Content-Type': mimeType,
+      'X-Upload-Content-Length': String(data.size),
+    },
+    body: metadata,
+  }, true, true);
+  if (!session.ok) {
+    const payload = await session.json().catch(() => ({}));
+    const message = (payload as { error?: { message?: string } }).error?.message;
+    throw new Error(message || 'Google Drive gagal membuat sesi upload resumable (HTTP ' + session.status + ').');
   }
+  const uploadUrl = session.headers.get('Location');
+  if (!uploadUrl) throw new Error('Google Drive tidak mengembalikan alamat sesi upload.');
+  const parsedUploadUrl = new URL(uploadUrl);
+  if (parsedUploadUrl.protocol !== 'https:' || parsedUploadUrl.hostname !== 'www.googleapis.com') {
+    throw new Error('Google Drive mengembalikan alamat sesi upload yang tidak aman. File tidak dikirim.');
+  }
+
+  let token = await getAccessToken();
+  if (!token) token = await refreshWorkspaceAccessToken();
+  if (!token) throw new Error('Sesi Google Drive kedaluwarsa. Hubungkan kembali akun Google Workspace, lalu ulangi backup.');
+  const sendFile = (accessToken: string) => fetch(uploadUrl, {
+    method: 'PUT',
+    headers: { Authorization: 'Bearer ' + accessToken, 'Content-Type': mimeType },
+    body: data,
+  });
+  let response = await sendFile(token);
+  if (response.status === 401) {
+    invalidateAccessToken();
+    token = await refreshWorkspaceAccessToken(true);
+    if (token) response = await sendFile(token);
+  }
+  if (!response.ok) {
+    const payload = await response.json().catch(() => ({}));
+    const message = (payload as { error?: { message?: string } }).error?.message;
+    throw new Error(message || 'Upload resumable Google Drive gagal (HTTP ' + response.status + ').');
+  }
+  const uploaded = await response.json() as { id: string; webViewLink?: string };
   if (!uploaded.id) throw new Error('Google Drive menerima upload tetapi tidak mengembalikan ID file.');
   return {
     ...uploaded,
@@ -156,7 +144,7 @@ export async function backupDocumentToCentralDrive(
 ): Promise<{ id: string; webViewLink?: string }> {
   const categoryFolder = category === 'surat-tugas' ? 'Surat Tugas' : 'Surat Lainnya';
   const folderId = await ensureFolderPath([ROOT_FOLDER_NAME, DOCUMENTS_FOLDER_NAME, categoryFolder]);
-  return uploadMultipart(folderId, safeName(file.name, 'dokumen'), file.type || 'application/octet-stream', file);
+  return uploadToDriveResumable(folderId, safeName(file.name, 'dokumen'), file.type || 'application/octet-stream', file);
 }
 
 /** Archives the structured content of a newly generated letter in the central Drive. */
@@ -168,7 +156,7 @@ export async function backupLetterToCentralDrive(record: SuratRecord): Promise<{
     ...record,
     archivedAt: new Date().toISOString(),
   }, null, 2)], { type: 'application/json' });
-  return uploadMultipart(folderId, safeName(record.nomorSurat + '-' + record.judul, record.id) + '.json', 'application/json', payload);
+  return uploadToDriveResumable(folderId, safeName(record.nomorSurat + '-' + record.judul, record.id) + '.json', 'application/json', payload);
 }
 
 /**
@@ -181,8 +169,6 @@ export async function backupAssessmentToCentralDrive(input: {
   nik?: string;
   fileName: string;
   existingFileId?: string;
-  existingFolderId?: string;
-  requireExistingFileMatch?: boolean;
   pdf: Blob;
 }): Promise<{ id: string; webViewLink?: string; replacedExisting: boolean }> {
   if (!(input.pdf instanceof Blob) || input.pdf.size < 8) {
@@ -194,7 +180,7 @@ export async function backupAssessmentToCentralDrive(input: {
   }
 
   const personFolder = safeName(input.ppksName || input.ppksId, input.ppksId);
-  const folderId = input.existingFolderId || await ensureFolderPath([ROOT_FOLDER_NAME, ASSESSMENTS_FOLDER_NAME, personFolder]);
+  const folderId = await ensureFolderPath([ROOT_FOLDER_NAME, ASSESSMENTS_FOLDER_NAME, personFolder]);
   const savedAt = new Date().toISOString();
   const stamp = savedAt.replace(/[:.]/g, '-');
   const respondent = safeName(input.ppksName || input.ppksId, input.ppksId);
@@ -205,21 +191,12 @@ export async function backupAssessmentToCentralDrive(input: {
     'Form-Asesmen-Terintegrasi-' + stamp,
   ) + '.pdf';
 
-  // Prefer the Firestore-tracked archive. If its pointer is missing or stale,
-  // locate a legacy SIPANDU JSON in this exact respondent folder. The helper
-  // verifies private appProperties before any existing Drive file is replaced.
-  const trackedFileIsReplaceable = input.existingFileId
+  // Reuse only a Firestore-tracked SIPANDU PDF. Never inspect, read, or replace legacy JSON.
+  const trackedPdfIsReplaceable = input.existingFileId
     ? await isReplaceableAssessmentArchive(input.existingFileId, folderId)
     : false;
-  if (input.requireExistingFileMatch && !trackedFileIsReplaceable) {
-    throw new Error('Arsip lama tidak lolos validasi kepemilikan SIPANDU. File JSON asli tidak diubah.');
-  }
-  const replaceFileId = trackedFileIsReplaceable
-    ? input.existingFileId
-    : input.requireExistingFileMatch
-      ? undefined
-      : await findLatestLegacyAssessmentArchive(folderId);
-  const uploaded = await uploadMultipart(
+  const replaceFileId = trackedPdfIsReplaceable ? input.existingFileId : undefined;
+  const uploaded = await uploadToDriveResumable(
     folderId,
     fileName,
     'application/pdf',
@@ -229,159 +206,7 @@ export async function backupAssessmentToCentralDrive(input: {
   return { ...uploaded, replacedExisting: Boolean(replaceFileId) };
 }
 
-export interface LegacyIntegratedAssessmentDriveArchive {
-  fileId: string;
-  fileName: string;
-  parentFolderId: string;
-  ppksId: string;
-  ppksName: string;
-  nik: string;
-  savedAt: string;
-  answers: Record<string, string | string[]>;
-}
-
-/** Lists old SIPANDU JSON snapshots only inside its assessment root/respondent folders. */
-export async function listLegacyIntegratedAssessmentDriveArchives(): Promise<LegacyIntegratedAssessmentDriveArchive[]> {
-  const assessmentRootId = await ensureFolderPath([ROOT_FOLDER_NAME, ASSESSMENTS_FOLDER_NAME]);
-  const folders: Array<{ id: string; name: string }> = [];
-  let folderPageToken = '';
-  do {
-    const params = new URLSearchParams({
-      q: "'" + assessmentRootId.replace(/'/g, "\\'") + "' in parents and trashed = false and mimeType = 'application/vnd.google-apps.folder'",
-      pageSize: '100',
-      orderBy: 'name',
-      fields: 'nextPageToken,files(id,name,mimeType)',
-      supportsAllDrives: 'true',
-      includeItemsFromAllDrives: 'true',
-    });
-    if (folderPageToken) params.set('pageToken', folderPageToken);
-    const response = await driveFetch('/files?' + params.toString());
-    if (!response.ok) throw new Error('Folder arsip asesmen Google Drive gagal dibaca (HTTP ' + response.status + ').');
-    const page = await response.json() as {
-      files?: Array<{ id: string; name: string; mimeType?: string }>;
-      nextPageToken?: string;
-    };
-    folders.push(...(page.files || []).filter((file) => file.mimeType === 'application/vnd.google-apps.folder'));
-    folderPageToken = page.nextPageToken || '';
-  } while (folderPageToken);
-
-  const archives: LegacyIntegratedAssessmentDriveArchive[] = [];
-  for (const folder of folders) {
-    let pageToken = '';
-    do {
-      const params = new URLSearchParams({
-        q: "'" + folder.id.replace(/'/g, "\\'") + "' in parents and trashed = false and mimeType = 'application/json' and name contains 'asesmen-'",
-        pageSize: '100',
-        orderBy: 'modifiedTime',
-        fields: 'nextPageToken,files(id,name,mimeType,appProperties,trashed,modifiedTime)',
-        supportsAllDrives: 'true',
-        includeItemsFromAllDrives: 'true',
-      });
-      if (pageToken) params.set('pageToken', pageToken);
-      const response = await driveFetch('/files?' + params.toString());
-      if (!response.ok) throw new Error('Arsip JSON pada folder responden gagal diperiksa (HTTP ' + response.status + ').');
-      const page = await response.json() as {
-        files?: Array<{
-          id: string;
-          name: string;
-          mimeType?: string;
-          trashed?: boolean;
-          appProperties?: Record<string, string>;
-        }>;
-        nextPageToken?: string;
-      };
-
-      const eligible = (page.files || []).filter((file) =>
-        isManagedIntegratedAssessmentArchiveFile(file, folder.id)
-      );
-      for (const file of eligible) {
-        try {
-          const contentResponse = await driveFetch('/files/' + encodeURIComponent(file.id) + '?alt=media');
-          if (!contentResponse.ok) throw new Error('Isi arsip gagal dibaca (HTTP ' + contentResponse.status + ').');
-          const payload = await contentResponse.json() as {
-            type?: string;
-            ppksId?: string;
-            ppksName?: string;
-            nik?: string;
-            savedAt?: string;
-            answers?: Record<string, unknown>;
-          };
-          if (payload.type !== 'SIPANDU Form Asesmen Terintegrasi'
-            || typeof payload.ppksId !== 'string'
-            || !payload.ppksId.trim()
-            || !payload.answers
-            || typeof payload.answers !== 'object'
-            || Array.isArray(payload.answers)) continue;
-
-          const answers: Record<string, string | string[]> = {};
-          for (const [key, value] of Object.entries(payload.answers)) {
-            if (!isIntegratedAssessmentAnswerKey(key)) continue;
-            if (typeof value === 'string') answers[key] = value;
-            else if (Array.isArray(value) && value.every((item) => typeof item === 'string')) {
-              answers[key] = value as string[];
-            }
-          }
-          if (!Object.keys(answers).length) continue;
-
-          archives.push({
-            fileId: file.id,
-            fileName: file.name,
-            parentFolderId: folder.id,
-            ppksId: payload.ppksId,
-            ppksName: String(payload.ppksName || folder.name),
-            nik: String(payload.nik || ''),
-            savedAt: String(payload.savedAt || ''),
-            answers,
-          });
-        } catch (error) {
-          console.warn('SIPANDU skipped one legacy assessment archive that could not be parsed:', {
-            fileId: file.id,
-            message: error instanceof Error ? error.message : String(error),
-          });
-        }
-      }
-      pageToken = page.nextPageToken || '';
-    } while (pageToken);
-  }
-
-  return archives.sort((a, b) => {
-    const left = Date.parse(a.savedAt) || 0;
-    const right = Date.parse(b.savedAt) || 0;
-    return left - right || a.fileName.localeCompare(b.fileName);
-  });
-}
-
-async function findLatestLegacyAssessmentArchive(folderId: string): Promise<string | undefined> {
-  try {
-    const escapedFolderId = folderId.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
-    const query = encodeURIComponent(
-      "'" + escapedFolderId + "' in parents and trashed = false and mimeType = 'application/json' and name contains 'asesmen-'",
-    );
-    const response = await driveFetch(
-      '/files?q=' + query
-        + '&fields=files(id,name,mimeType,appProperties,trashed,modifiedTime)'
-        + '&orderBy=modifiedTime desc&pageSize=100&supportsAllDrives=true&includeItemsFromAllDrives=true',
-    );
-    if (!response.ok) return undefined;
-    const payload = await response.json() as { files?: Array<{
-      id?: string;
-      name?: string;
-      mimeType?: string;
-      trashed?: boolean;
-      appProperties?: Record<string, string>;
-    }> };
-    const candidates = (payload.files || []).filter((file) =>
-      file.mimeType === 'application/json'
-      && /^asesmen-.*\.json$/i.test(file.name || '')
-      && isManagedIntegratedAssessmentArchiveFile(file, folderId)
-    );
-    return candidates[0]?.id;
-  } catch (error) {
-    console.warn('SIPANDU could not locate the legacy assessment JSON archive; a new PDF will still be uploaded:', error);
-    return undefined;
-  }
-}
-
+/** Reuse only an explicitly tracked, managed assessment PDF. */
 async function isReplaceableAssessmentArchive(fileId: string, folderId: string): Promise<boolean> {
   if (!fileId) return false;
   try {
@@ -398,7 +223,7 @@ async function isReplaceableAssessmentArchive(fileId: string, folderId: string):
     };
     return file.id === fileId && isManagedIntegratedAssessmentArchiveFile(file, folderId);
   } catch {
-    // Never block a new PDF because an old file cannot be inspected.
+    // A stale pointer creates a new PDF; it never triggers a JSON archive lookup.
     return false;
   }
 }
