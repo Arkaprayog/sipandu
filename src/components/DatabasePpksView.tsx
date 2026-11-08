@@ -167,7 +167,7 @@ export const DatabasePpksView: React.FC<DatabasePpksViewProps> = ({
           <div>
             <h2 className="text-xl md:text-2xl font-black text-white tracking-wider flex items-center gap-2">
               <span>DATABASE PPKS</span>
-              <span className="text-xs px-2.5 py-0.5 rounded-full bg-emerald-950 text-emerald-300 border border-emerald-500/40 font-mono">
+              <span className="sipandu-database-title-badge text-xs px-2.5 py-0.5 rounded-full bg-emerald-950 text-emerald-300 border border-emerald-500/40 font-mono">
                 ODHIV Sumatera Utara
               </span>
             </h2>
