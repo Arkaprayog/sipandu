@@ -87,6 +87,39 @@ export function isFollowUpRequired(status: PPKSServiceStatus): boolean {
   );
 }
 
+export type FollowUpReminderUrgency = 'overdue' | 'today' | 'upcoming' | 'unscheduled' | 'none';
+
+function dateOrdinal(value: string): number | null {
+  const match = String(value || '').trim().match(/^(\\d{4})-(\\d{2})-(\\d{2})$/);
+  if (!match) return null;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  if (date.getUTCFullYear() !== year || date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) return null;
+  return Math.floor(date.getTime() / 86400000);
+}
+
+/**
+ * Derive an in-app reminder from an explicitly stored follow-up date.
+ * Unscheduled pending work is surfaced separately; absence of a service record
+ * is never interpreted as proof that assistance was not received.
+ */
+export function getFollowUpReminderUrgency(
+  status: PPKSServiceStatus,
+  todayDate: string,
+  upcomingWindowDays = 7,
+): FollowUpReminderUrgency {
+  if (!status.followUpAt) return isFollowUpRequired(status) ? 'unscheduled' : 'none';
+  const due = dateOrdinal(status.followUpAt);
+  const today = dateOrdinal(todayDate);
+  if (due === null || today === null) return 'none';
+  const daysUntilDue = due - today;
+  if (daysUntilDue < 0) return 'overdue';
+  if (daysUntilDue === 0) return 'today';
+  return daysUntilDue <= Math.max(0, upcomingWindowDays) ? 'upcoming' : 'none';
+}
+
 export function calculatePPKSServiceMetrics(
   records: PPKSRecord[],
   storedStatuses: PPKSServiceStatus[],
