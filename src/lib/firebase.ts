@@ -1799,3 +1799,71 @@ export async function fetchPPKSServiceEvents(ppksId: string): Promise<PPKSServic
     throw new Error(describeConnectionError(error));
   }
 }
+
+
+const isValidFieldVisitDate = (value: string): boolean =>
+  value === '' || /^\\d{4}-\\d{2}-\\d{2}$/.test(value);
+
+/** Live field visit feed; pendamping can only query records assigned to their UID. */
+export function subscribeToFieldVisits(
+  role: string,
+  userUid: string,
+  onVisits: (visits: FieldVisitRecord[]) => void,
+  onError: (error: Error) => void,
+): () => void {
+  if (!auth.currentUser) throw new Error('Sesi SIPANDU belum aktif.');
+  if (!['owner', 'supervisor', 'pendamping'].includes(role)) {
+    throw new Error('Peran akun tidak memiliki akses ke Pendampingan Lapangan.');
+  }
+  const visitsQuery = role === 'pendamping'
+    ? query(collection(db, 'fieldVisits'), where('assignedToUid', '==', userUid))
+    : query(collection(db, 'fieldVisits'), limit(500));
+  return onSnapshot(visitsQuery, (snapshot) => {
+    const visits = snapshot.docs.map((item) => {
+      const data = item.data();
+      return {
+        ...data,
+        id: item.id,
+        createdAt: toISODate(data.createdAt),
+      } as FieldVisitRecord;
+    }).sort((left, right) => right.visitDate.localeCompare(left.visitDate) || right.createdAt.localeCompare(left.createdAt));
+    onVisits(visits);
+  }, (error) => onError(new Error(describeConnectionError(error))));
+}
+
+/** Create an immutable, auditable field visit; records cannot be edited or deleted. */
+export async function createFieldVisit(input: Omit<FieldVisitRecord, 'id' | 'createdByUid' | 'createdAt'>): Promise<void> {
+  const user = auth.currentUser;
+  if (!user) throw new Error('Sesi SIPANDU berakhir. Masuk kembali sebelum mencatat kunjungan.');
+  const token = await getIdTokenResult(user, true);
+  const role = String(token.claims.role || '');
+  if (!['owner', 'supervisor', 'pendamping'].includes(role)) throw new Error('Peran akun tidak memiliki akses.');
+  if (!input.ppksId.trim() || input.ppksId.includes('/') || input.ppksId.length > 150) throw new Error('ID PPKS tidak valid.');
+  if (!isValidFieldVisitDate(input.visitDate) || !input.visitDate) throw new Error('Tanggal kunjungan wajib diisi.');
+  if (!isValidFieldVisitDate(input.followUpAt)) throw new Error('Tanggal tindak lanjut tidak valid.');
+  const types = ['kunjungan-rumah', 'kunjungan-faskes', 'pendampingan-sosial', 'monitoring-bantuan', 'koordinasi-rujukan'];
+  const outcomes = ['selesai', 'perlu-tindak-lanjut', 'tidak-bertemu', 'dijadwalkan-ulang'];
+  if (!types.includes(input.visitType) || !outcomes.includes(input.outcome)) throw new Error('Jenis atau hasil kunjungan tidak valid.');
+  if (input.summary.trim().length < 3 || input.summary.length > 3000 || input.nextAction.length > 1200) throw new Error('Ringkasan atau tindak lanjut tidak valid.');
+  if (input.followUpAt && !input.nextAction.trim()) throw new Error('Tindak lanjut wajib dijelaskan jika tanggal ditetapkan.');
+  const assignedToUid = role === 'pendamping' ? user.uid : String(input.assignedToUid || user.uid).trim();
+  if (!assignedToUid || assignedToUid.length > 128) throw new Error('UID pendamping yang ditugaskan tidak valid.');
+  try {
+    const visitRef = doc(collection(db, 'fieldVisits'));
+    await setDoc(visitRef, {
+      id: visitRef.id,
+      ppksId: input.ppksId,
+      visitDate: input.visitDate,
+      visitType: input.visitType,
+      outcome: input.outcome,
+      summary: input.summary.trim(),
+      nextAction: input.nextAction.trim(),
+      followUpAt: input.followUpAt,
+      assignedToUid,
+      createdByUid: user.uid,
+      createdAt: serverTimestamp(),
+    });
+  } catch (error) {
+    throw new Error(describeConnectionError(error));
+  }
+}
