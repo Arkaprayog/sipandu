@@ -27,6 +27,7 @@ const NotificationsModal = lazyWithRecovery('NotificationsModal', () => import('
 const GoogleWorkspaceModal = lazyWithRecovery('GoogleWorkspaceModal', () => import('./components/GoogleWorkspaceModal').then((module) => ({ default: module.GoogleWorkspaceModal })));
 const SIPANDUAICopilot = lazyWithRecovery('SIPANDUAICopilot', () => import('./components/SIPANDUAICopilot').then((module) => ({ default: module.SIPANDUAICopilot })));
 const ServiceCenterView = lazyWithRecovery('ServiceCenterView', () => import('./components/ServiceCenterView').then((module) => ({ default: module.ServiceCenterView })));
+const RegionalIntelligenceView = lazyWithRecovery('RegionalIntelligenceView', () => import('./components/RegionalIntelligenceView').then((module) => ({ default: module.RegionalIntelligenceView })));
 import { onAuthStateChanged, signOut, getIdTokenResult } from 'firebase/auth';
 import { auth, getAccessToken, savePPKSToFirestore, saveIntegratedAssessmentToFirestore, replacePPKSCollectionFromSpreadsheet, googleLogout, subscribeToPPKSChanges, subscribeToPPKSServiceStatus, savePPKSServiceUpdate, subscribeToIntegratedAssessmentAnswers, saveStageOneIntakeToFirestore, subscribeToStageOneIntake, staffAuthPersistenceReady, isWorkspaceAccountConnected, invalidateAccessToken, getSIPANDUUserProfile, saveSIPANDUUserProfile } from './lib/firebase';
 import { activatePendingTeamMember, restorePendingTeamInvitation } from './lib/teamRegistration';
@@ -1878,6 +1879,8 @@ function StaffApp() {
               }}
             />
           )}
+
+          {activeTab === 'intelijen-wilayah' && <RegionalIntelligenceView ppksList={ppksList} />}
 
           {activeTab === 'database-ppks' && (
             <DatabasePpksView
