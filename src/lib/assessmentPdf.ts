@@ -4,7 +4,8 @@ import { PDFDocument } from 'pdf-lib';
 const A4_WIDTH_PT = 595.276;
 const A4_HEIGHT_PT = 841.89;
 const PAGE_MARGIN_PT = (8 / 25.4) * 72;
-const RENDER_SCALE = 2.5;
+export const PDF_RENDER_SCALES = [2.5, 2, 1.5, 1] as const;
+const JPEG_QUALITY = 0.94;
 
 /**
  * html2canvas 1.4.x cannot parse modern CSS Color 4 values such as oklch().
@@ -60,10 +61,97 @@ function sanitizeOklchColorsForHtml2Canvas(
   });
 }
 
+function canvasToBlob(
+  canvas: HTMLCanvasElement,
+  mimeType: 'image/jpeg' | 'image/png',
+): Promise<Blob> {
+  return new Promise<Blob>((resolve, reject) => {
+    try {
+      canvas.toBlob((blob) => {
+        if (blob && blob.size > 0 && blob.type === mimeType) resolve(blob);
+        else reject(new Error('Halaman PDF gagal dikompresi sebagai ' + mimeType + '.'));
+      }, mimeType, mimeType === 'image/jpeg' ? JPEG_QUALITY : undefined);
+    } catch (error) {
+      reject(error instanceof Error ? error : new Error(String(error)));
+    }
+  });
+}
+
+type EncodedAssessmentPage = { bytes: Uint8Array; format: 'jpg' | 'png' };
+
+async function renderAssessmentPage(
+  element: HTMLElement,
+  renderRootId: string,
+  pageNumber: number,
+): Promise<EncodedAssessmentPage> {
+  let lastError: unknown = null;
+  const bounds = element.getBoundingClientRect();
+  const width = Math.ceil(Math.max(bounds.width, element.scrollWidth));
+  const height = Math.ceil(Math.max(bounds.height, element.scrollHeight));
+  if (width <= 0 || height <= 0) {
+    throw new Error('Halaman ' + pageNumber + ' kosong dan tidak dapat dimasukkan ke PDF.');
+  }
+
+  for (const scale of PDF_RENDER_SCALES) {
+    let canvas: HTMLCanvasElement | null = null;
+    try {
+      canvas = await html2canvas(element, {
+        backgroundColor: '#ffffff',
+        scale,
+        useCORS: true,
+        allowTaint: false,
+        logging: false,
+        width,
+        height,
+        windowWidth: Math.max(window.innerWidth, width),
+        windowHeight: Math.max(window.innerHeight, Math.ceil(bounds.bottom + 32)),
+        scrollX: 0,
+        scrollY: 0,
+        onclone: (clonedDocument) => {
+          sanitizeOklchColorsForHtml2Canvas(clonedDocument, renderRootId);
+          const root = clonedDocument.getElementById(renderRootId);
+          if (root) {
+            root.style.setProperty('opacity', '1', 'important');
+            root.style.setProperty('visibility', 'visible', 'important');
+          }
+        },
+      });
+      if (canvas.width <= 0 || canvas.height <= 0) {
+        throw new Error('Kanvas halaman kosong.');
+      }
+
+      try {
+        const jpeg = await canvasToBlob(canvas, 'image/jpeg');
+        return { bytes: new Uint8Array(await jpeg.arrayBuffer()), format: 'jpg' };
+      } catch (jpegError) {
+        // JPEG encoding can fail on particular mobile browsers. Keep a lossless
+        // PNG fallback for that page before retrying the whole render at lower DPI.
+        if (jpegError instanceof DOMException && jpegError.name === 'SecurityError') throw jpegError;
+        const png = await canvasToBlob(canvas, 'image/png');
+        return { bytes: new Uint8Array(await png.arrayBuffer()), format: 'png' };
+      }
+    } catch (error) {
+      lastError = error;
+    } finally {
+      if (canvas) {
+        // Release the large raster allocation before the next page or DPI attempt.
+        canvas.width = 0;
+        canvas.height = 0;
+      }
+    }
+  }
+
+  const reason = lastError instanceof Error ? lastError.message : String(lastError);
+  throw new Error(
+    'Halaman ' + pageNumber + ' gagal dirender menjadi PDF A4 pada beberapa tingkat resolusi: ' + reason,
+  );
+}
+
 /**
- * Renders each official assessment sheet separately at high resolution and
- * assembles a true A4 PDF. Lossless PNG page images keep small text and lines crisp;
- * one-page-at-a-time rendering limits peak canvas memory on Android devices.
+ * Renders each official assessment sheet separately and assembles a true A4 PDF.
+ * Rendering retries at lower resolution on memory-constrained mobile devices;
+ * JPEG is used to keep large photo appendices practical while PNG remains a fallback.
+ * There is no application-level page-count or output-byte cap.
  */
 export async function createOfficialAssessmentPdf(
   pages: HTMLElement[],
@@ -74,73 +162,33 @@ export async function createOfficialAssessmentPdf(
   }
 
   const pdf = await PDFDocument.create();
-  const contentWidth = A4_WIDTH_PT - PAGE_MARGIN_PT * 2;
-  const contentHeight = A4_HEIGHT_PT - PAGE_MARGIN_PT * 2;
-
   for (let index = 0; index < pages.length; index += 1) {
-    const element = pages[index];
-    const bounds = element.getBoundingClientRect();
-    const width = Math.ceil(Math.max(bounds.width, element.scrollWidth));
-    const height = Math.ceil(Math.max(bounds.height, element.scrollHeight));
-    if (width <= 0 || height <= 0) {
-      throw new Error('Halaman ' + (index + 1) + ' kosong dan tidak dapat dimasukkan ke PDF.');
-    }
-
-    const canvas = await html2canvas(element, {
-      backgroundColor: '#ffffff',
-      scale: RENDER_SCALE,
-      useCORS: true,
-      allowTaint: false,
-      logging: false,
-      width,
-      height,
-      windowWidth: Math.max(window.innerWidth, width),
-      windowHeight: Math.max(window.innerHeight, Math.ceil(bounds.bottom + 32)),
-      scrollX: 0,
-      scrollY: 0,
-      onclone: (clonedDocument) => {
-        sanitizeOklchColorsForHtml2Canvas(clonedDocument, renderRootId);
-        const root = clonedDocument.getElementById(renderRootId);
-        if (root) {
-          root.style.setProperty('opacity', '1', 'important');
-          root.style.setProperty('visibility', 'visible', 'important');
-        }
-      },
+    const encoded = await renderAssessmentPage(pages[index], renderRootId, index + 1);
+    const embeddedImage = encoded.format === 'jpg'
+      ? await pdf.embedJpg(encoded.bytes)
+      : await pdf.embedPng(encoded.bytes);
+    const pdfPage = pdf.addPage([A4_WIDTH_PT, A4_HEIGHT_PT]);
+    const contentWidth = A4_WIDTH_PT - PAGE_MARGIN_PT * 2;
+    const contentHeight = A4_HEIGHT_PT - PAGE_MARGIN_PT * 2;
+    const fit = Math.min(
+      contentWidth / embeddedImage.width,
+      contentHeight / embeddedImage.height,
+    );
+    const drawWidth = embeddedImage.width * fit;
+    const drawHeight = embeddedImage.height * fit;
+    pdfPage.drawImage(embeddedImage, {
+      x: (A4_WIDTH_PT - drawWidth) / 2,
+      y: A4_HEIGHT_PT - PAGE_MARGIN_PT - drawHeight,
+      width: drawWidth,
+      height: drawHeight,
     });
-
-    try {
-      if (canvas.width <= 0 || canvas.height <= 0) {
-        throw new Error('Halaman ' + (index + 1) + ' gagal dirender.');
-      }
-      const pngBlob = await new Promise<Blob>((resolve, reject) => {
-        canvas.toBlob((blob) => {
-          if (blob) resolve(blob);
-          else reject(new Error('Gambar halaman ' + (index + 1) + ' gagal dikompresi.'));
-        }, 'image/png');
-      });
-      const pngBytes = new Uint8Array(await pngBlob.arrayBuffer());
-      const embeddedImage = await pdf.embedPng(pngBytes);
-      const pdfPage = pdf.addPage([A4_WIDTH_PT, A4_HEIGHT_PT]);
-      const fit = Math.min(
-        contentWidth / embeddedImage.width,
-        contentHeight / embeddedImage.height,
-      );
-      const drawWidth = embeddedImage.width * fit;
-      const drawHeight = embeddedImage.height * fit;
-      pdfPage.drawImage(embeddedImage, {
-        x: (A4_WIDTH_PT - drawWidth) / 2,
-        y: A4_HEIGHT_PT - PAGE_MARGIN_PT - drawHeight,
-        width: drawWidth,
-        height: drawHeight,
-      });
-    } finally {
-      // Release the large raster allocation before rendering the next page.
-      canvas.width = 0;
-      canvas.height = 0;
-    }
   }
 
   const bytes = await pdf.save({ useObjectStreams: true });
   const output = new Uint8Array(bytes);
-  return new Blob([output.buffer as ArrayBuffer], { type: 'application/pdf' });
+  const result = new Blob([output.buffer as ArrayBuffer], { type: 'application/pdf' });
+  if (result.size < 8 || (await result.slice(0, 5).text()) !== '%PDF-') {
+    throw new Error('PDF A4 tidak valid setelah dirender.');
+  }
+  return result;
 }
