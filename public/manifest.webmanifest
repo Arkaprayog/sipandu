@@ -2,13 +2,13 @@
   "id": "./",
   "name": "SIPANDU ODHIV",
   "short_name": "SIPANDU",
-  "version": "4.1.0",
+  "version": "4.2.0",
   "description": "Sistem Informasi & Pendampingan Terpadu Database PPKS ODHIV Sumatera Utara",
   "lang": "id-ID",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
-  "orientation": "portrait",
+  "orientation": "any",
   "background_color": "#031540",
   "theme_color": "#031540",
   "icons": [
@@ -28,5 +28,11 @@
   "display_override": [
     "standalone",
     "minimal-ui"
-  ]
+  ],
+  "categories": [
+    "business",
+    "productivity",
+    "utilities"
+  ],
+  "prefer_related_applications": false
 }
