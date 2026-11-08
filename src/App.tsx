@@ -1818,6 +1818,7 @@ function StaffApp() {
               ppksList={ppksList}
               serviceStatuses={serviceStatuses}
               serviceStatusLoading={serviceStatusLoading}
+              serviceStatusError={serviceStatusError}
               onOpenServices={() => navigateToTab('layanan-ppks')}
             />
           )}
