@@ -24,6 +24,7 @@ interface BerandaViewProps {
   ppksList: PPKSRecord[];
   serviceStatuses: PPKSServiceStatus[];
   serviceStatusLoading?: boolean;
+  serviceStatusError?: string;
   onOpenServices?: () => void;
 }
 
@@ -41,6 +42,7 @@ export const BerandaView: React.FC<BerandaViewProps> = ({
   ppksList,
   serviceStatuses,
   serviceStatusLoading = false,
+  serviceStatusError = '',
   onOpenServices,
 }) => {
   // Every dashboard number is derived from the current SIPANDU respondent list.
@@ -184,7 +186,7 @@ export const BerandaView: React.FC<BerandaViewProps> = ({
         </div>
         <div className="sipandu-dashboard-command-footer">
           <span><HeartHandshake className="h-4 w-4" /> Terapi psikososial: {serviceMetrics.therapyScheduled} terjadwal · {serviceMetrics.therapyActive} berjalan · {serviceMetrics.therapyCompleted} memiliki sesi selesai</span>
-          <span>{serviceStatusLoading ? 'Memuat status layanan…' : serviceStatuses.length ? serviceStatuses.length.toLocaleString('id-ID') + ' status layanan tersinkron' : 'Status awal mengikuti permintaan bantuan yang tercatat; penerimaan belum diasumsikan.'}</span>
+          <span>{serviceStatusLoading ? 'Memuat status layanan…' : serviceStatusError ? 'Sinkronisasi status layanan bermasalah; periksa menu Layanan PPKS.' : serviceStatuses.length ? serviceStatuses.length.toLocaleString('id-ID') + ' status layanan tersinkron' : 'Status awal mengikuti permintaan bantuan yang tercatat; penerimaan belum diasumsikan.'}</span>
         </div>
       </section>
 
