@@ -8,7 +8,7 @@ import {
   UsersRound,
   Building2,
   HeartHandshake,
-  ChartColumnIncreasing,
+  BarChart3,
   PieChart,
   UserRound,
   BriefcaseBusiness,
@@ -97,7 +97,6 @@ export const BerandaView: React.FC<BerandaViewProps> = ({
   const assistanceValues = ppksList.map((record) => String(record.jenisBantuan || '').trim());
   const entrepreneurshipCount = assistanceValues.filter((value) => /kewirausaha|wirausaha|modal usaha|bantuan usaha/i.test(value)).length;
   const nutritionCount = assistanceValues.filter((value) => /nutrisi|gizi|pemenuhan makanan/i.test(value)).length;
-  const mappedAssistanceCount = entrepreneurshipCount + nutritionCount;
   const otherAssistanceCount = assistanceValues.filter((value) =>
     value !== '' &&
     !/kewirausaha|wirausaha|modal usaha|bantuan usaha|nutrisi|gizi|pemenuhan makanan/i.test(value)
@@ -217,7 +216,7 @@ export const BerandaView: React.FC<BerandaViewProps> = ({
       <section className="sipandu-dashboard-chart-grid" aria-label="Analitik PPKS">
         <article className="sipandu-dashboard-panel sipandu-dashboard-chart-card sipandu-dashboard-chart-card--region">
           <div className="sipandu-dashboard-card-heading">
-            <div className="sipandu-dashboard-icon sipandu-dashboard-icon--blue"><ChartColumnIncreasing className="h-5 w-5" /></div>
+            <div className="sipandu-dashboard-icon sipandu-dashboard-icon--blue"><BarChart3 className="h-5 w-5" /></div>
             <div>
               <h3>PPKS berdasarkan wilayah</h3>
               <p>Distribusi responden pada 33 kabupaten/kota Sumatera Utara</p>
@@ -311,7 +310,7 @@ export const BerandaView: React.FC<BerandaViewProps> = ({
           <div className="sipandu-dashboard-chart-list sipandu-dashboard-chart-list--assistance">
             {assistanceItems.map((item) => renderBar(item, maxAssistanceCount, 'assistance', true))}
           </div>
-          {assistanceItems.length === 0 && (
+          {totalPPKS === 0 && (
             <div className="sipandu-dashboard-empty"><CircleHelp className="h-5 w-5" />Belum ada data jenis bantuan.</div>
           )}
         </article>
