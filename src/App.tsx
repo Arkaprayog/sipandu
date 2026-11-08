@@ -1169,7 +1169,7 @@ function StaffApp() {
     setServiceStatusError('');
     let unsubscribe: (() => void) | null = null;
     try {
-      unsubscribe = subscribeToPPKSServiceStatus(ppksList.map((record) => record.id), (statuses) => {
+      unsubscribe = subscribeToPPKSServiceStatus(ppksList.map((record) => record.id), currentUserRole, currentUserUid, (statuses) => {
         if (!active) return;
         setServiceStatuses(statuses);
         setServiceStatusLoading(false);
@@ -1187,7 +1187,7 @@ function StaffApp() {
       active = false;
       unsubscribe?.();
     };
-  }, [authReady, isAuthenticated, localCacheReady, ppksList]);
+  }, [authReady, isAuthenticated, localCacheReady, ppksList, currentUserRole, currentUserUid]);
 
   // Realtime Firestore sync: apply cloud edits to records already in the selected
   // source roster. This prevents stale Firestore-only rows from reappearing after
