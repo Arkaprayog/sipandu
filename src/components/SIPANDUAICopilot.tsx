@@ -3,7 +3,7 @@ import { Bot, BrainCircuit, X, Send, LoaderCircle, ShieldCheck, AlertCircle, Spa
 import { auth } from "../lib/firebase";
 
 type ChatMessage = { role: "user" | "model"; text: string; at: string };
-type ChatMetadata = { generatedAt: string; recordsAnalyzed: number; serviceStatusRecordsAnalyzed: number; truncated: boolean; scope: string; sources: string[] };
+type ChatMetadata = { generatedAt: string; recordsAnalyzed: number; serviceStatusRecordsAnalyzed: number | null; truncated: boolean; scope: string; sources: string[] };
 type Props = { onClose: () => void };
 
 const AI_WORKER_URL = (import.meta.env.VITE_SIPANDU_AI_WORKER_URL || "https://sipandu-ai.aryprayoga139.workers.dev").replace(/\/$/, "");
@@ -131,10 +131,11 @@ export const SIPANDUAICopilot: React.FC<Props> = ({ onClose }) => {
               <div className="mb-2 flex items-center gap-2 text-[10px] font-bold text-neutral-300"><Database size={13} /> SUMBER ANALISIS</div>
               <div className="grid grid-cols-2 gap-2 text-[10px] text-neutral-400 sm:grid-cols-3">
                 <span>PPKS dianalisis: <strong className="text-neutral-200">{metadata.recordsAnalyzed}</strong></span>
-                <span>Status layanan: <strong className="text-neutral-200">{metadata.serviceStatusRecordsAnalyzed}</strong></span>
+                <span>Status layanan: <strong className="text-neutral-200">{metadata.serviceStatusRecordsAnalyzed === null ? "disembunyikan (<5)" : metadata.serviceStatusRecordsAnalyzed}</strong></span>
                 <span>{metadata.truncated ? "Data dibatasi hingga 10.000 per koleksi" : "Data tidak terpotong"}</span>
               </div>
               <p className="mt-2 text-[10px] leading-relaxed text-neutral-500">{metadata.scope}</p>
+              <p className="mt-1 text-[9px] leading-relaxed text-neutral-600">Sumber: {metadata.sources.join("; ")}</p>
               <p className="mt-1 flex items-center gap-1 text-[9px] text-neutral-600"><Clock3 size={11} /> {new Date(metadata.generatedAt).toLocaleString("id-ID", { dateStyle: "medium", timeStyle: "short" })}</p>
             </div>
           )}
