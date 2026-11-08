@@ -160,7 +160,7 @@ export const DatabasePpksView: React.FC<DatabasePpksViewProps> = ({
   };
 
   return (
-    <div className="workspace-page min-h-full space-y-4 text-white">
+    <div className="sipandu-workspace-motion workspace-page min-h-full space-y-4 text-white">
       {/* Bingkai Luar: Judul DATABASE PPKS */}
       <div className="workspace-panel min-h-full p-3 sm:p-4 md:p-6 rounded-2xl bg-black/25 border border-white/10 shadow-[0_12px_36px_rgba(0,0,0,0.18)]">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 mb-5 border-b border-rose-500/25 pb-4">
