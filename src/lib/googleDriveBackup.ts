@@ -1,6 +1,6 @@
 import { getAccessToken, invalidateAccessToken, refreshWorkspaceAccessToken } from './firebase';
 import type { SuratRecord } from '../types';
-import { buildGoogleDriveMultipartBody, buildGoogleDriveRequestUrl } from './googleDriveMultipart';
+import { buildGoogleDriveRequestUrl } from './googleDriveMultipart';
 import { isManagedIntegratedAssessmentArchiveFile } from './integratedAssessmentArchive';
 
 const ROOT_FOLDER_NAME = 'SIPANDU';
@@ -66,7 +66,7 @@ async function ensureFolderPath(parts: string[]): Promise<string> {
   return parentId!;
 }
 
-async function uploadMultipart(
+async function uploadToDriveResumable(
   folderId: string,
   fileName: string,
   mimeType: string,
@@ -144,7 +144,7 @@ export async function backupDocumentToCentralDrive(
 ): Promise<{ id: string; webViewLink?: string }> {
   const categoryFolder = category === 'surat-tugas' ? 'Surat Tugas' : 'Surat Lainnya';
   const folderId = await ensureFolderPath([ROOT_FOLDER_NAME, DOCUMENTS_FOLDER_NAME, categoryFolder]);
-  return uploadMultipart(folderId, safeName(file.name, 'dokumen'), file.type || 'application/octet-stream', file);
+  return uploadToDriveResumable(folderId, safeName(file.name, 'dokumen'), file.type || 'application/octet-stream', file);
 }
 
 /** Archives the structured content of a newly generated letter in the central Drive. */
@@ -156,7 +156,7 @@ export async function backupLetterToCentralDrive(record: SuratRecord): Promise<{
     ...record,
     archivedAt: new Date().toISOString(),
   }, null, 2)], { type: 'application/json' });
-  return uploadMultipart(folderId, safeName(record.nomorSurat + '-' + record.judul, record.id) + '.json', 'application/json', payload);
+  return uploadToDriveResumable(folderId, safeName(record.nomorSurat + '-' + record.judul, record.id) + '.json', 'application/json', payload);
 }
 
 /**
@@ -197,7 +197,7 @@ export async function backupAssessmentToCentralDrive(input: {
     ? await isReplaceableAssessmentArchive(input.existingFileId, folderId)
     : false;
   const replaceFileId = trackedPdfIsReplaceable ? input.existingFileId : undefined;
-  const uploaded = await uploadMultipart(
+  const uploaded = await uploadToDriveResumable(
     folderId,
     fileName,
     'application/pdf',
