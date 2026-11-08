@@ -18,11 +18,17 @@ export const ProgramPerformanceView: React.FC<Props> = ({ ppksList, serviceStatu
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
   const filteredVisits = useMemo(() => visits.filter((visit) => inRange(visit.visitDate, from, to)), [visits, from, to]);
-  const statusCounts = useMemo(() => ({
-    nutrition: serviceStatuses.reduce((acc, item) => acc + (acc[item.nutritionStatus] || 0), {} as Record<string, number>),
-    entrepreneurship: serviceStatuses.reduce((acc, item) => acc + (acc[item.entrepreneurshipStatus] || 0), {} as Record<string, number>),
-    therapy: serviceStatuses.reduce((acc, item) => acc + (acc[item.psychosocialStatus] || 0), {} as Record<string, number>),
-  }), [serviceStatuses]);
+  const statusCounts = useMemo(() => {
+    const nutrition: Record<string, number> = {};
+    const entrepreneurship: Record<string, number> = {};
+    const therapy: Record<string, number> = {};
+    serviceStatuses.forEach((item) => {
+      nutrition[item.nutritionStatus] = (nutrition[item.nutritionStatus] || 0) + 1;
+      entrepreneurship[item.entrepreneurshipStatus] = (entrepreneurship[item.entrepreneurshipStatus] || 0) + 1;
+      therapy[item.psychosocialStatus] = (therapy[item.psychosocialStatus] || 0) + 1;
+    });
+    return { nutrition, entrepreneurship, therapy };
+  }, [serviceStatuses]);
   const countBy = (items: Record<string, number>, key: string) => items[key] || 0;
   const visitOutcomes = useMemo(() => filteredVisits.reduce((acc, visit) => {
     acc[visit.outcome] = (acc[visit.outcome] || 0) + 1;
