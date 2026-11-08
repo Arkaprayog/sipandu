@@ -110,7 +110,7 @@ export function isManagedIntegratedAssessmentArchiveFile(
     file.trashed !== true &&
     folderId &&
     file.mimeType === 'application/pdf' &&
-    /^form-asesmen-terintegrasi-.*\\.pdf$/i.test(file.name || '') &&
+    /^form-asesmen-terintegrasi-.*\.pdf$/i.test(file.name || '') &&
     file.appProperties?.sipanduManaged === 'true' &&
     file.appProperties?.sipanduArchive === folderId
   );
