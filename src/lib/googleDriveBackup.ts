@@ -169,7 +169,6 @@ export async function backupAssessmentToCentralDrive(input: {
   nik?: string;
   fileName: string;
   existingFileId?: string;
-  existingFolderId?: string;
   pdf: Blob;
 }): Promise<{ id: string; webViewLink?: string; replacedExisting: boolean }> {
   if (!(input.pdf instanceof Blob) || input.pdf.size < 8) {
@@ -181,7 +180,7 @@ export async function backupAssessmentToCentralDrive(input: {
   }
 
   const personFolder = safeName(input.ppksName || input.ppksId, input.ppksId);
-  const folderId = input.existingFolderId || await ensureFolderPath([ROOT_FOLDER_NAME, ASSESSMENTS_FOLDER_NAME, personFolder]);
+  const folderId = await ensureFolderPath([ROOT_FOLDER_NAME, ASSESSMENTS_FOLDER_NAME, personFolder]);
   const savedAt = new Date().toISOString();
   const stamp = savedAt.replace(/[:.]/g, '-');
   const respondent = safeName(input.ppksName || input.ppksId, input.ppksId);
