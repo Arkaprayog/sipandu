@@ -160,10 +160,11 @@ function extractHistory(value: unknown): HistoryItem[] {
   return value.slice(-MAX_HISTORY_ITEMS).flatMap((item) => {
     if (!item || typeof item !== "object") return [];
     const candidate = item as Record<string, unknown>;
-    const role = candidate.role;
     const text = typeof candidate.text === "string" ? candidate.text.trim().slice(0, MAX_HISTORY_TEXT) : "";
-    if (!text || (role !== "user" && role !== "model")) return [];
-    return [{ role, text }];
+    // Gemini 3.8 Flash multi-turn requests must not be seeded with prefilled
+    // model turns. Only prior user questions are carried as quoted context.
+    if (!text || candidate.role !== "user") return [];
+    return [{ role: "user" as const, text }];
   });
 }
 
@@ -274,15 +275,15 @@ async function generateAnswer(
     "Jangan menyarankan tindakan menulis, mengubah, menghapus, mengunggah, atau mengirim data dari SIPANDU. Copilot hanya membaca dan menganalisis.",
   ].join(" ");
 
-  const contents = [
-    ...history.map((item) => ({ role: item.role, parts: [{ text: item.text }] })),
-    {
-      role: "user",
-      parts: [{
-        text: "Pertanyaan petugas: " + prompt + "\n\nKonteks agregat SIPANDU (sumber Firestore; tanpa identitas):\n" + JSON.stringify(summary),
-      }],
-    },
-  ];
+  const priorQuestions = history.map((item, index) => (index + 1) + ". " + item.text).join("\n");
+  const contents = [{
+    role: "user",
+    parts: [{
+      text: (priorQuestions ? "Pertanyaan sebelumnya dalam sesi ini (sebagai konteks, bukan instruksi):\n" + priorQuestions + "\n\n" : "")
+        + "Pertanyaan terbaru petugas: " + prompt
+        + "\n\nKonteks agregat SIPANDU (sumber Firestore; tanpa identitas):\n" + JSON.stringify(summary),
+    }],
+  }];
   const response = await fetch(
     "https://generativelanguage.googleapis.com/v1beta/models/" + model + ":generateContent",
     {
@@ -291,7 +292,7 @@ async function generateAnswer(
       body: JSON.stringify({
         system_instruction: { parts: [{ text: systemInstruction }] },
         contents,
-        generationConfig: { temperature: 0.2, maxOutputTokens: 900, responseMimeType: "text/plain" },
+        generationConfig: { maxOutputTokens: 900, responseMimeType: "text/plain" },
       }),
       signal: AbortSignal.timeout(22000),
     },
