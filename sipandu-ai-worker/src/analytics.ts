@@ -25,9 +25,14 @@ export interface SIPANDUAggregateSummary {
     note: string;
   };
   dataQuality: {
-    missingOrInvalidAge: number;
-    unknownGender: number;
-    unclassifiedRegion: number;
+    missingOrInvalidAge: number | null;
+    unknownGender: number | null;
+    unclassifiedRegion: number | null;
+  };
+  privacy: {
+    smallCellThreshold: number;
+    smallGroupsSuppressed: boolean;
+    note: string;
   };
   truncated: boolean;
 }
@@ -70,23 +75,28 @@ function assistanceCategories(value: unknown): string[] {
   return categories.length ? categories : ["Kategori Lainnya"];
 }
 
-function countEntries(values: string[]): Array<{ label: string; count: number }> {
+const SMALL_CELL_THRESHOLD = 5;
+function countEntries(values: string[]): { entries: Array<{ label: string; count: number }>; suppressed: boolean } {
   const counts = new Map<string, number>();
   for (const value of values) counts.set(value, (counts.get(value) || 0) + 1);
-  return [...counts.entries()]
-    .map(([label, count]) => ({ label, count }))
-    .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label, "id"));
+  const all = [...counts.entries()].map(([label, count]) => ({ label, count }));
+  return {
+    entries: all
+      .filter((entry) => entry.count >= SMALL_CELL_THRESHOLD)
+      .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label, "id")),
+    suppressed: all.some((entry) => entry.count < SMALL_CELL_THRESHOLD),
+  };
 }
-function statusCounts(records: ServiceStatusRecord[], field: keyof ServiceStatusRecord): Array<{ status: string; count: number }> {
-  const counts = new Map<string, number>();
-  for (const record of records) {
-    const status = String(record[field] ?? "").trim();
-    if (!status) continue;
-    counts.set(status, (counts.get(status) || 0) + 1);
-  }
-  return [...counts.entries()]
-    .map(([status, count]) => ({ status, count }))
-    .sort((a, b) => b.count - a.count || a.status.localeCompare(b.status));
+function safeMetric(value: number): number | null {
+  return value > 0 && value < SMALL_CELL_THRESHOLD ? null : value;
+}
+function statusCounts(records: ServiceStatusRecord[], field: keyof ServiceStatusRecord): { entries: Array<{ status: string; count: number }>; suppressed: boolean } {
+  const values = records.map((record) => String(record[field] ?? "").trim()).filter(Boolean);
+  const result = countEntries(values);
+  return {
+    entries: result.entries.map(({ label, count }) => ({ status: label, count })),
+    suppressed: result.suppressed,
+  };
 }
 
 /** Builds aggregate-only context; never returns names, NIK, contacts, photos, addresses or clinical fields. */
@@ -128,22 +138,47 @@ export function buildAggregateSummary(
     assistance.push(...assistanceCategories(record.jenisBantuan));
   }
 
+  const regionCounts = countEntries(regions);
+  const ageCounts = countEntries(ageGroups);
+  const genderCounts = countEntries(genders);
+  const aidCounts = countEntries(assistance);
+  const nutritionCounts = statusCounts(serviceRecords, "nutritionStatus");
+  const entrepreneurshipCounts = statusCounts(serviceRecords, "entrepreneurshipStatus");
+  const psychosocialCounts = statusCounts(serviceRecords, "psychosocialStatus");
+  const smallGroupsSuppressed = [
+    regionCounts.suppressed, ageCounts.suppressed, genderCounts.suppressed, aidCounts.suppressed,
+    nutritionCounts.suppressed, entrepreneurshipCounts.suppressed, psychosocialCounts.suppressed,
+    missingOrInvalidAge > 0 && missingOrInvalidAge < SMALL_CELL_THRESHOLD,
+    unknownGender > 0 && unknownGender < SMALL_CELL_THRESHOLD,
+    unclassifiedRegion > 0 && unclassifiedRegion < SMALL_CELL_THRESHOLD,
+    serviceRecords.length > 0 && serviceRecords.length < SMALL_CELL_THRESHOLD,
+  ].some(Boolean);
+
   return {
     generatedAt: options.generatedAt || new Date().toISOString(),
     scope: options.scope || "Seluruh data yang diizinkan oleh Firestore Security Rules",
     totalPpks: records.length,
-    byRegion: countEntries(regions).map(({ label, count }) => ({ region: label, count })),
-    byAgeGroup: countEntries(ageGroups).map(({ label, count }) => ({ group: label, count })),
-    byGender: countEntries(genders).map(({ label, count }) => ({ gender: label, count })),
-    requestedAssistance: countEntries(assistance).map(({ label, count }) => ({ category: label, count })),
+    byRegion: regionCounts.entries.map(({ label, count }) => ({ region: label, count })),
+    byAgeGroup: ageCounts.entries.map(({ label, count }) => ({ group: label, count })),
+    byGender: genderCounts.entries.map(({ label, count }) => ({ gender: label, count })),
+    requestedAssistance: aidCounts.entries.map(({ label, count }) => ({ category: label, count })),
     serviceMonitoring: {
-      recordsWithStatus: serviceRecords.length,
-      nutrition: statusCounts(serviceRecords, "nutritionStatus"),
-      entrepreneurship: statusCounts(serviceRecords, "entrepreneurshipStatus"),
-      psychosocial: statusCounts(serviceRecords, "psychosocialStatus"),
-      note: "Tidak adanya catatan status tidak membuktikan bahwa bantuan belum diterima. Hanya status yang tercatat yang dihitung.",
+      recordsWithStatus: safeMetric(serviceRecords.length),
+      nutrition: nutritionCounts.entries,
+      entrepreneurship: entrepreneurshipCounts.entries,
+      psychosocial: psychosocialCounts.entries,
+      note: "Tidak adanya catatan status tidak membuktikan bahwa bantuan belum diterima. Hanya status yang tercatat yang dihitung. Kategori permintaan bantuan dapat tumpang tindih karena satu PPKS dapat meminta lebih dari satu jenis bantuan.",
     },
-    dataQuality: { missingOrInvalidAge, unknownGender, unclassifiedRegion },
+    dataQuality: {
+      missingOrInvalidAge: safeMetric(missingOrInvalidAge),
+      unknownGender: safeMetric(unknownGender),
+      unclassifiedRegion: safeMetric(unclassifiedRegion),
+    },
+    privacy: {
+      smallCellThreshold: SMALL_CELL_THRESHOLD,
+      smallGroupsSuppressed,
+      note: "Kategori dengan jumlah 1–4 disembunyikan untuk mengurangi risiko identifikasi melalui kelompok kecil. Kategori yang disembunyikan bukan berarti nol.",
+    },
     truncated: options.truncated === true,
   };
 }
