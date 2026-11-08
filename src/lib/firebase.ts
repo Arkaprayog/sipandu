@@ -1781,10 +1781,13 @@ export async function fetchPPKSServiceEvents(ppksId: string): Promise<PPKSServic
   if (!ppksId.trim() || ppksId.includes('/')) throw new Error('ID PPKS tidak valid.');
   try {
     const role = (await getIdTokenResult(user)).claims.role;
-    const filters = [where('ppksId', '==', ppksId)];
-    if (role === 'pendamping') filters.push(where('assignedToUid', '==', user.uid));
-    const snapshot = await getDocs(query(collection(db, 'ppksServiceEvents'), ...filters));
-    return snapshot.docs.map((document) => {
+    const eventQuery = role === 'pendamping'
+      ? query(collection(db, 'ppksServiceEvents'), where('assignedToUid', '==', user.uid))
+      : query(collection(db, 'ppksServiceEvents'), where('ppksId', '==', ppksId));
+    const snapshot = await getDocs(eventQuery);
+    return snapshot.docs
+      .filter((document) => document.data().ppksId === ppksId)
+      .map((document) => {
       const data = document.data();
       return {
         ...data,
