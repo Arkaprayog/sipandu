@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { PPKSRecord, AppSettings } from '../types';
 import { PrivateDriveImage } from './PrivateDriveImage';
+import { analyzePPKSDataQuality } from '../lib/dataQuality';
 import { deduplicatePPKSRecords, formatPPKSTimestamp, sortPPKSRecordsByName } from '../lib/ppksData';
 import {
   buildGoogleFormsPrefilledUrl,
@@ -60,6 +61,11 @@ export const DatabasePpksView: React.FC<DatabasePpksViewProps> = ({
   const displayPPKSList = useMemo(
     () => sortPPKSRecordsByName(deduplicatePPKSRecords(ppksList)),
     [ppksList]
+  );
+
+  const dataQuality = useMemo(
+    () => analyzePPKSDataQuality(displayPPKSList),
+    [displayPPKSList]
   );
 
   // Currently selected PPKS
@@ -176,6 +182,39 @@ export const DatabasePpksView: React.FC<DatabasePpksViewProps> = ({
             </p>
           </div>
         </div>
+
+        <section className="mb-5 rounded-2xl border border-white/10 bg-black/20 p-4 sm:p-5" aria-label="Pemeriksaan kualitas data PPKS">
+          <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-[0.16em] text-emerald-300">DATA QUALITY CENTER</p>
+              <h3 className="mt-1 text-base font-extrabold text-white">Pemeriksaan Kualitas Data</h3>
+              <p className="mt-1 text-[11px] text-neutral-400">Kelengkapan profil dan potensi masalah identitas pada roster yang sedang dimuat.</p>
+            </div>
+            <div className="rounded-xl border border-emerald-300/20 bg-emerald-950/30 px-3 py-2 text-right">
+              <strong className="block text-2xl font-black text-emerald-200">{dataQuality.completenessPercent}%</strong>
+              <span className="text-[9px] text-neutral-300">Kelengkapan dasar</span>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            <div className="rounded-xl border border-white/10 bg-black/20 p-3"><span className="block text-[9px] text-neutral-400">Perlu pemeriksaan</span><strong className="mt-1 block text-xl font-black text-amber-200">{dataQuality.recordsNeedingReview}</strong><span className="text-[9px] text-neutral-500">dari {dataQuality.totalRecords} PPKS</span></div>
+            <div className="rounded-xl border border-white/10 bg-black/20 p-3"><span className="block text-[9px] text-neutral-400">NIK kosong / tidak valid</span><strong className="mt-1 block text-xl font-black text-rose-200">{dataQuality.issueCounts['nik-tidak-valid']}</strong><span className="text-[9px] text-neutral-500">format 16 digit</span></div>
+            <div className="rounded-xl border border-white/10 bg-black/20 p-3"><span className="block text-[9px] text-neutral-400">NIK berulang</span><strong className="mt-1 block text-xl font-black text-amber-200">{dataQuality.issueCounts['nik-duplikat']}</strong><span className="text-[9px] text-neutral-500">baris yang perlu dicocokkan</span></div>
+            <div className="rounded-xl border border-white/10 bg-black/20 p-3"><span className="block text-[9px] text-neutral-400">Foto KTP belum ada</span><strong className="mt-1 block text-xl font-black text-sky-200">{dataQuality.issueCounts['foto-ktp-kosong']}</strong><span className="text-[9px] text-neutral-500">lampiran identitas</span></div>
+          </div>
+          <details className="mt-3 rounded-xl border border-white/10 bg-black/15 px-3 py-2">
+            <summary className="cursor-pointer text-[10px] font-bold text-sky-200">Lihat rincian pemeriksaan lainnya</summary>
+            <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 text-[10px] text-neutral-300 sm:grid-cols-3">
+              <span>Nama kosong: <strong>{dataQuality.issueCounts['nama-kosong']}</strong></span>
+              <span>Usia tidak valid: <strong>{dataQuality.issueCounts['usia-tidak-valid']}</strong></span>
+              <span>Jenis kelamin kosong: <strong>{dataQuality.issueCounts['jenis-kelamin-kosong']}</strong></span>
+              <span>Wilayah kosong: <strong>{dataQuality.issueCounts['wilayah-kosong']}</strong></span>
+              <span>Alamat kosong: <strong>{dataQuality.issueCounts['alamat-kosong']}</strong></span>
+              <span>Kontak tidak valid: <strong>{dataQuality.issueCounts['kontak-tidak-valid']}</strong></span>
+              <span>Foto diri belum ada: <strong>{dataQuality.issueCounts['foto-diri-kosong']}</strong></span>
+            </div>
+          </details>
+          <p className="mt-3 text-[9px] leading-relaxed text-neutral-500">Pemeriksaan hanya membaca roster yang dimuat. SIPANDU tidak mengubah, menghapus, atau menggabungkan data otomatis. Potensi duplikasi harus diverifikasi sebelum memperbaiki sumber.</p>
+        </section>
 
         {/* Kotak Horizontal: Pemilihan Data PPKS yang akan dilihat */}
         <div className="mb-6">
