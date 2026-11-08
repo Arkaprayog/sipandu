@@ -90,7 +90,7 @@ export function isFollowUpRequired(status: PPKSServiceStatus): boolean {
 export type FollowUpReminderUrgency = 'overdue' | 'today' | 'upcoming' | 'unscheduled' | 'none';
 
 function dateOrdinal(value: string): number | null {
-  const match = String(value || '').trim().match(/^(\\d{4})-(\\d{2})-(\\d{2})$/);
+  const match = String(value || '').trim().match(/^(\d{4})-(\d{2})-(\d{2})$/);
   if (!match) return null;
   const year = Number(match[1]);
   const month = Number(match[2]);
