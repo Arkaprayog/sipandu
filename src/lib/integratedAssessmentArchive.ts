@@ -98,9 +98,8 @@ export interface IntegratedAssessmentDriveArchiveFile {
 }
 
 /**
- * Accept only a PDF or the old assessment JSON format created by SIPANDU,
- * and only inside the matching managed respondent folder. This prevents
- * archive migration from replacing unrelated Google Drive files.
+ * Accept only an existing SIPANDU assessment PDF in the matching respondent
+ * folder. JSON archives are deliberately never read, migrated, or replaced.
  */
 export function isManagedIntegratedAssessmentArchiveFile(
   file: IntegratedAssessmentDriveArchiveFile,
@@ -110,9 +109,6 @@ export function isManagedIntegratedAssessmentArchiveFile(
   if (file.appProperties?.sipanduManaged !== 'true'
     || file.appProperties?.sipanduArchive !== folderId) return false;
 
-  const isLegacyJson = file.mimeType === 'application/json'
-    && /^asesmen-.*\.json$/i.test(file.name || '');
-  const isPdf = file.mimeType === 'application/pdf'
+  return file.mimeType === 'application/pdf'
     && /^form-asesmen-terintegrasi-.*\.pdf$/i.test(file.name || '');
-  return isLegacyJson || isPdf;
 }
