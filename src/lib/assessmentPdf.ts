@@ -1,9 +1,6 @@
 import html2canvas from 'html2canvas';
 import { PDFDocument } from 'pdf-lib';
-
-const A4_WIDTH_PT = 595.276;
-const A4_HEIGHT_PT = 841.89;
-const PAGE_MARGIN_PT = (8 / 25.4) * 72;
+import { A4_HEIGHT_PT, A4_WIDTH_PT, fitImageToA4 } from './a4Layout';
 export const PDF_RENDER_SCALES = [2.5, 2, 1.5, 1] as const;
 const JPEG_QUALITY = 0.94;
 
@@ -168,20 +165,7 @@ export async function createOfficialAssessmentPdf(
       ? await pdf.embedJpg(encoded.bytes)
       : await pdf.embedPng(encoded.bytes);
     const pdfPage = pdf.addPage([A4_WIDTH_PT, A4_HEIGHT_PT]);
-    const contentWidth = A4_WIDTH_PT - PAGE_MARGIN_PT * 2;
-    const contentHeight = A4_HEIGHT_PT - PAGE_MARGIN_PT * 2;
-    const fit = Math.min(
-      contentWidth / embeddedImage.width,
-      contentHeight / embeddedImage.height,
-    );
-    const drawWidth = embeddedImage.width * fit;
-    const drawHeight = embeddedImage.height * fit;
-    pdfPage.drawImage(embeddedImage, {
-      x: (A4_WIDTH_PT - drawWidth) / 2,
-      y: A4_HEIGHT_PT - PAGE_MARGIN_PT - drawHeight,
-      width: drawWidth,
-      height: drawHeight,
-    });
+    pdfPage.drawImage(embeddedImage, fitImageToA4(embeddedImage.width, embeddedImage.height));
   }
 
   const bytes = await pdf.save({ useObjectStreams: true });
