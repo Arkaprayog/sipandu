@@ -418,6 +418,50 @@ service cloud.firestore {
         && request.resource.data.createdAt == request.time;
       allow update, delete: if false;
     }
+    // Append-only field visit notes. A pendamping sees and creates only visits
+    // assigned to their UID; supervisors/owners may assign and monitor visits.
+    match /fieldVisits/{visitId} {
+      allow read: if canWritePpks()
+        || (hasRole('pendamping') && resource.data.assignedToUid == request.auth.uid);
+      allow create: if isStaff()
+        && request.resource.data.keys().hasAll([
+          'id', 'ppksId', 'visitDate', 'visitType', 'outcome', 'summary',
+          'nextAction', 'followUpAt', 'assignedToUid', 'createdByUid', 'createdAt'
+        ])
+        && request.resource.data.keys().hasOnly([
+          'id', 'ppksId', 'visitDate', 'visitType', 'outcome', 'summary',
+          'nextAction', 'followUpAt', 'assignedToUid', 'createdByUid', 'createdAt'
+        ])
+        && request.resource.data.id == visitId
+        && request.resource.data.ppksId is string
+        && request.resource.data.ppksId.size() > 0
+        && request.resource.data.ppksId.size() <= 150
+        && validServiceDate(request.resource.data.visitDate)
+        && request.resource.data.visitDate.size() == 10
+        && request.resource.data.visitType in [
+          'kunjungan-rumah', 'kunjungan-faskes', 'pendampingan-sosial',
+          'monitoring-bantuan', 'koordinasi-rujukan'
+        ]
+        && request.resource.data.outcome in [
+          'selesai', 'perlu-tindak-lanjut', 'tidak-bertemu', 'dijadwalkan-ulang'
+        ]
+        && request.resource.data.summary is string
+        && request.resource.data.summary.size() >= 3
+        && request.resource.data.summary.size() <= 3000
+        && request.resource.data.nextAction is string
+        && request.resource.data.nextAction.size() <= 1200
+        && validServiceDate(request.resource.data.followUpAt)
+        && (request.resource.data.followUpAt == ''
+          || request.resource.data.nextAction.size() > 0)
+        && request.resource.data.assignedToUid is string
+        && request.resource.data.assignedToUid.size() > 0
+        && request.resource.data.assignedToUid.size() <= 128
+        && request.resource.data.createdByUid == request.auth.uid
+        && request.resource.data.createdAt == request.time
+        && (canWritePpks() || request.resource.data.assignedToUid == request.auth.uid);
+      allow update, delete: if false;
+    }
+
     // Deny all collections unless a collection-specific policy is added.
     match /{document=**} {
       allow read, write: if false;
