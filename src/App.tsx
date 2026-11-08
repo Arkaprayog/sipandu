@@ -446,6 +446,41 @@ function StaffApp() {
   const [isNotificationsOpen, setIsNotificationsOpen] = useState<boolean>(false);
   const [isGoogleWorkspaceOpen, setIsGoogleWorkspaceOpen] = useState<boolean>(false);
   const [isAICopilotOpen, setIsAICopilotOpen] = useState<boolean>(false);
+  const [isAICopilotAvailable, setIsAICopilotAvailable] = useState<boolean>(false);
+
+  // Keep the AI entry point hidden until the isolated backend confirms its Gemini secret is configured.
+  // This prevents a non-functional or unconfigured Copilot from appearing in the production app.
+  useEffect(() => {
+    const allowedRole = isAuthenticated && ["owner", "supervisor", "pendamping"].includes(currentUserRole);
+    if (!allowedRole) {
+      setIsAICopilotAvailable(false);
+      return;
+    }
+    let active = true;
+    const controller = new AbortController();
+    void fetch("https://sipandu-ai.aryprayoga139.workers.dev/health", {
+      method: "GET",
+      cache: "no-store",
+      credentials: "omit",
+      signal: controller.signal,
+    }).then(async (response) => {
+      if (!response.ok) return null;
+      return await response.json() as { service?: string; mode?: string; configured?: boolean };
+    }).then((health) => {
+      if (!active) return;
+      setIsAICopilotAvailable(Boolean(
+        health?.service === "SIPANDU AI Copilot" &&
+        health.mode === "read-only" &&
+        health.configured === true
+      ));
+    }).catch(() => {
+      if (active) setIsAICopilotAvailable(false);
+    });
+    return () => {
+      active = false;
+      controller.abort();
+    };
+  }, [isAuthenticated, currentUserRole]);
 
   const lastBackNavigationAtRef = useRef(0);
   const handleBackNavigation = useCallback(() => {
@@ -1883,7 +1918,7 @@ function StaffApp() {
       </main>
 
       {/* Bottom Navigation Bar: BERANDA - DATABASE PPKS - ASESMEN - FROM ASESMEN TERINTEGRASI - DOKUMEN */}
-      {isAuthenticated && ["owner", "supervisor", "pendamping"].includes(currentUserRole) && (
+      {isAuthenticated && isAICopilotAvailable && ["owner", "supervisor", "pendamping"].includes(currentUserRole) && (
         <button
           type="button"
           onClick={() => setIsAICopilotOpen(true)}
