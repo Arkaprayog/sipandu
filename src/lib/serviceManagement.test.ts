@@ -4,6 +4,7 @@ import type { PPKSRecord, PPKSServiceStatus } from '../types';
 import {
   calculatePPKSServiceMetrics,
   getInitialPPKSServiceStatus,
+  getFollowUpReminderUrgency,
   isFollowUpRequired,
   resolvePPKSServiceStatus,
 } from './serviceManagement';
