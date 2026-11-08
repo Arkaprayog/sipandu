@@ -1614,32 +1614,64 @@ const toISODate = (value: any): string => {
   return '';
 };
 
-/** Read compact service-status documents only; the master PPKS roster stays separate. */
+/** Read only the active roster's compact service-status records in bounded batches. */
 export function subscribeToPPKSServiceStatus(
+  ppksIds: string[],
   onStatuses: (statuses: PPKSServiceStatus[], info: { fromCache: boolean }) => void,
   onError: (error: Error) => void,
 ): () => void {
   if (!auth.currentUser) throw new Error('Sesi SIPANDU belum aktif untuk membaca status layanan.');
-  return onSnapshot(
-    collection(db, 'ppksServiceStatus'),
-    (snapshot) => {
-      const statuses = snapshot.docs.map((document) => {
-        const data = document.data();
-        return {
-          ...data,
-          ppksId: document.id,
-          lastNutritionAt: toISODate(data.lastNutritionAt),
-          lastEntrepreneurshipAt: toISODate(data.lastEntrepreneurshipAt),
-          lastTherapyAt: toISODate(data.lastTherapyAt),
-          followUpAt: toISODate(data.followUpAt),
-          createdAt: toISODate(data.createdAt),
-          updatedAt: toISODate(data.updatedAt),
-        } as PPKSServiceStatus;
-      });
-      onStatuses(statuses, { fromCache: snapshot.metadata.fromCache });
-    },
-    (error) => onError(new Error(describeConnectionError(error))),
-  );
+  const ids = [...new Set(ppksIds.map((id) => String(id || '').trim()).filter((id) => id && !id.includes('/')))];
+  if (!ids.length) {
+    onStatuses([], { fromCache: false });
+    return () => undefined;
+  }
+
+  const statusById = new Map<string, PPKSServiceStatus>();
+  const unsubscribers: Array<() => void> = [];
+  const chunks: string[][] = [];
+  for (let index = 0; index < ids.length; index += 30) chunks.push(ids.slice(index, index + 30));
+  const cacheFlags = new Array(chunks.length).fill(false);
+
+  try {
+    chunks.forEach((chunk, chunkIndex) => {
+      const statusQuery = query(
+        collection(db, 'ppksServiceStatus'),
+        where('ppksId', 'in', chunk),
+      );
+      const unsubscribe = onSnapshot(
+        statusQuery,
+        (snapshot) => {
+          cacheFlags[chunkIndex] = snapshot.metadata.fromCache;
+          const chunkIds = new Set(chunk);
+          for (const [id, status] of statusById) {
+            if (chunkIds.has(id)) statusById.delete(id);
+          }
+          for (const document of snapshot.docs) {
+            const data = document.data();
+            statusById.set(document.id, {
+              ...data,
+              ppksId: document.id,
+              lastNutritionAt: toISODate(data.lastNutritionAt),
+              lastEntrepreneurshipAt: toISODate(data.lastEntrepreneurshipAt),
+              lastTherapyAt: toISODate(data.lastTherapyAt),
+              followUpAt: toISODate(data.followUpAt),
+              createdAt: toISODate(data.createdAt),
+              updatedAt: toISODate(data.updatedAt),
+            } as PPKSServiceStatus);
+          }
+          onStatuses([...statusById.values()], { fromCache: cacheFlags.some(Boolean) });
+        },
+        (error) => onError(new Error(describeConnectionError(error))),
+      );
+      unsubscribers.push(unsubscribe);
+    });
+  } catch (error) {
+    unsubscribers.forEach((unsubscribe) => unsubscribe());
+    throw new Error(describeConnectionError(error));
+  }
+
+  return () => unsubscribers.forEach((unsubscribe) => unsubscribe());
 }
 
 /** Save one status change and its immutable audit event in the same transaction. */
