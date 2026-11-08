@@ -1,0 +1,104 @@
+name: SIPANDU AI Worker validation and gated deployment
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "sipandu-ai-worker/**"
+      - "src/App.tsx"
+      - "src/components/SIPANDUAICopilot.tsx"
+      - "docs/SIPANDU_AI_COPILOT.md"
+      - ".github/workflows/sipandu-ai-worker.yml"
+  push:
+    branches: [main]
+    paths:
+      - "sipandu-ai-worker/**"
+      - "src/App.tsx"
+      - "src/components/SIPANDUAICopilot.tsx"
+      - "docs/SIPANDU_AI_COPILOT.md"
+      - ".github/workflows/sipandu-ai-worker.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sipandu-ai-worker-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    name: Test, type-check, and dry-run AI Worker
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: 1.4.4
+
+      - name: Install locked dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Run existing application unit tests
+        run: bun run test
+
+      - name: Run SIPANDU AI Worker unit tests
+        run: bunx tsx --test sipandu-ai-worker/src/index.test.ts sipandu-ai-worker/src/analytics.test.ts
+
+      - name: TypeScript validation for existing application
+        run: bun run lint
+
+      - name: Install pinned Wrangler
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/wrangler-cli"
+          npm install --prefix "$RUNNER_TEMP/wrangler-cli" --no-audit --no-fund --no-save wrangler@4.136.3
+          "$RUNNER_TEMP/wrangler-cli/node_modules/.bin/wrangler" --version
+
+      - name: Generate Worker runtime and binding types
+        run: "$RUNNER_TEMP/wrangler-cli/node_modules/.bin/wrangler" types sipandu-ai-worker/worker-configuration.d.ts --config sipandu-ai-worker/wrangler.jsonc
+
+      - name: Strict TypeScript validation for AI Worker
+        run: bunx tsc --noEmit -p sipandu-ai-worker/tsconfig.json
+
+      - name: Verify Worker bundle without deployment
+        run: "$RUNNER_TEMP/wrangler-cli/node_modules/.bin/wrangler" deploy --dry-run --config sipandu-ai-worker/wrangler.jsonc
+
+  deploy:
+    name: Deploy isolated AI Worker only when explicitly enabled
+    needs: validate
+    if: ${{ (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main' && vars.SIPANDU_AI_DEPLOY_ENABLED == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - name: Install pinned Wrangler
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/wrangler-cli"
+          npm install --prefix "$RUNNER_TEMP/wrangler-cli" --no-audit --no-fund --no-save wrangler@4.136.3
+
+      - name: Deploy isolated SIPANDU AI Worker
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: 0f751dca493cdf222b4c7cd084647f67
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${CLOUDFLARE_API_TOKEN:-}" || {
+            echo "::error::GitHub Actions secret CLOUDFLARE_API_TOKEN is missing."
+            exit 1
+          }
+          "$RUNNER_TEMP/wrangler-cli/node_modules/.bin/wrangler" deploy --config sipandu-ai-worker/wrangler.jsonc

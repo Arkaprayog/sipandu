@@ -5,7 +5,7 @@ Worker Cloudflare terpisah untuk SIPANDU AI Copilot. Layanan ini hanya membaca d
 ## Batas keamanan
 
 - Autentikasi menggunakan Firebase ID token dari sesi SIPANDU.
-- Token didekode hanya untuk memilih query yang lebih sempit. Decode bukan verifikasi tanda tangan. Firestore REST menerima token asli dan menerapkan Firestore Security Rules pada setiap pembacaan.
+- Worker memverifikasi tanda tangan JWT Firebase RS256, issuer, audience, UID, waktu token, role claim, status akun, dan batas revokasi sebelum query. Firestore REST tetap menerima token asli dan menerapkan Firestore Security Rules pada setiap pembacaan.
 - Peran yang diterima: owner, supervisor, pendamping.
 - Untuk pendamping, query status layanan dibatasi dengan assignedToUid sama dengan UID akun. Firestore Rules tetap menjadi otoritas final.
 - Hanya field demografi minimum dan status layanan terstruktur yang dibaca.
@@ -16,14 +16,14 @@ Worker Cloudflare terpisah untuk SIPANDU AI Copilot. Layanan ini hanya membaca d
 ## Konfigurasi dan deploy
 
 1. Buat API key Gemini melalui Google AI Studio.
-2. Pasang sebagai Cloudflare Worker Secret bernama GEMINI_API_KEY. Jangan masukkan ke vars, frontend, GitHub source, atau file repositori.
-3. Jalankan pemeriksaan dari folder ini: npx wrangler types lalu npx tsc --noEmit -p tsconfig.json.
-4. Deploy hanya setelah secret tersedia: npx wrangler deploy --config sipandu-ai-worker/wrangler.jsonc.
+2. Deploy versi awal Worker melalui workflow yang digate. Worker tetap tidak menerima percakapan sampai secret Gemini dipasang.
+3. Pasang API key Gemini sebagai Cloudflare Worker Secret bernama GEMINI_API_KEY melalui Dashboard Cloudflare. Jangan masukkan ke vars, frontend, GitHub source, atau file repositori.
+4. CI menjalankan Wrangler type generation, TypeScript strict check, unit tests, dan dry-run bundle.
 5. Health check: GET /health. Endpoint percakapan: POST /api/chat.
 
 Model default adalah gemini-3.8-flash. Administrator dapat mengganti nama model melalui variabel GEMINI_MODEL.
 
-Deployment otomatis dinonaktifkan secara default. Setelah secret Worker dipasang, administrator harus mengatur GitHub repository variable SIPANDU_AI_DEPLOY_ENABLED=true. Workflow deploy juga membutuhkan GitHub secret CLOUDFLARE_API_TOKEN.
+Deployment otomatis tetap dinonaktifkan jika repository variable SIPANDU_AI_DEPLOY_ENABLED tidak bernilai true. Workflow juga memerlukan GitHub secret CLOUDFLARE_API_TOKEN. Pull request hanya menjalankan validasi dan tidak pernah deploy.
 
 ## Endpoint POST /api/chat
 
@@ -39,4 +39,4 @@ Batas input: prompt maksimum 1.200 karakter dan body maksimum 12 KB. Jangan sert
 
 ## Operasional
 
-Kelompok statistik dengan jumlah 1–4 disembunyikan untuk mengurangi risiko identifikasi. Teks bebas jenis bantuan dipetakan ke kategori tetap, dan satu PPKS dapat masuk lebih dari satu kategori. Pasang Cloudflare rate limiting pada POST /api/chat sebelum layanan dibuka untuk penggunaan luas. Batas panjang input dan output bukan pengganti rate limiting per akun/IP.
+Kelompok statistik dengan jumlah 1–4 disembunyikan untuk mengurangi risiko identifikasi. Teks bebas jenis bantuan dipetakan ke kategori tetap, dan satu PPKS dapat masuk lebih dari satu kategori. Worker memakai Cloudflare Rate Limiting binding: 60 permintaan/menit per IP dan 10 permintaan/menit per UID, bersifat approximate dan lokal per lokasi Cloudflare, bukan kuota global ketat. Batas input dan output tetap berlaku.
