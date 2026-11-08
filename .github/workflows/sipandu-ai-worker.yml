@@ -64,13 +64,13 @@ jobs:
           "$RUNNER_TEMP/wrangler-cli/node_modules/.bin/wrangler" --version
 
       - name: Generate Worker runtime and binding types
-        run: "$RUNNER_TEMP/wrangler-cli/node_modules/.bin/wrangler" types sipandu-ai-worker/worker-configuration.d.ts --config sipandu-ai-worker/wrangler.jsonc
+        run: $RUNNER_TEMP/wrangler-cli/node_modules/.bin/wrangler types sipandu-ai-worker/worker-configuration.d.ts --config sipandu-ai-worker/wrangler.jsonc
 
       - name: Strict TypeScript validation for AI Worker
         run: bunx tsc --noEmit -p sipandu-ai-worker/tsconfig.json
 
       - name: Verify Worker bundle without deployment
-        run: "$RUNNER_TEMP/wrangler-cli/node_modules/.bin/wrangler" deploy --dry-run --config sipandu-ai-worker/wrangler.jsonc
+        run: $RUNNER_TEMP/wrangler-cli/node_modules/.bin/wrangler deploy --dry-run --config sipandu-ai-worker/wrangler.jsonc
 
   deploy:
     name: Deploy isolated AI Worker only when explicitly enabled
