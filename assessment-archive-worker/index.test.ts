@@ -43,6 +43,9 @@ test('archives a PDF only after Firebase and Google identity checks and Drive re
       if (parsed.searchParams.has('q')) return jsonResponse({ files: [] });
 
       if (parsed.searchParams.get('uploadType') === 'multipart' && method === 'POST') {
+        const multipart = await (init?.body as Blob).text();
+        assert.ok(multipart.includes('\\r\\nContent-Type: application/json; charset=UTF-8\\r\\n'));
+        assert.ok(multipart.includes('\\r\\nContent-Type: application/pdf\\r\\n'));
         savedFileRef.current = {
           id: fileId,
           name: 'Form-Asesmen-Terintegrasi-' + archiveKey.slice(0, 20) + '.pdf',
