@@ -511,6 +511,71 @@ async function handleStaffDocumentRoute(
   }
 }
 
+
+async function handleAssessmentArchiveDownload(
+  request: Request,
+  env: Env,
+  url: URL,
+  origin: string | null,
+): Promise<Response> {
+  try {
+    const authorization = request.headers.get('Authorization') || '';
+    const idToken = authorization.startsWith('Bearer ') ? authorization.slice(7).trim() : '';
+    const googleAccessToken = (request.headers.get('X-Google-Access-Token') || '').trim();
+    if (!idToken) return json({ ok: false, message: 'Sesi Firebase tidak ditemukan.' }, 401, origin);
+    if (!googleAccessToken) return json({ ok: false, message: 'Sesi Google Workspace tidak ditemukan.' }, 401, origin);
+    await lookupFirebaseUser(env, idToken);
+    await verifyGoogleIdentity(googleAccessToken, env.GOOGLE_WORKSPACE_EMAIL!);
+
+    const match = url.pathname.match(/^\/archive\/([^/]+)$/);
+    if (!match || request.method !== 'GET') {
+      return json({ ok: false, message: 'Endpoint arsip asesmen tidak ditemukan.' }, 404, origin);
+    }
+    const ppksId = decodeURIComponent(match[1]);
+    if (!ppksId || ppksId.length > 180 || ppksId.includes('/')) {
+      return json({ ok: false, message: 'ID responden tidak valid.' }, 400, origin);
+    }
+
+    const archiveKey = await sha256Hex('sipandu-integrated-assessment:' + ppksId);
+    const folderId = await ensureArchiveFolder(googleAccessToken, archiveKey);
+    const metadata = await findExistingArchive(googleAccessToken, archiveKey, folderId);
+    if (!metadata?.id) return json({ ok: false, message: 'Arsip PDF asesmen belum ditemukan di Google Drive.' }, 404, origin);
+
+    const verified = await verifyUploadedFile(
+      googleAccessToken,
+      metadata.id,
+      Number(metadata.size),
+      archiveKey,
+      folderId,
+    );
+    const download = await driveRequest(
+      googleAccessToken,
+      '/files/' + encodeURIComponent(verified.id!) + '?alt=media',
+    );
+    if (!download.ok || !download.body) {
+      return json({ ok: false, message: 'Isi PDF asesmen tidak dapat diunduh dari Google Drive (HTTP ' + download.status + ').' }, 502, origin);
+    }
+    return new Response(download.body, {
+      status: 200,
+      headers: {
+        ...cors(origin),
+        'Content-Type': 'application/pdf',
+        'Content-Length': String(verified.size),
+        'Content-Disposition': "attachment; filename*=UTF-8''" + encodeURIComponent(String(verified.name || 'arsip-asesmen.pdf')),
+        'Cache-Control': 'private, no-store',
+        'X-Content-Type-Options': 'nosniff',
+      },
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unduhan arsip asesmen gagal.';
+    const status = /sesi firebase|token oauth google|sesi google workspace/i.test(message) ? 401
+      : /peran sipandu|peran akun/i.test(message) ? 403
+      : /id responden/i.test(message) ? 400
+      : 502;
+    return json({ ok: false, message }, status, origin);
+  }
+}
+
 function missingConfiguration(env: Env): string[] {
   const missing: string[] = [];
   if (!env.FIREBASE_PROJECT_ID) missing.push('FIREBASE_PROJECT_ID');
@@ -538,7 +603,7 @@ export default {
       return handleStaffDocumentRoute(request, env, url, origin);
     }
 
-    if (url.pathname !== '/archive' || request.method !== 'POST') {
+    if (url.pathname.startsWith('/archive/') && request.method === 'GET') {\n      if (missingConfiguration(env).length) return json({ ok: false, message: 'Layanan arsip belum dikonfigurasi administrator.' }, 503, origin);\n      return handleAssessmentArchiveDownload(request, env, url, origin);\n    }\n\n    if (url.pathname !== '/archive' || request.method !== 'POST') {
       return json({ ok: false, message: 'Endpoint tidak ditemukan.' }, 404, origin);
     }
     if (missingConfiguration(env).length) {
