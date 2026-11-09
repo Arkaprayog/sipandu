@@ -129,11 +129,11 @@ class NativePrinterPatchTests(unittest.TestCase):
             self.assertIn("new Printer.OnPrintStartCallback()", plugin)
             self.assertIn('call.reject("Failed to print file: " + message)', plugin)
             self.assertEqual(
-                len(re.findall(r"@PluginMethod\\s+public\\s+void\\s+printFile\\s*\\(\\s*PluginCall\\s+call\\s*\\)", plugin)),
+                len(re.findall(r"@PluginMethod\s+public\s+void\s+printFile\s*\(\s*PluginCall\s+call\s*\)", plugin)),
                 1,
             )
             self.assertEqual(
-                len(re.findall(r"@PluginMethod\\s+public\\s+void\\s+printWebView\\s*\\(\\s*PluginCall\\s+call\\s*\\)", plugin)),
+                len(re.findall(r"@PluginMethod\s+public\s+void\s+printWebView\s*\(\s*PluginCall\s+call\s*\)", plugin)),
                 1,
             )
             self.assertIn("activity.runOnUiThread(", printer)
