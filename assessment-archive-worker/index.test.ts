@@ -240,6 +240,7 @@ test('downloads an assessment archive only after identity and Drive archive veri
   )), (byte) => byte.toString(16).padStart(2, '0')).join('');
   const folderIds = ['assessment-root', 'assessment-folder', 'respondent-folder'];
   let mediaReads = 0;
+  let folderCreateRequests = 0;
   const archivedFile = {
     id: 'assessment-pdf-002',
     name: 'Form-Asesmen-Terintegrasi-' + archiveKey.slice(0, 20) + '.pdf',
@@ -271,7 +272,8 @@ test('downloads an assessment archive only after identity and Drive archive veri
         return jsonResponse({ files: [] });
       }
       if (url.searchParams.get('fields') === 'id' && method === 'POST') {
-        return jsonResponse({ id: folderIds[folderIndex++] });
+        folderCreateRequests += 1;
+        return jsonResponse({ id: 'unexpected-folder' });
       }
       if (url.pathname.endsWith('/' + archivedFile.id) && url.searchParams.get('alt') === 'media') {
         mediaReads += 1;
@@ -303,7 +305,7 @@ test('downloads an assessment archive only after identity and Drive archive veri
   assert.equal(response.headers.get('X-Content-Type-Options'), 'nosniff');
   assert.deepEqual(new Uint8Array(await response.arrayBuffer()), pdfBytes);
   assert.equal(mediaReads, 1);
-  assert.equal(folderIndex, 3);
+  assert.equal(folderCreateRequests, 0, 'archive download must not create Drive folders');
 });
 
 test('does not expose assessment archive bytes without a Firebase session', async () => {
