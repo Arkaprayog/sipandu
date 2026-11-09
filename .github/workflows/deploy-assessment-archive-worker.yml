@@ -2,7 +2,7 @@ name: Deploy SIPANDU Assessment Archive Worker
 
 on:
   push:
-    branches: [fix/assessment-drive-archive-worker-20261109]
+    branches: [main]
     paths:
       - "assessment-archive-worker/**"
       - "package.json"
@@ -18,7 +18,8 @@ concurrency:
 
 jobs:
   deploy:
-    name: Test, deploy isolated archive Worker, and verify health
+    if: github.ref == 'refs/heads/main'
+    name: Test, deploy production archive Worker, and verify health
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:

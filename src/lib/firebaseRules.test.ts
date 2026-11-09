@@ -47,7 +47,23 @@ test('Pendamping hanya dapat mengubah map Form Asesmen Terintegrasi pada PPKS', 
   }).firestore();
 
   await assertSucceeds(updateDoc(doc(firestore, 'ppks', 'ppks-demo'), {
-    formAsesmenTerintegrasi: { q1: '2026-11-05', q16: 'Responden Contoh' },
+    formAsesmenTerintegrasi: {
+      q1: '2026-11-05',
+      q16: 'Responden Contoh',
+      q48: ['Pendampingan sosial'],
+      metaSatker: 'Sentra Medan',
+    },
+  }));
+
+  // The embedded answer map must reject keys outside the official form schema.
+  await assertFails(updateDoc(doc(firestore, 'ppks', 'ppks-demo'), {
+    formAsesmenTerintegrasi: {
+      q1: '2026-11-05',
+      injectedProfileField: 'Tidak boleh masuk',
+    },
+  }));
+  await assertFails(updateDoc(doc(firestore, 'ppks', 'ppks-demo'), {
+    formAsesmenTerintegrasi: { q92: 'Field di luar formulir' },
   }));
 
   await assertFails(updateDoc(doc(firestore, 'ppks', 'ppks-demo'), {
