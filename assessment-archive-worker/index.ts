@@ -154,6 +154,23 @@ async function ensureArchiveFolder(accessToken: string, archiveKey: string): Pro
   return getOrCreateFolder(accessToken, archiveKey.slice(0, 20), assessments);
 }
 
+async function findArchiveFolder(accessToken: string, archiveKey: string): Promise<string | null> {
+  const names = ['SIPANDU', 'From Asesmen Terintegrasi', archiveKey.slice(0, 20)];
+  let parentId: string | undefined;
+  for (const name of names) {
+    const parentClause = parentId ? " and '" + escapeDriveQuery(parentId) + "' in parents" : " and 'root' in parents";
+    const query = "mimeType='application/vnd.google-apps.folder' and name='" + escapeDriveQuery(name) + "' and trashed=false" + parentClause;
+    const response = await driveRequest(accessToken, '/files?q=' + encodeURIComponent(query) + '&pageSize=2&fields=files(id,name,mimeType,parents)');
+    if (!response.ok) throw new Error('Google Drive gagal memeriksa folder arsip SIPANDU (HTTP ' + response.status + ').');
+    const payload = await response.json() as { files?: DriveFile[] };
+    const matches = payload.files || [];
+    if (matches.length > 1) throw new Error('Ditemukan beberapa folder dengan nama arsip yang sama. Perlu pemeriksaan administrator.');
+    if (!matches[0]?.id) return null;
+    parentId = matches[0].id;
+  }
+  return parentId || null;
+}
+
 async function sha256Hex(value: string): Promise<string> {
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value));
   return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('');
@@ -524,7 +541,13 @@ async function handleAssessmentArchiveDownload(
     const googleAccessToken = (request.headers.get('X-Google-Access-Token') || '').trim();
     if (!idToken) return json({ ok: false, message: 'Sesi Firebase tidak ditemukan.' }, 401, origin);
     if (!googleAccessToken) return json({ ok: false, message: 'Sesi Google Workspace tidak ditemukan.' }, 401, origin);
-    await lookupFirebaseUser(env, idToken);
+    const user = await lookupFirebaseUser(env, idToken);
+    const role = firebaseRole(user);
+    // Respondent-level ownership mapping is not available in this endpoint yet.
+    // Until it exists, only owner/supervisor may retrieve cross-respondent archives.
+    if (!['owner', 'supervisor'].includes(role)) {
+      return json({ ok: false, message: 'Unduhan arsip asesmen hanya diizinkan untuk owner atau supervisor.' }, 403, origin);
+    }
     await verifyGoogleIdentity(googleAccessToken, env.GOOGLE_WORKSPACE_EMAIL!);
 
     const match = url.pathname.match(/^\/archive\/([^/]+)$/);
@@ -537,7 +560,8 @@ async function handleAssessmentArchiveDownload(
     }
 
     const archiveKey = await sha256Hex('sipandu-integrated-assessment:' + ppksId);
-    const folderId = await ensureArchiveFolder(googleAccessToken, archiveKey);
+    const folderId = await findArchiveFolder(googleAccessToken, archiveKey);
+    if (!folderId) return json({ ok: false, message: 'Arsip PDF asesmen belum ditemukan di Google Drive.' }, 404, origin);
     const metadata = await findExistingArchive(googleAccessToken, archiveKey, folderId);
     if (!metadata?.id) return json({ ok: false, message: 'Arsip PDF asesmen belum ditemukan di Google Drive.' }, 404, origin);
 
@@ -603,7 +627,12 @@ export default {
       return handleStaffDocumentRoute(request, env, url, origin);
     }
 
-    if (url.pathname.startsWith('/archive/') && request.method === 'GET') {\n      if (missingConfiguration(env).length) return json({ ok: false, message: 'Layanan arsip belum dikonfigurasi administrator.' }, 503, origin);\n      return handleAssessmentArchiveDownload(request, env, url, origin);\n    }\n\n    if (url.pathname !== '/archive' || request.method !== 'POST') {
+    if (url.pathname.startsWith('/archive/') && request.method === 'GET') {
+      if (missingConfiguration(env).length) return json({ ok: false, message: 'Layanan arsip belum dikonfigurasi administrator.' }, 503, origin);
+      return handleAssessmentArchiveDownload(request, env, url, origin);
+    }
+
+    if (url.pathname !== '/archive' || request.method !== 'POST') {
       return json({ ok: false, message: 'Endpoint tidak ditemukan.' }, 404, origin);
     }
     if (missingConfiguration(env).length) {

@@ -4,7 +4,7 @@ import { PPKSRecord } from '../types';
 import { getAccessToken, invalidateAccessToken, refreshWorkspaceAccessToken } from '../lib/firebase';
 import { formatPPKSTimestamp } from '../lib/ppksData';
 import { publicAssetUrl } from '../lib/publicAssets';
-import { backupAssessmentViaArchiveWorker, deleteCentralDriveFile } from '../lib/googleDriveBackup';
+import { backupAssessmentViaArchiveWorker, deleteCentralDriveFile, downloadAssessmentArchiveViaArchiveWorker } from '../lib/googleDriveBackup';
 import { getIntegratedAssessmentBackupMetadata, saveIntegratedAssessmentBackupMetadata } from '../lib/firebase';
 import { printPreparedAssessmentWebView } from '../lib/printing';
 import { createOfficialAssessmentPdf } from '../lib/assessmentPdf';
@@ -263,6 +263,7 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
   const [answers, setAnswers] = useState<Record<string, AnswerValue>>(() => answersForRecord(ppksList.find((record) => record.id === selectedPPKSId)));
   const [statusMessage, setStatusMessage] = useState<{ type: 'success' | 'error'; text: string; driveUrl?: string } | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [isDownloadingArchive, setIsDownloadingArchive] = useState(false);
   const [driveArchive, setDriveArchive] = useState<{ status: 'complete' | 'failed'; error: string; fileId: string; webViewLink: string; savedAt: string } | null>(null);
   const [printPhotoUrls, setPrintPhotoUrls] = useState<Record<string, string>>({});
   const [printPhotoErrors, setPrintPhotoErrors] = useState<Record<string, string>>({});
@@ -624,6 +625,25 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
     link.click();
     link.remove();
     window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  };
+
+  const handleDownloadArchive = async () => {
+    if (!currentPPKS || isDownloadingArchive) return;
+    setIsDownloadingArchive(true);
+    setStatusMessage(null);
+    try {
+      const pdf = await downloadAssessmentArchiveViaArchiveWorker(currentPPKS.id);
+      const stamp = new Date().toISOString().slice(0, 10);
+      downloadAssessmentPdf(pdf, 'Arsip-Asesmen-' + currentPPKS.id + '-' + stamp + '.pdf');
+      setStatusMessage({ type: 'success', text: 'Arsip PDF berhasil diunduh melalui layanan privat SIPANDU.' });
+    } catch (error) {
+      setStatusMessage({
+        type: 'error',
+        text: error instanceof Error ? error.message : 'Arsip asesmen gagal diunduh.',
+      });
+    } finally {
+      setIsDownloadingArchive(false);
+    }
   };
 
   const handleSave = async () => {
@@ -1028,6 +1048,11 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
           <button type="button" onClick={() => { void handlePrint(); }} disabled={preparingPrint || isSaving || !currentPPKS} className="inline-flex items-center gap-2 rounded-lg border border-sky-400/40 bg-sky-950/50 px-4 py-2 text-xs font-bold text-white disabled:opacity-60">
             <Printer className="h-4 w-4" /> {preparingPrint ? 'Menyiapkan 12 halaman…' : 'Cetak / Simpan PDF'}
           </button>
+          {driveArchive?.status === 'complete' && currentPPKS && (
+            <button type="button" onClick={() => { void handleDownloadArchive(); }} disabled={isDownloadingArchive || isSaving} className="inline-flex items-center gap-2 rounded-lg border border-emerald-400/40 bg-emerald-950/50 px-4 py-2 text-xs font-bold text-white disabled:opacity-60">
+              <FileText className="h-4 w-4" /> {isDownloadingArchive ? 'Mengunduh arsip…' : 'Unduh Arsip Tersimpan'}
+            </button>
+          )}
           <button type="button" onClick={handleReset} disabled={isSaving} className="inline-flex items-center gap-2 rounded-lg border border-rose-400/40 bg-rose-950/40 px-4 py-2 text-xs font-bold text-white">
             <RotateCcw className="h-4 w-4" /> Kosongkan Form
           </button>
@@ -1038,11 +1063,6 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
         <div role="status" aria-live="polite" className={'official-status mb-3 rounded-lg border p-3 text-xs ' + (statusMessage.type === 'success' ? 'border-emerald-500/40 bg-emerald-950/50 text-emerald-100' : 'border-rose-500/40 bg-rose-950/50 text-rose-100')}>
           {statusMessage.type === 'success' && <CheckCircle2 className="mr-1 inline h-4 w-4 align-middle" />}
           {statusMessage.text}
-          {statusMessage.driveUrl && (
-            <a href={statusMessage.driveUrl} target="_blank" rel="noopener noreferrer" className="ml-2 inline-flex items-center gap-1 font-bold underline underline-offset-2">
-              Buka arsip Google Drive
-            </a>
-          )}
         </div>
       )}
 

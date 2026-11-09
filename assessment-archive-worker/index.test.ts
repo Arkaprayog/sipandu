@@ -239,8 +239,8 @@ test('downloads an assessment archive only after identity and Drive archive veri
     new TextEncoder().encode('sipandu-integrated-assessment:' + ppksId),
   )), (byte) => byte.toString(16).padStart(2, '0')).join('');
   const folderIds = ['assessment-root', 'assessment-folder', 'respondent-folder'];
-  let folderIndex = 0;
   let mediaReads = 0;
+  let folderCreateRequests = 0;
   const archivedFile = {
     id: 'assessment-pdf-002',
     name: 'Form-Asesmen-Terintegrasi-' + archiveKey.slice(0, 20) + '.pdf',
@@ -265,12 +265,15 @@ test('downloads an assessment archive only after identity and Drive archive veri
     if (url.hostname === 'www.googleapis.com' && url.pathname === '/drive/v3/files') {
       if (url.searchParams.has('q')) {
         const query = url.searchParams.get('q') || '';
-        return query.includes('sipanduArchiveKey')
-          ? jsonResponse({ files: [archivedFile] })
-          : jsonResponse({ files: [] });
+        if (query.includes('sipanduArchiveKey')) return jsonResponse({ files: [archivedFile] });
+        if (query.includes("name='SIPANDU'")) return jsonResponse({ files: [{ id: folderIds[0] }] });
+        if (query.includes("name='From Asesmen Terintegrasi'")) return jsonResponse({ files: [{ id: folderIds[1] }] });
+        if (query.includes("name='" + archiveKey.slice(0, 20) + "'")) return jsonResponse({ files: [{ id: folderIds[2] }] });
+        return jsonResponse({ files: [] });
       }
       if (url.searchParams.get('fields') === 'id' && method === 'POST') {
-        return jsonResponse({ id: folderIds[folderIndex++] });
+        folderCreateRequests += 1;
+        return jsonResponse({ id: 'unexpected-folder' });
       }
       if (url.pathname.endsWith('/' + archivedFile.id) && url.searchParams.get('alt') === 'media') {
         mediaReads += 1;
@@ -302,7 +305,29 @@ test('downloads an assessment archive only after identity and Drive archive veri
   assert.equal(response.headers.get('X-Content-Type-Options'), 'nosniff');
   assert.deepEqual(new Uint8Array(await response.arrayBuffer()), pdfBytes);
   assert.equal(mediaReads, 1);
-  assert.equal(folderIndex, 3);
+  assert.equal(folderCreateRequests, 0, 'archive download must not create Drive folders');
+});
+
+test('denies assessment archive downloads to pendamping until respondent scope checks exist', async () => {
+  let driveRequests = 0;
+  globalThis.fetch = async (input) => {
+    const url = new URL(String(input));
+    if (url.hostname === 'identitytoolkit.googleapis.com') {
+      return jsonResponse({ users: [{ localId: 'staff-uid', customAttributes: JSON.stringify({ role: 'pendamping' }) }] });
+    }
+    if (url.hostname === 'www.googleapis.com') driveRequests += 1;
+    throw new Error('Unexpected request: ' + url);
+  };
+  const response = await worker.fetch(new Request(
+    'https://sipandu-assessment-archive.aryprayoga139.workers.dev/archive/ppks-private-002',
+    { headers: { Authorization: 'Bearer firebase-id-token', 'X-Google-Access-Token': 'google-access-token' } },
+  ), {
+    FIREBASE_PROJECT_ID: 'gen-lang-client-0197631978',
+    FIREBASE_AUTH_API_KEY: 'public-firebase-api-key',
+    GOOGLE_WORKSPACE_EMAIL: 'aryprayoga139@gmail.com',
+  });
+  assert.equal(response.status, 403);
+  assert.equal(driveRequests, 0, 'unauthorized role must be rejected before Google Drive access');
 });
 
 test('does not expose assessment archive bytes without a Firebase session', async () => {
