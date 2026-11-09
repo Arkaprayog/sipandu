@@ -1,10 +1,10 @@
 # Integrasi Google SIPANDU — status dan prosedur
 
 ## Sumber yang diberikan pemilik proyek
-- Google Form editor: `https://docs.google.com/forms/d/12JJIlBzY9yA5taFIfkQ6r0dJDMEBbEw8ymX7mTUHmYc/edit`
+- Google Form editor: `https://docs.google.com/forms/d/12JJIlBzY9yA5taFIfkQ6r0dJDMEBbEw8ymX7mTUHmYc/edit?chromeless=1`
 - Google Form respondent URL (used by the QR code): `https://docs.google.com/forms/d/12JJIlBzY9yA5taFIfkQ6r0dJDMEBbEw8ymX7mTUHmYc/viewform`
-- Spreadsheet respons Form: `https://docs.google.com/spreadsheets/d/16R7_ov8KN0_AZBBDbqLrvtqnqjMIkfn8Gx9Sj1i9048/htmlview`
-- Folder Drive: ID `1TtUYxMv9-f5kcGWqYS_5PK7NwYqUvNgMMV0l1BpzoLdkHJAQ7Ucxg0rbqc9Ue19Wo2w85GV1`
+- Spreadsheet respons Form: `https://docs.google.com/spreadsheets/d/16R7_ov8KN0_AZBBDbqLrvtqnqjMIkfn8Gx9Sj1i9048/edit?gid=941036007#gid=941036007`
+- Folder Drive: `https://drive.google.com/drive/u/9/folders/1TtUYxMv9-f5kcGWqYS_5PK7NwYqUvNgMMV0l1BpzoLdkHJAQ7Ucxg0rbqc9Ue19Wo2w85GV1`
 
 IDs di atas diambil dari URL yang diberikan pengguna, bukan dibuat-buat. Konfigurasi ini tidak membuktikan izin OAuth, kepemilikan, atau akses API.
 
