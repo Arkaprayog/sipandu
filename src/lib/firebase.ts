@@ -508,7 +508,7 @@ export const googleSignIn = async (): Promise<{
     ((/iPhone|iPad|iPod/i.test(userAgent)) &&
       /AppleWebKit/i.test(userAgent) && !/Safari/i.test(userAgent));
   if (isEmbeddedWebView) {
-    const provider = buildWorkspaceProvider('select_account');
+    const provider = buildWorkspaceProvider('select_account consent');
     try {
       await signInWithRedirect(workspaceAuth, provider);
       return null;
