@@ -437,3 +437,17 @@ export async function backupAssessmentViaArchiveWorker(input: {
   return { id: payload.fileId, webViewLink };
 }
 
+
+/** Downloads an assessment archive through the authenticated Worker proxy. */
+export async function downloadAssessmentArchiveViaArchiveWorker(ppksId: string): Promise<Blob> {
+  const normalizedId = String(ppksId || '').trim();
+  if (!normalizedId || normalizedId.length > 180 || normalizedId.includes('/')) {
+    throw new Error('ID responden tidak valid untuk mengunduh arsip asesmen.');
+  }
+  const response = await requestArchiveWorker('/archive/' + encodeURIComponent(normalizedId));
+  const blob = await response.blob();
+  if (blob.type !== 'application/pdf' || blob.size < 8 || (await blob.slice(0, 5).text()) !== '%PDF-') {
+    throw new Error('Arsip yang diterima bukan PDF asesmen yang valid.');
+  }
+  return blob;
+}
