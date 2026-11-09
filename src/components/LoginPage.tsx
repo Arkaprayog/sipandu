@@ -152,7 +152,67 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
   }
 
   return (
-    <div className="relative flex min-h-screen w-full items-center justify-center overflow-x-hidden px-3 py-5 text-slate-800 min-[900px]:px-7 min-[900px]:py-7">
+    <>
+      <style>{`
+        .sipandu-login-shell {
+          width: min(800px, calc(100vw - 36px));
+          grid-template-columns: minmax(0, 1fr);
+        }
+        .sipandu-login-branding { display: none; }
+        .sipandu-login-form {
+          min-width: 0;
+          background: rgba(255, 255, 255, 0.20);
+          border-radius: 1.25rem;
+          border: 1px solid rgba(255, 255, 255, 0.68);
+          backdrop-filter: blur(30px) saturate(115%);
+          -webkit-backdrop-filter: blur(30px) saturate(115%);
+          box-shadow: 0 16px 44px rgba(8, 31, 54, 0.24);
+        }
+        @media (orientation: portrait) {
+          .sipandu-login-shell {
+            width: min(360px, calc(100vw - 32px));
+            grid-template-columns: minmax(0, 1fr);
+            border-radius: 1.25rem;
+            background: rgba(255, 255, 255, 0.16);
+            border: 1px solid rgba(255, 255, 255, 0.72);
+            backdrop-filter: blur(30px) saturate(115%);
+            -webkit-backdrop-filter: blur(30px) saturate(115%);
+          }
+          .sipandu-login-branding { display: none !important; }
+          .sipandu-login-form {
+            background: rgba(255, 255, 255, 0.20);
+            border: 0;
+            border-radius: inherit;
+            box-shadow: none;
+          }
+        }
+        @media (orientation: landscape) {
+          .sipandu-login-shell {
+            width: min(800px, calc(100vw - 36px));
+            max-width: 800px;
+            grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+            border-radius: 1.5rem;
+            background: rgba(255, 255, 255, 0.16);
+            backdrop-filter: blur(24px);
+            -webkit-backdrop-filter: blur(24px);
+          }
+          .sipandu-login-branding { display: flex; }
+          .sipandu-login-form {
+            background: #ffffff;
+            border: 0;
+            border-radius: 0;
+            backdrop-filter: none;
+            -webkit-backdrop-filter: none;
+            box-shadow: inset 0 1px 0 rgba(255,255,255,0.9);
+          }
+        }
+        @media (orientation: landscape) and (max-height: 560px) {
+          .sipandu-login-shell { min-height: 0; }
+          .sipandu-login-branding { padding-top: 1.25rem; padding-bottom: 1.25rem; }
+          .sipandu-login-form { padding-top: 1.25rem; padding-bottom: 1.25rem; }
+        }
+      `}</style>
+      <div className="relative flex min-h-[100dvh] w-full items-center justify-center overflow-x-hidden px-3 py-4 text-slate-800">
       {/* Pertahankan wallpaper SIPANDU yang sudah ada; efek kaca hanya diterapkan pada panel login. */}
       <img
         aria-hidden="true"
@@ -175,8 +235,8 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
       />
 
       {/* Panel glassmorphism responsif; wallpaper asli tetap terlihat di belakangnya. */}
-      <main className="relative z-10 mx-auto grid w-full max-w-[800px] grid-cols-1 items-stretch gap-0 overflow-hidden rounded-3xl border border-white/70 bg-white/[0.16] shadow-2xl backdrop-blur-[24px] min-[720px]:grid-cols-2">
-        <section className="relative flex min-w-0 flex-col justify-between bg-slate-900/40 p-5 text-white backdrop-blur-md min-[720px]:p-6">
+      <main className="sipandu-login-shell relative z-10 mx-auto grid items-stretch gap-0 overflow-hidden rounded-3xl border border-white/70 bg-white/[0.16] shadow-2xl">
+        <section className="sipandu-login-branding relative min-w-0 flex-col justify-between bg-slate-900/40 p-6 text-white backdrop-blur-md">
           <div className="relative z-10 mt-5 max-w-full text-white">
             <h1 className="text-3xl font-bold leading-tight tracking-tight">SIPANDU</h1>
             <p className="mt-2 text-base font-semibold leading-snug text-white/95">
@@ -205,7 +265,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
           </div>
         </section>
 
-        <section className="w-full min-w-0 bg-white p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.9)] min-[720px]:flex min-[720px]:flex-col min-[720px]:justify-center min-[720px]:rounded-none min-[720px]:px-5 min-[720px]:py-5">
+        <section className="sipandu-login-form flex w-full min-w-0 flex-col justify-center p-5 sm:p-7">
           <div className="mb-5 flex flex-col items-center text-center">
             <div className="mb-4 flex w-full min-w-0 items-center justify-center gap-3">
               <img
@@ -247,7 +307,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
                 htmlFor="sipandu-email"
                 className="mb-1 block text-xs font-semibold text-slate-800"
               >
-                Username
+                Email / Username
               </label>
               <div className="relative">
                 <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-slate-600">
@@ -305,13 +365,13 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
               onClick={() => void handlePrimaryAction()}
               disabled={isSubmitting || !authReady}
               aria-label="Masuk ke SIPANDU dengan username dan password atau biometrik yang telah diaktifkan"
-              className="mt-1 flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-indigo-600 via-blue-600 to-blue-500 px-3 py-2.5 text-sm font-semibold text-white shadow-[0_8px_20px_rgba(59,76,210,0.28)] transition hover:brightness-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
+              className="mt-1 flex w-full items-center justify-center gap-2 rounded-xl bg-[#1769AA] px-3 py-2.5 text-sm font-semibold text-white shadow-[0_8px_20px_rgba(23,105,170,0.25)] transition hover:-translate-y-0.5 hover:bg-[#104C80] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
             >
               <span>{!authReady ? 'Memulihkan sesi…' : (isSubmitting ? 'Memeriksa akun…' : (quickUnlockActive ? 'Masuk dengan biometrik' : 'Masuk'))}</span>
               {quickUnlockActive ? <Fingerprint className="h-5 w-5" aria-hidden="true" /> : <ArrowRight className="h-5 w-5" aria-hidden="true" />}
             </button>
             <p className="mt-2 text-center text-[11px] font-semibold text-black">
-              Sudah memiliki akun?{' '}
+              Belum memiliki akun?{' '}
               <a href="#buat-akun" onClick={(event) => { event.preventDefault(); setRegistrationNotice(''); setShowRegistration(true); }} className="underline decoration-black/50 underline-offset-2">Buat akun</a>
             </p>
           </form>
@@ -384,5 +444,6 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
         </section>
       </main>
     </div>
+    </>
   );
 };
