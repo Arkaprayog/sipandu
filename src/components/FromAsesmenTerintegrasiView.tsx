@@ -261,6 +261,10 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
       : ppksList[0]?.id || ''
   );
   const [answers, setAnswers] = useState<Record<string, AnswerValue>>(() => answersForRecord(ppksList.find((record) => record.id === selectedPPKSId)));
+  // Keep respondent identity and latest keystrokes synchronous with input events.
+  // A queued event from the previous respondent must never update the newly selected form.
+  const selectedPPKSIdRef = useRef(selectedPPKSId);
+  const answersRef = useRef<Record<string, AnswerValue>>(answers);
   const [statusMessage, setStatusMessage] = useState<{ type: 'success' | 'error'; text: string; driveUrl?: string } | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [isDownloadingArchive, setIsDownloadingArchive] = useState(false);
@@ -297,8 +301,12 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
   useEffect(() => {
     if (ppksList.some((record) => record.id === selectedPPKSId)) return;
     const next = ppksList[0];
-    setSelectedPPKSId(next?.id || '');
-    setAnswers(answersForRecord(next));
+    const nextId = next?.id || '';
+    const nextAnswers = answersForRecord(next);
+    selectedPPKSIdRef.current = nextId;
+    answersRef.current = nextAnswers;
+    setSelectedPPKSId(nextId);
+    setAnswers(nextAnswers);
   }, [ppksList, selectedPPKSId]);
 
   const currentPPKS = useMemo(() => ppksList.find((record) => record.id === selectedPPKSId), [ppksList, selectedPPKSId]);
@@ -316,25 +324,35 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
   }, [currentPPKS?.id]);
 
   const choosePPKS = (id: string) => {
-    if (isSaving) return;
+    if (isSaving || !ppksList.some((record) => record.id === id)) return;
     releasePrintPhotoUrls();
     setPrintPhotoUrls({});
     setPrintPhotoErrors({});
+    // Update the ref before scheduling React state updates so late input
+    // events from the previous respondent are rejected.
+    selectedPPKSIdRef.current = id;
+    const nextAnswers = answersForRecord(ppksList.find((record) => record.id === id));
+    answersRef.current = nextAnswers;
     setSelectedPPKSId(id);
-    setAnswers(answersForRecord(ppksList.find((record) => record.id === id)));
+    setAnswers(nextAnswers);
     setStatusMessage(null);
   };
 
   const updateAnswer = (key: string, value: AnswerValue) => {
-    if (isSaving) return;
-    setAnswers((current) => ({ ...current, [key]: value }));
+    // Each rendered input belongs to the respondent ID captured by that render.
+    if (isSaving || !selectedPPKSId || selectedPPKSId !== selectedPPKSIdRef.current) return;
+    const nextAnswers = { ...answersRef.current, [key]: value };
+    answersRef.current = nextAnswers;
+    setAnswers(nextAnswers);
     setStatusMessage(null);
   };
 
   const handleReset = () => {
     if (isSaving) return;
     if (!currentPPKS) {
-      setAnswers(emptyAnswers());
+      const blank = emptyAnswers();
+      answersRef.current = blank;
+      setAnswers(blank);
       setStatusMessage({ type: 'success', text: 'Formulir kosong. Pilih responden ketika data tersedia.' });
       return;
     }
@@ -344,6 +362,7 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
     blank.q23 = currentPPKS.nik || '';
     blank.q9 = currentPPKS.alamatLengkap || '';
     blank.q15 = currentPPKS.alamatLengkap || '';
+    answersRef.current = blank;
     setAnswers(blank);
     setStatusMessage({ type: 'success', text: 'Isian asesmen dikosongkan. Tekan Simpan Form agar perubahan tersimpan.' });
   };
@@ -652,18 +671,28 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
       setStatusMessage({ type: 'error', text: 'Pilih responden PPKS terlebih dahulu. Form tidak disimpan ke data contoh.' });
       return;
     }
-    const nikFromForm = typeof answers.q23 === 'string' ? answers.q23.replace(/\D/g, '') : '';
+    const respondentId = selectedPPKSIdRef.current;
+    const respondent = ppksList.find((record) => record.id === respondentId);
+    if (!respondent || respondentId !== selectedPPKSId) {
+      setStatusMessage({ type: 'error', text: 'Pilihan responden berubah. Pilih kembali responden sebelum menyimpan.' });
+      return;
+    }
+    // Snapshot respondent ID and answers together before any asynchronous work.
+    const answerSnapshot = Object.fromEntries(
+      Object.entries(answersRef.current).map(([key, value]) => [key, Array.isArray(value) ? [...value] : value])
+    ) as Record<string, AnswerValue>;
+    const nikFromForm = typeof answerSnapshot.q23 === 'string' ? answerSnapshot.q23.replace(/\D/g, '') : '';
     if (nikFromForm && !/^\d{16}$/.test(nikFromForm)) {
       setStatusMessage({ type: 'error', text: 'NIK harus terdiri dari 16 digit. Periksa kolom 23 NIK sebelum menyimpan.' });
       return;
     }
     const clean: Record<string, AnswerValue> = {};
-    Object.entries(answers).forEach(([key, value]) => {
+    Object.entries(answerSnapshot).forEach(([key, value]) => {
       clean[key] = Array.isArray(value) ? value.filter(Boolean) : String(value ?? '');
     });
 
     const updated: PPKSRecord = {
-      ...currentPPKS,
+      ...respondent,
       formAsesmenTerintegrasi: clean,
     };
 
