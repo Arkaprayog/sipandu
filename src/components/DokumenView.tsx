@@ -20,8 +20,7 @@ export const DokumenView: React.FC<DokumenViewProps> = ({ ppksList, onOpenAssess
   const [staffDocuments, setStaffDocuments] = useState<StaffDocumentRecord[]>([]);
   const [documentSearch, setDocumentSearch] = useState('');
   const [documentCategory, setDocumentCategory] = useState<StaffDocumentCategory>('surat-tugas');
-  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
-  const [documentBusy, setDocumentBusy] = useState(false);
+    const [documentBusy, setDocumentBusy] = useState(false);
   const [documentMessage, setDocumentMessage] = useState('');
   const [documentError, setDocumentError] = useState('');
   const uploadInputRef = useRef<HTMLInputElement>(null);
@@ -39,20 +38,20 @@ export const DokumenView: React.FC<DokumenViewProps> = ({ ppksList, onOpenAssess
 
   const handleDocumentUpload = async (file?: File) => {
     if (!file) return;
-    setDocumentBusy(true); setDocumentError(''); setDocumentMessage(''); setUploadProgress(0);
+    setDocumentBusy(true); setDocumentError(''); setDocumentMessage('');
     try {
-      const saved = await uploadStaffDocument(file, documentCategory, setUploadProgress);
+      const saved = await uploadStaffDocument(file, documentCategory);
       setDocumentMessage(saved.driveBackupStatus === 'complete'
-        ? 'Dokumen tersimpan di Firebase dan salinan Google Drive berhasil dibuat.'
-        : 'Dokumen tersimpan di Firebase. Backup Google Drive belum berhasil; statusnya tercatat dan dapat dicoba ulang.');
+        ? 'Dokumen tersimpan dan terverifikasi di Google Drive SIPANDU.'
+        : 'Dokumen belum tercatat sebagai arsip terverifikasi. Periksa koneksi Google Workspace lalu ulangi upload.');
       await refreshStaffDocuments();
     } catch (error) { setDocumentError(error instanceof Error ? error.message : 'Dokumen gagal diunggah.'); }
-    finally { setDocumentBusy(false); setUploadProgress(null); if (uploadInputRef.current) uploadInputRef.current.value = ''; }
+    finally { setDocumentBusy(false); if (uploadInputRef.current) uploadInputRef.current.value = ''; }
   };
   const handleDocumentDownload = async (record: StaffDocumentRecord) => {
     setDocumentBusy(true); setDocumentError('');
     try {
-      const blob = await downloadStaffDocument(record.storagePath);
+      const blob = await downloadStaffDocument(record);
       const objectUrl = URL.createObjectURL(blob);
       const anchor = document.createElement('a'); anchor.href = objectUrl; anchor.download = record.name; anchor.rel = 'noopener'; anchor.click();
       window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
@@ -88,7 +87,7 @@ export const DokumenView: React.FC<DokumenViewProps> = ({ ppksList, onOpenAssess
     <div className="workspace-page min-h-full space-y-4 text-white">
       <section className="rounded-2xl border border-white/10 bg-black/25 p-3 shadow-[0_12px_36px_rgba(0,0,0,0.18)] sm:p-5">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-3"><div className="rounded-xl border border-sky-300/20 bg-sky-300/10 p-2.5 text-sky-200"><FileCheck2 className="h-6 w-6" /></div><div><p className="text-[10px] font-bold uppercase tracking-[0.18em] text-sky-300">DOCUMENT CENTER</p><h2 className="text-lg font-extrabold text-white">ARSIP DOKUMEN PETUGAS</h2><p className="text-xs text-neutral-400">Penyimpanan privat Firebase dengan status backup Google Drive.</p></div></div>
+          <div className="flex items-center gap-3"><div className="rounded-xl border border-sky-300/20 bg-sky-300/10 p-2.5 text-sky-200"><FileCheck2 className="h-6 w-6" /></div><div><p className="text-[10px] font-bold uppercase tracking-[0.18em] text-sky-300">DOCUMENT CENTER</p><h2 className="text-lg font-extrabold text-white">ARSIP DOKUMEN PETUGAS</h2><p className="text-xs text-neutral-400">Penyimpanan privat Google Drive SIPANDU dengan metadata akses di Firestore.</p></div></div>
           <span className="rounded-xl border border-sky-300/20 bg-sky-950/30 px-3 py-2 text-center text-xs font-bold text-sky-100">{staffDocuments.length} dokumen</span>
         </div>
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_auto]">
@@ -96,7 +95,6 @@ export const DokumenView: React.FC<DokumenViewProps> = ({ ppksList, onOpenAssess
           <div className="flex items-end"><input ref={uploadInputRef} type="file" accept={ACCEPTED_DOCUMENT_EXTENSIONS} disabled={documentBusy} onChange={(event) => void handleDocumentUpload(event.target.files?.[0])} className="hidden" aria-label="Pilih dokumen untuk diunggah" /><button type="button" disabled={documentBusy} onClick={() => uploadInputRef.current?.click()} className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-emerald-300/30 bg-emerald-800/70 px-4 py-2 text-xs font-bold text-white hover:bg-emerald-700 disabled:opacity-50 sm:w-auto"><UploadCloud className="h-4 w-4" /> Unggah dokumen</button></div>
         </div>
         <p className="mt-2 text-[10px] text-neutral-500">PDF, DOC/DOCX, JPG/PNG, WEBP, TIFF, HEIC. Maksimal 25 MB per file.</p>
-        {uploadProgress !== null && <div className="mt-3 rounded-xl border border-sky-300/20 bg-sky-950/30 p-3"><div className="mb-1 flex justify-between text-[10px] text-sky-100"><span>Mengunggah dokumen…</span><span>{uploadProgress}%</span></div><div className="h-2 overflow-hidden rounded-full bg-black/40"><div className="h-full rounded-full bg-sky-400 transition-all" style={{ width: uploadProgress + '%' }} /></div></div>}
         {documentMessage && <p role="status" className="mt-3 rounded-lg border border-emerald-300/20 bg-emerald-950/30 p-3 text-xs text-emerald-100">{documentMessage}</p>}
         {documentError && <p role="alert" className="mt-3 rounded-lg border border-rose-300/20 bg-rose-950/30 p-3 text-xs text-rose-100">{documentError}</p>}
         <label className="mt-4 flex items-center gap-2 rounded-xl border border-white/10 bg-black/30 px-3 py-2.5"><Search className="h-4 w-4 text-neutral-400" /><input type="search" value={documentSearch} onChange={(event) => setDocumentSearch(event.target.value)} placeholder="Cari nama file, kategori, atau pengunggah…" className="w-full bg-transparent text-xs text-white outline-none placeholder:text-neutral-500" /></label>
@@ -110,7 +108,7 @@ export const DokumenView: React.FC<DokumenViewProps> = ({ ppksList, onOpenAssess
             </article>
           ))}
         </div>
-        <p className="mt-4 border-t border-white/10 pt-3 text-[10px] leading-relaxed text-neutral-500">Arsip ini memakai koleksi staffDocuments dan bucket Firebase yang sudah ada. Akses baca/unduh melewati Firebase Storage Rules; tidak membuat link publik, tidak mengubah file lama, dan tidak menghapus dokumen otomatis.</p>
+        <p className="mt-4 border-t border-white/10 pt-3 text-[10px] leading-relaxed text-neutral-500">Arsip ini menyimpan file privat pada Google Drive akun Workspace SIPANDU melalui Worker yang memverifikasi sesi Firebase dan identitas Google. Firestore hanya menyimpan metadata dan ID file; unduh harus melewati verifikasi peran/pemilik di Worker, tanpa bucket Firebase Storage atau tautan publik.</p>
       </section>
 
       <section className="rounded-2xl border border-white/10 bg-black/25 p-3 shadow-[0_12px_36px_rgba(0,0,0,0.18)] sm:p-5">

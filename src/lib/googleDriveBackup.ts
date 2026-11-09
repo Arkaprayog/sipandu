@@ -298,6 +298,82 @@ export async function deleteCentralDriveFile(fileId: string): Promise<void> {
 
 const ASSESSMENT_ARCHIVE_WORKER_URL = 'https://sipandu-assessment-archive.aryprayoga139.workers.dev';
 
+
+export interface ArchivedStaffDocument {
+  id: string;
+  fileName: string;
+  mimeType: string;
+  size: number;
+  webViewLink: string;
+}
+
+async function requestArchiveWorker(path: string, init: RequestInit = {}): Promise<Response> {
+  const user = auth.currentUser;
+  if (!user) throw new Error('Sesi akun SIPANDU berakhir. Masuk kembali sebelum mengelola dokumen.');
+  const idToken = await user.getIdToken();
+  let googleAccessToken = await getAccessToken();
+  if (!googleAccessToken) googleAccessToken = await refreshWorkspaceAccessToken();
+  if (!googleAccessToken) {
+    throw new Error('Sesi Google Workspace tidak tersedia. Hubungkan kembali akun Google sebelum mengelola dokumen.');
+  }
+  const send = (token: string) => {
+    const headers = new Headers(init.headers);
+    headers.set('Authorization', 'Bearer ' + idToken);
+    headers.set('X-Google-Access-Token', token);
+    return fetch(ASSESSMENT_ARCHIVE_WORKER_URL + path, { ...init, headers });
+  };
+  let response = await send(googleAccessToken);
+  if (response.status === 401) {
+    invalidateAccessToken();
+    const refreshed = await refreshWorkspaceAccessToken(true);
+    if (refreshed) response = await send(refreshed);
+  }
+  if (!response.ok) {
+    const payload = await response.json().catch(() => ({})) as { message?: string };
+    throw new Error(payload.message || 'Layanan arsip dokumen SIPANDU gagal (HTTP ' + response.status + ').');
+  }
+  return response;
+}
+
+export async function uploadStaffDocumentViaArchiveWorker(
+  file: File,
+  category: 'surat-tugas' | 'surat-lainnya',
+): Promise<ArchivedStaffDocument> {
+  const form = new FormData();
+  const normalizedFile = new File([file], file.name, { type: file.type });
+  form.set('category', category);
+  form.set('file', normalizedFile, file.name);
+  const response = await requestArchiveWorker('/documents', { method: 'POST', body: form });
+  const payload = await response.json() as {
+    ok?: boolean; verified?: boolean; fileId?: string; fileName?: string;
+    mimeType?: string; size?: number; webViewLink?: string;
+  };
+  if (payload.ok !== true || payload.verified !== true || !payload.fileId) {
+    throw new Error('Google Drive belum mengonfirmasi dokumen SIPANDU tersimpan.');
+  }
+  if (payload.mimeType !== file.type || Number(payload.size) !== file.size) {
+    throw new Error('Verifikasi dokumen Google Drive tidak cocok dengan tipe atau ukuran file asli.');
+  }
+  return {
+    id: payload.fileId,
+    fileName: payload.fileName || file.name,
+    mimeType: payload.mimeType,
+    size: Number(payload.size),
+    webViewLink: payload.webViewLink || ('https://drive.google.com/open?id=' + encodeURIComponent(payload.fileId)),
+  };
+}
+
+export async function downloadStaffDocumentViaArchiveWorker(fileId: string): Promise<Blob> {
+  const response = await requestArchiveWorker('/documents/' + encodeURIComponent(fileId));
+  const blob = await response.blob();
+  if (!blob.size) throw new Error('Google Drive mengembalikan dokumen kosong.');
+  return blob;
+}
+
+export async function deleteStaffDocumentViaArchiveWorker(fileId: string): Promise<void> {
+  await requestArchiveWorker('/documents/' + encodeURIComponent(fileId), { method: 'DELETE' });
+}
+
 /**
  * Sends the already-rendered assessment PDF to the authenticated archive Worker.
  * Google service-account credentials and Drive access tokens never enter the client.

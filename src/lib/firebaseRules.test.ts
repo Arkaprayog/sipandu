@@ -133,57 +133,57 @@ test('Pendamping dapat menyimpan jawaban asesmen walau dokumen roster PPKS belum
   }));
 });
 
-test('Dokumen staf hanya dapat dibuat pada folder pemilik dan backup Drive hanya mengubah metadata', async () => {
+test('Metadata dokumen staf hanya menerima pointer Drive privat dan pemilik/administrator yang dapat mengubahnya', async () => {
   const firestore = environment.authenticatedContext(PENDAMPING_UID, {
     role: 'pendamping',
   }).firestore();
   const record = doc(firestore, 'staffDocuments', 'document-001');
-
-  await assertSucceeds(setDoc(record, {
+  const metadata = {
     name: 'bukti.pdf',
     contentType: 'application/pdf',
     size: 4,
-    storagePath: `staff-documents/${PENDAMPING_UID}/document-001/bukti.pdf`,
-    downloadUrl: 'https://firebasestorage.googleapis.com/example-tokenized-url',
     ownerUid: PENDAMPING_UID,
     ownerEmail: 'pendamping@example.test',
     category: 'surat-tugas',
     uploadedAt: serverTimestamp(),
-    driveBackupStatus: 'pending',
-    driveBackupError: '',
-    driveFileId: '',
-    driveWebViewLink: '',
-    driveBackupAt: null,
-    driveBackupUpdatedAt: serverTimestamp(),
-  }));
-
-  await assertSucceeds(updateDoc(record, {
     driveBackupStatus: 'complete',
     driveBackupError: '',
     driveFileId: 'drive-file-001',
     driveWebViewLink: 'https://drive.google.com/open?id=drive-file-001',
     driveBackupAt: serverTimestamp(),
     driveBackupUpdatedAt: serverTimestamp(),
+  };
+
+  await assertSucceeds(setDoc(record, metadata));
+  await assertSucceeds(updateDoc(record, {
+    driveBackupStatus: 'complete',
+    driveBackupError: '',
+    driveFileId: 'drive-file-002',
+    driveWebViewLink: 'https://drive.google.com/open?id=drive-file-002',
+    driveBackupAt: serverTimestamp(),
+    driveBackupUpdatedAt: serverTimestamp(),
   }));
 
   await assertFails(updateDoc(record, { name: 'diubah.pdf' }));
-  await assertFails(setDoc(doc(firestore, 'staffDocuments', 'foreign-document'), {
-    name: 'foreign.pdf',
-    contentType: 'application/pdf',
-    size: 4,
-    storagePath: 'staff-documents/another-user/foreign-document/foreign.pdf',
-    downloadUrl: 'https://example.test/file',
-    ownerUid: PENDAMPING_UID,
-    ownerEmail: '',
-    category: 'surat-tugas',
-    uploadedAt: serverTimestamp(),
-    driveBackupStatus: 'pending',
-    driveBackupError: '',
+  await assertFails(setDoc(doc(firestore, 'staffDocuments', 'legacy-storage'), {
+    ...metadata,
     driveFileId: '',
     driveWebViewLink: '',
-    driveBackupAt: null,
+    storagePath: 'staff-documents/pendamping-001/legacy-storage/bukti.pdf',
+    downloadUrl: 'https://firebasestorage.googleapis.com/public-token',
+  }));
+
+  const otherPendamping = environment.authenticatedContext('pendamping-002', {
+    role: 'pendamping',
+  }).firestore();
+  await assertSucceeds(getDoc(doc(otherPendamping, 'staffDocuments', 'document-001')));
+  await assertFails(updateDoc(doc(otherPendamping, 'staffDocuments', 'document-001'), {
+    driveBackupError: 'tidak diizinkan',
     driveBackupUpdatedAt: serverTimestamp(),
   }));
+
+  const outsider = environment.authenticatedContext('outsider-001').firestore();
+  await assertFails(getDoc(doc(outsider, 'staffDocuments', 'document-001')));
 });
 
 test('Metadata arsip asesmen dan surat dibuat hanya dengan skema yang diizinkan', async () => {

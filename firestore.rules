@@ -105,23 +105,21 @@ service cloud.firestore {
       allow update, delete: if canWritePpks();
     }
 
-    // Shared document archive metadata. Binary files live in Firebase Storage.
-    // Drive backup status is stored here so every app/device sees the same state.
+    // Staff document metadata points to private Google Drive files.
+    // Binary access is mediated by the authenticated archive Worker, not Firebase Storage.
     match /staffDocuments/{documentId} {
       allow read: if isStaff();
 
       allow create: if isStaff()
         && request.resource.data.keys().hasAll([
-          'name', 'contentType', 'size', 'storagePath', 'downloadUrl',
-          'ownerUid', 'ownerEmail', 'category', 'uploadedAt',
-          'driveBackupStatus', 'driveBackupError', 'driveFileId',
-          'driveWebViewLink', 'driveBackupAt', 'driveBackupUpdatedAt'
+          'name', 'contentType', 'size', 'ownerUid', 'ownerEmail',
+          'category', 'uploadedAt', 'driveBackupStatus', 'driveBackupError',
+          'driveFileId', 'driveWebViewLink', 'driveBackupAt', 'driveBackupUpdatedAt'
         ])
         && request.resource.data.keys().hasOnly([
-          'name', 'contentType', 'size', 'storagePath', 'downloadUrl',
-          'ownerUid', 'ownerEmail', 'category', 'uploadedAt',
-          'driveBackupStatus', 'driveBackupError', 'driveFileId',
-          'driveWebViewLink', 'driveBackupAt', 'driveBackupUpdatedAt'
+          'name', 'contentType', 'size', 'ownerUid', 'ownerEmail',
+          'category', 'uploadedAt', 'driveBackupStatus', 'driveBackupError',
+          'driveFileId', 'driveWebViewLink', 'driveBackupAt', 'driveBackupUpdatedAt'
         ])
         && request.resource.data.name is string
         && request.resource.data.name.size() > 0
@@ -139,30 +137,25 @@ service cloud.firestore {
         && request.resource.data.ownerUid == request.auth.uid
         && request.resource.data.ownerEmail is string
         && request.resource.data.category in ['surat-tugas', 'surat-lainnya']
-        && request.resource.data.storagePath is string
-        && request.resource.data.storagePath.matches(
-          '^staff-documents/' + request.auth.uid + '/' + documentId + '/[^/]+$'
-        )
-        && request.resource.data.downloadUrl is string
-        && request.resource.data.downloadUrl.size() <= 4096
         && request.resource.data.uploadedAt == request.time
-        && request.resource.data.driveBackupStatus == 'pending'
-        && request.resource.data.driveBackupError is string
-        && request.resource.data.driveBackupError.size() <= 1000
-        && request.resource.data.driveFileId == ''
-        && request.resource.data.driveWebViewLink == ''
-        && request.resource.data.driveBackupAt == null
+        && request.resource.data.driveBackupStatus == 'complete'
+        && request.resource.data.driveBackupError == ''
+        && request.resource.data.driveFileId is string
+        && request.resource.data.driveFileId.size() > 0
+        && request.resource.data.driveFileId.size() <= 256
+        && request.resource.data.driveWebViewLink is string
+        && request.resource.data.driveWebViewLink.size() <= 4096
+        && request.resource.data.driveBackupAt == request.time
         && request.resource.data.driveBackupUpdatedAt == request.time;
 
-      // Only backup bookkeeping may change after upload. A staff member can
-      // update only their own record; owner/supervisor can maintain any record.
+      // Only the Drive pointer/health fields may change; ownership and file identity stay fixed.
       allow update: if isStaff()
         && (resource.data.ownerUid == request.auth.uid || canWritePpks())
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
           'driveBackupStatus', 'driveBackupError', 'driveFileId',
           'driveWebViewLink', 'driveBackupAt', 'driveBackupUpdatedAt'
         ])
-        && request.resource.data.driveBackupStatus in ['pending', 'complete', 'failed']
+        && request.resource.data.driveBackupStatus in ['complete', 'failed']
         && request.resource.data.driveBackupError is string
         && request.resource.data.driveBackupError.size() <= 1000
         && request.resource.data.driveFileId is string
@@ -174,7 +167,6 @@ service cloud.firestore {
         && request.resource.data.driveBackupUpdatedAt == request.time
         && (request.resource.data.driveBackupStatus != 'complete'
           || (request.resource.data.driveFileId.size() > 0
-            && request.resource.data.driveWebViewLink.size() > 0
             && request.resource.data.driveBackupAt is timestamp));
 
       allow delete: if isStaff()

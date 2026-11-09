@@ -35,7 +35,7 @@ const MAX_PDF_BYTES = 24 * 1024 * 1024;
 function cors(origin: string | null): HeadersInit {
   const headers: Record<string, string> = {
     'Vary': 'Origin',
-    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+    'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS',
     'Access-Control-Allow-Headers': 'Authorization, Content-Type, X-Google-Access-Token',
     'Access-Control-Max-Age': '86400',
   };
@@ -289,6 +289,229 @@ async function archivePdf(
   throw lastError instanceof Error ? lastError : new Error('Upload arsip Google Drive gagal setelah percobaan ulang.');
 }
 
+
+const MAX_DOCUMENT_BYTES = 25 * 1024 * 1024;
+const DOCUMENT_MIME_TYPES = new Set([
+  'application/pdf',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'image/jpeg', 'image/png', 'image/gif', 'image/webp',
+  'image/bmp', 'image/tiff', 'image/heic', 'image/heif',
+]);
+const DOCUMENT_CATEGORIES: Record<string, string> = {
+  'surat-tugas': 'Surat Tugas',
+  'surat-lainnya': 'Dokumen Lainnya',
+};
+
+function firebaseRole(user: FirebaseLookupUser): string {
+  try {
+    const attributes = JSON.parse(user.customAttributes || '{}') as Record<string, unknown>;
+    return String(attributes.role || '');
+  } catch {
+    return '';
+  }
+}
+
+function safeDocumentName(value: string): string {
+  const cleaned = value.normalize('NFKC')
+    .replace(/[\\/:*?"<>|]/g, '_')
+    .replace(/[\u0000-\u001f]/g, '')
+    .trim().slice(0, 180);
+  return cleaned || 'dokumen';
+}
+
+async function ensureStaffDocumentFolder(accessToken: string, category: string): Promise<string> {
+  const root = await getOrCreateFolder(accessToken, 'SIPANDU');
+  const documents = await getOrCreateFolder(accessToken, 'Dokumen', root);
+  return getOrCreateFolder(accessToken, DOCUMENT_CATEGORIES[category], documents);
+}
+
+async function verifyManagedStaffDocument(
+  accessToken: string,
+  fileId: string,
+  expected?: { ownerUid: string; category: string; size: number; mimeType: string; folderId: string },
+): Promise<DriveFile> {
+  const response = await driveRequest(
+    accessToken,
+    '/files/' + encodeURIComponent(fileId) + '?fields=id,name,mimeType,size,webViewLink,parents,appProperties,trashed',
+  );
+  if (response.status === 404) throw new Error('Dokumen tidak ditemukan di arsip Google Drive SIPANDU.');
+  if (!response.ok) throw new Error('Metadata dokumen tidak dapat diverifikasi di Google Drive (HTTP ' + response.status + ').');
+  const file = await response.json() as DriveFile;
+  const props = file.appProperties || {};
+  const valid = file.id === fileId
+    && file.trashed !== true
+    && DOCUMENT_MIME_TYPES.has(String(file.mimeType || ''))
+    && Number(file.size) > 0
+    && Number(file.size) <= MAX_DOCUMENT_BYTES
+    && props.sipanduManaged === 'true'
+    && props.sipanduDocument === 'true'
+    && Object.prototype.hasOwnProperty.call(DOCUMENT_CATEGORIES, String(props.sipanduCategory || ''));
+  if (!valid) throw new Error('File tidak terdaftar sebagai dokumen privat yang dikelola SIPANDU.');
+  if (expected && (
+    props.sipanduOwnerUid !== expected.ownerUid
+    || props.sipanduCategory !== expected.category
+    || Number(file.size) !== expected.size
+    || file.mimeType !== expected.mimeType
+    || !(file.parents || []).includes(expected.folderId)
+  )) {
+    throw new Error('Dokumen Drive tidak cocok dengan metadata upload SIPANDU.');
+  }
+  return file;
+}
+
+async function uploadManagedStaffDocument(
+  accessToken: string,
+  file: File,
+  ownerUid: string,
+  category: string,
+): Promise<DriveFile> {
+  if (!DOCUMENT_CATEGORIES[category]) throw new Error('Kategori dokumen tidak valid.');
+  if (!(file instanceof File) || file.size <= 0 || file.size > MAX_DOCUMENT_BYTES) {
+    throw new Error('Dokumen harus berukuran lebih dari 0 dan maksimal 25 MiB.');
+  }
+  if (!DOCUMENT_MIME_TYPES.has(file.type)) throw new Error('Format dokumen tidak didukung.');
+  const folderId = await ensureStaffDocumentFolder(accessToken, category);
+  const name = safeDocumentName(file.name);
+  const metadata = {
+    name,
+    mimeType: file.type,
+    parents: [folderId],
+    appProperties: {
+      sipanduManaged: 'true',
+      sipanduDocument: 'true',
+      sipanduOwnerUid: ownerUid,
+      sipanduCategory: category,
+    },
+  };
+  const boundary = 'sipandu_doc_' + crypto.randomUUID().replace(/-/g, '');
+  const body = new Blob([
+    '--' + boundary + '\r\n',
+    'Content-Type: application/json; charset=UTF-8\r\n\r\n',
+    JSON.stringify(metadata) + '\r\n',
+    '--' + boundary + '\r\n',
+    'Content-Type: ' + file.type + '\r\n',
+    'Content-Transfer-Encoding: binary\r\n\r\n',
+    await file.arrayBuffer(),
+    '\r\n--' + boundary + '--',
+  ]);
+  const response = await driveRequest(accessToken, '/files?uploadType=multipart&fields=id,name,mimeType,size,webViewLink,parents,appProperties', {
+    method: 'POST',
+    headers: { 'Content-Type': 'multipart/related; boundary=' + boundary },
+    body,
+  });
+  if (!response.ok) {
+    const detail = await response.json().catch(() => ({})) as { error?: { message?: string } };
+    throw new Error((detail.error?.message || 'Google Drive menolak upload dokumen') + ' (HTTP ' + response.status + ').');
+  }
+  const uploaded = await response.json() as DriveFile;
+  if (!uploaded.id) throw new Error('Google Drive tidak mengembalikan ID dokumen.');
+  try {
+    return await verifyManagedStaffDocument(accessToken, uploaded.id, {
+      ownerUid,
+      category,
+      size: file.size,
+      mimeType: file.type,
+      folderId,
+    });
+  } catch (error) {
+    try { await driveRequest(accessToken, '/files/' + encodeURIComponent(uploaded.id), { method: 'DELETE' }); } catch { /* preserve verification failure */ }
+    throw error;
+  }
+}
+
+async function handleStaffDocumentRoute(
+  request: Request,
+  env: Env,
+  url: URL,
+  origin: string | null,
+): Promise<Response> {
+  try {
+    const authorization = request.headers.get('Authorization') || '';
+    const idToken = authorization.startsWith('Bearer ') ? authorization.slice(7).trim() : '';
+    const googleAccessToken = (request.headers.get('X-Google-Access-Token') || '').trim();
+    if (!idToken) return json({ ok: false, message: 'Sesi Firebase tidak ditemukan.' }, 401, origin);
+    if (!googleAccessToken) return json({ ok: false, message: 'Sesi Google Workspace tidak ditemukan.' }, 401, origin);
+    const user = await lookupFirebaseUser(env, idToken);
+    const role = firebaseRole(user);
+    await verifyGoogleIdentity(googleAccessToken, env.GOOGLE_WORKSPACE_EMAIL!);
+
+    if (url.pathname === '/documents' && request.method === 'POST') {
+      const contentLength = Number(request.headers.get('Content-Length') || 0);
+      if (contentLength > MAX_DOCUMENT_BYTES + 128 * 1024) {
+        return json({ ok: false, message: 'Ukuran permintaan melebihi batas 25 MiB.' }, 413, origin);
+      }
+      const form = await request.formData();
+      const category = String(form.get('category') || '');
+      const file = form.get('file');
+      if (!(file instanceof File)) return json({ ok: false, message: 'Dokumen tidak ditemukan pada permintaan.' }, 400, origin);
+      const uploaded = await uploadManagedStaffDocument(googleAccessToken, file, user.localId!, category);
+      return json({
+        ok: true,
+        verified: true,
+        fileId: uploaded.id,
+        fileName: uploaded.name,
+        mimeType: uploaded.mimeType,
+        size: Number(uploaded.size),
+        webViewLink: uploaded.webViewLink || ('https://drive.google.com/open?id=' + encodeURIComponent(uploaded.id || '')),
+      }, 200, origin);
+    }
+
+    const match = url.pathname.match(/^\/documents\/([^/]+)$/);
+    if (!match || !['GET', 'DELETE'].includes(request.method)) {
+      return json({ ok: false, message: 'Endpoint dokumen tidak ditemukan.' }, 404, origin);
+    }
+    const fileId = decodeURIComponent(match[1]);
+    if (!/^[A-Za-z0-9_-]{1,256}$/.test(fileId)) {
+      return json({ ok: false, message: 'ID dokumen tidak valid.' }, 400, origin);
+    }
+    let metadata: DriveFile;
+    try {
+      metadata = await verifyManagedStaffDocument(googleAccessToken, fileId);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Dokumen tidak dapat diverifikasi.';
+      const status = /tidak ditemukan/i.test(message) ? 404 : 403;
+      return json({ ok: false, message }, status, origin);
+    }
+    const ownerUid = String(metadata.appProperties?.sipanduOwnerUid || '');
+    if (ownerUid !== user.localId && role !== 'owner' && role !== 'supervisor') {
+      return json({ ok: false, message: 'Anda tidak memiliki izin untuk mengakses dokumen petugas lain.' }, 403, origin);
+    }
+
+    if (request.method === 'DELETE') {
+      const removed = await driveRequest(googleAccessToken, '/files/' + encodeURIComponent(fileId), { method: 'DELETE' });
+      if (!removed.ok && removed.status !== 404) {
+        return json({ ok: false, message: 'Dokumen gagal dihapus dari Google Drive (HTTP ' + removed.status + ').' }, 502, origin);
+      }
+      return json({ ok: true, deleted: true }, 200, origin);
+    }
+
+    const download = await driveRequest(googleAccessToken, '/files/' + encodeURIComponent(fileId) + '?alt=media');
+    if (!download.ok || !download.body) {
+      return json({ ok: false, message: 'Isi dokumen tidak dapat diunduh dari Google Drive (HTTP ' + download.status + ').' }, 502, origin);
+    }
+    const filename = encodeURIComponent(safeDocumentName(String(metadata.name || 'dokumen')));
+    return new Response(download.body, {
+      status: 200,
+      headers: {
+        ...cors(origin),
+        'Content-Type': String(metadata.mimeType),
+        'Content-Length': String(metadata.size),
+        'Content-Disposition': "attachment; filename*=UTF-8''" + filename,
+        'Cache-Control': 'private, no-store',
+        'X-Content-Type-Options': 'nosniff',
+      },
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Operasi arsip dokumen gagal.';
+    const status = /sesi firebase|token oauth google|sesi google workspace/i.test(message) ? 401
+      : /peran sipandu|peran akun|tidak memiliki izin/i.test(message) ? 403
+      : /format dokumen|kategori dokumen|ukuran permintaan|dokumen harus|id dokumen/i.test(message) ? 400
+      : 502;
+    return json({ ok: false, message }, status, origin);
+  }
+}
+
 function missingConfiguration(env: Env): string[] {
   const missing: string[] = [];
   if (!env.FIREBASE_PROJECT_ID) missing.push('FIREBASE_PROJECT_ID');
@@ -309,6 +532,11 @@ export default {
       return missing.length
         ? json({ ok: false, ready: false, missing }, 503, origin)
         : json({ ok: true, ready: true, destinationVerified: false, message: 'Konfigurasi tersedia; folder SIPANDU akan diverifikasi/dibuat dengan OAuth pengguna saat unggah.' }, 200, origin);
+    }
+
+    if (url.pathname === '/documents' || url.pathname.startsWith('/documents/')) {
+      if (missingConfiguration(env).length) return json({ ok: false, message: 'Layanan arsip belum dikonfigurasi administrator.' }, 503, origin);
+      return handleStaffDocumentRoute(request, env, url, origin);
     }
 
     if (url.pathname !== '/archive' || request.method !== 'POST') {

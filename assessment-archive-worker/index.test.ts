@@ -110,3 +110,121 @@ test('rejects requests from an unapproved web origin', async () => {
   const response = await worker.fetch(request, {});
   assert.equal(response.status, 403);
 });
+
+
+test('stores a staff document in private Drive, verifies the bytes, and enforces owner access', async () => {
+  const fileId = 'drive-doc-file-001';
+  const bytes = new TextEncoder().encode('synthetic staff document');
+  const folderIds: string[] = [];
+  let documentRecord: Record<string, unknown> | null = null;
+  let mediaReadCount = 0;
+
+  globalThis.fetch = async (input, init) => {
+    const url = new URL(String(input));
+    const method = init?.method || 'GET';
+
+    if (url.hostname === 'identitytoolkit.googleapis.com') {
+      const body = JSON.parse(String(init?.body || '{}')) as { idToken?: string };
+      return jsonResponse({
+        users: [{
+          localId: body.idToken === 'other-firebase-token' ? 'other-uid' : 'staff-uid',
+          email: 'staff@example.test',
+          customAttributes: JSON.stringify({ role: 'pendamping' }),
+        }],
+      });
+    }
+    if (url.hostname === 'www.googleapis.com' && url.pathname === '/oauth2/v3/userinfo') {
+      return jsonResponse({ email: 'aryprayoga139@gmail.com', email_verified: true });
+    }
+    if (url.hostname === 'www.googleapis.com' && url.pathname.startsWith('/drive/v3/files')) {
+      if (url.searchParams.has('q')) return jsonResponse({ files: [] });
+
+      if (url.searchParams.get('fields') === 'id' && method === 'POST') {
+        const id = 'document-folder-' + (folderIds.length + 1);
+        folderIds.push(id);
+        return jsonResponse({ id });
+      }
+
+      if (url.searchParams.has('uploadType') && method === 'POST') {
+        const body = await (init?.body as Blob).text();
+        assert.ok(body.includes('sipanduDocument'));
+        assert.ok(body.includes('sipanduOwnerUid'));
+        assert.ok(body.includes('application/pdf'));
+        documentRecord = {
+          id: fileId,
+          name: 'scan.pdf',
+          mimeType: 'application/pdf',
+          size: String(bytes.byteLength),
+          webViewLink: 'https://drive.google.com/open?id=' + fileId,
+          parents: [folderIds[2]],
+          appProperties: {
+            sipanduManaged: 'true',
+            sipanduDocument: 'true',
+            sipanduOwnerUid: 'staff-uid',
+            sipanduCategory: 'surat-tugas',
+          },
+          trashed: false,
+        };
+        return jsonResponse(documentRecord);
+      }
+
+      if (url.pathname.endsWith('/' + fileId) && url.searchParams.get('alt') === 'media') {
+        mediaReadCount += 1;
+        return new Response(bytes, { headers: { 'Content-Type': 'application/pdf' } });
+      }
+      if (url.pathname.endsWith('/' + fileId)) return jsonResponse(documentRecord);
+    }
+    throw new Error('Unexpected mocked request: ' + method + ' ' + url);
+  };
+
+  const env = {
+    FIREBASE_PROJECT_ID: 'gen-lang-client-0197631978',
+    FIREBASE_AUTH_API_KEY: 'public-firebase-api-key',
+    GOOGLE_WORKSPACE_EMAIL: 'aryprayoga139@gmail.com',
+  };
+  const origin = 'https://sipanduodhiv.my.id';
+  const form = new FormData();
+  form.set('category', 'surat-tugas');
+  form.set('file', new File([bytes], 'scan.pdf', { type: 'application/pdf' }), 'scan.pdf');
+  const uploadRequest = new Request('https://sipandu-assessment-archive.aryprayoga139.workers.dev/documents', {
+    method: 'POST',
+    headers: {
+      Origin: origin,
+      Authorization: 'Bearer staff-firebase-token',
+      'X-Google-Access-Token': 'google-access-token',
+    },
+    body: form,
+  });
+  const uploadResponse = await worker.fetch(uploadRequest, env);
+  const uploaded = await uploadResponse.json() as Record<string, unknown>;
+  assert.equal(uploadResponse.status, 200, JSON.stringify(uploaded));
+  assert.equal(uploaded.verified, true);
+  assert.equal(uploaded.fileId, fileId);
+  assert.equal(uploaded.size, bytes.byteLength);
+  assert.equal(folderIds.length, 3);
+
+  const downloadRequest = new Request('https://sipandu-assessment-archive.aryprayoga139.workers.dev/documents/' + fileId, {
+    headers: {
+      Origin: origin,
+      Authorization: 'Bearer staff-firebase-token',
+      'X-Google-Access-Token': 'google-access-token',
+    },
+  });
+  const downloadResponse = await worker.fetch(downloadRequest, env);
+  assert.equal(downloadResponse.status, 200);
+  assert.equal(downloadResponse.headers.get('Cache-Control'), 'private, no-store');
+  assert.equal(downloadResponse.headers.get('X-Content-Type-Options'), 'nosniff');
+  assert.deepEqual(new Uint8Array(await downloadResponse.arrayBuffer()), bytes);
+  assert.equal(mediaReadCount, 1);
+
+  const foreignRequest = new Request('https://sipandu-assessment-archive.aryprayoga139.workers.dev/documents/' + fileId, {
+    headers: {
+      Origin: origin,
+      Authorization: 'Bearer other-firebase-token',
+      'X-Google-Access-Token': 'google-access-token',
+    },
+  });
+  const foreignResponse = await worker.fetch(foreignRequest, env);
+  assert.equal(foreignResponse.status, 403);
+  assert.equal(mediaReadCount, 1, 'a different pendamping must not receive the file bytes');
+});

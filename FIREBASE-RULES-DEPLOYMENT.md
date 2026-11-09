@@ -40,3 +40,19 @@ The current standalone **From Asesmen Terintegrasi** form stores its answer map 
 
 Production Firestore Rules must include the `integratedAssessmentAnswers` match block before the updated app attempts to save to this collection. The `firebase-rules.yml` workflow runs emulator tests first and deploys only the Firestore Rules to the named SIPANDU database after a successful push to `main`.
 
+
+## Perubahan jalur Arsip Dokumen Petugas pada v5.0.4
+
+Fitur Arsip Dokumen Petugas tidak lagi mengunggah binary ke Firebase Storage. File disimpan pada folder privat akun Google Workspace SIPANDU melalui sipandu-assessment-archive Worker. Worker memverifikasi Firebase ID token dan custom role (owner, supervisor, pendamping), memastikan Google OAuth token berasal dari akun Workspace yang ditetapkan, membatasi ukuran dan MIME type, menandai file dengan appProperties SIPANDU, lalu membaca ulang metadata sebelum menyatakan upload berhasil.
+
+Firestore staffDocuments hanya menyimpan metadata, driveFileId, dan tautan Drive non-publik. Download dan delete melewati Worker; Worker memverifikasi bahwa file memiliki penanda SIPANDU dan membatasi akses kepada pemilik dokumen, owner, atau supervisor. Firebase Storage bucket tetap tidak dibuat, tidak ada layanan berbayar yang diaktifkan, dan storage.rules tetap diuji melalui emulator saja.
+
+Dokumen lama yang hanya memiliki storagePath Firebase Storage tidak otomatis dipindahkan atau dihapus. Dokumen tersebut harus dipulihkan dari backup Drive yang sudah ada atau diunggah ulang dari file aslinya. Dokumen lama yang memakai Drive backup sebelum penanda SIPANDU v5.0.4 juga harus diunggah ulang agar Worker dapat memverifikasi kepemilikan dan aksesnya. Jangan menganggap data lama sudah dimigrasikan hanya karena build baru berhasil.
+
+### Pengujian operasional wajib setelah deployment
+
+1. Masuk sebagai masing-masing role staf dan hubungkan akun Workspace yang ditetapkan.
+2. Unggah PDF sintetis dan gambar; pastikan Worker mengembalikan verified=true dan file tampil pada folder SIPANDU/Dokumen.
+3. Unduh sebagai pemilik; pastikan byte dan MIME type sesuai file asli.
+4. Coba unduh dokumen petugas lain sebagai akun pendamping; Worker harus menolak.
+5. Pastikan metadata Firestore baru tidak berisi storagePath atau downloadUrl.
