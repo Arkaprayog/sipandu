@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { decodeFirebaseClaims, containsSensitivePrompt, verifyFirebaseIdToken, isActiveFirebaseAccount } from "./index";
+import { decodeFirebaseClaims, containsSensitivePrompt, containsSensitiveHistory, verifyFirebaseIdToken, isActiveFirebaseAccount } from "./index";
 
 function makeToken(payload: Record<string, unknown>): string {
   const encode = (value: unknown) => btoa(JSON.stringify(value)).replace(/=/g, "").replace(/\+/g, "-").replace(/\//g, "_");
@@ -88,4 +88,15 @@ test("rejects disabled, mismatched, or revoked Firebase accounts", () => {
   assert.equal(isActiveFirebaseAccount({ localId: "staff-uid", validSince: "1800000001" }, claims), false);
   assert.equal(isActiveFirebaseAccount({ localId: "staff-uid", validSince: "invalid" }, claims), false);
   assert.equal(isActiveFirebaseAccount(undefined, claims), false);
+});
+
+test("blocks sensitive information in the bounded user conversation history", () => {
+  assert.equal(containsSensitiveHistory([
+    { role: "user", text: "Analisis status layanan PPKS" },
+    { role: "user", text: "NIK 1234567890123456" },
+  ]), true);
+  assert.equal(containsSensitiveHistory([
+    { role: "user", text: "Analisis jumlah layanan per wilayah" },
+    { role: "model", text: "Nama lengkap PPKS adalah contoh" },
+  ]), false);
 });
