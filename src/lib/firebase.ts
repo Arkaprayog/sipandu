@@ -360,7 +360,7 @@ function describeGoogleOAuthError(error: unknown): string {
  * Attempts a popup first; mobile/embedded browsers fall back to the full-page
  * redirect flow, whose result is processed after the page returns from Google.
  */
-function buildWorkspaceProvider(prompt?: 'none' | 'select_account'): GoogleAuthProvider {
+function buildWorkspaceProvider(prompt?: 'none' | 'select_account' | 'consent' | 'select_account consent'): GoogleAuthProvider {
   const provider = new GoogleAuthProvider();
   provider.setCustomParameters({
     login_hint: GOOGLE_WORKSPACE_EMAIL,
@@ -522,17 +522,17 @@ export const googleSignIn = async (): Promise<{
     existingUser &&
     getWorkspaceGoogleEmail(existingUser)?.toLowerCase() === GOOGLE_WORKSPACE_EMAIL.toLowerCase()
   ) {
-    // First try to renew access with the already-authorized Google session,
-    // without forcing account selection or repeating the consent screen.
+    // User-initiated recovery must show Google's consent screen so newly added
+    // scopes (especially Forms responses read-only) are actually granted.
     try {
       const refreshed = await reauthenticateWithPopup(
         existingUser,
-        buildWorkspaceProvider('none')
+        buildWorkspaceProvider('consent')
       );
       return await finishWorkspaceSignIn(refreshed);
     } catch (silentRefreshError: any) {
       const code = silentRefreshError?.code ? String(silentRefreshError.code) : '';
-      // Fall back to normal account selection, which no longer forces consent.
+      // If the existing session cannot be reauthorized, show account selection and consent.
       if (!code) throw new Error(describeGoogleOAuthError(silentRefreshError));
       if (
         code.includes('auth/user-mismatch') ||
@@ -548,7 +548,7 @@ export const googleSignIn = async (): Promise<{
     }
   }
 
-  const provider = buildWorkspaceProvider('select_account');
+  const provider = buildWorkspaceProvider('select_account consent');
   try {
     const result = await signInWithPopup(workspaceAuth, provider);
     return await finishWorkspaceSignIn(result);
