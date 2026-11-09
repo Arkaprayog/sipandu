@@ -106,7 +106,7 @@ Lihat [Audit kesiapan produksi v1.0.0](docs/PRODUCTION_READINESS_AUDIT.md). Nomo
 ## Pendaftaran mandiri anggota SIPANDU
 
 - Halaman login menyediakan tautan teks **Sudah memiliki akun? Buat akun** yang membuka formulir pendaftaran.
-- Pendaftaran memerlukan nama, NIP, jabatan, unit kerja, email, password, konfirmasi password, dan kode pendaftaran tim bersama.
+- Pendaftaran memerlukan nama, NIP, jabatan, unit kerja, email, password, dan konfirmasi password. Aktivasi akun dilakukan hanya setelah email diverifikasi; tidak ada kode pendaftaran tim.
 - Email harus diverifikasi sebelum akun baru diaktifkan. Setelah verifikasi, anggota masuk kembali dengan email dan password.
 - Profil anggota disimpan pada dokumen Firestore pribadi `userProfiles/{uid}`, sehingga nama, NIP, jabatan, dan unit kerja otomatis muncul ketika akun dipakai pada perangkat lain. Foto profil dapat diunggah kemudian; menu Edit Profil tetap tersedia.
 - Role `pendamping` diberikan hanya oleh Worker Cloudflare terpisah setelah memvalidasi undangan dan status email Firebase. Browser tidak dapat mengatur custom claim.
