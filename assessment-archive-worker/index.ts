@@ -165,14 +165,14 @@ function escapeDriveQuery(value: string): string {
 
 function multipartBody(metadata: Record<string, unknown>, pdf: ArrayBuffer, boundary: string): Blob {
   return new Blob([
-    '--' + boundary + '\\r\\n',
-    'Content-Type: application/json; charset=UTF-8\\r\\n\\r\\n',
-    JSON.stringify(metadata) + '\\r\\n',
-    '--' + boundary + '\\r\\n',
-    'Content-Type: application/pdf\\r\\n',
-    'Content-Transfer-Encoding: binary\\r\\n\\r\\n',
+    '--' + boundary + '\r\n',
+    'Content-Type: application/json; charset=UTF-8\r\n\r\n',
+    JSON.stringify(metadata) + '\r\n',
+    '--' + boundary + '\r\n',
+    'Content-Type: application/pdf\r\n',
+    'Content-Transfer-Encoding: binary\r\n\r\n',
     pdf,
-    '\\r\\n--' + boundary + '--',
+    '\r\n--' + boundary + '--',
   ]);
 }
 
