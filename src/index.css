@@ -1653,12 +1653,17 @@ body,
   font-weight: 850;
   line-height: 1.25;
   letter-spacing: .035em;
-  overflow-wrap: anywhere;
+  writing-mode: horizontal-tb !important;
+  white-space: nowrap !important;
+  word-break: keep-all !important;
+  overflow-wrap: normal !important;
+  width: max-content;
+  max-width: calc(100vw - 24px);
   text-align: center;
 }
 @media (min-width: 768px) {
   .sipandu-navigation-shell .app-nav-bar .sipandu-nav-label--active {
     font-size: 10px !important;
-    max-width: 240px;
+    max-width: calc(100vw - 32px);
   }
 }
