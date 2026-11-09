@@ -108,7 +108,7 @@ service cloud.firestore {
     // Staff document metadata points to private Google Drive files.
     // Binary access is mediated by the authenticated archive Worker, not Firebase Storage.
     match /staffDocuments/{documentId} {
-      allow read: if isStaff();
+      allow read: if isStaff() && (resource.data.ownerUid == request.auth.uid || canWritePpks());
 
       allow create: if isStaff()
         && request.resource.data.keys().hasAll([

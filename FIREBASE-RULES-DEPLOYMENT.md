@@ -68,3 +68,7 @@ Workflow Firebase Rules menggunakan `cancel-in-progress: false` agar deployment 
 Metadata `staffDocuments` hanya menyimpan ID file Google Drive, bukan `webViewLink` atau URL unduhan langsung. Pembacaan isi dokumen tetap melewati `sipandu-assessment-archive` Worker dan pemeriksaan pemilik/role. Ini mencegah daftar metadata Firestore menjadi jalan pintas untuk membuka file Drive di luar otorisasi aplikasi.
 
 Saat dokumen lama diunggah ulang dan salinan Drive baru sudah terverifikasi, aplikasi menghapus field warisan `storagePath`, `downloadUrl`, dan `driveWebViewLink`. Firestore Rules mengizinkan penghapusan field tersebut saja dan menolak penambahan kembali. File sumber lama tidak dihapus otomatis sebelum pengganti terverifikasi.
+
+## Pembatasan visibilitas arsip petugas pada v5.0.9
+
+Firestore Rules untuk `staffDocuments` kini membatasi pembacaan dokumen kepada pemiliknya atau role Owner/Supervisor. Pendamping tidak dapat membaca metadata maupun ID file petugas lain. Fungsi daftar arsip memakai filter `ownerUid == UID pengguna` untuk Pendamping; Owner dan Supervisor tetap dapat meninjau seluruh arsip. Ini melengkapi pemeriksaan kepemilikan pada endpoint download/delete Worker.

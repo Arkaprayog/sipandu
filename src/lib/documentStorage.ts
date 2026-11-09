@@ -1,6 +1,6 @@
 import { getIdTokenResult } from 'firebase/auth';
 import {
-  collection, deleteDoc, deleteField, doc, getDoc, getDocs, limit, orderBy, query,
+  collection, deleteDoc, deleteField, doc, getDoc, getDocs, limit, orderBy, query, where,
   serverTimestamp, setDoc, updateDoc,
 } from 'firebase/firestore';
 import { auth, db } from './firebase';
@@ -138,14 +138,18 @@ export async function uploadStaffDocument(
 }
 
 export async function listStaffDocuments(): Promise<StaffDocumentRecord[]> {
-  await getVerifiedStaff();
+  const { user, role } = await getVerifiedStaff();
   try {
-    const snapshot = await getDocs(query(
-      collection(db, 'staffDocuments'),
-      orderBy('uploadedAt', 'desc'),
-      limit(100),
-    ));
-    return snapshot.docs.map((item) => mapDocument(item.id, item.data()));
+    const records = collection(db, 'staffDocuments');
+    // Owner/supervisor can review the shared archive; pendamping queries only their own records.
+    const documentsQuery = role === 'owner' || role === 'supervisor'
+      ? query(records, orderBy('uploadedAt', 'desc'), limit(100))
+      : query(records, where('ownerUid', '==', user.uid));
+    const snapshot = await getDocs(documentsQuery);
+    return snapshot.docs
+      .map((item) => mapDocument(item.id, item.data()))
+      .sort((a, b) => Date.parse(b.uploadedAt || '') - Date.parse(a.uploadedAt || ''))
+      .slice(0, 100);
   } catch (error) {
     throw explainDocumentError(error);
   }

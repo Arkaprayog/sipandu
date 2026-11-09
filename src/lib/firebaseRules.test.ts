@@ -7,7 +7,7 @@ import {
   initializeTestEnvironment,
   type RulesTestEnvironment,
 } from '@firebase/rules-unit-testing';
-import { deleteDoc, deleteField, doc, getDoc, serverTimestamp, setDoc, updateDoc } from 'firebase/firestore';
+import { collection, deleteDoc, deleteField, doc, getDoc, getDocs, query, serverTimestamp, setDoc, updateDoc, where } from 'firebase/firestore';
 import { getBytes, ref, uploadBytes } from 'firebase/storage';
 
 const PROJECT_ID = 'demo-sipandu-rules';
@@ -133,7 +133,7 @@ test('Pendamping dapat menyimpan jawaban asesmen walau dokumen roster PPKS belum
   }));
 });
 
-test('Metadata dokumen staf hanya menerima pointer Drive privat dan pemilik/administrator yang dapat mengubahnya', async () => {
+test('Metadata dokumen petugas dibatasi ke pemilik; Owner dan Supervisor dapat membaca seluruh arsip', async () => {
   const firestore = environment.authenticatedContext(PENDAMPING_UID, {
     role: 'pendamping',
   }).firestore();
@@ -154,6 +154,11 @@ test('Metadata dokumen staf hanya menerima pointer Drive privat dan pemilik/admi
   };
 
   await assertSucceeds(setDoc(record, metadata));
+  await assertSucceeds(getDoc(record));
+  await assertSucceeds(getDocs(query(
+    collection(firestore, 'staffDocuments'),
+    where('ownerUid', '==', PENDAMPING_UID),
+  )));
   await assertFails(setDoc(doc(firestore, 'staffDocuments', 'direct-link'), {
     ...metadata,
     driveWebViewLink: 'https://drive.google.com/open?id=drive-file-private',
@@ -166,7 +171,6 @@ test('Metadata dokumen staf hanya menerima pointer Drive privat dan pemilik/admi
     driveBackupAt: serverTimestamp(),
     driveBackupUpdatedAt: serverTimestamp(),
   }));
-
   await assertFails(updateDoc(record, { name: 'diubah.pdf' }));
   await assertFails(setDoc(doc(firestore, 'staffDocuments', 'legacy-storage'), {
     ...metadata,
@@ -179,15 +183,27 @@ test('Metadata dokumen staf hanya menerima pointer Drive privat dan pemilik/admi
   const otherPendamping = environment.authenticatedContext('pendamping-002', {
     role: 'pendamping',
   }).firestore();
-  await assertSucceeds(getDoc(doc(otherPendamping, 'staffDocuments', 'document-001')));
+  await assertFails(getDoc(doc(otherPendamping, 'staffDocuments', 'document-001')));
+  await assertSucceeds(getDocs(query(
+    collection(otherPendamping, 'staffDocuments'),
+    where('ownerUid', '==', 'pendamping-002'),
+  )));
+  await assertFails(getDocs(collection(otherPendamping, 'staffDocuments')));
   await assertFails(updateDoc(doc(otherPendamping, 'staffDocuments', 'document-001'), {
     driveBackupError: 'tidak diizinkan',
     driveBackupUpdatedAt: serverTimestamp(),
   }));
 
+  const supervisor = environment.authenticatedContext('supervisor-001', {
+    role: 'supervisor',
+  }).firestore();
+  await assertSucceeds(getDoc(doc(supervisor, 'staffDocuments', 'document-001')));
+  await assertSucceeds(getDocs(collection(supervisor, 'staffDocuments')));
+
   const outsider = environment.authenticatedContext('outsider-001').firestore();
   await assertFails(getDoc(doc(outsider, 'staffDocuments', 'document-001')));
 });
+
 
 
 test('Legacy Firebase and direct Drive links can only be removed during verified Drive migration', async () => {
