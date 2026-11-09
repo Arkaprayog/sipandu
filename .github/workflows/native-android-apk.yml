@@ -109,7 +109,7 @@ jobs:
 
       # Capgo's Android plugin source lives in node_modules; patch it after sync so
       # both assembleDebug and assembleRelease compile the same UI-thread print bridge.
-      - name: Patch native Android PDF storage and print lifecycle
+      - name: Patch Capgo printer source for native PDF storage and UI-thread printing
         run: python3 scripts/patch_native_printer.py --project android
 
       - name: Add and verify precise Android GPS permissions
