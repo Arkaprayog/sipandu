@@ -94,9 +94,6 @@ export const GoogleWorkspaceModal: React.FC<GoogleWorkspaceModalProps> = ({
   const [sourceSpreadsheetUrl, setSourceSpreadsheetUrl] = useState<string>(
     settings.googleSpreadsheetSourceUrl?.trim() || ''
   );
-  const [sourceSpreadsheetTab, setSourceSpreadsheetTab] = useState<string>(
-    settings.googleSpreadsheetSourceTab?.trim() || ''
-  );
 
   // Forms state
   const [formResponsesCount, setFormResponsesCount] = useState<number | null>(null);
@@ -258,7 +255,6 @@ export const GoogleWorkspaceModal: React.FC<GoogleWorkspaceModalProps> = ({
   useEffect(() => {
     const configuredSource = settings.googleSpreadsheetSourceUrl?.trim() || '';
     setSourceSpreadsheetUrl(configuredSource);
-    setSourceSpreadsheetTab(settings.googleSpreadsheetSourceTab?.trim() || '');
   }, [settings.googleSpreadsheetSourceUrl, settings.googleSpreadsheetSourceTab]);
 
   useEffect(() => {
@@ -403,7 +399,6 @@ export const GoogleWorkspaceModal: React.FC<GoogleWorkspaceModalProps> = ({
     }
     const url = GOOGLE_SIPANDU_RESOURCES.responseSpreadsheetUrl;
     setSourceSpreadsheetUrl(url);
-    setSourceSpreadsheetTab('');
     onUpdateSettings({
       ...settings,
       googleSpreadsheetSourceUrl: url,
@@ -439,10 +434,8 @@ export const GoogleWorkspaceModal: React.FC<GoogleWorkspaceModalProps> = ({
       const sourceUrl = GOOGLE_SIPANDU_RESOURCES.responseSpreadsheetUrl;
       const sourceTab = 'From Responses 1';
       setSourceSpreadsheetUrl(sourceUrl);
-      setSourceSpreadsheetTab(sourceTab);
       const imported = await importPPKSFromSpreadsheet(sourceUrl, sourceTab);
       setSheetRows(imported.previewRows);
-      setSourceSpreadsheetTab(imported.selectedTab);
       onUpdateSettings({
         ...settings,
         googleSpreadsheetSourceUrl: sourceUrl,
@@ -978,6 +971,7 @@ export const GoogleWorkspaceModal: React.FC<GoogleWorkspaceModalProps> = ({
                   <p className="text-[11px] text-neutral-300">
                     Foto Diri, Foto KTP, Foto KK, dan Foto Rumah Tampak Depan. Foto lama dipindahkan berdasarkan kolom foto yang sudah terpetakan pada Database PPKS.
                   </p>
+                  <p className="text-[10px] text-neutral-400">Sumber aktif: Folder Dokumen SIPANDU. Alamat folder disimpan internal dan tidak ditampilkan.</p>
                 </div>
                 <button
                   type="button"
@@ -1086,12 +1080,14 @@ export const GoogleWorkspaceModal: React.FC<GoogleWorkspaceModalProps> = ({
                   value={(() => { try { return extractSpreadsheetId(sourceSpreadsheetUrl); } catch { return ''; } })()}
                   onChange={(e) => handleSourceSpreadsheetSelect(e.target.value)}
                   className="w-full p-2.5 rounded bg-black/70 border border-sky-500/30 text-xs text-white"
-                  disabled={loading || !token || spreadsheetFiles.length === 0}
+                  disabled={loading || !token || !spreadsheetFiles.some((file) => file.id === GOOGLE_SIPANDU_RESOURCES.responseSpreadsheetId)}
                 >
                   <option value="">— Pilih sumber Spreadsheet PPKS —</option>
-                  {spreadsheetFiles.map((file) => (
-                    <option key={file.id} value={file.id}>{file.name}</option>
-                  ))}
+                  {spreadsheetFiles
+                    .filter((file) => file.id === GOOGLE_SIPANDU_RESOURCES.responseSpreadsheetId)
+                    .map((file) => (
+                      <option key={file.id} value={file.id}>{file.name}</option>
+                    ))}
                 </select>
                 <p className="text-[10px] text-neutral-400">
                   Sumber aktif: <strong className="text-neutral-200">{settings.googleSpreadsheetSourceName || 'Sumber ATENSI SIPANDU'}</strong>
