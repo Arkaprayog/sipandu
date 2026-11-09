@@ -14,11 +14,9 @@ from pathlib import Path
 
 
 IMPORTS = (
-    "import android.content.ContentValues;",
-    "import android.os.Environment;",
-    "import android.provider.MediaStore;",
     "import java.nio.charset.StandardCharsets;",
     "import java.util.Locale;",
+    "import android.print.PrintJob;",
     "import java.util.concurrent.atomic.AtomicBoolean;",
     "import java.util.concurrent.atomic.AtomicReference;",
 )
