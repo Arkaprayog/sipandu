@@ -523,14 +523,26 @@ def patch_plugin_source(source: str) -> str:
 
 
 def patch_android_project(project: Path) -> tuple[Path, Path]:
-    printer_files = [
-        path for path in project.rglob("Printer.java")
-        if path.as_posix().endswith("/com/capgo/printer/Printer.java")
-    ]
-    plugin_files = [
-        path for path in project.rglob("PrinterPlugin.java")
-        if path.as_posix().endswith("/com/capgo/printer/PrinterPlugin.java")
-    ]
+    # Capacitor links Android plugins from node_modules as Gradle subprojects;
+    # their source files remain in node_modules rather than android/.
+    search_roots = [project]
+    installed_printer = project.parent / "node_modules" / "@capgo" / "capacitor-printer"
+    if installed_printer.is_dir():
+        search_roots.append(installed_printer)
+
+    def find_java_sources(file_name: str) -> list[Path]:
+        matches: list[Path] = []
+        for root in search_roots:
+            if not root.is_dir():
+                continue
+            for path in root.rglob(file_name):
+                if path.as_posix().endswith(f"/com/capgo/printer/{file_name}"):
+                    if path not in matches:
+                        matches.append(path)
+        return matches
+
+    printer_files = find_java_sources("Printer.java")
+    plugin_files = find_java_sources("PrinterPlugin.java")
     if len(printer_files) != 1 or len(plugin_files) != 1:
         raise RuntimeError(
             "Expected exactly one generated Capgo printer implementation and plugin, "
