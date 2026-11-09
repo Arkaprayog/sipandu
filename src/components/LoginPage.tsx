@@ -175,8 +175,8 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
       />
 
       {/* Panel glassmorphism responsif; wallpaper asli tetap terlihat di belakangnya. */}
-      <main className="relative z-10 mx-auto grid w-full max-w-[700px] grid-cols-1 items-stretch gap-0 overflow-hidden rounded-[24px] border border-white/70 bg-white/[0.16] shadow-2xl backdrop-blur-[24px] min-[720px]:grid-cols-2">
-        <section className="relative hidden min-[720px]:flex min-[720px]:min-w-0 min-[720px]:flex-col min-[720px]:justify-between min-[720px]:p-5">
+      <main className="relative z-10 mx-auto grid w-full max-w-[800px] grid-cols-1 items-stretch gap-0 overflow-hidden rounded-3xl border border-white/70 bg-white/[0.16] shadow-2xl backdrop-blur-[24px] min-[720px]:grid-cols-2">
+        <section className="relative flex min-w-0 flex-col justify-between p-5 min-[720px]:p-6">
           <div className="absolute inset-0 bg-gradient-to-b from-slate-950/55 via-slate-950/45 to-slate-950/85" />
           <div className="relative z-10 mt-5 max-w-full text-white">
             <h1 className="text-3xl font-bold leading-tight tracking-tight">SIPANDU</h1>
@@ -210,7 +210,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
           <div className="mb-5 flex flex-col items-center text-center">
             <div className="mb-4 flex w-full min-w-0 items-center justify-center gap-3">
               <img
-                src={publicAssetUrl('uploads/Logo Kemensos Hadir.png')}
+                src={publicAssetUrl('uploads/Logo Kemensos.png')}
                 alt="Logo Kementerian Sosial Republik Indonesia"
                 className="h-[42px] w-[72px] object-contain"
                 loading="eager"
