@@ -349,7 +349,7 @@ function extractHistory(value: unknown): HistoryItem[] {
 
 /** Check only the bounded user-authored history that would be forwarded to Gemini. */
 export function containsSensitiveHistory(history: HistoryItem[]): boolean {
-  return history.some((item) => containsSensitivePrompt(item.text));
+  return history.some((item) => item.role === "user" && containsSensitivePrompt(item.text));
 }
 
 async function readJsonBody(request: Request): Promise<Record<string, unknown> | null> {
