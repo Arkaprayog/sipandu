@@ -21,6 +21,7 @@ on:
       - "scripts/verify_apk_native_google_bridge.py"
       - "scripts/patch_social_login_reauth.py"
       - "scripts/ensure_android_location_permissions.py"
+      - "scripts/configure-gradle-wrapper.py"
       - ".github/workflows/android-apk.yml"
 
 permissions:
