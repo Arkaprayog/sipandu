@@ -87,7 +87,7 @@ test('archives a PDF only after Firebase and Google identity checks and Drive re
   });
   const result = await response.json() as Record<string, unknown>;
 
-  assert.equal(response.status, 200);
+  assert.equal(response.status, 200, JSON.stringify(result));
   assert.equal(result.ok, true);
   assert.equal(result.verified, true);
   assert.equal(result.fileId, fileId);
