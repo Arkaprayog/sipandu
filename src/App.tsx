@@ -57,7 +57,7 @@ import {
 function describeTeamActivationError(error: unknown): string {
   const detail = error instanceof Error ? error.message.trim() : String(error ?? '').trim();
   const missing = [...new Set(
-    detail.match(/TEAM_REGISTRATION_CODE|FIREBASE_SERVICE_ACCOUNT_JSON|FIREBASE_AUTH_API_KEY|FIREBASE_WEB_API_KEY|FIREBASE_PROJECT_ID|PENDING_REGISTRATIONS KV/g) || []
+    detail.match(/FIREBASE_SERVICE_ACCOUNT_JSON|FIREBASE_AUTH_API_KEY|FIREBASE_WEB_API_KEY|FIREBASE_PROJECT_ID|PENDING_REGISTRATIONS KV/g) || []
   )];
 
   if (missing.length) {
