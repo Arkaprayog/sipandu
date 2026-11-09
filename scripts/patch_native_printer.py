@@ -302,7 +302,6 @@ SAVE_PDF_PLUGIN_METHOD = r'''
 '''
 
 PRINT_FILE_PLUGIN_METHOD = r'''
-    @PluginMethod
     public void printFile(PluginCall call) {
         String path = call.getString("path");
         String mimeType = call.getString("mimeType");
@@ -337,7 +336,6 @@ PRINT_FILE_PLUGIN_METHOD = r'''
 '''
 
 PRINT_WEBVIEW_PLUGIN_METHOD = r'''
-    @PluginMethod
     public void printWebView(PluginCall call) {
         String name = call.getString("name", "Document");
         try {
