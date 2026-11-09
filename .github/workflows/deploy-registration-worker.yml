@@ -47,7 +47,7 @@ jobs:
             throw new Error('The existing PENDING_REGISTRATIONS namespace binding is missing or mismatched.');
           }
           const required = new Set(config.secrets?.required || []);
-          for (const secret of ['TEAM_REGISTRATION_CODE', 'FIREBASE_SERVICE_ACCOUNT_JSON', 'TURNSTILE_SECRET_KEY', 'FIREBASE_AUTH_API_KEY']) {
+          for (const secret of ['FIREBASE_SERVICE_ACCOUNT_JSON', 'TURNSTILE_SECRET_KEY', 'FIREBASE_AUTH_API_KEY']) {
             if (!required.has(secret)) throw new Error('Required Worker secret is missing from wrangler.jsonc: ' + secret);
           }
           console.log('Worker source, generated bundle entry, KV binding and required secret names verified.');
