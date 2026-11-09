@@ -72,6 +72,38 @@ jobs:
       - name: Verify Worker bundle without deployment
         run: $RUNNER_TEMP/wrangler-cli/node_modules/.bin/wrangler deploy --dry-run --config sipandu-ai-worker/wrangler.jsonc
 
+  readiness:
+    name: Report AI activation prerequisites
+    needs: validate
+    if: ${{ (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check deployment gate and credential presence without exposing values
+        env:
+          SIPANDU_AI_DEPLOY_ENABLED: ${{ vars.SIPANDU_AI_DEPLOY_ENABLED }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gate="not enabled"
+          token="missing"
+          if [[ "${SIPANDU_AI_DEPLOY_ENABLED:-}" == "true" ]]; then gate="enabled"; fi
+          if [[ -n "${CLOUDFLARE_API_TOKEN:-}" ]]; then token="configured"; fi
+          {
+            echo "## SIPANDU AI activation readiness"
+            echo "- Repository variable SIPANDU_AI_DEPLOY_ENABLED: **$gate**"
+            echo "- GitHub Actions secret CLOUDFLARE_API_TOKEN: **$token**"
+            if [[ "$gate" != "enabled" ]]; then
+              echo "- Next action: set repository variable SIPANDU_AI_DEPLOY_ENABLED to the exact value `true`."
+            fi
+            if [[ "$token" != "configured" ]]; then
+              echo "- Next action: add CLOUDFLARE_API_TOKEN as a GitHub Actions secret with least-privilege Workers deployment permissions."
+            fi
+            if [[ "$gate" == "enabled" && "$token" == "configured" ]]; then
+              echo "- Deployment prerequisites in GitHub are present. Cloudflare Worker deployment can proceed."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
   deploy:
     name: Deploy isolated AI Worker only when explicitly enabled
     needs: validate
@@ -103,3 +135,15 @@ jobs:
             exit 1
           }
           "$RUNNER_TEMP/wrangler-cli/node_modules/.bin/wrangler" deploy --config sipandu-ai-worker/wrangler.jsonc
+      - name: Verify deployed Worker health and activation state
+        shell: bash
+        run: |
+          set -euo pipefail
+          response="$(curl --fail --silent --show-error --retry 8 --retry-delay 2 --retry-all-errors https://sipandu-ai.aryprayoga139.workers.dev/health)"
+          configured="$(printf '%s' "$response" | node -e 'let s=""; process.stdin.on("data", c => s += c).on("end", () => { const d = JSON.parse(s); if (d.service !== "SIPANDU AI Copilot" || d.mode !== "read-only") process.exit(2); process.stdout.write(d.configured === true ? "true" : "false"); });')"
+          if [[ "$configured" == "true" ]]; then
+            echo "SIPANDU AI Worker is deployed and reports configured=true." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "::warning::Worker deployed, but Gemini/Firebase runtime configuration is incomplete. Add the GEMINI_API_KEY Cloudflare Worker Secret before Copilot can be enabled."
+            echo "Worker deployment succeeded, but health reports configured=false. Add the GEMINI_API_KEY Cloudflare Worker Secret." >> "$GITHUB_STEP_SUMMARY"
+          fi
