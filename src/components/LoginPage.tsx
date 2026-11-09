@@ -2,7 +2,7 @@ import React, { useRef, useState } from 'react';
 import { onAuthStateChanged, signInWithEmailAndPassword, sendEmailVerification, signOut, type User as FirebaseUser } from 'firebase/auth';
 import { auth, staffAuthPersistenceReady } from '../lib/firebase';
 import { authenticateBiometricLock, isAppPinConfigured, isBiometricLockEnabled, verifyAppPin } from '../lib/biometricLock';
-import { Lock, User, Eye, EyeOff, Fingerprint } from 'lucide-react';
+import { Lock, User, Eye, EyeOff, Fingerprint, ArrowRight } from 'lucide-react';
 import { publicAssetUrl } from '../lib/publicAssets';
 import { RegistrationPage } from './RegistrationPage';
 
@@ -20,7 +20,6 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
   const [showPassword, setShowPassword] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [logoFailed, setLogoFailed] = useState(false);
   const [quickPin, setQuickPin] = useState('');
   const [forcePasswordLogin, setForcePasswordLogin] = useState(false);
   const [showRegistration, setShowRegistration] = useState(false);
@@ -176,29 +175,31 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
       />
 
       {/* Panel glassmorphism responsif; wallpaper asli tetap terlihat di belakangnya. */}
-      <main className="relative z-10 w-[340px] max-w-[calc(100vw-24px)]">
-        <section className="w-full rounded-2xl border border-white/80 bg-white/[0.24] p-5 shadow-[0_12px_40px_rgba(20,40,35,0.18),inset_0_1px_0_rgba(255,255,255,0.65)] backdrop-blur-[14px]">
-          <div className="mb-4 flex flex-col items-center text-center">
-            {logoFailed ? (
-              <p className="mb-2 text-sm font-semibold text-black">Logo Kemensos Hadir tidak dapat dimuat</p>
-            ) : (
+      <main className="relative z-10 w-[414px] max-w-[calc(100vw-24px)]">
+        <section className="w-full rounded-[22px] border border-white/85 bg-white/[0.78] p-6 shadow-[0_16px_44px_rgba(15,23,42,0.2),inset_0_1px_0_rgba(255,255,255,0.9)] backdrop-blur-[22px]">
+          <div className="mb-5 flex flex-col items-center text-center">
+            <div className="mb-5 flex w-full items-center justify-center gap-5">
               <img
-                src={publicAssetUrl('uploads/Logo Kemensos Hadir.png')}
-                alt="Logo resmi Kemensos Hadir"
-                className="mb-2 h-auto w-[160px] max-w-full object-contain"
+                src={publicAssetUrl('uploads/Logo Kemensos.png')}
+                alt="Logo Kementerian Sosial Republik Indonesia"
+                className="h-[56px] w-[88px] object-contain"
                 loading="eager"
                 decoding="async"
-                onError={() => setLogoFailed(true)}
               />
-            )}
-            <h1 className="text-xl font-extrabold leading-tight tracking-wide text-black">
-              SIPANDU ODHIV
+              <span aria-hidden="true" className="h-10 w-px bg-slate-300/90" />
+              <img
+                src={publicAssetUrl('uploads/sipandu-logo.png')}
+                alt="Logo SIPANDU"
+                className="h-[56px] w-[116px] object-contain"
+                loading="eager"
+                decoding="async"
+              />
+            </div>
+            <h1 className="text-[22px] font-bold leading-tight tracking-tight text-slate-800">
+              Selamat Datang 👋
             </h1>
-            <p className="mt-1 text-[11px] font-semibold leading-snug text-black">
-              Sistem Informasi &amp; Pendampingan Terpadu
-            </p>
-            <p className="mt-1 text-[10px] leading-snug text-black">
-              Layanan Terintegrasi Database PPKS ODHIV Sumatera Utara
+            <p className="mt-1 text-xs leading-relaxed text-slate-500">
+              Silahkan masuk ke akun SIPANDU Anda
             </p>
           </div>
 
@@ -217,7 +218,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
                 htmlFor="sipandu-email"
                 className="mb-1 block text-xs font-semibold text-slate-800"
               >
-                Email akun resmi
+                Username
               </label>
               <div className="relative">
                 <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-slate-600">
@@ -230,7 +231,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
                   value={quickUnlockActive ? '••••••••••••' : email}
                   readOnly={quickUnlockActive}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="nama@instansi.go.id"
+                  placeholder="Masukkan email akun SIPANDU Anda..."
                   className="w-full rounded-lg border border-white/90 bg-white/55 py-3 pl-9 pr-3 text-sm text-slate-800 placeholder-slate-600/80 shadow-sm outline-none transition focus:border-teal-700 focus:bg-white/75 focus:ring-2 focus:ring-teal-700/25"
                   required={!quickUnlockActive}
                 />
@@ -242,7 +243,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
                 htmlFor="sipandu-password"
                 className="mb-1 block text-[11px] font-semibold text-black"
               >
-                Kata sandi
+                Password
               </label>
               <div className="relative">
                 <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-black">
@@ -255,7 +256,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
                   value={quickUnlockActive ? '••••••' : password}
                   readOnly={quickUnlockActive}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Masukkan kata sandi"
+                  placeholder="Masukkan password Anda..."
                   className="w-full rounded-lg border border-white/90 bg-white/55 py-3 pl-9 pr-9 text-sm text-slate-800 placeholder-slate-600/80 shadow-sm outline-none transition focus:border-teal-700 focus:bg-white/75 focus:ring-2 focus:ring-teal-700/25"
                   required={!quickUnlockActive}
                 />
@@ -274,11 +275,11 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
               type="button"
               onClick={() => void handlePrimaryAction()}
               disabled={isSubmitting || !authReady}
-              aria-label="Masuk Aplikasi dengan biometrik wajah atau sidik jari jika tersedia, atau email dan kata sandi"
-              className="mt-1 flex w-full items-center justify-center gap-2 rounded-xl border border-teal-700/70 bg-teal-700 px-3 py-3 text-sm font-bold uppercase tracking-wide text-white shadow-[0_6px_18px_rgba(15,118,110,0.28)] transition hover:bg-teal-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
+              aria-label="Masuk ke SIPANDU dengan username dan password atau biometrik yang telah diaktifkan"
+              className="mt-1 flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-indigo-600 via-blue-600 to-blue-500 px-3 py-3 text-sm font-semibold text-white shadow-[0_8px_20px_rgba(59,76,210,0.28)] transition hover:brightness-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
             >
-              <span>{!authReady ? 'Memulihkan sesi…' : (isSubmitting ? 'Memeriksa akun…' : (quickUnlockActive ? 'Buka dengan biometrik' : 'Masuk Aplikasi'))}</span>
-              <Fingerprint className="h-5 w-5" aria-hidden="true" />
+              <span>{!authReady ? 'Memulihkan sesi…' : (isSubmitting ? 'Memeriksa akun…' : (quickUnlockActive ? 'Masuk dengan biometrik' : 'Masuk'))}</span>
+              {quickUnlockActive ? <Fingerprint className="h-5 w-5" aria-hidden="true" /> : <ArrowRight className="h-5 w-5" aria-hidden="true" />}
             </button>
             <p className="mt-2 text-center text-[11px] font-semibold text-black">
               Sudah memiliki akun?{' '}
@@ -343,14 +344,11 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
           )}
 
           {/* Footer berada di dalam card, tepat di bawah tombol masuk. */}
-          <footer className="mt-3 border-t border-white/45 pt-2 text-center">
-            <p className="text-[9px] font-semibold leading-snug text-black">
-              © 2026 - Kementerian Sosial RI - DRSKPNO
+          <footer className="mt-4 border-t border-slate-300/60 pt-3 text-center">
+            <p className="text-[10px] font-medium leading-snug text-slate-500">
+              © 2026 - Kementerian Sosial RI - SIPANDU
             </p>
-            <p className="mt-1 text-[9px] font-semibold leading-snug text-black">
-              Hak Cipta Kementerian Sosial RI
-            </p>
-            <p className="mt-1 text-[9px] leading-snug text-black">
+            <p className="mt-1 text-[9px] leading-relaxed text-slate-500">
               Direktorat Rehabilitasi Sosial Korban Penyalahgunaan Narkoba &amp; ODHIV
             </p>
           </footer>
