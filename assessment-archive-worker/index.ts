@@ -1,5 +1,6 @@
 interface Env {
   FIREBASE_PROJECT_ID?: string;
+  FIREBASE_AUTH_API_KEY?: string;
   GOOGLE_DRIVE_FOLDER_ID?: string;
   GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON?: string;
 }
