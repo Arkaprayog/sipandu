@@ -367,7 +367,7 @@ async function assignPendampingRole(env: Env, user: FirebaseUserLookup): Promise
       error?: { message?: string; status?: string };
     };
     const firebaseError = `${body.error?.status || ''} ${body.error?.message || ''}`.trim();
-    if (/INSUFFICIENT_PERMISSION|PERMISSION_DENIED|firebaseauth\\.users\\.update/i.test(firebaseError)) {
+    if (/INSUFFICIENT_PERMISSION|PERMISSION_DENIED|firebaseauth[.]users[.]update/i.test(firebaseError)) {
       throw new Error(
         'Service account Firebase pada Worker sipandu-registration belum memiliki izin IAM firebaseauth.users.update pada proyek gen-lang-client-0197631978. Berikan izin tersebut kepada email client_email di secret FIREBASE_SERVICE_ACCOUNT_JSON, lalu tekan Coba verifikasi akses lagi. Undangan pendaftaran tetap tersimpan dan tidak perlu membuat akun baru.',
       );
@@ -530,7 +530,7 @@ export default {
         return jsonResponse({ ok: true, message: 'Akun SIPANDU telah diaktifkan sebagai pendamping.' }, 200, origin);
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Aktivasi akun belum berhasil.';
-        const permissionFailure = /INSUFFICIENT_PERMISSION|PERMISSION_DENIED|firebaseauth\\.users\\.update/i.test(message);
+        const permissionFailure = /INSUFFICIENT_PERMISSION|PERMISSION_DENIED|firebaseauth[.]users[.]update/i.test(message);
         // Keep the pending invitation when Google Cloud IAM blocks role assignment.
         // The user can retry after the service-account permission is corrected.
         return jsonResponse({ ok: false, message }, permissionFailure ? 503 : 500, origin);
