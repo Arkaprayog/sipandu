@@ -61,6 +61,26 @@ jobs:
           NODE
           bunx esbuild registration-worker/index.ts --bundle --format=esm --platform=browser --target=es2022 --outfile="$RUNNER_TEMP/sipandu-registration-worker.js"
           node --check "$RUNNER_TEMP/sipandu-registration-worker.js"
+      - name: Validate assessment archive Worker configuration and bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --input-type=module - <<'NODE'
+          import fs from 'node:fs';
+          const config = JSON.parse(fs.readFileSync('assessment-archive-worker/wrangler.jsonc', 'utf8'));
+          if (config.name !== 'sipandu-assessment-archive' || config.main !== 'index.ts') {
+            throw new Error('Unexpected SIPANDU assessment archive Worker target.');
+          }
+          if (config.vars?.FIREBASE_PROJECT_ID !== 'gen-lang-client-0197631978'
+            || config.vars?.GOOGLE_WORKSPACE_EMAIL !== 'aryprayoga139@gmail.com') {
+            throw new Error('Assessment archive Worker identity configuration mismatch.');
+          }
+          if (config.observability?.enabled !== true || config.observability?.traces?.enabled !== true) {
+            throw new Error('Assessment archive Worker observability must remain enabled.');
+          }
+          NODE
+          bunx esbuild assessment-archive-worker/index.ts --bundle --format=esm --platform=browser --target=es2022 --outfile="$RUNNER_TEMP/sipandu-assessment-archive-worker.js"
+          node --check "$RUNNER_TEMP/sipandu-assessment-archive-worker.js"
       - name: Generate PWA, iOS, and favicon icons from the official uploaded logo
         run: python3 scripts/generate_pwa_icons.py
       - name: Build SIPANDU

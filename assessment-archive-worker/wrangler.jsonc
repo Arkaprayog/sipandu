@@ -1,0 +1,13 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "sipandu-assessment-archive",
+  "main": "index.ts",
+  "compatibility_date": "2026-11-09",
+  "workers_dev": true,
+  "vars": {
+    "FIREBASE_PROJECT_ID": "gen-lang-client-0197631978",
+    "FIREBASE_AUTH_API_KEY": "AIzaSyCPQq7qsAXUvpW1LHE_5IB_Xs9drioH-o8",
+    "GOOGLE_WORKSPACE_EMAIL": "aryprayoga139@gmail.com"
+  },
+  "observability": { "enabled": true, "traces": { "enabled": true } }
+}

@@ -1,11 +1,9 @@
-import { getAccessToken, invalidateAccessToken, refreshWorkspaceAccessToken } from './firebase';
+import { auth, getAccessToken, invalidateAccessToken, refreshWorkspaceAccessToken } from './firebase';
 import type { SuratRecord } from '../types';
 import { buildDriveUploadMetadata, buildGoogleDriveMultipartBody, buildGoogleDriveRequestUrl, buildResumableContentRange, parseResumableRangeOffset } from './googleDriveMultipart';
-import { isManagedIntegratedAssessmentArchiveFile } from './integratedAssessmentArchive';
 
 const ROOT_FOLDER_NAME = 'SIPANDU';
 const DOCUMENTS_FOLDER_NAME = 'Dokumen';
-const ASSESSMENTS_FOLDER_NAME = 'From Asesmen Terintegrasi';
 
 function safeName(value: string, fallback: string): string {
   const cleaned = value.normalize('NFKC').replace(/[\\/:*?"<>|]+/g, '_').replace(/\s+/g, ' ').trim().slice(0, 120);
@@ -286,72 +284,6 @@ export async function backupLetterToCentralDrive(record: SuratRecord): Promise<{
   return uploadMultipart(folderId, safeName(record.nomorSurat + '-' + record.judul, record.id) + '.json', 'application/json', payload);
 }
 
-/**
- * Uploads the already-rendered official integrated-assessment PDF to the central
- * Drive archive. Raw answer JSON is intentionally never uploaded by this path.
- */
-export async function backupAssessmentToCentralDrive(input: {
-  ppksId: string;
-  ppksName: string;
-  nik?: string;
-  fileName: string;
-  existingFileId?: string;
-  pdf: Blob;
-}): Promise<{ id: string; webViewLink?: string; replacedExisting: boolean }> {
-  if (!(input.pdf instanceof Blob) || input.pdf.size < 8) {
-    throw new Error('Dokumen PDF asesmen kosong atau tidak valid.');
-  }
-  if ((await input.pdf.slice(0, 5).text()) !== '%PDF-') {
-    throw new Error('Arsip Google Drive hanya menerima PDF A4 yang valid.');
-  }
-
-  const personFolder = safeName(input.ppksName || input.ppksId, input.ppksId);
-  const folderId = await ensureFolderPath([ROOT_FOLDER_NAME, ASSESSMENTS_FOLDER_NAME, personFolder]);
-  const requestedName = String(input.fileName || '').replace(/\\.pdf$/i, '');
-  const fileName = safeName(
-    requestedName || ('Form-Asesmen-Terintegrasi-' + personFolder + '-' + Date.now()),
-    'Form-Asesmen-Terintegrasi-' + Date.now(),
-  ) + '.pdf';
-
-  // Reuse only an existing SIPANDU-owned PDF in this respondent's folder.
-  // Legacy JSON files are deliberately never searched for, migrated or replaced.
-  const trackedPdfIsReplaceable = input.existingFileId
-    ? await isReplaceableAssessmentArchive(input.existingFileId, folderId)
-    : false;
-  const replaceFileId = trackedPdfIsReplaceable ? input.existingFileId : undefined;
-
-  const uploaded = await uploadMultipart(
-    folderId,
-    fileName,
-    'application/pdf',
-    input.pdf,
-    replaceFileId,
-  );
-  return { ...uploaded, replacedExisting: Boolean(replaceFileId) };
-}
-
-/** True only for an existing SIPANDU-managed PDF in the exact respondent folder. */
-async function isReplaceableAssessmentArchive(fileId: string, folderId: string): Promise<boolean> {
-  if (!fileId || !folderId) return false;
-  try {
-    const response = await driveFetch(
-      '/files/' + encodeURIComponent(fileId) + '?fields=id,name,mimeType,appProperties,trashed',
-    );
-    if (!response.ok) return false;
-    const file = await response.json() as {
-      id?: string;
-      name?: string;
-      mimeType?: string;
-      trashed?: boolean;
-      appProperties?: Record<string, string>;
-    };
-    return file.id === fileId && file.mimeType === 'application/pdf'
-      && isManagedIntegratedAssessmentArchiveFile(file, folderId);
-  } catch {
-    return false;
-  }
-}
-
 /** Deletes a SIPANDU archive copy from the central Google Drive account. */
 export async function deleteCentralDriveFile(fileId: string): Promise<void> {
   if (!fileId) return;
@@ -361,4 +293,72 @@ export async function deleteCentralDriveFile(fileId: string): Promise<void> {
     const error = await response.json().catch(() => ({}));
     throw new Error((error as { error?: { message?: string } }).error?.message || 'Salinan Google Drive gagal dihapus (HTTP ' + response.status + ').');
   }
+}
+
+
+const ASSESSMENT_ARCHIVE_WORKER_URL = 'https://sipandu-assessment-archive.aryprayoga139.workers.dev';
+
+/**
+ * Sends the already-rendered assessment PDF to the authenticated archive Worker.
+ * Google service-account credentials and Drive access tokens never enter the client.
+ */
+export async function backupAssessmentViaArchiveWorker(input: {
+  ppksId: string;
+  pdf: Blob;
+}): Promise<{ id: string; webViewLink: string }> {
+  if (!input.ppksId || input.ppksId.length > 180 || input.ppksId.includes('/')) {
+    throw new Error('ID responden tidak valid untuk pengarsipan PDF.');
+  }
+  if (!(input.pdf instanceof Blob) || input.pdf.type !== 'application/pdf' || input.pdf.size < 8) {
+    throw new Error('PDF asesmen kosong atau tidak valid.');
+  }
+  if ((await input.pdf.slice(0, 5).text()) !== '%PDF-') {
+    throw new Error('Isi berkas bukan PDF yang valid.');
+  }
+  const user = auth.currentUser;
+  if (!user) throw new Error('Sesi akun SIPANDU berakhir. Masuk kembali sebelum mengarsipkan PDF.');
+  const idToken = await user.getIdToken();
+  let googleAccessToken = await getAccessToken();
+  if (!googleAccessToken) googleAccessToken = await refreshWorkspaceAccessToken();
+  if (!googleAccessToken) {
+    throw new Error('Sesi Google Workspace tidak tersedia. Hubungkan kembali akun Google sebelum mengarsipkan PDF.');
+  }
+
+  const form = new FormData();
+  form.set('ppksId', input.ppksId);
+  form.set('file', input.pdf, 'assessment.pdf');
+  const send = (accessToken: string) => fetch(ASSESSMENT_ARCHIVE_WORKER_URL + '/archive', {
+    method: 'POST',
+    headers: {
+      Authorization: 'Bearer ' + idToken,
+      'X-Google-Access-Token': accessToken,
+    },
+    body: form,
+  });
+  let response = await send(googleAccessToken);
+  if (response.status === 401) {
+    invalidateAccessToken();
+    const refreshed = await refreshWorkspaceAccessToken(true);
+    if (refreshed) {
+      googleAccessToken = refreshed;
+      response = await send(googleAccessToken);
+    }
+  }
+  const payload = await response.json().catch(() => ({})) as {
+    ok?: boolean;
+    verified?: boolean;
+    fileId?: string;
+    mimeType?: string;
+    size?: number;
+    webViewLink?: string;
+    message?: string;
+  };
+  if (!response.ok || payload.ok !== true || payload.verified !== true || !payload.fileId) {
+    throw new Error(payload.message || 'Worker arsip SIPANDU belum dapat memverifikasi PDF di Google Drive (HTTP ' + response.status + ').');
+  }
+  if (payload.mimeType !== 'application/pdf' || Number(payload.size) !== input.pdf.size) {
+    throw new Error('Verifikasi Google Drive tidak cocok dengan tipe atau ukuran PDF yang dikirim.');
+  }
+  const webViewLink = payload.webViewLink || ('https://drive.google.com/open?id=' + encodeURIComponent(payload.fileId));
+  return { id: payload.fileId, webViewLink };
 }
