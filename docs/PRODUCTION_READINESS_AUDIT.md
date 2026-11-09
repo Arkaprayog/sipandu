@@ -114,7 +114,7 @@ Scope: the complete 132-file repository tree on `main`, with focused source revi
 
 ### Production prerequisites still separate from code
 
-- The `sipandu-registration` Worker still requires the Cloudflare secrets `TEAM_REGISTRATION_CODE` and `FIREBASE_SERVICE_ACCOUNT_JSON`, added manually through Cloudflare Dashboard. Neither secret is stored in this repository.
+- The `sipandu-registration` Worker requires `FIREBASE_SERVICE_ACCOUNT_JSON`, `FIREBASE_AUTH_API_KEY`, `TURNSTILE_SECRET_KEY`, and the `PENDING_REGISTRATIONS` KV binding. Team signup no longer requires a shared registration-code secret. Secrets are added manually through Cloudflare Dashboard and are not stored in this repository.
 - The updated Firestore Rules require a separate deployment to the named Firebase database. The GitHub workflow runs Emulator tests; it does not deploy production rules.
 - CI and APK signature checks do not replace real-device tests of Google Workspace OAuth, email delivery, private Drive file access, gallery/camera, notifications while the app is closed, or cross-device profile use.
 - The official uploaded SIPANDU app icon remains the Android/PWA launcher artwork source. No AI-generated or internet-sourced replacement is introduced by this audit.
