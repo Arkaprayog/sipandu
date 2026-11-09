@@ -17,6 +17,7 @@ import {
   query,
   limit,
   where,
+  orderBy,
   runTransaction,
 } from 'firebase/firestore';
 import {
@@ -38,7 +39,7 @@ import {
   getIdTokenResult,
 } from 'firebase/auth';
 import firebaseConfig from '../../firebase-applet-config.json';
-import { PPKSRecord, ProfileUser, StageOneIntakePayload, PPKSServiceStatus, PPKSServiceEvent, PPKSServiceUpdateInput, FieldVisitRecord } from '../types';
+import { PPKSRecord, ProfileUser, StageOneIntakePayload, PPKSServiceStatus, PPKSServiceEvent, PPKSServiceUpdateInput, FieldVisitRecord, SecurityAuditEntry } from '../types';
 import { deduplicatePPKSRecords, EXPECTED_REAL_PPKS_COUNT, parsePPKSTimestamp, samePPKSIdentity } from './ppksData';
 import { isLegacySamplePPKS } from '../data/initialData';
 import { GOOGLE_WORKSPACE_EMAIL } from './googleSIPANDUResources';
@@ -1769,6 +1770,59 @@ export async function savePPKSServiceUpdate(input: PPKSServiceUpdateInput): Prom
         createdAt: serverTimestamp(),
       });
     });
+  } catch (error) {
+    throw new Error(describeConnectionError(error));
+  }
+}
+
+/**
+ * Read a bounded, privacy-minimized audit feed for owner/supervisor accounts.
+ * Rules independently enforce the role boundary on both source collections.
+ */
+export async function fetchSecurityAuditActivity(): Promise<SecurityAuditEntry[]> {
+  const user = auth.currentUser;
+  if (!user) throw new Error('Sesi SIPANDU belum aktif.');
+  const role = String((await getIdTokenResult(user, true)).claims.role || '');
+  if (role !== 'owner' && role !== 'supervisor') {
+    throw new Error('Pusat Audit hanya tersedia untuk owner dan supervisor.');
+  }
+
+  try {
+    const [serviceSnapshot, visitSnapshot] = await Promise.all([
+      getDocs(query(collection(db, 'ppksServiceEvents'), orderBy('createdAt', 'desc'), limit(250))),
+      getDocs(query(collection(db, 'fieldVisits'), orderBy('createdAt', 'desc'), limit(250))),
+    ]);
+    const serviceEvents = serviceSnapshot.docs.map((item) => {
+      const data = item.data();
+      return {
+        id: item.id,
+        ppksId: String(data.ppksId || ''),
+        eventType: String(data.eventType || ''),
+        status: String(data.status || ''),
+        serviceDate: String(data.serviceDate || ''),
+        createdByUid: String(data.createdByUid || ''),
+        assignedToUid: String(data.assignedToUid || ''),
+        createdAt: toISODate(data.createdAt),
+      };
+    });
+    const fieldVisits = visitSnapshot.docs.map((item) => {
+      const data = item.data();
+      return {
+        id: item.id,
+        ppksId: String(data.ppksId || ''),
+        visitType: String(data.visitType || ''),
+        outcome: String(data.outcome || ''),
+        visitDate: String(data.visitDate || ''),
+        createdByUid: String(data.createdByUid || ''),
+        assignedToUid: String(data.assignedToUid || ''),
+        createdAt: toISODate(data.createdAt),
+      };
+    });
+    const { createSecurityAuditEntries } = await import('./securityAudit');
+    return createSecurityAuditEntries(
+      serviceEvents as Parameters<typeof createSecurityAuditEntries>[0],
+      fieldVisits as Parameters<typeof createSecurityAuditEntries>[1],
+    );
   } catch (error) {
     throw new Error(describeConnectionError(error));
   }
