@@ -57,6 +57,9 @@ jobs:
       - name: Build web application
         run: bun run build
 
+      - name: Verify PWA manifest, icons, relative assets, and version metadata
+        run: node scripts/verify-dist.mjs
+
       - name: Generate native Android project
         run: npx cap add android
 
