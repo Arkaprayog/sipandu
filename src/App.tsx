@@ -32,6 +32,7 @@ const ProgramPerformanceView = lazyWithRecovery('ProgramPerformanceView', () => 
 const FieldAssistanceView = lazyWithRecovery('FieldAssistanceView', () => import('./components/FieldAssistanceView').then((module) => ({ default: module.FieldAssistanceView })));
 const SecurityAuditView = lazyWithRecovery('SecurityAuditView', () => import('./components/SecurityAuditView').then((module) => ({ default: module.SecurityAuditView })));
 import { onAuthStateChanged, signOut, getIdTokenResult } from 'firebase/auth';
+import { SIPANDU_AI_WORKER_URL } from './lib/sipanduAI';
 import { auth, getAccessToken, savePPKSToFirestore, saveIntegratedAssessmentToFirestore, replacePPKSCollectionFromSpreadsheet, googleLogout, subscribeToPPKSChanges, subscribeToPPKSServiceStatus, savePPKSServiceUpdate, subscribeToFieldVisits, createFieldVisit, subscribeToIntegratedAssessmentAnswers, fetchSecurityAuditActivity, saveStageOneIntakeToFirestore, subscribeToStageOneIntake, staffAuthPersistenceReady, isWorkspaceAccountConnected, invalidateAccessToken, getSIPANDUUserProfile, saveSIPANDUUserProfile } from './lib/firebase';
 import { activatePendingTeamMember, restorePendingTeamInvitation } from './lib/teamRegistration';
 import { ensureSIPANDUDatabaseSheet, extractSpreadsheetId, getLinkedSpreadsheetUrlForForm, importPPKSFromSpreadsheet, upsertPPKSInSpreadsheet } from './lib/googleWorkspace';
@@ -468,7 +469,7 @@ function StaffApp() {
     }
     let active = true;
     const controller = new AbortController();
-    void fetch("https://sipandu-ai.aryprayoga139.workers.dev/health", {
+    void fetch(SIPANDU_AI_WORKER_URL + "/health", {
       method: "GET",
       cache: "no-store",
       credentials: "omit",

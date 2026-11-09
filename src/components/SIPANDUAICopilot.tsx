@@ -1,12 +1,12 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Bot, BrainCircuit, X, Send, LoaderCircle, ShieldCheck, AlertCircle, Sparkles, Database, Clock3 } from "lucide-react";
 import { auth } from "../lib/firebase";
+import { SIPANDU_AI_WORKER_URL } from "../lib/sipanduAI";
 
 type ChatMessage = { role: "user" | "model"; text: string; at: string };
 type ChatMetadata = { generatedAt: string; recordsAnalyzed: number; serviceStatusRecordsAnalyzed: number | null; truncated: boolean; scope: string; sources: string[] };
 type Props = { onClose: () => void };
 
-const AI_WORKER_URL = (import.meta.env.VITE_SIPANDU_AI_WORKER_URL || "https://sipandu-ai.aryprayoga139.workers.dev").replace(/\/$/, "");
 const STARTER_PROMPTS = [
   "Analisis persebaran PPKS berdasarkan wilayah.",
   "Ringkas kebutuhan bantuan nutrisi dan kewirausahaan.",
@@ -50,7 +50,7 @@ export const SIPANDUAICopilot: React.FC<Props> = ({ onClose }) => {
     setMessages((current) => [...current, { role: "user", text: question, at: new Date().toISOString() }]);
     try {
       const idToken = await user.getIdToken();
-      const response = await fetch(AI_WORKER_URL + "/api/chat", {
+      const response = await fetch(SIPANDU_AI_WORKER_URL + "/api/chat", {
         method: "POST",
         headers: {
           "Authorization": "Bearer " + idToken,

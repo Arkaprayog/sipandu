@@ -347,6 +347,11 @@ function extractHistory(value: unknown): HistoryItem[] {
   });
 }
 
+/** Check only the bounded user-authored history that would be forwarded to Gemini. */
+export function containsSensitiveHistory(history: HistoryItem[]): boolean {
+  return history.some((item) => item.role === "user" && containsSensitivePrompt(item.text));
+}
+
 async function readJsonBody(request: Request): Promise<Record<string, unknown> | null> {
   const contentType = request.headers.get("Content-Type") || "";
   if (!/^application\/json(?:\s*;|$)/i.test(contentType)) return null;
@@ -534,6 +539,10 @@ async function handleChat(request: Request, env: Env, origin: string | null): Pr
   if (containsSensitivePrompt(prompt)) {
     return jsonResponse({ error: "SENSITIVE_PROMPT_BLOCKED", message: "Pertanyaan tampaknya memuat identitas atau informasi kesehatan sensitif. Hapus data pribadi dan ajukan pertanyaan dalam bentuk agregat." }, 400, origin);
   }
+  const history = extractHistory(body.history);
+  if (containsSensitiveHistory(history)) {
+    return jsonResponse({ error: "SENSITIVE_PROMPT_BLOCKED", message: "Riwayat pertanyaan memuat pola identitas atau informasi kesehatan sensitif. Hapus riwayat tersebut dan lanjutkan dengan pertanyaan agregat." }, 400, origin);
+  }
 
   try {
     const [ppksResult, statusResult] = await Promise.all([
@@ -555,10 +564,6 @@ async function handleChat(request: Request, env: Env, origin: string | null): Pr
         : "Statistik roster dan status layanan sesuai cakupan akses owner/supervisor.",
       truncated: ppksResult.truncated || statusResult.truncated,
     });
-    const history = extractHistory(body.history);
-    if (history.some((item) => containsSensitivePrompt(item.text))) {
-      return jsonResponse({ error: "SENSITIVE_PROMPT_BLOCKED", message: "Riwayat pertanyaan memuat pola identitas atau informasi kesehatan sensitif. Hapus riwayat tersebut dan lanjutkan dengan pertanyaan agregat." }, 400, origin);
-    }
     const answer = await generateAnswer(prompt, history, summary, env);
     return jsonResponse({
       answer,
