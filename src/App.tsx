@@ -1841,7 +1841,7 @@ function StaffApp() {
                 className="mt-3 w-full rounded-xl bg-amber-500 px-4 py-3 text-sm font-bold text-black hover:bg-amber-400"
               >
                 Pulihkan undangan akun yang sama
-              </button>>
+              </button>
             </div>
           )}
           <button type="button" onClick={() => void handleRetryStaffAccess()} className="mt-4 w-full rounded-xl bg-emerald-600 px-4 py-3 text-sm font-bold text-white hover:bg-emerald-500">
