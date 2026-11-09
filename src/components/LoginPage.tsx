@@ -152,7 +152,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
   }
 
   return (
-    <div className="relative flex min-h-screen w-full items-center justify-center overflow-x-hidden px-3 py-5 text-slate-800">
+    <div className="relative flex min-h-screen w-full items-center justify-center overflow-x-hidden px-3 py-5 text-slate-800 min-[900px]:px-7 min-[900px]:py-7">
       {/* Pertahankan wallpaper SIPANDU yang sudah ada; efek kaca hanya diterapkan pada panel login. */}
       <img
         aria-hidden="true"
@@ -175,8 +175,38 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
       />
 
       {/* Panel glassmorphism responsif; wallpaper asli tetap terlihat di belakangnya. */}
-      <main className="relative z-10 w-[414px] max-w-[calc(100vw-24px)]">
-        <section className="w-full rounded-[22px] border border-white/85 bg-white/[0.78] p-6 shadow-[0_16px_44px_rgba(15,23,42,0.2),inset_0_1px_0_rgba(255,255,255,0.9)] backdrop-blur-[22px]">
+      <main className="relative z-10 mx-auto grid w-full max-w-[1440px] grid-cols-1 items-stretch gap-0 min-[900px]:min-h-[min(92vh,760px)] min-[900px]:grid-cols-2 min-[900px]:overflow-hidden min-[900px]:rounded-[30px] min-[900px]:shadow-[0_24px_70px_rgba(2,12,35,0.38)]">
+        <section className="relative hidden min-[900px]:flex min-[900px]:flex-col min-[900px]:justify-between min-[900px]:p-9 min-[1200px]:p-12">
+          <div className="absolute inset-0 bg-gradient-to-b from-slate-950/55 via-slate-950/45 to-slate-950/85" />
+          <div className="relative z-10 mt-8 max-w-[590px] text-white min-[1200px]:mt-12">
+            <h1 className="text-4xl font-bold leading-tight tracking-tight min-[1200px]:text-5xl">SIPANDU</h1>
+            <p className="mt-3 text-lg font-semibold leading-snug text-white/95 min-[1200px]:text-xl">
+              Sistem Informasi &amp; Pendampingan Terpadu
+            </p>
+            <p className="mt-4 max-w-[560px] text-sm leading-relaxed text-white/85 min-[1200px]:text-base">
+              Layanan Terintegrasi Database PPKS ODHIV Sumatera Utara untuk pengelolaan data yang akurat, terpadu, dan akuntabel untuk program Asistensi (ATENSI).
+            </p>
+          </div>
+          <div className="relative z-10 mb-1 flex items-center gap-4">
+            <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl border border-white/15 bg-slate-900/55 p-2 shadow-lg backdrop-blur-md">
+              <img
+                src={publicAssetUrl('uploads/Logo Kemensos.png')}
+                alt="Logo Kementerian Sosial RI"
+                className="h-full w-full object-contain"
+                loading="eager"
+                decoding="async"
+              />
+            </div>
+            <div className="min-w-0 text-white">
+              <p className="text-sm font-semibold">Kementerian Sosial RI</p>
+              <p className="mt-1 max-w-[420px] text-xs leading-relaxed text-white/75">
+                Direktorat Rehabilitasi Sosial Korban Penyalahgunaan Narkoba &amp; ODHIV
+              </p>
+            </div>
+          </div>
+        </section>
+
+        <section className="w-full rounded-[22px] border border-white/85 bg-white/[0.78] p-6 shadow-[0_16px_44px_rgba(15,23,42,0.2),inset_0_1px_0_rgba(255,255,255,0.9)] backdrop-blur-[22px] min-[900px]:flex min-[900px]:flex-col min-[900px]:justify-center min-[900px]:rounded-none min-[900px]:rounded-r-[30px] min-[900px]:px-8 min-[1200px]:px-12 min-[900px]:py-9">
           <div className="mb-5 flex flex-col items-center text-center">
             <div className="mb-5 flex w-full items-center justify-center gap-5">
               <img
