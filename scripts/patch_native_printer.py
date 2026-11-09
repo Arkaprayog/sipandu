@@ -412,14 +412,25 @@ def patch_printer_source(source: str) -> str:
         void onFinish();
         void onError(String message);
     }
+'''
+        source = source.replace(class_marker, class_marker + interface, 1)
 
+    if "public interface OnPrintStartCallback" not in source:
+        finish_marker = r'''
+    public interface OnPrintFinishCallback {
+        void onFinish();
+        void onError(String message);
+    }
+'''
+        start_interface = r'''
     public interface OnPrintStartCallback {
         void onStarted();
         void onError(String message);
     }
-
 '''
-        source = source.replace(class_marker, class_marker + interface, 1)
+        if finish_marker not in source:
+            raise RuntimeError("Could not find OnPrintFinishCallback insertion point")
+        source = source.replace(finish_marker, finish_marker + start_interface, 1)
 
     if "public String savePdfToAppStorage(" not in source:
         marker = "    public void printBase64("
