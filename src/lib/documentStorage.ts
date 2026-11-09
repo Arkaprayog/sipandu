@@ -24,7 +24,6 @@ export interface StaffDocumentRecord {
   driveBackupStatus: 'complete' | 'failed';
   driveBackupError: string;
   driveFileId: string;
-  driveWebViewLink: string;
   driveBackupAt: string;
 }
 
@@ -87,7 +86,6 @@ function mapDocument(id: string, data: Record<string, unknown>): StaffDocumentRe
     driveBackupStatus: data.driveBackupStatus === 'complete' && data.driveFileId ? 'complete' : 'failed',
     driveBackupError: String(data.driveBackupError || ''),
     driveFileId: String(data.driveFileId || ''),
-    driveWebViewLink: String(data.driveWebViewLink || ''),
     driveBackupAt: toIso(data.driveBackupAt),
   };
 }
@@ -120,7 +118,6 @@ export async function uploadStaffDocument(
       driveBackupStatus: 'complete',
       driveBackupError: '',
       driveFileId: driveFile.id,
-      driveWebViewLink: driveFile.webViewLink,
       driveBackupAt: serverTimestamp(),
       driveBackupUpdatedAt: serverTimestamp(),
     });
@@ -129,7 +126,7 @@ export async function uploadStaffDocument(
       ownerUid: user.uid, ownerEmail: user.email || '', category,
       uploadedAt: new Date().toISOString(),
       driveBackupStatus: 'complete', driveBackupError: '',
-      driveFileId: driveFile.id, driveWebViewLink: driveFile.webViewLink,
+      driveFileId: driveFile.id,
       driveBackupAt: new Date().toISOString(),
     };
   } catch (error) {
@@ -210,8 +207,8 @@ export async function retryStaffDocumentDriveBackup(
       driveBackupError: '',
       storagePath: deleteField(),
       downloadUrl: deleteField(),
+      driveWebViewLink: deleteField(),
       driveFileId: replacement.id,
-      driveWebViewLink: replacement.webViewLink,
       driveBackupAt: serverTimestamp(),
       driveBackupUpdatedAt: serverTimestamp(),
     });
@@ -224,7 +221,7 @@ export async function retryStaffDocumentDriveBackup(
   }
   return mapDocument(documentId, {
     ...data, contentType, driveBackupStatus: 'complete', driveBackupError: '',
-    driveFileId: replacement.id, driveWebViewLink: replacement.webViewLink,
+    driveFileId: replacement.id,
     driveBackupAt: new Date().toISOString(),
   });
 }

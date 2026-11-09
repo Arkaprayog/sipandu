@@ -149,17 +149,20 @@ test('Metadata dokumen staf hanya menerima pointer Drive privat dan pemilik/admi
     driveBackupStatus: 'complete',
     driveBackupError: '',
     driveFileId: 'drive-file-001',
-    driveWebViewLink: 'https://drive.google.com/open?id=drive-file-001',
     driveBackupAt: serverTimestamp(),
     driveBackupUpdatedAt: serverTimestamp(),
   };
 
   await assertSucceeds(setDoc(record, metadata));
+  await assertFails(setDoc(doc(firestore, 'staffDocuments', 'direct-link'), {
+    ...metadata,
+    driveWebViewLink: 'https://drive.google.com/open?id=drive-file-private',
+  }));
+
   await assertSucceeds(updateDoc(record, {
     driveBackupStatus: 'complete',
     driveBackupError: '',
     driveFileId: 'drive-file-002',
-    driveWebViewLink: 'https://drive.google.com/open?id=drive-file-002',
     driveBackupAt: serverTimestamp(),
     driveBackupUpdatedAt: serverTimestamp(),
   }));
@@ -187,7 +190,7 @@ test('Metadata dokumen staf hanya menerima pointer Drive privat dan pemilik/admi
 });
 
 
-test('Legacy Firebase Storage references can only be removed during verified Drive migration', async () => {
+test('Legacy Firebase and direct Drive links can only be removed during verified Drive migration', async () => {
   const recordPath = doc(environment.authenticatedContext(PENDAMPING_UID, {
     role: 'pendamping',
   }).firestore(), 'staffDocuments', 'legacy-document-001');
@@ -206,7 +209,7 @@ test('Legacy Firebase Storage references can only be removed during verified Dri
       driveBackupStatus: 'failed',
       driveBackupError: 'legacy storage source',
       driveFileId: '',
-      driveWebViewLink: '',
+      driveWebViewLink: 'https://drive.google.com/open?id=legacy-drive-file',
       driveBackupAt: null,
       driveBackupUpdatedAt: new Date(),
     });
@@ -215,16 +218,20 @@ test('Legacy Firebase Storage references can only be removed during verified Dri
   await assertSucceeds(updateDoc(recordPath, {
     storagePath: deleteField(),
     downloadUrl: deleteField(),
+    driveWebViewLink: deleteField(),
     driveBackupStatus: 'complete',
     driveBackupError: '',
     driveFileId: 'migrated-drive-file-001',
-    driveWebViewLink: 'https://drive.google.com/open?id=migrated-drive-file-001',
     driveBackupAt: serverTimestamp(),
     driveBackupUpdatedAt: serverTimestamp(),
   }));
 
   await assertFails(updateDoc(recordPath, {
     downloadUrl: 'https://firebasestorage.googleapis.com/reintroduced-token',
+    driveBackupUpdatedAt: serverTimestamp(),
+  }));
+  await assertFails(updateDoc(recordPath, {
+    driveWebViewLink: 'https://drive.google.com/open?id=reintroduced-link',
     driveBackupUpdatedAt: serverTimestamp(),
   }));
 });

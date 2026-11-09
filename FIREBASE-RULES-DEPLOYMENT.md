@@ -62,3 +62,9 @@ Dokumen lama yang hanya memiliki storagePath Firebase Storage tidak otomatis dip
 Pada v5.0.6, proses pemulihan dokumen lama hanya mengizinkan penghapusan field Firebase Storage `storagePath` dan `downloadUrl` setelah salinan Drive baru terverifikasi. Firestore Rules menolak penambahan kembali kedua field tersebut. File Firebase Storage lama tidak dihapus otomatis; file asli harus diunggah ulang atau dipulihkan dari backup yang tersedia sebelum metadata lama dibersihkan.
 
 Workflow Firebase Rules menggunakan `cancel-in-progress: false` agar deployment aturan produksi yang sedang berjalan tidak dibatalkan oleh push berikutnya pada branch yang sama.
+
+## Privasi arsip dokumen petugas pada v5.0.8
+
+Metadata `staffDocuments` hanya menyimpan ID file Google Drive, bukan `webViewLink` atau URL unduhan langsung. Pembacaan isi dokumen tetap melewati `sipandu-assessment-archive` Worker dan pemeriksaan pemilik/role. Ini mencegah daftar metadata Firestore menjadi jalan pintas untuk membuka file Drive di luar otorisasi aplikasi.
+
+Saat dokumen lama diunggah ulang dan salinan Drive baru sudah terverifikasi, aplikasi menghapus field warisan `storagePath`, `downloadUrl`, dan `driveWebViewLink`. Firestore Rules mengizinkan penghapusan field tersebut saja dan menolak penambahan kembali. File sumber lama tidak dihapus otomatis sebelum pengganti terverifikasi.

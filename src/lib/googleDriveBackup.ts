@@ -304,7 +304,6 @@ export interface ArchivedStaffDocument {
   fileName: string;
   mimeType: string;
   size: number;
-  webViewLink: string;
 }
 
 async function requestArchiveWorker(path: string, init: RequestInit = {}): Promise<Response> {
@@ -346,7 +345,7 @@ export async function uploadStaffDocumentViaArchiveWorker(
   const response = await requestArchiveWorker('/documents', { method: 'POST', body: form });
   const payload = await response.json() as {
     ok?: boolean; verified?: boolean; fileId?: string; fileName?: string;
-    mimeType?: string; size?: number; webViewLink?: string;
+    mimeType?: string; size?: number;
   };
   if (payload.ok !== true || payload.verified !== true || !payload.fileId) {
     throw new Error('Google Drive belum mengonfirmasi dokumen SIPANDU tersimpan.');
@@ -359,7 +358,6 @@ export async function uploadStaffDocumentViaArchiveWorker(
     fileName: payload.fileName || file.name,
     mimeType: payload.mimeType,
     size: Number(payload.size),
-    webViewLink: payload.webViewLink || ('https://drive.google.com/open?id=' + encodeURIComponent(payload.fileId)),
   };
 }
 
@@ -438,3 +436,4 @@ export async function backupAssessmentViaArchiveWorker(input: {
   const webViewLink = payload.webViewLink || ('https://drive.google.com/open?id=' + encodeURIComponent(payload.fileId));
   return { id: payload.fileId, webViewLink };
 }
+

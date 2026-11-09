@@ -200,6 +200,7 @@ test('stores a staff document in private Drive, verifies the bytes, and enforces
   assert.equal(uploadResponse.status, 200, JSON.stringify(uploaded));
   assert.equal(uploaded.verified, true);
   assert.equal(uploaded.fileId, fileId);
+  assert.equal('webViewLink' in uploaded, false, 'Firestore-facing response must not expose a direct Drive URL');
   assert.equal(uploaded.size, bytes.byteLength);
   assert.equal(folderIds.length, 3);
 

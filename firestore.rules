@@ -114,12 +114,12 @@ service cloud.firestore {
         && request.resource.data.keys().hasAll([
           'name', 'contentType', 'size', 'ownerUid', 'ownerEmail',
           'category', 'uploadedAt', 'driveBackupStatus', 'driveBackupError',
-          'driveFileId', 'driveWebViewLink', 'driveBackupAt', 'driveBackupUpdatedAt'
+          'driveFileId', 'driveBackupAt', 'driveBackupUpdatedAt'
         ])
         && request.resource.data.keys().hasOnly([
           'name', 'contentType', 'size', 'ownerUid', 'ownerEmail',
           'category', 'uploadedAt', 'driveBackupStatus', 'driveBackupError',
-          'driveFileId', 'driveWebViewLink', 'driveBackupAt', 'driveBackupUpdatedAt'
+          'driveFileId', 'driveBackupAt', 'driveBackupUpdatedAt'
         ])
         && request.resource.data.name is string
         && request.resource.data.name.size() > 0
@@ -143,8 +143,6 @@ service cloud.firestore {
         && request.resource.data.driveFileId is string
         && request.resource.data.driveFileId.size() > 0
         && request.resource.data.driveFileId.size() <= 256
-        && request.resource.data.driveWebViewLink is string
-        && request.resource.data.driveWebViewLink.size() <= 4096
         && request.resource.data.driveBackupAt == request.time
         && request.resource.data.driveBackupUpdatedAt == request.time;
 
@@ -153,17 +151,15 @@ service cloud.firestore {
         && (resource.data.ownerUid == request.auth.uid || canWritePpks())
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
           'driveBackupStatus', 'driveBackupError', 'driveFileId',
-          'driveWebViewLink', 'driveBackupAt', 'driveBackupUpdatedAt',
-          'storagePath', 'downloadUrl'
+          'driveBackupAt', 'driveBackupUpdatedAt',
+          'storagePath', 'downloadUrl', 'driveWebViewLink'
         ])
-        && !request.resource.data.keys().hasAny(['storagePath', 'downloadUrl'])
+        && !request.resource.data.keys().hasAny(['storagePath', 'downloadUrl', 'driveWebViewLink'])
         && request.resource.data.driveBackupStatus in ['complete', 'failed']
         && request.resource.data.driveBackupError is string
         && request.resource.data.driveBackupError.size() <= 1000
         && request.resource.data.driveFileId is string
         && request.resource.data.driveFileId.size() <= 256
-        && request.resource.data.driveWebViewLink is string
-        && request.resource.data.driveWebViewLink.size() <= 4096
         && (request.resource.data.driveBackupAt == null
           || request.resource.data.driveBackupAt is timestamp)
         && request.resource.data.driveBackupUpdatedAt == request.time

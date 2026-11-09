@@ -185,7 +185,7 @@ async function findExistingArchive(accessToken: string, archiveKey: string, fold
   ].join(' and ');
   const response = await driveRequest(
     accessToken,
-    '/files?q=' + encodeURIComponent(query) + '&pageSize=2&fields=files(id,name,mimeType,size,webViewLink,parents,appProperties,trashed)',
+    '/files?q=' + encodeURIComponent(query) + '&pageSize=2&fields=files(id,name,mimeType,size,parents,appProperties,trashed)',
   );
   if (!response.ok) throw new Error('Google Drive gagal memeriksa arsip sebelumnya (HTTP ' + response.status + ').');
   const payload = await response.json() as { files?: DriveFile[] };
@@ -453,7 +453,6 @@ async function handleStaffDocumentRoute(
         fileName: uploaded.name,
         mimeType: uploaded.mimeType,
         size: Number(uploaded.size),
-        webViewLink: uploaded.webViewLink || ('https://drive.google.com/open?id=' + encodeURIComponent(uploaded.id || '')),
       }, 200, origin);
     }
 
@@ -573,7 +572,6 @@ export default {
         fileName: uploaded.name,
         mimeType: uploaded.mimeType,
         size: Number(uploaded.size),
-        webViewLink: uploaded.webViewLink || ('https://drive.google.com/open?id=' + encodeURIComponent(uploaded.id || '')),
       }, 200, origin);
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Arsip PDF belum dapat disimpan.';
@@ -585,3 +583,4 @@ export default {
     }
   },
 };
+
