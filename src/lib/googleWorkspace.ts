@@ -67,8 +67,8 @@ async function googleJson<T>(url: string, init: RequestInit = {}): Promise<T> {
       invalidateAccessToken();
       throw new Error('Token Google API ditolak setelah percobaan refresh otomatis. Periksa izin Google Workspace dan ulangi sinkronisasi.');
     }
-    if (res.status === 403 && /insufficient|scope/i.test(`${reason} ${message}`)) {
-      throw new Error(`Izin OAuth Google kurang (HTTP 403): ${message}. Otorisasi ulang dan pastikan scope Drive/Sheets/Forms disetujui akun.`);
+    if (res.status === 403 && /insufficient|scope|caller does not have permission|permission denied|not authorized/i.test(`${reason} ${message}`)) {
+      throw new Error(`Google Forms/Workspace menolak izin (HTTP 403): ${message}. SIPANDU kini meminta izin baca respons Google Forms (forms.responses.readonly). Buka Google Workspace → Koneksi Akun → Pulihkan Izin Google API, pilih akun ${GOOGLE_WORKSPACE_EMAIL}, lalu setujui layar izin Google. Pastikan Google Forms API aktif dan akun tersebut memiliki akses ke Form sumber.`);
     }
     if (res.status === 403 && /SERVICE_DISABLED|has not been used|disabled/i.test(`${reason} ${message}`)) {
       throw new Error(`Google API belum diaktifkan pada Google Cloud project OAuth: ${message}. Aktifkan API yang disebutkan pada Google Cloud Console.`);
