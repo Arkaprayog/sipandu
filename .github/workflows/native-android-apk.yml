@@ -209,7 +209,7 @@ jobs:
           grep -E "Signer #1 certificate SHA-1 digest|Signer #1 certificate SHA-256 digest" /tmp/sipandu-debug-signing.txt
 
       - name: Upload installable APK
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: SIPANDU-ODHIV-debug-APK-v${{ env.APP_VERSION }}
           path: android/app/build/outputs/apk/debug/app-debug.apk
@@ -371,7 +371,7 @@ jobs:
 
       - name: Upload native release APK
         if: github.event_name != 'pull_request'
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: SIPANDU-ODHIV-RELEASE-APK-v${{ env.APP_VERSION }}
           path: android/app/build/outputs/apk/release/app-release.apk
