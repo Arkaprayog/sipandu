@@ -487,7 +487,7 @@ test('activation explains missing firebaseauth.users.update permission and prese
     assert.equal(response.status, 503);
     const result = await response.json() as { ok?: boolean; message?: string };
     assert.equal(result.ok, false);
-    assert.match(result.message || '', /firebaseauth\\.users\\.update/);
+    assert.match(result.message || '', /firebaseauth[.]users[.]update/);
     assert.match(result.message || '', /tidak perlu membuat akun baru/);
     assert.deepEqual(deletedKeys, []);
     assert.equal(await kv.get(pendingKey), pendingValue);
