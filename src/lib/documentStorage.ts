@@ -155,7 +155,7 @@ export async function listStaffDocuments(): Promise<StaffDocumentRecord[]> {
 }
 
 export async function downloadStaffDocument(
-  record: Pick<StaffDocumentRecord, 'id' | 'driveFileId' | 'ownerUid'>,
+  record: Pick<StaffDocumentRecord, 'id' | 'driveFileId' | 'ownerUid' | 'size' | 'contentType'>,
 ): Promise<Blob> {
   const { user, role } = await getVerifiedStaff();
   if (record.ownerUid !== user.uid && role !== 'owner' && role !== 'supervisor') {
@@ -168,10 +168,10 @@ export async function downloadStaffDocument(
       throw new Error('Metadata arsip berubah atau dokumen tidak ditemukan. Muat ulang daftar arsip.');
     }
     const blob = await downloadStaffDocumentViaArchiveWorker(record.driveFileId);
-    if (blob.size !== Number((record as { size?: number }).size || 0)) {
+    if (blob.size !== Number(record.size)) {
       throw new Error('Ukuran dokumen hasil unduh tidak cocok dengan metadata arsip.');
     }
-    const expectedType = String((record as { contentType?: string }).contentType || '');
+    const expectedType = String(record.contentType || '');
     if (expectedType && blob.type && blob.type !== expectedType) {
       throw new Error('Tipe dokumen hasil unduh tidak cocok dengan metadata arsip.');
     }
