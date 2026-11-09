@@ -1,7 +1,7 @@
 import React, { lazy, Suspense, useState, useEffect, useRef, useCallback } from 'react';
 import { Capacitor } from '@capacitor/core';
 import { App as CapacitorApp } from '@capacitor/app';
-import { PPKSRecord, ProfileUser, AppSettings, PPKSServiceStatus } from './types';
+import { PPKSRecord, ProfileUser, AppSettings, PPKSServiceStatus, SecurityAuditEntry } from './types';
 import { importLazyModuleWithRecovery } from './lib/lazyImportRecovery';
 import { initialPPKSList, initialProfileUser, initialAppSettings, isLegacySamplePPKS } from './data/initialData';
 import { LoginPage } from './components/LoginPage';
@@ -30,8 +30,9 @@ const ServiceCenterView = lazyWithRecovery('ServiceCenterView', () => import('./
 const RegionalIntelligenceView = lazyWithRecovery('RegionalIntelligenceView', () => import('./components/RegionalIntelligenceView').then((module) => ({ default: module.RegionalIntelligenceView })));
 const ProgramPerformanceView = lazyWithRecovery('ProgramPerformanceView', () => import('./components/ProgramPerformanceView').then((module) => ({ default: module.ProgramPerformanceView })));
 const FieldAssistanceView = lazyWithRecovery('FieldAssistanceView', () => import('./components/FieldAssistanceView').then((module) => ({ default: module.FieldAssistanceView })));
+const SecurityAuditView = lazyWithRecovery('SecurityAuditView', () => import('./components/SecurityAuditView').then((module) => ({ default: module.SecurityAuditView })));
 import { onAuthStateChanged, signOut, getIdTokenResult } from 'firebase/auth';
-import { auth, getAccessToken, savePPKSToFirestore, saveIntegratedAssessmentToFirestore, replacePPKSCollectionFromSpreadsheet, googleLogout, subscribeToPPKSChanges, subscribeToPPKSServiceStatus, savePPKSServiceUpdate, subscribeToFieldVisits, createFieldVisit, subscribeToIntegratedAssessmentAnswers, saveStageOneIntakeToFirestore, subscribeToStageOneIntake, staffAuthPersistenceReady, isWorkspaceAccountConnected, invalidateAccessToken, getSIPANDUUserProfile, saveSIPANDUUserProfile } from './lib/firebase';
+import { auth, getAccessToken, savePPKSToFirestore, saveIntegratedAssessmentToFirestore, replacePPKSCollectionFromSpreadsheet, googleLogout, subscribeToPPKSChanges, subscribeToPPKSServiceStatus, savePPKSServiceUpdate, subscribeToFieldVisits, createFieldVisit, subscribeToIntegratedAssessmentAnswers, fetchSecurityAuditActivity, saveStageOneIntakeToFirestore, subscribeToStageOneIntake, staffAuthPersistenceReady, isWorkspaceAccountConnected, invalidateAccessToken, getSIPANDUUserProfile, saveSIPANDUUserProfile } from './lib/firebase';
 import { activatePendingTeamMember, restorePendingTeamInvitation } from './lib/teamRegistration';
 import { ensureSIPANDUDatabaseSheet, extractSpreadsheetId, getLinkedSpreadsheetUrlForForm, importPPKSFromSpreadsheet, upsertPPKSInSpreadsheet } from './lib/googleWorkspace';
 import { GOOGLE_SIPANDU_RESOURCES } from './lib/googleSIPANDUResources';
@@ -418,6 +419,9 @@ function StaffApp() {
   const [serviceStatuses, setServiceStatuses] = useState<PPKSServiceStatus[]>([]);
   const [serviceStatusLoading, setServiceStatusLoading] = useState(true);
   const [serviceStatusError, setServiceStatusError] = useState('');
+  const [securityAuditEntries, setSecurityAuditEntries] = useState<SecurityAuditEntry[]>([]);
+  const [securityAuditLoading, setSecurityAuditLoading] = useState(false);
+  const [securityAuditError, setSecurityAuditError] = useState('');
   const [integratedAssessmentAnswers, setIntegratedAssessmentAnswers] = useState<IntegratedAssessmentAnswersById>({});
   // A separate feed for submissions made through the stage-one Form link/barcode.
   // This state must never be populated from googleSpreadsheetSourceUrl.
@@ -1250,6 +1254,31 @@ function StaffApp() {
     return () => { active = false; unsubscribe?.(); };
   }, [authReady, isAuthenticated, localCacheReady, currentUserRole, currentUserUid]);
 
+  // Load the security audit only when an authorized manager opens its menu.
+  useEffect(() => {
+    if (activeTab !== 'security-audit') return;
+    if (!authReady || !isAuthenticated || !['owner', 'supervisor'].includes(currentUserRole)) {
+      setSecurityAuditEntries([]);
+      setSecurityAuditError('Akses Pusat Audit tidak tersedia untuk akun ini.');
+      setSecurityAuditLoading(false);
+      return;
+    }
+    let active = true;
+    setSecurityAuditLoading(true);
+    setSecurityAuditError('');
+    void fetchSecurityAuditActivity()
+      .then((entries) => {
+        if (active) setSecurityAuditEntries(entries);
+      })
+      .catch((error) => {
+        if (active) setSecurityAuditError(error instanceof Error ? error.message : String(error));
+      })
+      .finally(() => {
+        if (active) setSecurityAuditLoading(false);
+      });
+    return () => { active = false; };
+  }, [activeTab, authReady, isAuthenticated, currentUserRole]);
+
   // Realtime Firestore sync: apply cloud edits to records already in the selected
   // source roster. This prevents stale Firestore-only rows from reappearing after
   // Google Sheets has identified the current master roster. No automatic writes/deletes.
@@ -1832,6 +1861,7 @@ function StaffApp() {
     'dokumen',
     'layanan-ppks',
     'pendampingan-lapangan',
+    'security-audit',
   ].includes(activeTab);
 
   return (
@@ -1914,6 +1944,7 @@ function StaffApp() {
           )}
 
           {activeTab === 'intelijen-wilayah' && <RegionalIntelligenceView ppksList={ppksList} />}
+          {activeTab === 'security-audit' && <SecurityAuditView entries={securityAuditEntries} loading={securityAuditLoading} error={securityAuditError} currentUserRole={currentUserRole} />}
           {activeTab === 'laporan-kinerja' && <ProgramPerformanceView ppksList={ppksList} serviceStatuses={serviceStatuses} visits={fieldVisits} />}
 
           {activeTab === 'database-ppks' && (
@@ -1969,7 +2000,7 @@ function StaffApp() {
         {isAICopilotOpen && <SIPANDUAICopilot onClose={() => setIsAICopilotOpen(false)} />}
       </Suspense>
 
-      <BottomNav activeTab={activeTab} onSelectTab={navigateToTab} />
+      <BottomNav activeTab={activeTab} onSelectTab={navigateToTab} currentUserRole={currentUserRole} />
 
       {/* Load rarely used modal code only after the user opens that modal. */}
       <Suspense fallback={null}>
