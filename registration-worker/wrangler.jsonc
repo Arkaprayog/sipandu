@@ -16,7 +16,6 @@
   ],
   "secrets": {
     "required": [
-      "TEAM_REGISTRATION_CODE",
       "FIREBASE_SERVICE_ACCOUNT_JSON",
       "TURNSTILE_SECRET_KEY",
       "FIREBASE_AUTH_API_KEY"
