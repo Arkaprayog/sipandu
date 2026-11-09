@@ -6,7 +6,7 @@ import { formatPPKSTimestamp } from '../lib/ppksData';
 import { publicAssetUrl } from '../lib/publicAssets';
 import { backupAssessmentViaArchiveWorker, deleteCentralDriveFile, downloadAssessmentArchiveViaArchiveWorker } from '../lib/googleDriveBackup';
 import { getIntegratedAssessmentBackupMetadata, saveIntegratedAssessmentBackupMetadata } from '../lib/firebase';
-import { printPreparedAssessmentWebView } from '../lib/printing';
+import { printPreparedAssessmentWebView, printPdfFromDevice, savePdfToDevice } from '../lib/printing';
 import { createOfficialAssessmentPdf } from '../lib/assessmentPdf';
 import { createPhotoPreviewBlob } from '../lib/photoFilePreview';
 import '../officialAssessment.css';
@@ -634,17 +634,7 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
     }
   };
 
-  const downloadAssessmentPdf = (pdf: Blob, fileName: string) => {
-    const url = URL.createObjectURL(pdf);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = fileName;
-    link.rel = 'noopener';
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
-  };
+  const downloadAssessmentPdf = (pdf: Blob, fileName: string) => savePdfToDevice(pdf, fileName);
 
   const handleDownloadArchive = async () => {
     if (!currentPPKS || isDownloadingArchive) return;
@@ -653,8 +643,13 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
     try {
       const pdf = await downloadAssessmentArchiveViaArchiveWorker(currentPPKS.id);
       const stamp = new Date().toISOString().slice(0, 10);
-      downloadAssessmentPdf(pdf, 'Arsip-Asesmen-' + currentPPKS.id + '-' + stamp + '.pdf');
-      setStatusMessage({ type: 'success', text: 'Arsip PDF berhasil diunduh melalui layanan privat SIPANDU.' });
+      const saved = await downloadAssessmentPdf(pdf, 'Arsip-Asesmen-' + currentPPKS.id + '-' + stamp + '.pdf');
+      setStatusMessage({
+        type: 'success',
+        text: saved.destination === 'app-private-storage'
+          ? 'Arsip PDF berhasil disimpan di penyimpanan privat aplikasi SIPANDU.'
+          : 'Arsip PDF berhasil diunduh melalui layanan privat SIPANDU.',
+      });
     } catch (error) {
       setStatusMessage({
         type: 'error',
@@ -705,19 +700,22 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
 
       // Google Drive receives the same A4 PDF that the user can print, never a JSON snapshot.
       const archive = await createAndBackupAssessmentPdf(updated);
-      // Save produces a real A4 PDF on the device as well as the private Drive archive.
-      downloadAssessmentPdf(archive.pdf, archive.fileName);
+      // Keep the native PDF copy private because assessment files can contain identity and case data.
+      const localCopy = await downloadAssessmentPdf(archive.pdf, archive.fileName);
+      const localCopyText = localCopy.destination === 'app-private-storage'
+        ? 'PDF A4 tersimpan di penyimpanan privat aplikasi SIPANDU.'
+        : 'PDF A4 berhasil diunduh ke perangkat.';
       setStatusMessage(archive.backupError
         ? {
             type: 'success',
             text: archive.driveUrl
-              ? 'Jawaban aman di Firestore. PDF A4 berhasil diunduh dan diverifikasi di Google Drive, tetapi pencatatan tautan arsip di Firestore perlu diulang: ' + archive.backupError
-              : 'Jawaban aman di Firestore. File PDF A4 sudah diunduh ke perangkat, tetapi backup Google Drive belum berhasil: ' + archive.backupError,
+              ? 'Jawaban aman di Firestore. ' + localCopyText + ' PDF terverifikasi di Google Drive, tetapi pencatatan tautan arsip di Firestore perlu diulang: ' + archive.backupError
+              : 'Jawaban aman di Firestore. ' + localCopyText + ' Backup Google Drive belum berhasil: ' + archive.backupError,
             ...(archive.driveUrl ? { driveUrl: archive.driveUrl } : {}),
           }
         : {
             type: 'success',
-            text: 'Form Asesmen Terintegrasi tersimpan. File PDF A4 diunduh ke perangkat dan diarsipkan di Google Drive.',
+            text: 'Form Asesmen Terintegrasi tersimpan. ' + localCopyText + ' Salinan arsip juga tersimpan di Google Drive.',
             driveUrl: archive.driveUrl,
           });
     } catch (error) {
@@ -725,7 +723,7 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
       setStatusMessage({
         type: firestoreSaved ? 'success' : 'error',
         text: firestoreSaved
-          ? 'Jawaban sudah aman di Firestore, tetapi PDF/backup Google Drive belum berhasil dibuat: ' + detail
+          ? 'Jawaban sudah aman di Firestore, tetapi pembuatan atau penyimpanan salinan PDF belum selesai: ' + detail
           : 'Gagal menyimpan Form Asesmen Terintegrasi ke Firebase: ' + detail,
       });
     } finally {
@@ -921,35 +919,64 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
         await onBeforePrint(updated);
       }
 
-      // The same generated A4 PDF is both uploaded to Drive and sent to the print UI.
-      // Keep its rendered A4 pages mounted until the native print dialog has finished.
+      // Generate one canonical PDF for Firestore/Drive backup, private app storage, and printing.
+      // The private app copy is used by Android's native PrintManager; the DOM remains as a fallback.
       const archive = await createAndBackupAssessmentPdf(updated, { retainPrintRoot: true });
       retainedPrintRootId = archive.printRootId;
-      downloadAssessmentPdf(archive.pdf, archive.fileName);
-      if (archive.backupError) {
-        setStatusMessage({
-          type: 'success',
-          text: 'PDF A4 berhasil diunduh ke perangkat. Jawaban tersimpan di Firestore, tetapi backup Google Drive belum berhasil: ' + archive.backupError,
-        });
-      } else {
-        setStatusMessage({
-          type: 'success',
-          text: 'PDF A4 berhasil diunduh ke perangkat dan diarsipkan ke Google Drive SIPANDU.',
-          driveUrl: archive.driveUrl,
-        });
+
+      let localCopy: Awaited<ReturnType<typeof downloadAssessmentPdf>> | null = null;
+      let localSaveError = '';
+      try {
+        localCopy = await downloadAssessmentPdf(archive.pdf, archive.fileName);
+      } catch (saveError) {
+        localSaveError = saveError instanceof Error ? saveError.message : String(saveError);
+        console.warn('SIPANDU could not save the assessment PDF in private app storage:', saveError);
       }
 
+      const localCopyText = localCopy?.destination === 'app-private-storage'
+        ? 'PDF A4 tersimpan di penyimpanan privat aplikasi SIPANDU.'
+        : localCopy?.destination === 'browser-download'
+          ? 'PDF A4 berhasil diunduh ke perangkat.'
+          : 'Salinan PDF lokal belum berhasil disimpan.';
+
       try {
-        if (!archive.printRootId) throw new Error('Halaman A4 sementara tidak tersedia untuk pencetakan.');
-        await printPreparedAssessmentWebView(archive.fileName, archive.printRootId);
-      } catch (printError) {
-        console.warn('SIPANDU print dialog is unavailable; the A4 PDF has already been downloaded:', printError);
+        if (localCopy?.destination === 'app-private-storage' && localCopy.uri) {
+          // Print the persisted PDF file, not a temporary Blob URL/WebView download.
+          await printPdfFromDevice(localCopy.uri, archive.fileName);
+        } else {
+          if (!archive.printRootId) throw new Error('Halaman A4 sementara tidak tersedia untuk pencetakan.');
+          await printPreparedAssessmentWebView(archive.fileName, archive.printRootId);
+        }
         setStatusMessage({
           type: 'success',
-          text: 'PDF A4 sudah diunduh ke perangkat. Dialog cetak perangkat tidak tersedia pada sesi ini.' +
-            (archive.backupError ? ' Backup Google Drive belum berhasil: ' + archive.backupError : ''),
+          text: localCopyText +
+            (archive.backupError ? ' Backup Google Drive belum berhasil: ' + archive.backupError : ' Arsip tersimpan di Google Drive SIPANDU.') +
+            (localSaveError ? ' Detail penyimpanan lokal: ' + localSaveError : ''),
           ...(archive.driveUrl ? { driveUrl: archive.driveUrl } : {}),
         });
+      } catch (printError) {
+        console.warn('SIPANDU native PDF printing failed; trying the prepared A4 WebView:', printError);
+        try {
+          if (!archive.printRootId) throw printError;
+          // The patched Android bridge waits for the print session before this DOM is removed.
+          await printPreparedAssessmentWebView(archive.fileName, archive.printRootId);
+          setStatusMessage({
+            type: 'success',
+            text: localCopyText + ' Dialog cetak dibuka melalui halaman A4 SIPANDU.' +
+              (archive.backupError ? ' Backup Google Drive belum berhasil: ' + archive.backupError : '') +
+              (localSaveError ? ' Detail penyimpanan lokal: ' + localSaveError : ''),
+            ...(archive.driveUrl ? { driveUrl: archive.driveUrl } : {}),
+          });
+        } catch (fallbackError) {
+          const detail = fallbackError instanceof Error ? fallbackError.message : String(fallbackError);
+          setStatusMessage({
+            type: 'success',
+            text: localCopyText + ' Dialog cetak tidak dapat dibuka: ' + detail +
+              (localSaveError ? ' Penyimpanan lokal: ' + localSaveError : '') +
+              (archive.backupError ? ' Backup Google Drive belum berhasil: ' + archive.backupError : ''),
+            ...(archive.driveUrl ? { driveUrl: archive.driveUrl } : {}),
+          });
+        }
       }
     } catch (error) {
       releasePrintPhotoUrls();
