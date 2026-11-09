@@ -416,3 +416,82 @@ test('registration accepts a Firebase identity token without any team code', asy
     globalThis.fetch = originalFetch;
   }
 });
+
+
+test('activation explains missing firebaseauth.users.update permission and preserves the pending invitation', async () => {
+  const { generateKeyPairSync } = await import('node:crypto');
+  const { privateKey } = generateKeyPairSync('rsa', {
+    modulusLength: 2048,
+    privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
+    publicKeyEncoding: { type: 'spki', format: 'pem' },
+  });
+  const originalFetch = globalThis.fetch;
+  const pendingKey = 'pending:firebase-uid-permission-test';
+  const pendingValue = JSON.stringify({
+    uid: 'firebase-uid-permission-test',
+    email: 'member@example.test',
+    createdAt: Date.now(),
+  });
+  const deletedKeys: string[] = [];
+  const kv = {
+    get: async (key: string) => key === pendingKey ? pendingValue : null,
+    put: async (_key: string, _value: string, _options?: { expirationTtl?: number }) => undefined,
+    delete: async (key: string) => { deletedKeys.push(key); },
+  };
+
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    const url = String(input);
+    if (url.includes('/accounts:lookup?key=')) {
+      return new Response(JSON.stringify({
+        users: [{
+          localId: 'firebase-uid-permission-test',
+          email: 'member@example.test',
+          emailVerified: true,
+          customAttributes: '{}',
+        }],
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }
+    if (url === 'https://oauth2.googleapis.com/token') {
+      return new Response(JSON.stringify({ access_token: 'service-account-test-token', expires_in: 3600 }), {
+        status: 200, headers: { 'Content-Type': 'application/json' },
+      });
+    }
+    if (url.includes('/accounts:update')) {
+      return new Response(JSON.stringify({
+        error: { status: 'PERMISSION_DENIED', message: 'INSUFFICIENT_PERMISSION' },
+      }), { status: 403, headers: { 'Content-Type': 'application/json' } });
+    }
+    throw new Error('Unexpected outbound request: ' + url);
+  }) as typeof fetch;
+
+  try {
+    const response = await worker.fetch(new Request('https://sipandu-registration.test/activate', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: 'Bearer verified-member-id-token',
+        'CF-Connecting-IP': '192.0.2.83',
+      },
+      body: JSON.stringify({}),
+    }), {
+      FIREBASE_AUTH_API_KEY: 'test-worker-secret-api-key',
+      FIREBASE_PROJECT_ID: 'gen-lang-client-0197631978',
+      FIREBASE_SERVICE_ACCOUNT_JSON: JSON.stringify({
+        project_id: 'gen-lang-client-0197631978',
+        client_email: 'test@example.iam.gserviceaccount.com',
+        private_key: privateKey,
+      }),
+      PENDING_REGISTRATIONS: kv,
+    });
+
+    assert.equal(response.status, 503);
+    const result = await response.json() as { ok?: boolean; message?: string };
+    assert.equal(result.ok, false);
+    assert.match(result.message || '', /firebaseauth\\.users\\.update/);
+    assert.match(result.message || '', /tidak perlu membuat akun baru/);
+    assert.deepEqual(deletedKeys, []);
+    assert.equal(await kv.get(pendingKey), pendingValue);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
