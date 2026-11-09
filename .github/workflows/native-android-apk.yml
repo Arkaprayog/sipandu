@@ -51,6 +51,9 @@ jobs:
       - name: Run application tests
         run: bun run test
 
+      - name: Test native Android printer patch
+        run: python3 scripts/test_patch_native_printer.py
+
       - name: TypeScript check
         run: bun run lint
 
@@ -103,6 +106,9 @@ jobs:
 
       - name: Copy web assets into Android app
         run: npx cap sync android
+
+      - name: Patch native Android PDF storage and print lifecycle
+        run: python3 scripts/patch_native_printer.py --project android
 
       - name: Add and verify precise Android GPS permissions
         run: python3 scripts/ensure_android_location_permissions.py
