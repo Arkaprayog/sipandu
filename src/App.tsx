@@ -54,6 +54,7 @@ import {
   type RespondentNotification,
 } from './lib/respondentNotifications';
 
+// Map Google Identity Toolkit IAM errors (including INSUFFICIENT_PERMISSION) to a safe recovery path.
 function describeTeamActivationError(error: unknown): string {
   const detail = error instanceof Error ? error.message.trim() : String(error ?? '').trim();
   const missing = [...new Set(
