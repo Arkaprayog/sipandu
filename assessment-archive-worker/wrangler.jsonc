@@ -6,11 +6,8 @@
   "workers_dev": true,
   "vars": {
     "FIREBASE_PROJECT_ID": "gen-lang-client-0197631978",
-    "GOOGLE_WORKSPACE_EMAIL": "aryprayoga139@gmail.com",
-    "GOOGLE_DRIVE_FOLDER_ID": "1TtUYxMv9-f5kcGWqYS_5PK7NwYqUvNgMMV0l1BpzoLdkHJAQ7Ucxg0rbqc9Ue19Wo2w85GV1"
+    "FIREBASE_AUTH_API_KEY": "AIzaSyCPQq7qsAXUvpW1LHE_5IB_Xs9drioH-o8",
+    "GOOGLE_WORKSPACE_EMAIL": "aryprayoga139@gmail.com"
   },
   "observability": { "enabled": true, "traces": { "enabled": true } },
-  "secrets": {
-    "required": ["FIREBASE_AUTH_API_KEY"]
-  }
 }
