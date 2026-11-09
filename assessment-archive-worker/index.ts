@@ -2,7 +2,6 @@ interface Env {
   FIREBASE_PROJECT_ID?: string;
   FIREBASE_AUTH_API_KEY?: string;
   GOOGLE_WORKSPACE_EMAIL?: string;
-  GOOGLE_DRIVE_FOLDER_ID?: string;
 }
 
 interface FirebaseLookupUser {
@@ -115,20 +114,44 @@ async function driveRequest(accessToken: string, path: string, init: RequestInit
   return response;
 }
 
-async function verifyDestinationFolder(env: Env, accessToken: string): Promise<void> {
-  const folderId = env.GOOGLE_DRIVE_FOLDER_ID?.trim();
-  if (!folderId) throw new Error('GOOGLE_DRIVE_FOLDER_ID belum dikonfigurasi.');
-  const response = await driveRequest(
+async function getOrCreateFolder(accessToken: string, name: string, parentId?: string): Promise<string> {
+  const parentClause = parentId ? " and '" + escapeDriveQuery(parentId) + "' in parents" : " and 'root' in parents";
+  const query = "mimeType='application/vnd.google-apps.folder' and name='" +
+    escapeDriveQuery(name) + "' and trashed=false" + parentClause;
+  const found = await driveRequest(
     accessToken,
-    '/files/' + encodeURIComponent(folderId) + '?fields=id,mimeType,trashed',
+    '/files?q=' + encodeURIComponent(query) + '&pageSize=10&fields=files(id,name,mimeType,parents)',
   );
-  if (!response.ok) {
-    throw new Error('Folder arsip tujuan tidak dapat diakses oleh akun Google SIPANDU (HTTP ' + response.status + ').');
+  if (!found.ok) throw new Error('Google Drive gagal memeriksa folder arsip SIPANDU (HTTP ' + found.status + ').');
+  const payload = await found.json() as { files?: DriveFile[] };
+  const matches = payload.files || [];
+  if (matches.length > 1) {
+    throw new Error('Ditemukan beberapa folder dengan nama arsip yang sama. Perlu pemeriksaan administrator.');
   }
-  const folder = await response.json() as DriveFile;
-  if (folder.id !== folderId || folder.mimeType !== 'application/vnd.google-apps.folder' || folder.trashed) {
-    throw new Error('ID tujuan bukan folder Google Drive aktif yang valid.');
+  if (matches[0]?.id) return matches[0].id;
+
+  const created = await driveRequest(accessToken, '/files?fields=id', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      name,
+      mimeType: 'application/vnd.google-apps.folder',
+      ...(parentId ? { parents: [parentId] } : {}),
+    }),
+  });
+  if (!created.ok) {
+    const detail = await created.json().catch(() => ({})) as { error?: { message?: string } };
+    throw new Error(detail.error?.message || 'Folder arsip SIPANDU gagal dibuat di Google Drive.');
   }
+  const folder = await created.json() as DriveFile;
+  if (!folder.id) throw new Error('Google Drive membuat folder tanpa mengembalikan ID.');
+  return folder.id;
+}
+
+async function ensureArchiveFolder(accessToken: string, archiveKey: string): Promise<string> {
+  const root = await getOrCreateFolder(accessToken, 'SIPANDU');
+  const assessments = await getOrCreateFolder(accessToken, 'From Asesmen Terintegrasi', root);
+  return getOrCreateFolder(accessToken, archiveKey.slice(0, 20), assessments);
 }
 
 async function sha256Hex(value: string): Promise<string> {
@@ -153,8 +176,7 @@ function multipartBody(metadata: Record<string, unknown>, pdf: ArrayBuffer, boun
   ]);
 }
 
-async function findExistingArchive(env: Env, accessToken: string, archiveKey: string): Promise<DriveFile | null> {
-  const folderId = env.GOOGLE_DRIVE_FOLDER_ID!;
+async function findExistingArchive(accessToken: string, archiveKey: string, folderId: string): Promise<DriveFile | null> {
   const query = [
     "mimeType='application/pdf'",
     'trashed=false',
@@ -174,13 +196,12 @@ async function findExistingArchive(env: Env, accessToken: string, archiveKey: st
 }
 
 async function uploadPdf(
-  env: Env,
   accessToken: string,
   pdf: Blob,
   archiveKey: string,
+  folderId: string,
 ): Promise<{ file: DriveFile; replacedExisting: boolean }> {
-  const folderId = env.GOOGLE_DRIVE_FOLDER_ID!;
-  const existing = await findExistingArchive(env, accessToken, archiveKey);
+  const existing = await findExistingArchive(accessToken, archiveKey, folderId);
   const fileName = 'Form-Asesmen-Terintegrasi-' + archiveKey.slice(0, 20) + '.pdf';
   const metadata = {
     name: fileName,
@@ -211,11 +232,11 @@ async function uploadPdf(
 }
 
 async function verifyUploadedFile(
-  env: Env,
   accessToken: string,
   fileId: string,
   expectedSize: number,
   archiveKey: string,
+  folderId: string,
 ): Promise<DriveFile> {
   const response = await driveRequest(
     accessToken,
@@ -228,7 +249,7 @@ async function verifyUploadedFile(
     file.mimeType !== 'application/pdf' ||
     Number(file.size) !== expectedSize ||
     file.trashed === true ||
-    !(file.parents || []).includes(env.GOOGLE_DRIVE_FOLDER_ID || '') ||
+    !(file.parents || []).includes(folderId) ||
     file.appProperties?.sipanduArchiveKey !== archiveKey ||
     file.appProperties?.sipanduManaged !== 'true'
   ) {
@@ -248,13 +269,13 @@ async function archivePdf(
     throw new Error('PDF harus bertipe application/pdf dan berukuran maksimal 24 MiB.');
   }
   if ((await pdf.slice(0, 5).text()) !== '%PDF-') throw new Error('Isi berkas bukan PDF yang valid.');
-  await verifyDestinationFolder(env, accessToken);
   const archiveKey = await sha256Hex('sipandu-integrated-assessment:' + ppksId);
+  const folderId = await ensureArchiveFolder(accessToken, archiveKey);
   let lastError: unknown;
   for (let attempt = 0; attempt < 3; attempt += 1) {
     try {
-      const upload = await uploadPdf(env, accessToken, pdf, archiveKey);
-      const verified = await verifyUploadedFile(env, accessToken, upload.file.id!, pdf.size, archiveKey);
+      const upload = await uploadPdf(accessToken, pdf, archiveKey, folderId);
+      const verified = await verifyUploadedFile(accessToken, upload.file.id!, pdf.size, archiveKey, folderId);
       return { file: verified, replacedExisting: upload.replacedExisting };
     } catch (error) {
       lastError = error;
@@ -270,7 +291,6 @@ function missingConfiguration(env: Env): string[] {
   if (!env.FIREBASE_PROJECT_ID) missing.push('FIREBASE_PROJECT_ID');
   if (!env.FIREBASE_AUTH_API_KEY) missing.push('FIREBASE_AUTH_API_KEY');
   if (!env.GOOGLE_WORKSPACE_EMAIL) missing.push('GOOGLE_WORKSPACE_EMAIL');
-  if (!env.GOOGLE_DRIVE_FOLDER_ID) missing.push('GOOGLE_DRIVE_FOLDER_ID');
   return missing;
 }
 
@@ -285,7 +305,7 @@ export default {
       const missing = missingConfiguration(env);
       return missing.length
         ? json({ ok: false, ready: false, missing }, 503, origin)
-        : json({ ok: true, ready: true, destinationVerified: false, message: 'Konfigurasi tersedia; akses folder diuji saat unggah terautentikasi.' }, 200, origin);
+        : json({ ok: true, ready: true, destinationVerified: false, message: 'Konfigurasi tersedia; folder SIPANDU akan diverifikasi/dibuat dengan OAuth pengguna saat unggah.' }, 200, origin);
     }
 
     if (url.pathname !== '/archive' || request.method !== 'POST') {
