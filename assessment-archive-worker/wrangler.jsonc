@@ -1,0 +1,14 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "sipandu-assessment-archive",
+  "main": "index.ts",
+  "compatibility_date": "2026-11-09",
+  "workers_dev": true,
+  "vars": {
+    "FIREBASE_PROJECT_ID": "gen-lang-client-0197631978",
+    "GOOGLE_DRIVE_FOLDER_ID": "1TtUYxMv9-f5kcGWqYS_5PK7NwYqUvNgMMV0l1BpzoLdkHJAQ7Ucxg0rbqc9Ue19Wo2w85GV1"
+  },
+  "secrets": {
+    "required": ["GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON"]
+  }
+}
