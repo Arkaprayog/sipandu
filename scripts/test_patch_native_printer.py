@@ -4,6 +4,7 @@ from pathlib import Path
 import sys
 import tempfile
 import unittest
+import re
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from patch_native_printer import patch_android_project
@@ -127,8 +128,14 @@ class NativePrinterPatchTests(unittest.TestCase):
             self.assertIn("new Printer.OnPrintFinishCallback()", plugin)
             self.assertIn("new Printer.OnPrintStartCallback()", plugin)
             self.assertIn('call.reject("Failed to print file: " + message)', plugin)
-            self.assertEqual(plugin.count("@PluginMethod\n    public void printFile(PluginCall call)"), 1)
-            self.assertEqual(plugin.count("@PluginMethod\n    public void printWebView(PluginCall call)"), 1)
+            self.assertEqual(
+                len(re.findall(r"@PluginMethod\\s+public\\s+void\\s+printFile\\s*\\(\\s*PluginCall\\s+call\\s*\\)", plugin)),
+                1,
+            )
+            self.assertEqual(
+                len(re.findall(r"@PluginMethod\\s+public\\s+void\\s+printWebView\\s*\\(\\s*PluginCall\\s+call\\s*\\)", plugin)),
+                1,
+            )
             self.assertIn("activity.runOnUiThread(", printer)
             self.assertIn("implementation.savePdfToAppStorage(data, name)", plugin)
             self.assertIn("call.resolve();", plugin)
