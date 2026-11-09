@@ -66,8 +66,7 @@ function missingConfiguration(env: Env): string[] {
   return missing;
 }
 
- // Activation uses an existing pending invitation, so it must not depend on
- // the shared registration code remaining configured after signup.
+ // Activation requires Firebase identity, verified email, and a matching pending invitation.
  export function missingActivationConfiguration(env: Env): string[] {
    const missing: string[] = [];
    if (!env.FIREBASE_AUTH_API_KEY && !env.FIREBASE_WEB_API_KEY) missing.push('FIREBASE_AUTH_API_KEY');
