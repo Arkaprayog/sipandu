@@ -239,7 +239,6 @@ test('downloads an assessment archive only after identity and Drive archive veri
     new TextEncoder().encode('sipandu-integrated-assessment:' + ppksId),
   )), (byte) => byte.toString(16).padStart(2, '0')).join('');
   const folderIds = ['assessment-root', 'assessment-folder', 'respondent-folder'];
-  let folderIndex = 0;
   let mediaReads = 0;
   const archivedFile = {
     id: 'assessment-pdf-002',
@@ -265,9 +264,11 @@ test('downloads an assessment archive only after identity and Drive archive veri
     if (url.hostname === 'www.googleapis.com' && url.pathname === '/drive/v3/files') {
       if (url.searchParams.has('q')) {
         const query = url.searchParams.get('q') || '';
-        return query.includes('sipanduArchiveKey')
-          ? jsonResponse({ files: [archivedFile] })
-          : jsonResponse({ files: [] });
+        if (query.includes('sipanduArchiveKey')) return jsonResponse({ files: [archivedFile] });
+        if (query.includes("name='SIPANDU'")) return jsonResponse({ files: [{ id: folderIds[0] }] });
+        if (query.includes("name='From Asesmen Terintegrasi'")) return jsonResponse({ files: [{ id: folderIds[1] }] });
+        if (query.includes("name='" + archiveKey.slice(0, 20) + "'")) return jsonResponse({ files: [{ id: folderIds[2] }] });
+        return jsonResponse({ files: [] });
       }
       if (url.searchParams.get('fields') === 'id' && method === 'POST') {
         return jsonResponse({ id: folderIds[folderIndex++] });
