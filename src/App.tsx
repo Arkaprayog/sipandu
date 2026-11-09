@@ -66,7 +66,7 @@ function describeTeamActivationError(error: unknown): string {
   if (/layanan aktivasi belum siap dikonfigurasi administrator/i.test(detail)) {
     return 'Email sudah diverifikasi, tetapi Worker pendaftaran belum memiliki kredensial service account Firebase. Administrator perlu memasang secret FIREBASE_SERVICE_ACCOUNT_JSON pada Worker sipandu-registration dan memastikan izin IAM firebaseauth.users.update. Sesi akun tetap tersimpan.';
   }
-  if (/PERMISSION_DENIED|INSUFFICIENT[_\\s]+PERMISSION|firebaseauth\\.users\\.update|not authorized|insufficient[_\\s]+permission/i.test(detail)) {
+  if (/PERMISSION_DENIED|INSUFFICIENT[_ ]+PERMISSION|firebaseauth[.]users[.]update|not authorized|insufficient[_ ]+permission/i.test(detail)) {
     return 'Email sudah diverifikasi, tetapi Firebase menolak pemberian peran pendamping karena izin service account belum lengkap. Pada Google Cloud Console proyek gen-lang-client-0197631978, buka IAM & Admin → IAM, cari service account yang tercantum sebagai client_email di secret FIREBASE_SERVICE_ACCOUNT_JSON milik Worker sipandu-registration, lalu berikan izin IAM firebaseauth.users.update (gunakan custom role khusus dengan izin tersebut). Setelah izin tersimpan, tekan “Coba verifikasi akses lagi”. Undangan dan sesi akun tetap tersimpan; tidak perlu mendaftar ulang.';
   }
   if (/undangan.*(tidak ditemukan|kedaluwarsa)|pending.*(not found|expired)/i.test(detail)) {
