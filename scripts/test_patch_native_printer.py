@@ -41,6 +41,7 @@ public class Printer {
     }
 
     public void printBase64(String data, String mimeType, String name) throws Exception {}
+    public void printFile(String path, String mimeType, String name) throws Exception {}
 
     public void printWebView(WebView webView, String name) throws Exception {
         if (webView == null) {
