@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { createUserWithEmailAndPassword, sendEmailVerification, signOut, updateProfile } from 'firebase/auth';
 import { ArrowLeft, Eye, EyeOff, UserPlus, MailCheck } from 'lucide-react';
 import { auth, staffAuthPersistenceReady, createSIPANDUUserProfile } from '../lib/firebase';
-import { checkTeamRegistrationService, registerPendingTeamMember, validateTeamRegistrationCode } from '../lib/teamRegistration';
+import { checkTeamRegistrationService, registerPendingTeamMember } from '../lib/teamRegistration';
 import { publicAssetUrl } from '../lib/publicAssets';
 
 interface RegistrationPageProps {
@@ -17,7 +17,6 @@ export const RegistrationPage: React.FC<RegistrationPageProps> = ({ onBack }) =>
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [repeatPassword, setRepeatPassword] = useState('');
-  const [teamCode, setTeamCode] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [showRepeatPassword, setShowRepeatPassword] = useState(false);
   const [error, setError] = useState('');
@@ -38,10 +37,8 @@ export const RegistrationPage: React.FC<RegistrationPageProps> = ({ onBack }) =>
     setIsSubmitting(true);
     try {
       await staffAuthPersistenceReady;
-      // Validate server availability and the shared team code before making
-      // a Firebase account, to avoid creating unusable accounts on bad codes.
+      // Ensure the activation service is ready before creating the Firebase account.
       await checkTeamRegistrationService();
-      await validateTeamRegistrationCode(teamCode);
 
       const normalizedEmail = email.trim().toLowerCase();
       const credential = await createUserWithEmailAndPassword(auth, normalizedEmail, password);
@@ -54,7 +51,7 @@ export const RegistrationPage: React.FC<RegistrationPageProps> = ({ onBack }) =>
         noHp: '',
         photoUrl: '',
       });
-      await registerPendingTeamMember(credential.user, teamCode);
+      await registerPendingTeamMember(credential.user);
       await sendEmailVerification(credential.user);
       await signOut(auth);
       setEmail(normalizedEmail);
@@ -144,9 +141,6 @@ export const RegistrationPage: React.FC<RegistrationPageProps> = ({ onBack }) =>
                     <input type={showRepeatPassword ? 'text' : 'password'} value={repeatPassword} onChange={(event) => setRepeatPassword(event.target.value)} autoComplete="new-password" minLength={8} maxLength={128} required placeholder="Masukkan ulang password" className="w-full rounded-lg border border-white bg-white/75 px-3 py-2.5 pr-10 text-sm text-black placeholder-slate-500 outline-none focus:border-teal-700 focus:ring-2 focus:ring-teal-700/20" />
                     <button type="button" aria-label={showRepeatPassword ? 'Sembunyikan password' : 'Tampilkan password'} onClick={() => setShowRepeatPassword((value) => !value)} className="absolute inset-y-0 right-0 flex items-center px-3 text-slate-600">{showRepeatPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}</button>
                   </span>
-                </label>
-                <label className="block text-xs font-semibold text-black">Kode Pendaftaran Tim
-                  <input value={teamCode} onChange={(event) => setTeamCode(event.target.value)} autoComplete="off" required placeholder="Masukkan kode dari administrator" className="mt-1 w-full rounded-lg border border-white bg-white/75 px-3 py-2.5 text-sm text-black placeholder-slate-500 outline-none focus:border-teal-700 focus:ring-2 focus:ring-teal-700/20" />
                 </label>
                 <button type="submit" disabled={isSubmitting} className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl bg-teal-700 px-4 py-3 text-sm font-bold uppercase tracking-wide text-white shadow-md transition hover:bg-teal-800 disabled:cursor-not-allowed disabled:opacity-60">
                   <UserPlus className="h-4 w-4" /> {isSubmitting ? 'Mengirim pendaftaran…' : 'Kirim'}
