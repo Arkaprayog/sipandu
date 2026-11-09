@@ -22,6 +22,7 @@ export const SIPANDUAICopilot: React.FC<Props> = ({ onClose }) => {
   const [metadata, setMetadata] = useState<ChatMetadata | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const sendingRef = useRef(false);
 
   useEffect(() => {
     inputRef.current?.focus();
@@ -33,7 +34,7 @@ export const SIPANDUAICopilot: React.FC<Props> = ({ onClose }) => {
 
   const sendPrompt = async (rawPrompt: string) => {
     const question = rawPrompt.trim();
-    if (!question || loading) return;
+    if (!question || sendingRef.current) return;
     if (question.length > 1200) {
       setError("Pertanyaan maksimal 1.200 karakter.");
       return;
@@ -44,10 +45,14 @@ export const SIPANDUAICopilot: React.FC<Props> = ({ onClose }) => {
       return;
     }
 
+    // Lock synchronously so Enter + tap cannot submit the same prompt twice.
+    sendingRef.current = true;
+    const sentAt = new Date().toISOString();
     setError("");
+    setMetadata(null);
     setPrompt("");
     setLoading(true);
-    setMessages((current) => [...current, { role: "user", text: question, at: new Date().toISOString() }]);
+    setMessages((current) => [...current, { role: "user", text: question, at: sentAt }]);
     try {
       const idToken = await user.getIdToken();
       const response = await fetch(SIPANDU_AI_WORKER_URL + "/api/chat", {
@@ -55,22 +60,59 @@ export const SIPANDUAICopilot: React.FC<Props> = ({ onClose }) => {
         headers: {
           "Authorization": "Bearer " + idToken,
           "Content-Type": "application/json",
+          "Accept": "application/json",
         },
         body: JSON.stringify({
           prompt: question,
+          // Send only earlier user questions; the current prompt is sent separately.
           history: messages.filter((item) => item.role === "user").slice(-4).map((item) => ({ role: "user", text: item.text })),
         }),
         cache: "no-store",
         credentials: "omit",
+        signal: AbortSignal.timeout(35000),
       });
-      const payload = await response.json() as { answer?: string; metadata?: ChatMetadata; message?: string };
-      if (!response.ok) throw new Error(payload.message || "Layanan AI belum dapat memberikan jawaban.");
-      if (!payload.answer) throw new Error("AI tidak mengembalikan jawaban.");
-      setMessages((current) => [...current, { role: "model", text: payload.answer || "", at: new Date().toISOString() }]);
+
+      const payload = await response.json().catch(() => null) as
+        | { answer?: string; metadata?: ChatMetadata; error?: string; message?: string }
+        | null;
+      if (!response.ok) {
+        const knownMessages: Record<string, string> = {
+          AUTH_REQUIRED: "Sesi masuk tidak ditemukan. Silakan masuk kembali.",
+          STAFF_ACCESS_REQUIRED: "Akun ini belum memiliki peran petugas yang diizinkan untuk SIPANDU AI.",
+          SENSITIVE_PROMPT_BLOCKED: "Pertanyaan atau riwayat memuat informasi pribadi/sensitif. Hapus informasi tersebut lalu coba lagi.",
+          AI_NOT_CONFIGURED: "SIPANDU AI belum diaktifkan oleh administrator.",
+          AI_CONFIGURATION_ERROR: "Konfigurasi model SIPANDU AI bermasalah. Administrator perlu memeriksanya.",
+          INTERNAL_ERROR: "Terjadi kesalahan internal saat menganalisis. Data SIPANDU tidak diubah; silakan coba kembali.",
+          ORIGIN_NOT_ALLOWED: "Alamat aplikasi ini belum diizinkan untuk mengakses SIPANDU AI.",
+          AUTH_PROVIDER_NOT_CONFIGURED: "Verifikasi akun SIPANDU AI belum dikonfigurasi administrator.",
+          AUTH_PROVIDER_UNAVAILABLE: "Verifikasi akun sementara tidak tersedia. Coba kembali beberapa saat lagi.",
+          DATA_SOURCE_UNAVAILABLE: "Data ringkasan SIPANDU sementara tidak dapat dibaca. Coba kembali nanti.",
+          AI_UNAVAILABLE: "Layanan AI sedang tidak tersedia. Data SIPANDU tidak berubah.",
+          AI_RATE_LIMIT: "Layanan AI sedang sibuk. Tunggu sebentar lalu coba lagi.",
+          RATE_LIMITED: "Batas permintaan tercapai. Tunggu satu menit sebelum mencoba lagi.",
+          INVALID_PROMPT: "Pertanyaan kosong atau melebihi batas 1.200 karakter.",
+        };
+        throw new Error((payload?.error && knownMessages[payload.error]) || payload?.message || "Pertanyaan belum berhasil diproses. Silakan coba kembali.");
+      }
+      if (!payload || typeof payload.answer !== "string" || !payload.answer.trim()) {
+        throw new Error("Respons SIPANDU AI tidak lengkap. Pertanyaan belum memperoleh jawaban.");
+      }
+      setMessages((current) => [...current, { role: "model", text: payload.answer!.trim(), at: new Date().toISOString() }]);
       setMetadata(payload.metadata || null);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Koneksi ke SIPANDU AI gagal.");
+      // A failed request must not remain in the transcript as if it succeeded.
+      setMessages((current) => current.filter((item) => item.at !== sentAt));
+      setMetadata(null);
+      setPrompt(question);
+      if (cause instanceof Error && (cause.name === "TimeoutError" || cause.name === "AbortError")) {
+        setError("Permintaan melewati batas waktu. Periksa koneksi lalu kirim kembali.");
+      } else if (cause instanceof TypeError) {
+        setError("Tidak dapat terhubung ke SIPANDU AI. Periksa koneksi atau status layanan.");
+      } else {
+        setError(cause instanceof Error ? cause.message : "Koneksi ke SIPANDU AI gagal.");
+      }
     } finally {
+      sendingRef.current = false;
       setLoading(false);
       inputRef.current?.focus();
     }
