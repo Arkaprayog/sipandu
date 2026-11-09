@@ -386,15 +386,32 @@ export async function backupAssessmentViaArchiveWorker(input: {
   const user = auth.currentUser;
   if (!user) throw new Error('Sesi akun SIPANDU berakhir. Masuk kembali sebelum mengarsipkan PDF.');
   const idToken = await user.getIdToken();
+  let googleAccessToken = await getAccessToken();
+  if (!googleAccessToken) googleAccessToken = await refreshWorkspaceAccessToken();
+  if (!googleAccessToken) {
+    throw new Error('Sesi Google Workspace tidak tersedia. Hubungkan kembali akun Google sebelum mengarsipkan PDF.');
+  }
 
   const form = new FormData();
   form.set('ppksId', input.ppksId);
   form.set('file', input.pdf, 'assessment.pdf');
-  const response = await fetch(ASSESSMENT_ARCHIVE_WORKER_URL + '/archive', {
+  const send = (accessToken: string) => fetch(ASSESSMENT_ARCHIVE_WORKER_URL + '/archive', {
     method: 'POST',
-    headers: { Authorization: 'Bearer ' + idToken },
+    headers: {
+      Authorization: 'Bearer ' + idToken,
+      'X-Google-Access-Token': accessToken,
+    },
     body: form,
   });
+  let response = await send(googleAccessToken);
+  if (response.status === 401) {
+    invalidateAccessToken();
+    const refreshed = await refreshWorkspaceAccessToken(true);
+    if (refreshed) {
+      googleAccessToken = refreshed;
+      response = await send(googleAccessToken);
+    }
+  }
   const payload = await response.json().catch(() => ({})) as {
     ok?: boolean;
     verified?: boolean;
