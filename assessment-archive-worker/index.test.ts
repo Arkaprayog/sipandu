@@ -23,7 +23,7 @@ test('archives a PDF only after Firebase and Google identity checks and Drive re
     new TextEncoder().encode('sipandu-integrated-assessment:ppks-internal-001'),
   )), (byte) => byte.toString(16).padStart(2, '0')).join('');
   const pdf = new Blob(['%PDF-1.7\nSIPANDU synthetic test PDF'], { type: 'application/pdf' });
-  let savedFile: Record<string, unknown> | null = null;
+  const savedFileRef: { current: Record<string, unknown> | null } = { current: null };
 
   globalThis.fetch = async (input, init) => {
     const url = String(input);
@@ -43,7 +43,7 @@ test('archives a PDF only after Firebase and Google identity checks and Drive re
       if (parsed.searchParams.has('q')) return jsonResponse({ files: [] });
 
       if (parsed.searchParams.get('uploadType') === 'multipart' && method === 'POST') {
-        savedFile = {
+        savedFileRef.current = {
           id: fileId,
           name: 'Form-Asesmen-Terintegrasi-' + archiveKey.slice(0, 20) + '.pdf',
           mimeType: 'application/pdf',
@@ -53,7 +53,7 @@ test('archives a PDF only after Firebase and Google identity checks and Drive re
           appProperties: { sipanduManaged: 'true', sipanduArchiveKey: archiveKey },
           trashed: false,
         };
-        return jsonResponse(savedFile);
+        return jsonResponse(savedFileRef.current);
       }
 
       if (parsed.searchParams.get('fields') === 'id' && method === 'POST') {
@@ -94,7 +94,9 @@ test('archives a PDF only after Firebase and Google identity checks and Drive re
   assert.equal(result.mimeType, 'application/pdf');
   assert.equal(result.size, pdf.size);
   assert.equal(createdFolderIds.length, 3);
-  assert.equal((savedFile?.name as string).includes('ppks-internal-001'), false);
+  const savedFile = savedFileRef.current;
+  assert.ok(savedFile);
+  assert.equal(String(savedFile.name).includes('ppks-internal-001'), false);
 });
 
 test('rejects requests from an unapproved web origin', async () => {
