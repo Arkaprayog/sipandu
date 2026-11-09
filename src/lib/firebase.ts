@@ -97,6 +97,7 @@ googleAuthProvider.addScope('https://www.googleapis.com/auth/drive.readonly');
 googleAuthProvider.addScope('https://www.googleapis.com/auth/drive.file');
 googleAuthProvider.addScope('https://www.googleapis.com/auth/spreadsheets');
 googleAuthProvider.addScope('https://www.googleapis.com/auth/forms.body.readonly');
+googleAuthProvider.addScope('https://www.googleapis.com/auth/forms.responses.readonly');
 
 // Google access tokens are short-lived. Keep them only in sessionStorage (not
 // localStorage) so a page reload in the same tab does not force an immediate
@@ -371,6 +372,7 @@ function buildWorkspaceProvider(prompt?: 'none' | 'select_account'): GoogleAuthP
   provider.addScope('https://www.googleapis.com/auth/drive.file');
   provider.addScope('https://www.googleapis.com/auth/spreadsheets');
   provider.addScope('https://www.googleapis.com/auth/forms.body.readonly');
+  provider.addScope('https://www.googleapis.com/auth/forms.responses.readonly');
   return provider;
 }
 
@@ -416,6 +418,7 @@ export const googleSignIn = async (): Promise<{
         'https://www.googleapis.com/auth/drive.file',
         'https://www.googleapis.com/auth/spreadsheets',
         'https://www.googleapis.com/auth/forms.body.readonly',
+        'https://www.googleapis.com/auth/forms.responses.readonly',
       ];
       const requestNativeLogin = () => SocialLogin.login({
         provider: 'google',
