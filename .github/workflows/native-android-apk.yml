@@ -63,6 +63,9 @@ jobs:
       - name: Generate native Android project
         run: npx cap add android
 
+      - name: Configure compact Gradle distribution and resilient download timeout
+        run: python3 scripts/configure-gradle-wrapper.py
+
       - name: Upgrade generated Android build tools for AndroidX Browser
         shell: bash
         run: |

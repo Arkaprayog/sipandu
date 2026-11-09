@@ -85,6 +85,9 @@ jobs:
           npx cap sync android
           python3 scripts/ensure_android_location_permissions.py
 
+      - name: Configure compact Gradle distribution and resilient download timeout
+        run: python3 scripts/configure-gradle-wrapper.py
+
       - name: Apply package version to private Android release APK
         shell: bash
         run: |
