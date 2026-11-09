@@ -36,7 +36,7 @@ import { SIPANDU_AI_WORKER_URL } from './lib/sipanduAI';
 import { auth, getAccessToken, savePPKSToFirestore, saveIntegratedAssessmentToFirestore, replacePPKSCollectionFromSpreadsheet, googleLogout, subscribeToPPKSChanges, subscribeToPPKSServiceStatus, savePPKSServiceUpdate, subscribeToFieldVisits, createFieldVisit, subscribeToIntegratedAssessmentAnswers, fetchSecurityAuditActivity, saveStageOneIntakeToFirestore, subscribeToStageOneIntake, staffAuthPersistenceReady, isWorkspaceAccountConnected, invalidateAccessToken, getSIPANDUUserProfile, saveSIPANDUUserProfile } from './lib/firebase';
 import { activatePendingTeamMember, restorePendingTeamInvitation } from './lib/teamRegistration';
 import { ensureSIPANDUDatabaseSheet, extractSpreadsheetId, getLinkedSpreadsheetUrlForForm, importPPKSFromSpreadsheet, upsertPPKSInSpreadsheet } from './lib/googleWorkspace';
-import { GOOGLE_SIPANDU_RESOURCES } from './lib/googleSIPANDUResources';
+import { GOOGLE_SIPANDU_RESOURCES, SIPANDU_OWNER_WHATSAPP_PHONE } from './lib/googleSIPANDUResources';
 import { getLiveSyncRetryDelay, LIVE_SYNC_INTERVAL_MS } from './lib/liveSyncPolicy';
 import { getCloudOnlyCompletedAssessments, mergeIntegratedAssessmentAnswers, type IntegratedAssessmentAnswersById } from './lib/integratedAssessmentArchive';
 import { preservePPKSRecordOrder } from './lib/ppksRecordState';
@@ -271,6 +271,7 @@ function normalizeAppSettings(value: unknown): AppSettings {
     googleSpreadsheetSourceUrl: resolvedSourceUrl,
     googleSpreadsheetSourceName: sourceName,
     googleSpreadsheetSourceTab: sourceTab,
+    googleDriveFolderUrl: GOOGLE_SIPANDU_RESOURCES.driveFolderUrl,
     theme: saved.theme === 'light' ? 'light' : 'dark',
   };
 }
@@ -667,6 +668,9 @@ function StaffApp() {
       console.warn('SIPANDU could not read its local settings cache:', error);
     }
     setPpksList(nextRecords);
+    if (currentUserRole === 'owner') {
+      nextProfile = { ...nextProfile, noHp: SIPANDU_OWNER_WHATSAPP_PHONE };
+    }
     setProfile(nextProfile);
     setSettings(nextSettings);
     setLocalCacheReady(true);
@@ -682,14 +686,30 @@ function StaffApp() {
     void getSIPANDUUserProfile(user.uid).then(async (cloudProfile) => {
       if (!active) return;
       if (cloudProfile) {
-        setProfile(cloudProfile);
+        const resolvedProfile = currentUserRole === 'owner'
+          ? { ...cloudProfile, noHp: SIPANDU_OWNER_WHATSAPP_PHONE }
+          : cloudProfile;
+        setProfile(resolvedProfile);
+        if (currentUserRole === 'owner' && cloudProfile.noHp !== SIPANDU_OWNER_WHATSAPP_PHONE) {
+          try {
+            await saveSIPANDUUserProfile(user.uid, resolvedProfile);
+          } catch (error) {
+            console.warn('Nomor WhatsApp owner SIPANDU belum dapat diperbarui di Firestore:', error);
+          }
+        }
         return;
       }
       if (currentUserRole === 'owner' || currentUserRole === 'supervisor') {
         try {
           const raw = localStorage.getItem(`sipandu_profile_${user.uid}`)
             || localStorage.getItem('sipandu_profile');
-          const localProfile = raw ? stripPhotoPayloadsFromLocalCache(JSON.parse(raw)) as ProfileUser : null;
+          const cachedProfile = raw ? stripPhotoPayloadsFromLocalCache(JSON.parse(raw)) as ProfileUser : null;
+          const localProfile = cachedProfile
+            ? (currentUserRole === 'owner'
+                ? { ...cachedProfile, noHp: SIPANDU_OWNER_WHATSAPP_PHONE }
+                : cachedProfile)
+            : null;
+          if (localProfile) setProfile(localProfile);
           if (localProfile?.nama?.trim() && localProfile?.nip?.trim() && user.email) {
             await saveSIPANDUUserProfile(user.uid, localProfile);
           }
