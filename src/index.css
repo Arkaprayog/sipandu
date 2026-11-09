@@ -1634,3 +1634,31 @@ body,
     transition-duration: .01ms !important;
   }
 }
+
+/* SIPANDU dashboard navigation: keep the bar icon-only and announce only the active menu. */
+.sipandu-navigation-shell .app-nav-bar .sipandu-nav-label--hidden {
+  display: none !important;
+}
+.sipandu-navigation-shell .app-nav-bar .sipandu-nav-label--active {
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+  color: #f4faf6 !important;
+  border: 1px solid rgba(111, 211, 186, .42);
+  background: rgba(11, 37, 29, .96);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, .28), inset 0 1px 0 rgba(255, 255, 255, .08);
+  -webkit-backdrop-filter: blur(18px) saturate(145%);
+  backdrop-filter: blur(18px) saturate(145%);
+  font-size: 9px !important;
+  font-weight: 850;
+  line-height: 1.25;
+  letter-spacing: .035em;
+  overflow-wrap: anywhere;
+  text-align: center;
+}
+@media (min-width: 768px) {
+  .sipandu-navigation-shell .app-nav-bar .sipandu-nav-label--active {
+    font-size: 10px !important;
+    max-width: 240px;
+  }
+}
