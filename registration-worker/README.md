@@ -1,6 +1,6 @@
 # SIPANDU team registration service
 
-The registration Worker is separate from the static `sipandu` app Worker. It validates the shared team code, verifies Firebase ID tokens, stores short-lived pending invitations in Cloudflare KV, and assigns only the `pendamping` custom claim after Firebase confirms the email is verified.
+The registration Worker is separate from the static `sipandu` app Worker. It verifies Firebase ID tokens, stores short-lived pending invitations in Cloudflare KV, and assigns only the `pendamping` custom claim after Firebase confirms the email is verified. Team registration does not use a shared code.
 
 ## Cloudflare resources
 
@@ -26,19 +26,18 @@ Open Cloudflare Dashboard → Workers & Pages → `sipandu-registration` → Set
 - `FIREBASE_SERVICE_ACCOUNT_JSON`: the complete JSON key downloaded from Google Cloud.
 - `FIREBASE_AUTH_API_KEY`: a **dedicated, separate** Google API key used only by the server-side Identity Toolkit lookup. It is stored as a Worker Secret, not checked into Git. The value currently provisioned during setup was copied from the public browser Firebase config only as a temporary bootstrap; it is not yet a separate restricted key and must be replaced before production with a key restricted to Identity Toolkit API. Do not reuse the browser key for the server after that replacement.
 - `TURNSTILE_SECRET_KEY`: the secret for the SIPANDU public intake Turnstile widget. It must never be placed in the browser bundle.
-- `TEAM_REGISTRATION_CODE`: one strong, random shared code (prefer 32 or more random characters) that the administrator shares only with SIPANDU team members.
 
 The Firebase project ID and named Firestore database ID are non-secret Worker variables in `wrangler.jsonc`. The KV binding is already included there. The app's Firebase client API key remains visible in `firebase-applet-config.json` by design; it must be restricted in Google Cloud Console to the Firebase APIs and application origins actually used by SIPANDU.
 
-The shared `TEAM_REGISTRATION_CODE` is checked when a new member registers. Once the Worker has stored that member's pending invitation, the `/activate` endpoint does not need the shared code again; it requires the Firebase service-account secret, Firebase project/API settings, and the KV binding. This lets a member complete email verification even if the shared code has since been rotated or removed. The `/health` endpoint still reports the full service as not ready when any required secret is missing, because new registrations also depend on the shared code.
+New members register with their email and password, then activate only after Firebase confirms that the email is verified. The `/register` endpoint stores a seven-day pending invitation for the Firebase UID; `/activate` checks the verified email, UID, and email address before assigning the `pendamping` role. No shared team code is required.
 
 ## Restore an invitation for an existing account
 
 If Firebase already contains the member account but its pending KV invitation is missing or has expired, the signed-in user can restore it without creating another Firebase account:
 
 1. Sign in using the existing email and password, then finish email verification.
-2. On the retained-session screen, enter the current shared team registration code and choose **Pulihkan undangan akun yang sama**.
-3. The Worker verifies the Firebase ID token, verified email, UID, and team code, then writes a new seven-day invitation for that exact UID.
+2. On the retained-session screen, choose **Pulihkan undangan akun yang sama** after verifying the email.
+3. The Worker verifies the Firebase ID token, verified email, and UID, then writes a new seven-day invitation for that exact UID.
 4. SIPANDU immediately retries activation. The Worker grants only the `pendamping` role and never accepts a role supplied by the browser.
 
 This recovery path rejects accounts that already have the `owner` or `supervisor` role. Those roles must be managed administratively; do not use member-invitation recovery for an administrator account. No new Firebase account is created by this route.
@@ -62,7 +61,7 @@ The `/health` endpoint returns `ready: true` only when both secrets and the KV b
 
 ## Registration flow
 
-1. SIPANDU checks service readiness and validates the shared code before creating a Firebase account.
+1. SIPANDU checks service readiness before creating a Firebase account.
 2. The app creates the email/password account, stores the member's name, NIP, job title, and work unit in `userProfiles/{uid}`, creates a seven-day pending invitation, sends the verification email, and signs out.
 3. After email verification, the member returns to SIPANDU and signs in again.
 4. The Worker checks the Firebase identity and verification status, confirms the matching pending invitation, then assigns the `pendamping` custom claim.
