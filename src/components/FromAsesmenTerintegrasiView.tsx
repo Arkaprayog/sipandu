@@ -1035,15 +1035,6 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
         </div>
       </div>
 
-      {driveArchive && (
-        <section className={`mb-3 rounded-lg border p-3 text-xs ${driveArchive.status === 'complete' ? 'border-emerald-500/40 bg-emerald-950/40 text-emerald-100' : 'border-amber-500/40 bg-amber-950/40 text-amber-100'}`} aria-live="polite">
-          <strong>{driveArchive.status === 'complete' ? 'Arsip Google Drive terhubung' : 'Backup Google Drive belum tersedia'}</strong>
-          {driveArchive.savedAt && <span className="ml-2 opacity-80">· {new Date(driveArchive.savedAt).toLocaleString('id-ID')}</span>}
-          {driveArchive.error && <p className="mt-1 break-words">{driveArchive.error}</p>}
-          {driveArchive.webViewLink && <a href={driveArchive.webViewLink} target="_blank" rel="noopener noreferrer" className="ml-2 inline-flex font-bold underline underline-offset-2">Buka arsip Google Drive</a>}
-        </section>
-      )}
-
       {statusMessage && (
         <div role="status" aria-live="polite" className={'official-status mb-3 rounded-lg border p-3 text-xs ' + (statusMessage.type === 'success' ? 'border-emerald-500/40 bg-emerald-950/50 text-emerald-100' : 'border-rose-500/40 bg-rose-950/50 text-rose-100')}>
           {statusMessage.type === 'success' && <CheckCircle2 className="mr-1 inline h-4 w-4 align-middle" />}
