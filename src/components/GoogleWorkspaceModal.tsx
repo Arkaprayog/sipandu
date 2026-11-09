@@ -29,8 +29,7 @@ import {
   organizePPKSPhotosInDrive,
   GoogleDriveFile,
 } from '../lib/googleWorkspace';
-import { GOOGLE_SIPANDU_RESOURCES, GOOGLE_WORKSPACE_EMAIL, getGoogleFormIdFromUrl } from '../lib/googleSIPANDUResources';
-import { toGoogleFormsRespondentUrl } from '../utils/helpers';
+import { GOOGLE_SIPANDU_RESOURCES, GOOGLE_WORKSPACE_EMAIL } from '../lib/googleSIPANDUResources';
 import { PPKSRecord, AppSettings } from '../types';
 import {
   X,
@@ -41,15 +40,12 @@ import {
   Cloud,
   CheckCircle2,
   RefreshCw,
-  ExternalLink,
   Plus,
   AlertCircle,
   LogIn,
   LogOut,
   ShieldCheck,
   FolderPlus,
-  Lock,
-  Unlock,
 } from 'lucide-react';
 
 interface GoogleWorkspaceModalProps {
@@ -81,9 +77,6 @@ export const GoogleWorkspaceModal: React.FC<GoogleWorkspaceModalProps> = ({
   const [newFolderName, setNewFolderName] = useState<string>('SIPANDU ODHIV - Berkas Kemensos Sumut 2026');
 
   // Sheets state
-  const [editingTargetUrl, setEditingTargetUrl] = useState<boolean>(() => !settings.googleSpreadsheetUrl?.trim());
-  const [editingSourceUrl, setEditingSourceUrl] = useState<boolean>(() => !settings.googleSpreadsheetSourceUrl?.trim());
-  const [editingFormUrl, setEditingFormUrl] = useState<boolean>(() => !settings.googleFormTahapAwalUrl?.trim());
   const [spreadsheetIdInput, setSpreadsheetIdInput] = useState<string>(() => {
     const configured = settings.googleSpreadsheetUrl?.trim() || '';
     // The previous default was a placeholder and the fallback silently selected
@@ -106,7 +99,6 @@ export const GoogleWorkspaceModal: React.FC<GoogleWorkspaceModalProps> = ({
   );
 
   // Forms state
-  const [formIdInput, setFormIdInput] = useState<string>(settings.googleFormTahapAwalUrl || GOOGLE_SIPANDU_RESOURCES.formEditorUrl);
   const [formResponsesCount, setFormResponsesCount] = useState<number | null>(null);
 
   // Firestore sync state
@@ -267,36 +259,25 @@ export const GoogleWorkspaceModal: React.FC<GoogleWorkspaceModalProps> = ({
     const configuredSource = settings.googleSpreadsheetSourceUrl?.trim() || '';
     setSourceSpreadsheetUrl(configuredSource);
     setSourceSpreadsheetTab(settings.googleSpreadsheetSourceTab?.trim() || '');
-    setEditingSourceUrl(!configuredSource);
   }, [settings.googleSpreadsheetSourceUrl, settings.googleSpreadsheetSourceTab]);
 
   useEffect(() => {
     const configured = settings.googleSpreadsheetUrl?.trim() || '';
     if (!configured || configured.includes('1yA8KemensosODHIVSumut2026_LiveSync')) {
       setSpreadsheetIdInput('');
-      setEditingTargetUrl(true);
       return;
     }
     try {
       if (extractSpreadsheetId(configured) === GOOGLE_SIPANDU_RESOURCES.responseSpreadsheetId) {
         setSpreadsheetIdInput('');
-        setEditingTargetUrl(true);
-        return;
+          return;
       }
     } catch {
       setSpreadsheetIdInput('');
-      setEditingTargetUrl(true);
       return;
     }
     setSpreadsheetIdInput(configured);
-    setEditingTargetUrl(false);
   }, [settings.googleSpreadsheetUrl]);
-
-  useEffect(() => {
-    const configured = settings.googleFormTahapAwalUrl?.trim() || '';
-    setFormIdInput(configured || GOOGLE_SIPANDU_RESOURCES.formEditorUrl);
-    setEditingFormUrl(!configured);
-  }, [settings.googleFormTahapAwalUrl]);
 
   if (!isOpen) return null;
 
@@ -339,10 +320,7 @@ export const GoogleWorkspaceModal: React.FC<GoogleWorkspaceModalProps> = ({
     setLoading(true);
     setStatusMessage(null);
     try {
-      const configuredFolder = settings.googleDriveFolderUrl?.trim() || '';
-      const folderToRead = configuredFolder.includes('1Kemensos_Sumut_Berkas_PPKS_ODHIV')
-        ? GOOGLE_SIPANDU_RESOURCES.driveFolderId
-        : (configuredFolder || GOOGLE_SIPANDU_RESOURCES.driveFolderId);
+      const folderToRead = GOOGLE_SIPANDU_RESOURCES.driveFolderId;
       const files = await listDriveFiles('', folderToRead);
       setDriveFiles(files);
       setStatusMessage({ type: 'success', text: `Ditemukan ${files.length} berkas di Google Drive.` });
@@ -435,6 +413,25 @@ export const GoogleWorkspaceModal: React.FC<GoogleWorkspaceModalProps> = ({
     setStatusMessage({ type: 'success', text: `Spreadsheet sumber dipilih: ${file.name}. Tekan “Muat Data PPKS + Asesmen” untuk membaca data asli.` });
   };
 
+  const handleTargetSpreadsheetSelect = (fileId: string) => {
+    const file = spreadsheetFiles.find((candidate) => candidate.id === fileId);
+    if (!file) return;
+    if (file.id === GOOGLE_SIPANDU_RESOURCES.responseSpreadsheetId) {
+      setStatusMessage({
+        type: 'error',
+        text: 'Spreadsheet respons Google Form hanya sumber baca dan tidak boleh dipakai sebagai database tujuan.',
+      });
+      return;
+    }
+    const url = `https://docs.google.com/spreadsheets/d/${file.id}`;
+    setSpreadsheetIdInput(url);
+    onUpdateSettings({ ...settings, googleSpreadsheetUrl: url });
+    setStatusMessage({
+      type: 'success',
+      text: `Database SIPANDU dipilih: ${file.name}. Alamat sumber disembunyikan.`,
+    });
+  };
+
   const handleImportPPKSFromSpreadsheet = async () => {
     setLoading(true);
     setStatusMessage(null);
@@ -452,7 +449,6 @@ export const GoogleWorkspaceModal: React.FC<GoogleWorkspaceModalProps> = ({
         googleSpreadsheetSourceName: imported.spreadsheetTitle,
         googleSpreadsheetSourceTab: imported.selectedTab,
       });
-      setEditingSourceUrl(false);
       if (!imported.records.length) {
         const headerPreview = (imported.previewRows[0] || []).slice(0, 12).join(' | ');
         throw new Error(
@@ -559,50 +555,6 @@ export const GoogleWorkspaceModal: React.FC<GoogleWorkspaceModalProps> = ({
     }
   };
 
-  // URL settings are explicitly saved and locked, so reopening this modal does not
-  // require retyping long URLs and accidental edits cannot erase them.
-  const saveSourceUrlAndLock = () => {
-    const url = GOOGLE_SIPANDU_RESOURCES.responseSpreadsheetUrl;
-    const tab = 'From Responses 1';
-    onUpdateSettings({
-      ...settings,
-      googleSpreadsheetSourceUrl: url,
-      googleSpreadsheetSourceName: 'Sumber ATENSI SIPANDU',
-      googleSpreadsheetSourceTab: tab,
-    });
-    setSourceSpreadsheetUrl(url);
-    setSourceSpreadsheetTab(tab);
-    setEditingSourceUrl(false);
-    setStatusMessage({ type: 'success', text: 'Sumber PPKS resmi dikunci ke spreadsheet ATENSI dan tab From Responses 1.' });
-  };
-
-  const saveTargetUrlAndLock = () => {
-    const url = spreadsheetIdInput.trim();
-    try {
-      const id = extractSpreadsheetId(url);
-      if (id === GOOGLE_SIPANDU_RESOURCES.responseSpreadsheetId) {
-        throw new Error('Spreadsheet respons Google Form tidak boleh menjadi target database PPKS.');
-      }
-      onUpdateSettings({ ...settings, googleSpreadsheetUrl: url });
-      setEditingTargetUrl(false);
-      setStatusMessage({ type: 'success', text: 'URL Database PPKS tersimpan dan dikunci.' });
-    } catch (error) {
-      setStatusMessage({ type: 'error', text: error instanceof Error ? error.message : 'URL Database PPKS tidak valid.' });
-    }
-  };
-
-  const saveFormUrlAndLock = () => {
-    const normalized = toGoogleFormsRespondentUrl(formIdInput.trim());
-    if (!normalized || !getGoogleFormIdFromUrl(normalized)) {
-      setStatusMessage({ type: 'error', text: 'URL Google Form tidak valid. Gunakan URL lengkap docs.google.com/forms/d/FORM_ID/edit atau /viewform.' });
-      return;
-    }
-    onUpdateSettings({ ...settings, googleFormTahapAwalUrl: normalized });
-    setFormIdInput(normalized);
-    setEditingFormUrl(false);
-    setStatusMessage({ type: 'success', text: 'URL Google Form tersimpan dan dikunci.' });
-  };
-
   // Google Sheets Actions
   const handleReadSheet = async () => {
     setLoading(true);
@@ -614,8 +566,7 @@ export const GoogleWorkspaceModal: React.FC<GoogleWorkspaceModalProps> = ({
         throw new Error('Spreadsheet respons Google Form tidak boleh menjadi target database PPKS.');
       }
       onUpdateSettings({ ...settings, googleSpreadsheetUrl: targetUrl });
-      setEditingTargetUrl(false);
-      const tabs = await getSpreadsheetSheetTitles(targetUrl);
+        const tabs = await getSpreadsheetSheetTitles(targetUrl);
       if (!tabs.length) throw new Error('Spreadsheet tidak memiliki tab yang dapat dibaca.');
       const rows = await readSpreadsheetData(spreadsheetIdInput, `'${tabs[0].replace(/'/g, "''")}'!A1:Z100`);
       setSheetRows(rows);
@@ -675,8 +626,7 @@ export const GoogleWorkspaceModal: React.FC<GoogleWorkspaceModalProps> = ({
       const newUrl = `https://docs.google.com/spreadsheets/d/${newId}`;
       setSpreadsheetIdInput(newUrl);
       onUpdateSettings({ ...settings, googleSpreadsheetUrl: newUrl });
-      setEditingTargetUrl(false);
-      setStatusMessage({ type: 'success', text: `Google Spreadsheet baru berhasil dibuat! (ID: ${newId})` });
+        setStatusMessage({ type: 'success', text: 'Database Google Spreadsheet baru SIPANDU berhasil dibuat dan dipilih.' });
     } catch (err: any) {
       setStatusMessage({ type: 'error', text: err.message });
     } finally {
@@ -684,21 +634,21 @@ export const GoogleWorkspaceModal: React.FC<GoogleWorkspaceModalProps> = ({
     }
   };
 
-  // Google Forms Actions
+  // Google Forms Actions: use the single official Form source stored in app configuration.
   const handleCheckFormResponses = async () => {
     setLoading(true);
     setStatusMessage(null);
     try {
-      const normalized = toGoogleFormsRespondentUrl(formIdInput.trim());
-      if (!normalized || !getGoogleFormIdFromUrl(normalized)) {
-        throw new Error('URL Google Form tidak valid. Gunakan URL lengkap docs.google.com/forms/d/FORM_ID/edit atau /viewform.');
-      }
-      const responses = await fetchFormResponses(normalized);
-      onUpdateSettings({ ...settings, googleFormTahapAwalUrl: normalized });
-      setFormIdInput(normalized);
-      setEditingFormUrl(false);
+      const responses = await fetchFormResponses(GOOGLE_SIPANDU_RESOURCES.formId);
+      onUpdateSettings({
+        ...settings,
+        googleFormTahapAwalUrl: GOOGLE_SIPANDU_RESOURCES.formRespondentUrl,
+      });
       setFormResponsesCount(responses.length);
-      setStatusMessage({ type: 'success', text: `Terdeteksi ${responses.length} respon. URL Google Form telah disimpan dan dikunci.` });
+      setStatusMessage({
+        type: 'success',
+        text: `Terdeteksi ${responses.length} respon dari sumber Google Form Utama SIPANDU.`,
+      });
     } catch (err: any) {
       setStatusMessage({ type: 'error', text: err.message });
     } finally {
@@ -1080,16 +1030,7 @@ export const GoogleWorkspaceModal: React.FC<GoogleWorkspaceModalProps> = ({
                           <FileText className="w-4 h-4 text-sky-300 shrink-0" />
                           <span className="text-white font-medium truncate">{file.name}</span>
                         </div>
-                        {file.webViewLink && (
-                          <a
-                            href={file.webViewLink}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-sky-300 hover:text-sky-100 shrink-0 ml-2"
-                          >
-                            <ExternalLink className="w-3.5 h-3.5" />
-                          </a>
-                        )}
+                        <span className="ml-2 shrink-0 text-[10px] text-neutral-500">Tersimpan di Drive</span>
                       </div>
                     ))}
                   </div>
@@ -1128,8 +1069,8 @@ export const GoogleWorkspaceModal: React.FC<GoogleWorkspaceModalProps> = ({
               <div className="p-3.5 rounded-xl bg-black/50 border border-sky-500/35 space-y-3">
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                   <div>
-                    <h5 className="text-sky-100 font-bold text-xs">Spreadsheet Sumber PPKS & Asesmen</h5>
-                    <p className="text-[10px] text-neutral-300">Pilih spreadsheet asli dari Drive. Data dibaca saja lalu dimasukkan ke daftar PPKS aplikasi; file sumber tidak diubah.</p>
+                    <h5 className="text-sky-100 font-bold text-xs">Sumber Spreadsheet PPKS & Asesmen</h5>
+                    <p className="text-[10px] text-neutral-300">Pilih nama sumber resmi dari Google Drive. Alamat tautan sumber disimpan internal dan tidak ditampilkan.</p>
                   </div>
                   <button
                     type="button"
@@ -1137,46 +1078,26 @@ export const GoogleWorkspaceModal: React.FC<GoogleWorkspaceModalProps> = ({
                     disabled={loading || !token}
                     className="shrink-0 px-3 py-2 rounded-lg bg-sky-900 hover:bg-sky-800 text-white font-semibold text-[11px] disabled:opacity-50"
                   >
-                    {loading ? 'Mencari…' : 'Cari Spreadsheet Saya'}
+                    {loading ? 'Mencari…' : 'Cari Sumber Spreadsheet'}
                   </button>
                 </div>
+                <label className="block text-sky-200 font-semibold text-[11px]">Pilih sumber Spreadsheet:</label>
                 <select
                   value={(() => { try { return extractSpreadsheetId(sourceSpreadsheetUrl); } catch { return ''; } })()}
                   onChange={(e) => handleSourceSpreadsheetSelect(e.target.value)}
                   className="w-full p-2.5 rounded bg-black/70 border border-sky-500/30 text-xs text-white"
                   disabled={loading || !token || spreadsheetFiles.length === 0}
                 >
-                  <option value="">— Pilih spreadsheet hasil pencarian Drive —</option>
+                  <option value="">— Pilih sumber Spreadsheet PPKS —</option>
                   {spreadsheetFiles.map((file) => (
                     <option key={file.id} value={file.id}>{file.name}</option>
                   ))}
                 </select>
-                <label className="block text-sky-200 font-semibold text-[11px]">Atau tempel URL Spreadsheet sumber:</label>
+                <p className="text-[10px] text-neutral-400">
+                  Sumber aktif: <strong className="text-neutral-200">{settings.googleSpreadsheetSourceName || 'Sumber ATENSI SIPANDU'}</strong>
+                  {' · '}alamat sumber disembunyikan
+                </p>
                 <div className="flex flex-col sm:flex-row gap-2">
-                  <input
-                    type="url"
-                    value={sourceSpreadsheetUrl}
-                    readOnly={!editingSourceUrl && Boolean(sourceSpreadsheetUrl.trim())}
-                    onChange={(e) => setSourceSpreadsheetUrl(e.target.value)}
-                    placeholder="https://docs.google.com/spreadsheets/d/..."
-                    className={`w-full sm:flex-1 p-2.5 rounded bg-black/70 border border-sky-500/30 text-xs text-white font-mono ${!editingSourceUrl && sourceSpreadsheetUrl.trim() ? 'cursor-not-allowed opacity-80' : ''}`}
-                  />
-                  <button
-                    type="button"
-                    onClick={editingSourceUrl ? saveSourceUrlAndLock : () => setEditingSourceUrl(true)}
-                    className="shrink-0 px-3 py-2 rounded-lg border border-sky-500/30 bg-black/50 text-[10px] font-semibold text-sky-100 hover:bg-white/10"
-                  >
-                    {editingSourceUrl ? <><Lock className="inline h-3 w-3 mr-1" />Simpan & Kunci</> : <><Unlock className="inline h-3 w-3 mr-1" />Ubah URL</>}
-                  </button>
-                </div>
-                <div className="flex flex-col sm:flex-row gap-2">
-                  <input
-                    type="text"
-                    value={sourceSpreadsheetTab}
-                    onChange={(e) => setSourceSpreadsheetTab(e.target.value)}
-                    placeholder="Nama tab (opsional, otomatis memilih tab respons)"
-                    className="w-full sm:flex-1 p-2 rounded bg-black/70 border border-neutral-700 text-xs text-white"
-                  />
                   <button
                     type="button"
                     onClick={handleImportPPKSFromSpreadsheet}
@@ -1186,36 +1107,49 @@ export const GoogleWorkspaceModal: React.FC<GoogleWorkspaceModalProps> = ({
                     {loading ? 'Memuat…' : 'Muat Data PPKS + Asesmen'}
                   </button>
                 </div>
-                <p className="text-[10px] text-neutral-400">
-                  Sumber terpilih: {settings.googleSpreadsheetSourceName || 'nama file akan diketahui setelah dibaca'}.
-                  {sourceSpreadsheetUrl ? <a href={sourceSpreadsheetUrl} target="_blank" rel="noopener noreferrer" className="ml-1 text-sky-300 underline">Buka file</a> : null}
-                </p>
               </div>
 
               <div className="p-3.5 rounded-xl bg-black/50 border border-emerald-500/30 space-y-3">
-                <label className="block text-sky-200 font-semibold text-[11px]">
-                  URL Google Spreadsheet tujuan DATABASE SIPANDU (khusus tulis):
-                </label>
+                <div>
+                  <h5 className="text-emerald-100 font-bold text-xs">Database SIPANDU (Tujuan Penyimpanan)</h5>
+                  <p className="text-[10px] text-neutral-300">Pilih spreadsheet database tujuan. Sumber respons Google Form tidak dapat dipilih sebagai tujuan tulis.</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleDiscoverSpreadsheets}
+                  disabled={loading || !token}
+                  className="w-full sm:w-auto px-3 py-2 rounded-lg bg-sky-900 hover:bg-sky-800 text-white font-semibold text-[11px] disabled:opacity-50"
+                >
+                  {loading ? 'Mencari…' : 'Muat Daftar Spreadsheet'}
+                </button>
+                <label className="block text-sky-200 font-semibold text-[11px]">Pilih database tujuan:</label>
+                <select
+                  value={(() => { try { return spreadsheetIdInput ? extractSpreadsheetId(spreadsheetIdInput) : ''; } catch { return ''; } })()}
+                  onChange={(e) => handleTargetSpreadsheetSelect(e.target.value)}
+                  className="w-full p-2.5 rounded bg-black/70 border border-emerald-500/30 text-xs text-white"
+                  disabled={loading || !token || spreadsheetFiles.length === 0}
+                >
+                  <option value="">— Pilih database SIPANDU —</option>
+                  {spreadsheetIdInput && !spreadsheetFiles.some((file) => file.id === (() => { try { return extractSpreadsheetId(spreadsheetIdInput); } catch { return ''; } })()) && (
+                    <option value={extractSpreadsheetId(spreadsheetIdInput)}>Database SIPANDU tersimpan</option>
+                  )}
+                  {spreadsheetFiles
+                    .filter((file) => file.id !== GOOGLE_SIPANDU_RESOURCES.responseSpreadsheetId)
+                    .map((file) => (
+                      <option key={file.id} value={file.id}>{file.name}</option>
+                    ))}
+                </select>
+                <p className="text-[10px] text-neutral-400">
+                  Database terpilih: <strong className="text-neutral-200">{spreadsheetFiles.find((file) => {
+                    try { return file.id === extractSpreadsheetId(spreadsheetIdInput); } catch { return false; }
+                  })?.name || (spreadsheetIdInput ? 'Database SIPANDU tersimpan' : 'Belum dipilih')}</strong>
+                  {' · '}alamat sumber disembunyikan
+                </p>
                 <div className="flex flex-col sm:flex-row items-center gap-2">
-                  <input
-                    type="text"
-                    value={spreadsheetIdInput}
-                    readOnly={!editingTargetUrl && Boolean(spreadsheetIdInput.trim())}
-                    onChange={(e) => setSpreadsheetIdInput(e.target.value)}
-                    placeholder="URL Google Spreadsheet"
-                    className={`w-full sm:flex-1 p-2 rounded bg-black/70 border border-rose-500/30 text-xs text-white font-mono ${!editingTargetUrl && spreadsheetIdInput.trim() ? 'cursor-not-allowed opacity-80' : ''}`}
-                  />
-                  <button
-                    type="button"
-                    onClick={editingTargetUrl ? saveTargetUrlAndLock : () => setEditingTargetUrl(true)}
-                    className="w-full sm:w-auto shrink-0 px-3 py-2 rounded-lg border border-emerald-500/30 bg-black/50 text-[10px] font-semibold text-emerald-100 hover:bg-white/10"
-                  >
-                    {editingTargetUrl ? <><Lock className="inline h-3 w-3 mr-1" />Simpan & Kunci</> : <><Unlock className="inline h-3 w-3 mr-1" />Ubah URL</>}
-                  </button>
                   <button
                     type="button"
                     onClick={handleReadSheet}
-                    disabled={loading || !token}
+                    disabled={loading || !token || !spreadsheetIdInput.trim()}
                     className="w-full sm:w-auto px-3.5 py-2 rounded-lg bg-sky-900 hover:bg-sky-800 text-white font-semibold text-xs flex items-center justify-center gap-1 cursor-pointer disabled:opacity-50"
                   >
                     <span>Baca Data</span>
@@ -1223,13 +1157,12 @@ export const GoogleWorkspaceModal: React.FC<GoogleWorkspaceModalProps> = ({
                   <button
                     type="button"
                     onClick={handleSyncAllToSheet}
-                    disabled={loading || !token}
+                    disabled={loading || !token || !spreadsheetIdInput.trim()}
                     className="w-full sm:w-auto px-3.5 py-2 rounded-lg bg-emerald-700 hover:bg-emerald-600 text-white font-semibold text-xs flex items-center justify-center gap-1 cursor-pointer disabled:opacity-50"
                   >
                     <span>Ekspor {ppksList.length} PPKS</span>
                   </button>
                 </div>
-
                 <div className="pt-2 border-t border-neutral-800 flex justify-between items-center">
                   <span className="text-[10px] text-neutral-400">Belum punya spreadsheet?</span>
                   <button
@@ -1273,35 +1206,27 @@ export const GoogleWorkspaceModal: React.FC<GoogleWorkspaceModalProps> = ({
               </div>
 
               <div className="p-3.5 rounded-xl bg-black/50 border border-emerald-500/30 space-y-3">
-                <label className="block text-sky-200 font-semibold text-[11px]">
-                  URL Google Form utama untuk pemeriksaan respons:
-                </label>
-                <div className="flex flex-col sm:flex-row items-center gap-2">
-                  <input
-                    type="text"
-                    value={formIdInput}
-                    readOnly={!editingFormUrl && Boolean(settings.googleFormTahapAwalUrl?.trim())}
-                    onChange={(e) => setFormIdInput(e.target.value)}
-                    placeholder="URL Google Form utama"
-                    className={`w-full sm:flex-1 p-2 rounded bg-black/70 border border-rose-500/30 text-xs text-white font-mono ${!editingFormUrl && settings.googleFormTahapAwalUrl?.trim() ? 'cursor-not-allowed opacity-80' : ''}`}
-                  />
-                  <button
-                    type="button"
-                    onClick={editingFormUrl ? saveFormUrlAndLock : () => setEditingFormUrl(true)}
-                    className="w-full sm:w-auto shrink-0 px-3 py-2 rounded-lg border border-emerald-500/30 bg-black/50 text-[10px] font-semibold text-emerald-100 hover:bg-white/10"
-                  >
-                    {editingFormUrl ? <><Lock className="inline h-3 w-3 mr-1" />Simpan & Kunci</> : <><Unlock className="inline h-3 w-3 mr-1" />Ubah URL</>}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleCheckFormResponses}
-                    disabled={loading || !token}
-                    className="w-full sm:w-auto px-4 py-2 rounded-lg bg-emerald-700 hover:bg-emerald-600 text-white font-semibold text-xs flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
-                  >
-                    <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
-                    <span>Cek Respon Form</span>
-                  </button>
+                <div>
+                  <h5 className="text-emerald-100 font-bold text-xs">Sumber Google Form Utama</h5>
+                  <p className="text-[10px] text-neutral-300">Gunakan Form SIPANDU yang sudah terdaftar. Tautan Form tidak ditampilkan pada panel ini.</p>
                 </div>
+                <label className="block text-sky-200 font-semibold text-[11px]">Pilih sumber Form:</label>
+                <select
+                  value={GOOGLE_SIPANDU_RESOURCES.formId}
+                  disabled
+                  className="w-full p-2.5 rounded bg-black/70 border border-emerald-500/30 text-xs text-white opacity-90"
+                >
+                  <option value={GOOGLE_SIPANDU_RESOURCES.formId}>Google Form Utama SIPANDU</option>
+                </select>
+                <button
+                  type="button"
+                  onClick={handleCheckFormResponses}
+                  disabled={loading || !token}
+                  className="w-full sm:w-auto px-4 py-2 rounded-lg bg-emerald-700 hover:bg-emerald-600 text-white font-semibold text-xs flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+                  <span>{loading ? 'Memeriksa…' : 'Cek Respon Form'}</span>
+                </button>
               </div>
 
               {formResponsesCount !== null && (
