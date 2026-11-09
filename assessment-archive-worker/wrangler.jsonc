@@ -9,6 +9,6 @@
     "GOOGLE_DRIVE_FOLDER_ID": "1TtUYxMv9-f5kcGWqYS_5PK7NwYqUvNgMMV0l1BpzoLdkHJAQ7Ucxg0rbqc9Ue19Wo2w85GV1"
   },
   "secrets": {
-    "required": ["GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON"]
+    "required": ["GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON", "FIREBASE_AUTH_API_KEY"]
   }
 }
