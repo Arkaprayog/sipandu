@@ -39,6 +39,7 @@ import { GOOGLE_SIPANDU_RESOURCES } from './lib/googleSIPANDUResources';
 import { getLiveSyncRetryDelay, LIVE_SYNC_INTERVAL_MS } from './lib/liveSyncPolicy';
 import { getCloudOnlyCompletedAssessments, mergeIntegratedAssessmentAnswers, type IntegratedAssessmentAnswersById } from './lib/integratedAssessmentArchive';
 import { preservePPKSRecordOrder } from './lib/ppksRecordState';
+import { clearFollowUpLocalNotifications, syncFollowUpLocalNotifications } from './lib/followUpNotificationScheduler';
 import { filterStageOneNotificationSubmissions } from './lib/stageOneRespondents';
 import { deduplicatePPKSRecords, parsePPKSTimestamp, samePPKSIdentity, sortPPKSRecordsByName, sortPPKSRecordsByTimestamp } from './lib/ppksData';
 import { normalizePPKSPhotoSource } from './lib/photoSources';
@@ -791,6 +792,11 @@ function StaffApp() {
   const handleLogout = async () => {
     if (!window.confirm('Apakah Anda yakin ingin keluar dari aplikasi SIPANDU ODHIV?')) return;
     const failures: string[] = [];
+    const sessionUid = auth.currentUser?.uid || '';
+    if (sessionUid) {
+      try { await clearFollowUpLocalNotifications(sessionUid); }
+      catch (error) { console.warn('SIPANDU could not clear local follow-up reminders during logout:', error); }
+    }
     try {
       await signOut(auth);
     } catch (error) {
@@ -1236,6 +1242,15 @@ function StaffApp() {
       unsubscribe?.();
     };
   }, [authReady, isAuthenticated, localCacheReady, ppksList, currentUserRole, currentUserUid]);
+
+  // Schedule generic Android reminders only after the service feed has loaded.
+  // The user grants permission explicitly from Settings; notification text contains no PPKS identity.
+  useEffect(() => {
+    if (!authReady || !isAuthenticated || !localCacheReady || serviceStatusLoading || serviceStatusError) return;
+    if (!['owner', 'supervisor', 'pendamping'].includes(currentUserRole) || !currentUserUid) return;
+    void syncFollowUpLocalNotifications(currentUserUid, serviceStatuses, currentUserRole)
+      .catch((error) => console.warn('SIPANDU could not synchronize local follow-up reminders:', error));
+  }, [authReady, isAuthenticated, localCacheReady, serviceStatusLoading, serviceStatusError, currentUserRole, currentUserUid, serviceStatuses, isSettingsOpen]);
 
   useEffect(() => {
     if (!authReady || !isAuthenticated || !localCacheReady || !['owner', 'supervisor', 'pendamping'].includes(currentUserRole)) {
