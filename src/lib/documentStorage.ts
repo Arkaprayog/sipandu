@@ -1,6 +1,6 @@
 import { getIdTokenResult } from 'firebase/auth';
 import {
-  collection, deleteDoc, doc, getDoc, getDocs, limit, orderBy, query,
+  collection, deleteDoc, deleteField, doc, getDoc, getDocs, limit, orderBy, query,
   serverTimestamp, setDoc, updateDoc,
 } from 'firebase/firestore';
 import { auth, db } from './firebase';
@@ -208,6 +208,8 @@ export async function retryStaffDocumentDriveBackup(
       contentType,
       driveBackupStatus: 'complete',
       driveBackupError: '',
+      storagePath: deleteField(),
+      downloadUrl: deleteField(),
       driveFileId: replacement.id,
       driveWebViewLink: replacement.webViewLink,
       driveBackupAt: serverTimestamp(),

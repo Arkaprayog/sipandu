@@ -7,7 +7,7 @@ import {
   initializeTestEnvironment,
   type RulesTestEnvironment,
 } from '@firebase/rules-unit-testing';
-import { deleteDoc, doc, getDoc, serverTimestamp, setDoc, updateDoc } from 'firebase/firestore';
+import { deleteDoc, deleteField, doc, getDoc, serverTimestamp, setDoc, updateDoc } from 'firebase/firestore';
 import { getBytes, ref, uploadBytes } from 'firebase/storage';
 
 const PROJECT_ID = 'demo-sipandu-rules';
@@ -184,6 +184,49 @@ test('Metadata dokumen staf hanya menerima pointer Drive privat dan pemilik/admi
 
   const outsider = environment.authenticatedContext('outsider-001').firestore();
   await assertFails(getDoc(doc(outsider, 'staffDocuments', 'document-001')));
+});
+
+
+test('Legacy Firebase Storage references can only be removed during verified Drive migration', async () => {
+  const recordPath = doc(environment.authenticatedContext(PENDAMPING_UID, {
+    role: 'pendamping',
+  }).firestore(), 'staffDocuments', 'legacy-document-001');
+
+  await environment.withSecurityRulesDisabled(async (context) => {
+    await setDoc(doc(context.firestore(), 'staffDocuments', 'legacy-document-001'), {
+      name: 'legacy.pdf',
+      contentType: 'application/pdf',
+      size: 4,
+      ownerUid: PENDAMPING_UID,
+      ownerEmail: 'pendamping@example.test',
+      category: 'surat-tugas',
+      uploadedAt: new Date(),
+      storagePath: 'staff-documents/pendamping-001/legacy-document-001/legacy.pdf',
+      downloadUrl: 'https://firebasestorage.googleapis.com/legacy-token',
+      driveBackupStatus: 'failed',
+      driveBackupError: 'legacy storage source',
+      driveFileId: '',
+      driveWebViewLink: '',
+      driveBackupAt: null,
+      driveBackupUpdatedAt: new Date(),
+    });
+  });
+
+  await assertSucceeds(updateDoc(recordPath, {
+    storagePath: deleteField(),
+    downloadUrl: deleteField(),
+    driveBackupStatus: 'complete',
+    driveBackupError: '',
+    driveFileId: 'migrated-drive-file-001',
+    driveWebViewLink: 'https://drive.google.com/open?id=migrated-drive-file-001',
+    driveBackupAt: serverTimestamp(),
+    driveBackupUpdatedAt: serverTimestamp(),
+  }));
+
+  await assertFails(updateDoc(recordPath, {
+    downloadUrl: 'https://firebasestorage.googleapis.com/reintroduced-token',
+    driveBackupUpdatedAt: serverTimestamp(),
+  }));
 });
 
 test('Metadata arsip asesmen dan surat dibuat hanya dengan skema yang diizinkan', async () => {

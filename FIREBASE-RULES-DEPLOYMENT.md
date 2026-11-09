@@ -56,3 +56,9 @@ Dokumen lama yang hanya memiliki storagePath Firebase Storage tidak otomatis dip
 3. Unduh sebagai pemilik; pastikan byte dan MIME type sesuai file asli.
 4. Coba unduh dokumen petugas lain sebagai akun pendamping; Worker harus menolak.
 5. Pastikan metadata Firestore baru tidak berisi storagePath atau downloadUrl.
+
+## Migrasi metadata dokumen lama dan keamanan deployment rules
+
+Pada v5.0.6, proses pemulihan dokumen lama hanya mengizinkan penghapusan field Firebase Storage `storagePath` dan `downloadUrl` setelah salinan Drive baru terverifikasi. Firestore Rules menolak penambahan kembali kedua field tersebut. File Firebase Storage lama tidak dihapus otomatis; file asli harus diunggah ulang atau dipulihkan dari backup yang tersedia sebelum metadata lama dibersihkan.
+
+Workflow Firebase Rules menggunakan `cancel-in-progress: false` agar deployment aturan produksi yang sedang berjalan tidak dibatalkan oleh push berikutnya pada branch yang sama.

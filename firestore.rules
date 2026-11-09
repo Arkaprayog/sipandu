@@ -153,8 +153,10 @@ service cloud.firestore {
         && (resource.data.ownerUid == request.auth.uid || canWritePpks())
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
           'driveBackupStatus', 'driveBackupError', 'driveFileId',
-          'driveWebViewLink', 'driveBackupAt', 'driveBackupUpdatedAt'
+          'driveWebViewLink', 'driveBackupAt', 'driveBackupUpdatedAt',
+          'storagePath', 'downloadUrl'
         ])
+        && !request.resource.data.keys().hasAny(['storagePath', 'downloadUrl'])
         && request.resource.data.driveBackupStatus in ['complete', 'failed']
         && request.resource.data.driveBackupError is string
         && request.resource.data.driveBackupError.size() <= 1000
