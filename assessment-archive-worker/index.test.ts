@@ -229,3 +229,99 @@ test('stores a staff document in private Drive, verifies the bytes, and enforces
   assert.equal(foreignResponse.status, 403);
   assert.equal(mediaReadCount, 1, 'a different pendamping must not receive the file bytes');
 });
+
+
+test('downloads an assessment archive only after identity and Drive archive verification', async () => {
+  const pdfBytes = new TextEncoder().encode('%PDF-1.7\\nprivate assessment archive');
+  const ppksId = 'ppks-private-002';
+  const archiveKey = Array.from(new Uint8Array(await crypto.subtle.digest(
+    'SHA-256',
+    new TextEncoder().encode('sipandu-integrated-assessment:' + ppksId),
+  )), (byte) => byte.toString(16).padStart(2, '0')).join('');
+  const folderIds = ['assessment-root', 'assessment-folder', 'respondent-folder'];
+  let folderIndex = 0;
+  let mediaReads = 0;
+  const archivedFile = {
+    id: 'assessment-pdf-002',
+    name: 'Form-Asesmen-Terintegrasi-' + archiveKey.slice(0, 20) + '.pdf',
+    mimeType: 'application/pdf',
+    size: String(pdfBytes.byteLength),
+    parents: [folderIds[2]],
+    appProperties: { sipanduManaged: 'true', sipanduArchiveKey: archiveKey },
+    trashed: false,
+  };
+
+  globalThis.fetch = async (input, init) => {
+    const url = new URL(String(input));
+    const method = init?.method || 'GET';
+    if (url.hostname === 'identitytoolkit.googleapis.com') {
+      return jsonResponse({
+        users: [{ localId: 'staff-uid', customAttributes: JSON.stringify({ role: 'owner' }) }],
+      });
+    }
+    if (url.hostname === 'www.googleapis.com' && url.pathname === '/oauth2/v3/userinfo') {
+      return jsonResponse({ email: 'aryprayoga139@gmail.com', email_verified: true });
+    }
+    if (url.hostname === 'www.googleapis.com' && url.pathname === '/drive/v3/files') {
+      if (url.searchParams.has('q')) {
+        const query = url.searchParams.get('q') || '';
+        return query.includes('sipanduArchiveKey')
+          ? jsonResponse({ files: [archivedFile] })
+          : jsonResponse({ files: [] });
+      }
+      if (url.searchParams.get('fields') === 'id' && method === 'POST') {
+        return jsonResponse({ id: folderIds[folderIndex++] });
+      }
+      if (url.pathname.endsWith('/' + archivedFile.id) && url.searchParams.get('alt') === 'media') {
+        mediaReads += 1;
+        return new Response(pdfBytes, { headers: { 'Content-Type': 'application/pdf' } });
+      }
+      if (url.pathname.endsWith('/' + archivedFile.id)) return jsonResponse(archivedFile);
+    }
+    throw new Error('Unexpected mocked request: ' + method + ' ' + url);
+  };
+
+  const response = await worker.fetch(new Request(
+    'https://sipandu-assessment-archive.aryprayoga139.workers.dev/archive/' + encodeURIComponent(ppksId),
+    {
+      headers: {
+        Origin: 'https://sipanduodhiv.my.id',
+        Authorization: 'Bearer firebase-id-token',
+        'X-Google-Access-Token': 'google-access-token',
+      },
+    },
+  ), {
+    FIREBASE_PROJECT_ID: 'gen-lang-client-0197631978',
+    FIREBASE_AUTH_API_KEY: 'public-firebase-api-key',
+    GOOGLE_WORKSPACE_EMAIL: 'aryprayoga139@gmail.com',
+  });
+
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get('Content-Type'), 'application/pdf');
+  assert.equal(response.headers.get('Cache-Control'), 'private, no-store');
+  assert.equal(response.headers.get('X-Content-Type-Options'), 'nosniff');
+  assert.deepEqual(new Uint8Array(await response.arrayBuffer()), pdfBytes);
+  assert.equal(mediaReads, 1);
+  assert.equal(folderIndex, 3);
+});
+
+test('does not expose assessment archive bytes without a Firebase session', async () => {
+  let mediaReads = 0;
+  globalThis.fetch = async (input) => {
+    const url = new URL(String(input));
+    if (url.hostname === 'identitytoolkit.googleapis.com') return jsonResponse({ users: [] }, 400);
+    if (url.hostname === 'www.googleapis.com' && url.pathname.includes('/files/')) mediaReads += 1;
+    throw new Error('Unexpected request: ' + url);
+  };
+  const response = await worker.fetch(new Request(
+    'https://sipandu-assessment-archive.aryprayoga139.workers.dev/archive/ppks-private-002',
+    { headers: { 'X-Google-Access-Token': 'google-access-token' } },
+  ), {
+    FIREBASE_PROJECT_ID: 'gen-lang-client-0197631978',
+    FIREBASE_AUTH_API_KEY: 'public-firebase-api-key',
+    GOOGLE_WORKSPACE_EMAIL: 'aryprayoga139@gmail.com',
+  });
+  assert.equal(response.status, 401);
+  assert.equal(mediaReads, 0);
+});
+
