@@ -107,12 +107,14 @@ class NativePrinterPatchTests(unittest.TestCase):
     def test_patches_print_thread_lifecycle_and_private_pdf_storage(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            package = root / "capgo-printer" / "src" / "main" / "java" / "com" / "capgo" / "printer"
+            project = root / "android"
+            project.mkdir(parents=True)
+            package = root / "node_modules" / "@capgo" / "capacitor-printer" / "android" / "src" / "main" / "java" / "com" / "capgo" / "printer"
             package.mkdir(parents=True)
             (package / "Printer.java").write_text(PRINTER_FIXTURE, encoding="utf-8")
             (package / "PrinterPlugin.java").write_text(PLUGIN_FIXTURE, encoding="utf-8")
 
-            printer_path, plugin_path = patch_android_project(root)
+            printer_path, plugin_path = patch_android_project(project)
             printer = printer_path.read_text(encoding="utf-8")
             plugin = plugin_path.read_text(encoding="utf-8")
 
@@ -137,11 +139,13 @@ class NativePrinterPatchTests(unittest.TestCase):
     def test_private_storage_avoids_public_downloads_media_store(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            package = root / "capgo-printer" / "src" / "main" / "java" / "com" / "capgo" / "printer"
+            project = root / "android"
+            project.mkdir(parents=True)
+            package = root / "node_modules" / "@capgo" / "capacitor-printer" / "android" / "src" / "main" / "java" / "com" / "capgo" / "printer"
             package.mkdir(parents=True)
             (package / "Printer.java").write_text(PRINTER_FIXTURE, encoding="utf-8")
             (package / "PrinterPlugin.java").write_text(PLUGIN_FIXTURE, encoding="utf-8")
-            printer_path, _ = patch_android_project(root)
+            printer_path, _ = patch_android_project(project)
             source = printer_path.read_text(encoding="utf-8")
             self.assertIn('new File(context.getFilesDir(), "assessment-archives")', source)
             self.assertNotIn("MediaStore.Downloads", source)
