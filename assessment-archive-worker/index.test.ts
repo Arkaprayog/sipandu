@@ -262,7 +262,7 @@ test('downloads an assessment archive only after identity and Drive archive veri
     if (url.hostname === 'www.googleapis.com' && url.pathname === '/oauth2/v3/userinfo') {
       return jsonResponse({ email: 'aryprayoga139@gmail.com', email_verified: true });
     }
-    if (url.hostname === 'www.googleapis.com' && url.pathname === '/drive/v3/files') {
+    if (url.hostname === 'www.googleapis.com' && url.pathname.startsWith('/drive/v3/files')) {
       if (url.searchParams.has('q')) {
         const query = url.searchParams.get('q') || '';
         if (query.includes('sipanduArchiveKey')) return jsonResponse({ files: [archivedFile] });
@@ -299,7 +299,7 @@ test('downloads an assessment archive only after identity and Drive archive veri
     GOOGLE_WORKSPACE_EMAIL: 'aryprayoga139@gmail.com',
   });
 
-  assert.equal(response.status, 200);
+  assert.equal(response.status, 200, JSON.stringify(await response.clone().json().catch(() => ({}))));
   assert.equal(response.headers.get('Content-Type'), 'application/pdf');
   assert.equal(response.headers.get('Cache-Control'), 'private, no-store');
   assert.equal(response.headers.get('X-Content-Type-Options'), 'nosniff');
