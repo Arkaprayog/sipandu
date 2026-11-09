@@ -11,6 +11,9 @@ if not match:
     raise SystemExit("Gradle distributionUrl is missing from generated wrapper.")
 
 url = match.group(1).replace(r"\:", ":")
+# Avoid the services.gradle.org redirect to GitHub release assets, which can
+# intermittently return HTTP 504 on hosted CI runners.
+url = re.sub(r"^https://services\\.gradle\\.org/distributions/", "https://downloads.gradle.org/distributions/", url)
 if url.endswith("-all.zip"):
     url = url[:-len("-all.zip")] + "-bin.zip"
 elif not url.endswith("-bin.zip"):
@@ -23,4 +26,4 @@ else:
 
 content = re.sub(r"(?m)^distributionUrl=.+$", "distributionUrl=" + url.replace(":", r"\:"), content)
 wrapper.write_text(content, encoding="utf-8")
-print("Configured Gradle wrapper:", url, "with networkTimeout=120000 ms")
+print("Configured Gradle wrapper:", url, "with networkTimeout=300000 ms")
