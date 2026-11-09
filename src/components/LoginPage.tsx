@@ -176,8 +176,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
 
       {/* Panel glassmorphism responsif; wallpaper asli tetap terlihat di belakangnya. */}
       <main className="relative z-10 mx-auto grid w-full max-w-[800px] grid-cols-1 items-stretch gap-0 overflow-hidden rounded-3xl border border-white/70 bg-white/[0.16] shadow-2xl backdrop-blur-[24px] min-[720px]:grid-cols-2">
-        <section className="relative flex min-w-0 flex-col justify-between p-5 min-[720px]:p-6">
-          <div className="absolute inset-0 bg-gradient-to-b from-slate-950/55 via-slate-950/45 to-slate-950/85" />
+        <section className="relative flex min-w-0 flex-col justify-between bg-slate-900/40 p-5 text-white backdrop-blur-md min-[720px]:p-6">
           <div className="relative z-10 mt-5 max-w-full text-white">
             <h1 className="text-3xl font-bold leading-tight tracking-tight">SIPANDU</h1>
             <p className="mt-2 text-base font-semibold leading-snug text-white/95">
@@ -206,7 +205,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
           </div>
         </section>
 
-        <section className="w-full min-w-0 bg-white/[0.82] p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.9)] backdrop-blur-[22px] min-[720px]:flex min-[720px]:flex-col min-[720px]:justify-center min-[720px]:rounded-none min-[720px]:px-5 min-[720px]:py-5">
+        <section className="w-full min-w-0 bg-white p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.9)] min-[720px]:flex min-[720px]:flex-col min-[720px]:justify-center min-[720px]:rounded-none min-[720px]:px-5 min-[720px]:py-5">
           <div className="mb-5 flex flex-col items-center text-center">
             <div className="mb-4 flex w-full min-w-0 items-center justify-center gap-3">
               <img
