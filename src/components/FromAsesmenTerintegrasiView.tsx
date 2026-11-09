@@ -573,9 +573,18 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
           });
           return { pdf, fileName, driveUrl: driveCopy.webViewLink || '', backupError: '', ...(printRootId ? { printRootId } : {}) };
         } catch (metadataError) {
-          // Keep the verified Drive copy. A retry uses the same server-side
-          // idempotency key, so it updates this archive instead of duplicating it.
-          throw metadataError;
+          // The PDF is already verified in Drive. Preserve that result and still
+          // deliver the local PDF; a later retry will update the same archive key.
+          const detail = 'PDF sudah terverifikasi di Google Drive, tetapi tautan arsip belum berhasil dicatat di Firestore: '
+            + (metadataError instanceof Error ? metadataError.message : String(metadataError));
+          setDriveArchive({
+            status: 'complete',
+            error: detail,
+            fileId: driveCopy.id,
+            webViewLink: driveCopy.webViewLink || '',
+            savedAt: new Date().toISOString(),
+          });
+          return { pdf, fileName, driveUrl: driveCopy.webViewLink || '', backupError: detail, ...(printRootId ? { printRootId } : {}) };
         }
       } catch (driveError) {
         const detail = driveError instanceof Error ? driveError.message : String(driveError);
@@ -652,7 +661,10 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
       setStatusMessage(archive.backupError
         ? {
             type: 'success',
-            text: 'Jawaban aman di Firestore. File PDF A4 sudah diunduh ke perangkat, tetapi backup Google Drive belum berhasil: ' + archive.backupError,
+            text: archive.driveUrl
+              ? 'Jawaban aman di Firestore. PDF A4 berhasil diunduh dan diverifikasi di Google Drive, tetapi pencatatan tautan arsip di Firestore perlu diulang: ' + archive.backupError
+              : 'Jawaban aman di Firestore. File PDF A4 sudah diunduh ke perangkat, tetapi backup Google Drive belum berhasil: ' + archive.backupError,
+            ...(archive.driveUrl ? { driveUrl: archive.driveUrl } : {}),
           }
         : {
             type: 'success',
