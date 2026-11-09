@@ -5,13 +5,16 @@
  */
 export const GOOGLE_WORKSPACE_EMAIL = 'aryprayoga139@gmail.com';
 
+/** Contact number configured for the SIPANDU owner account. */
+export const SIPANDU_OWNER_WHATSAPP_PHONE = '088807185166';
+
 export const GOOGLE_SIPANDU_RESOURCES = {
-  formEditorUrl: 'https://docs.google.com/forms/d/12JJIlBzY9yA5taFIfkQ6r0dJDMEBbEw8ymX7mTUHmYc/edit',
+  formEditorUrl: 'https://docs.google.com/forms/d/12JJIlBzY9yA5taFIfkQ6r0dJDMEBbEw8ymX7mTUHmYc/edit?chromeless=1',
   formRespondentUrl: 'https://docs.google.com/forms/d/12JJIlBzY9yA5taFIfkQ6r0dJDMEBbEw8ymX7mTUHmYc/viewform',
   formId: '12JJIlBzY9yA5taFIfkQ6r0dJDMEBbEw8ymX7mTUHmYc',
-  responseSpreadsheetUrl: 'https://docs.google.com/spreadsheets/d/16R7_ov8KN0_AZBBDbqLrvtqnqjMIkfn8Gx9Sj1i9048/htmlview',
+  responseSpreadsheetUrl: 'https://docs.google.com/spreadsheets/d/16R7_ov8KN0_AZBBDbqLrvtqnqjMIkfn8Gx9Sj1i9048/edit?gid=941036007#gid=941036007',
   responseSpreadsheetId: '16R7_ov8KN0_AZBBDbqLrvtqnqjMIkfn8Gx9Sj1i9048',
-  driveFolderUrl: 'https://drive.google.com/drive/u/0/mobile/folders/1TtUYxMv9-f5kcGWqYS_5PK7NwYqUvNgMMV0l1BpzoLdkHJAQ7Ucxg0rbqc9Ue19Wo2w85GV1',
+  driveFolderUrl: 'https://drive.google.com/drive/u/9/folders/1TtUYxMv9-f5kcGWqYS_5PK7NwYqUvNgMMV0l1BpzoLdkHJAQ7Ucxg0rbqc9Ue19Wo2w85GV1',
   driveFolderId: '1TtUYxMv9-f5kcGWqYS_5PK7NwYqUvNgMMV0l1BpzoLdkHJAQ7Ucxg0rbqc9Ue19Wo2w85GV1',
 } as const;
 
