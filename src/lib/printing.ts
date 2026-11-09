@@ -1,8 +1,19 @@
+import { Capacitor } from '@capacitor/core';
 import { Printer } from '@capgo/capacitor-printer';
 
 /** Uses native Android/iOS print UI and the browser print dialog for PWA. */
 export async function printCurrentWebView(name: string): Promise<void> {
   await Printer.printWebView({ name });
+}
+
+async function blobToBase64(blob: Blob): Promise<string> {
+  const bytes = new Uint8Array(await blob.arrayBuffer());
+  let binary = '';
+  const chunkSize = 0x8000;
+  for (let offset = 0; offset < bytes.length; offset += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(offset, Math.min(offset + chunkSize, bytes.length)));
+  }
+  return btoa(binary);
 }
 
 /** Prints a small PDF or image without relying on an anchor download in WebView. */
@@ -12,13 +23,61 @@ export async function printSupportedBlob(
   mimeType: 'application/pdf' | 'image/jpeg' | 'image/png',
 ): Promise<void> {
   if (blob.size <= 0) throw new Error('File kosong dan tidak dapat dicetak.');
-  const bytes = new Uint8Array(await blob.arrayBuffer());
-  let binary = '';
-  const chunkSize = 0x8000;
-  for (let offset = 0; offset < bytes.length; offset += chunkSize) {
-    binary += String.fromCharCode(...bytes.subarray(offset, Math.min(offset + chunkSize, bytes.length)));
+  await Printer.printBase64({ name, data: await blobToBase64(blob), mimeType });
+}
+
+
+
+export type AssessmentPdfSaveResult =
+  | { destination: 'app-private-storage'; uri: string }
+  | { destination: 'browser-download'; uri?: never };
+
+/**
+ * Save assessment PDFs in private Android app storage. These documents can
+ * contain identity and case data, so they are deliberately not written to
+ * the public Downloads folder. The web app keeps its normal browser download.
+ */
+export async function savePdfToDevice(blob: Blob, name: string): Promise<AssessmentPdfSaveResult> {
+  if (blob.size <= 0) throw new Error('File PDF kosong dan tidak dapat disimpan.');
+  if ((await blob.slice(0, 5).text()) !== '%PDF-') {
+    throw new Error('Berkas yang akan disimpan bukan PDF yang valid.');
   }
-  await Printer.printBase64({ name, data: btoa(binary), mimeType });
+
+  if (Capacitor.isNativePlatform() && Capacitor.getPlatform() === 'android') {
+    const nativePrinter = Printer as typeof Printer & {
+      savePdfToAppStorage(options: {
+        name: string;
+        data: string;
+        mimeType: 'application/pdf';
+      }): Promise<{ uri: string; name?: string }>;
+    };
+    const saved = await nativePrinter.savePdfToAppStorage({
+      name,
+      data: await blobToBase64(blob),
+      mimeType: 'application/pdf',
+    });
+    if (!saved?.uri) {
+      throw new Error('Android tidak mengembalikan lokasi file PDF yang tersimpan.');
+    }
+    return { destination: 'app-private-storage', uri: saved.uri };
+  }
+
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = name;
+  link.rel = 'noopener';
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  return { destination: 'browser-download' };
+}
+
+/** Print the verified PDF file already persisted in SIPANDU's private storage. */
+export async function printPdfFromDevice(uri: string, name: string): Promise<void> {
+  if (!uri.trim()) throw new Error('Lokasi PDF tersimpan tidak tersedia.');
+  await Printer.printFile({ path: uri, name, mimeType: 'application/pdf' });
 }
 
 export async function printPdfBlob(blob: Blob, name: string): Promise<void> {
