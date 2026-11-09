@@ -107,6 +107,8 @@ jobs:
       - name: Copy web assets into Android app
         run: npx cap sync android
 
+      # Capgo's Android plugin source lives in node_modules; patch it after sync so
+      # both assembleDebug and assembleRelease compile the same UI-thread print bridge.
       - name: Patch native Android PDF storage and print lifecycle
         run: python3 scripts/patch_native_printer.py --project android
 
