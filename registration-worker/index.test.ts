@@ -238,7 +238,7 @@ test('public intake refuses to run without a Turnstile secret', async () => {
   assert.equal(response.status, 503);
 });
 
-test('activation does not require the shared signup code once a pending invitation exists', () => {
+test('activation configuration does not require a shared team code', () => {
   const env = {
     FIREBASE_AUTH_API_KEY: 'worker-secret-api-key',
     FIREBASE_PROJECT_ID: 'gen-lang-client-0197631978',
@@ -313,9 +313,8 @@ test('restores an invitation for the same verified Firebase account without crea
         Authorization: 'Bearer existing-firebase-id-token',
         'CF-Connecting-IP': '192.0.2.80',
       },
-      body: JSON.stringify({ code: 'team-recovery-code-0123456789' }),
+      body: JSON.stringify({}),
     }), {
-      TEAM_REGISTRATION_CODE: 'team-recovery-code-0123456789',
       FIREBASE_AUTH_API_KEY: 'test-worker-secret-api-key',
       FIREBASE_PROJECT_ID: 'gen-lang-client-0197631978',
       FIREBASE_SERVICE_ACCOUNT_JSON: '{"project_id":"gen-lang-client-0197631978","client_email":"test@example.iam.gserviceaccount.com","private_key":"test"}',
@@ -365,9 +364,8 @@ test('does not restore an invitation before Firebase email verification', async 
         Authorization: 'Bearer unverified-firebase-id-token',
         'CF-Connecting-IP': '192.0.2.81',
       },
-      body: JSON.stringify({ code: 'team-recovery-code-0123456789' }),
+      body: JSON.stringify({}),
     }), {
-      TEAM_REGISTRATION_CODE: 'team-recovery-code-0123456789',
       FIREBASE_AUTH_API_KEY: 'test-worker-secret-api-key',
       FIREBASE_PROJECT_ID: 'gen-lang-client-0197631978',
       FIREBASE_SERVICE_ACCOUNT_JSON: '{"project_id":"gen-lang-client-0197631978","client_email":"test@example.iam.gserviceaccount.com","private_key":"test"}',
@@ -376,6 +374,44 @@ test('does not restore an invitation before Firebase email verification', async 
 
     assert.equal(response.status, 403);
     assert.deepEqual(writes.filter((key) => key.startsWith('pending:')), []);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+
+test('registration accepts a Firebase identity token without any team code', async () => {
+  const originalFetch = globalThis.fetch;
+  const writes: Array<{ key: string; value: string; expirationTtl?: number }> = [];
+  const kv = {
+    get: async (_key: string) => null,
+    put: async (key: string, value: string, options?: { expirationTtl?: number }) => {
+      writes.push({ key, value, expirationTtl: options?.expirationTtl });
+    },
+    delete: async (_key: string) => undefined,
+  };
+  globalThis.fetch = (async () => new Response(JSON.stringify({
+    users: [{ localId: 'firebase-uid-new-member', email: 'member@example.test', emailVerified: false }],
+  }), { status: 200, headers: { 'Content-Type': 'application/json' } })) as typeof fetch;
+  try {
+    const response = await worker.fetch(new Request('https://sipandu-registration.test/register', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: 'Bearer firebase-id-token',
+        'CF-Connecting-IP': '192.0.2.82',
+      },
+      body: JSON.stringify({}),
+    }), {
+      FIREBASE_AUTH_API_KEY: 'test-worker-secret-api-key',
+      FIREBASE_PROJECT_ID: 'gen-lang-client-0197631978',
+      FIREBASE_SERVICE_ACCOUNT_JSON: '{"project_id":"gen-lang-client-0197631978","client_email":"test@example.iam.gserviceaccount.com","private_key":"test"}',
+      PENDING_REGISTRATIONS: kv,
+    });
+    assert.equal(response.status, 200);
+    const invitation = writes.find((entry) => entry.key === 'pending:firebase-uid-new-member');
+    assert.ok(invitation);
+    assert.equal(invitation.expirationTtl, 7 * 24 * 60 * 60);
   } finally {
     globalThis.fetch = originalFetch;
   }
