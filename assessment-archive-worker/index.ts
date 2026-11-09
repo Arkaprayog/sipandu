@@ -224,7 +224,7 @@ async function uploadPdf(
   });
   if (!response.ok) {
     const detail = await response.json().catch(() => ({})) as { error?: { message?: string } };
-    throw new Error(detail.error?.message || 'Google Drive menolak upload PDF (HTTP ' + response.status + ').');
+    throw new Error((detail.error?.message || 'Google Drive menolak upload PDF') + ' (HTTP ' + response.status + ').');
   }
   const uploaded = await response.json() as DriveFile;
   if (!uploaded.id) throw new Error('Google Drive tidak mengembalikan ID file setelah upload.');
@@ -280,7 +280,10 @@ async function archivePdf(
     } catch (error) {
       lastError = error;
       if (attempt === 2) break;
-      if (error instanceof Error && !/HTTP (429|500|502|503|504)|temporarily|timeout|network/i.test(error.message)) throw error;
+      const transient = error instanceof TypeError
+        || (error instanceof Error && /HTTP (429|500|502|503|504)|temporarily|timeout|network|fetch failed|internal error/i.test(error.message));
+      if (!transient) throw error;
+      await new Promise((resolve) => setTimeout(resolve, 250 * (attempt + 1)));
     }
   }
   throw lastError instanceof Error ? lastError : new Error('Upload arsip Google Drive gagal setelah percobaan ulang.');
@@ -321,6 +324,10 @@ export default {
     if (!googleAccessToken) return json({ ok: false, message: 'Sesi Google Workspace tidak ditemukan. Hubungkan akun Google terlebih dahulu.' }, 401, origin);
 
     try {
+      const contentLength = Number(request.headers.get('Content-Length') || 0);
+      if (contentLength > MAX_PDF_BYTES + 128 * 1024) {
+        return json({ ok: false, message: 'Ukuran permintaan melebihi batas arsip PDF 24 MiB.' }, 413, origin);
+      }
       await lookupFirebaseUser(env, idToken);
       await verifyGoogleIdentity(googleAccessToken, env.GOOGLE_WORKSPACE_EMAIL!);
       const form = await request.formData();
