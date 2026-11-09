@@ -39,6 +39,8 @@ concurrency:
 
 jobs:
   rules-emulator:
+    outputs:
+      rules_changed: ${{ steps.rules_changes.outputs.rules_changed }}
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
@@ -46,6 +48,26 @@ jobs:
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
+          fetch-depth: 0
+
+      - name: Detect production Rules/config changes
+        id: rules_changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          BEFORE="$(jq -r '.before // empty' "$GITHUB_EVENT_PATH")"
+          if [[ "$GITHUB_EVENT_NAME" != "push" ]]; then
+            echo "rules_changed=false" >> "$GITHUB_OUTPUT"
+          elif [[ -z "$BEFORE" || "$BEFORE" =~ ^0+$ ]]; then
+            echo "rules_changed=true" >> "$GITHUB_OUTPUT"
+          else
+            CHANGED_RULES="$(git diff --name-only "$BEFORE" "$GITHUB_SHA" -- firestore.rules storage.rules firebase.json .firebaserc)"
+            if [[ -n "$CHANGED_RULES" ]]; then
+              echo "rules_changed=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "rules_changed=false" >> "$GITHUB_OUTPUT"
+            fi
+          fi
 
       - name: Setup Node.js
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
@@ -76,7 +98,7 @@ jobs:
     name: Deploy Firestore Rules to production
     needs: rules-emulator
     if: >-
-      (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+      (github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.rules-emulator.outputs.rules_changed == 'true') ||
       (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.deploy_production == true)
     runs-on: ubuntu-latest
     timeout-minutes: 15
