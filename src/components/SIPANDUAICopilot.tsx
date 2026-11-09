@@ -49,6 +49,7 @@ export const SIPANDUAICopilot: React.FC<Props> = ({ onClose }) => {
     sendingRef.current = true;
     const sentAt = new Date().toISOString();
     setError("");
+    setMetadata(null);
     setPrompt("");
     setLoading(true);
     setMessages((current) => [...current, { role: "user", text: question, at: sentAt }]);
@@ -80,6 +81,9 @@ export const SIPANDUAICopilot: React.FC<Props> = ({ onClose }) => {
           STAFF_ACCESS_REQUIRED: "Akun ini belum memiliki peran petugas yang diizinkan untuk SIPANDU AI.",
           SENSITIVE_PROMPT_BLOCKED: "Pertanyaan atau riwayat memuat informasi pribadi/sensitif. Hapus informasi tersebut lalu coba lagi.",
           AI_NOT_CONFIGURED: "SIPANDU AI belum diaktifkan oleh administrator.",
+          AI_CONFIGURATION_ERROR: "Konfigurasi model SIPANDU AI bermasalah. Administrator perlu memeriksanya.",
+          INTERNAL_ERROR: "Terjadi kesalahan internal saat menganalisis. Data SIPANDU tidak diubah; silakan coba kembali.",
+          ORIGIN_NOT_ALLOWED: "Alamat aplikasi ini belum diizinkan untuk mengakses SIPANDU AI.",
           AUTH_PROVIDER_NOT_CONFIGURED: "Verifikasi akun SIPANDU AI belum dikonfigurasi administrator.",
           AUTH_PROVIDER_UNAVAILABLE: "Verifikasi akun sementara tidak tersedia. Coba kembali beberapa saat lagi.",
           DATA_SOURCE_UNAVAILABLE: "Data ringkasan SIPANDU sementara tidak dapat dibaca. Coba kembali nanti.",
@@ -98,8 +102,9 @@ export const SIPANDUAICopilot: React.FC<Props> = ({ onClose }) => {
     } catch (cause) {
       // A failed request must not remain in the transcript as if it succeeded.
       setMessages((current) => current.filter((item) => item.at !== sentAt));
+      setMetadata(null);
       setPrompt(question);
-      if (cause instanceof Error && cause.name === "TimeoutError") {
+      if (cause instanceof Error && (cause.name === "TimeoutError" || cause.name === "AbortError")) {
         setError("Permintaan melewati batas waktu. Periksa koneksi lalu kirim kembali.");
       } else if (cause instanceof TypeError) {
         setError("Tidak dapat terhubung ke SIPANDU AI. Periksa koneksi atau status layanan.");
