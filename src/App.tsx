@@ -64,13 +64,13 @@ function describeTeamActivationError(error: unknown): string {
     return `Email sudah diverifikasi, tetapi layanan belum dapat menerbitkan peran SIPANDU. Konfigurasi Worker yang belum tersedia: ${missing.join(', ')}. Administrator perlu melengkapi secret/binding pada Worker sipandu-registration. Sesi akun tetap tersimpan.`;
   }
   if (/layanan aktivasi belum siap dikonfigurasi administrator/i.test(detail)) {
-    return 'Email sudah diverifikasi, tetapi Worker pendaftaran belum memiliki kredensial service account Firebase. Administrator perlu memasang secret FIREBASE_SERVICE_ACCOUNT_JSON pada Worker sipandu-registration dan memastikan izin IAM firebaseauth.users.update. Kode TEAM_REGISTRATION_CODE hanya diperlukan untuk pendaftaran baru, bukan untuk mengaktifkan undangan yang sudah tersimpan. Sesi akun tetap tersimpan.';
+    return 'Email sudah diverifikasi, tetapi Worker pendaftaran belum memiliki kredensial service account Firebase. Administrator perlu memasang secret FIREBASE_SERVICE_ACCOUNT_JSON pada Worker sipandu-registration dan memastikan izin IAM firebaseauth.users.update. Sesi akun tetap tersimpan.';
   }
   if (/PERMISSION_DENIED|firebaseauth\.users\.update|not authorized|insufficient permission/i.test(detail)) {
     return 'Email sudah diverifikasi, tetapi Firebase menolak penerbitan peran. Administrator perlu memastikan service account Worker memiliki izin IAM firebaseauth.users.update pada proyek Firebase SIPANDU. Sesi akun tetap tersimpan.';
   }
   if (/undangan.*(tidak ditemukan|kedaluwarsa)|pending.*(not found|expired)/i.test(detail)) {
-    return 'Email sudah diverifikasi, tetapi undangan pendaftaran tim tidak ditemukan atau telah kedaluwarsa. Minta administrator memulihkan undangan untuk email yang sama; jangan membuat akun baru. Sesi akun tetap tersimpan.';
+    return 'Email sudah diverifikasi, tetapi undangan pendaftaran tim tidak ditemukan atau telah kedaluwarsa. Pulihkan undangan untuk email yang sama; jangan membuat akun baru. Sesi akun tetap tersimpan.';
   }
   if (/email belum diverifikasi|not verified/i.test(detail)) {
     return 'Firebase belum membaca status verifikasi email. Buka kembali tautan verifikasi, lalu masuk dan coba lagi. Sesi akun tetap tersimpan.';
@@ -304,7 +304,6 @@ function StaffApp() {
   const [currentUserName, setCurrentUserName] = useState('');
   const [currentUserRole, setCurrentUserRole] = useState('');
   const [authError, setAuthError] = useState('');
-  const [teamRecoveryCode, setTeamRecoveryCode] = useState('');
   const [localCacheReady, setLocalCacheReady] = useState(false);
 
   useEffect(() => {
@@ -850,32 +849,22 @@ function StaffApp() {
 
   const handleRestoreTeamInvitation = async () => {
     const user = auth.currentUser;
-    const code = teamRecoveryCode.trim();
     if (!user) {
       setAuthError('Sesi akun sudah tidak ditemukan. Masuk kembali dengan akun yang sama.');
-      return;
-    }
-    if (!code) {
-      setAuthError('Masukkan kode pendaftaran tim dari administrator untuk memulihkan undangan akun yang sama.');
       return;
     }
     setAuthReady(false);
     setAuthError('');
     try {
       await user.reload();
-      if (!user.emailVerified) {
-        throw new Error('Email belum diverifikasi. Selesaikan verifikasi email sebelum memulihkan undangan.');
-      }
-      await restorePendingTeamInvitation(user, code);
+      if (!user.emailVerified) throw new Error('Email belum diverifikasi. Selesaikan verifikasi email sebelum memulihkan undangan.');
+      await restorePendingTeamInvitation(user);
       await activatePendingTeamMember(user);
       const token = await getIdTokenResult(user, true);
       const role = token.claims.role;
-      if (role !== 'pendamping') {
-        throw new Error('Pemulihan undangan selesai, tetapi peran pendamping belum muncul pada token Firebase terbaru. Coba verifikasi akses lagi.');
-      }
+      if (role !== 'pendamping') throw new Error('Peran pendamping belum muncul pada token Firebase terbaru. Coba verifikasi akses lagi.');
       setCurrentUserRole(role);
       setCurrentUserName(user.displayName || user.email || '');
-      setTeamRecoveryCode('');
       setIsAuthenticated(true);
       setLocalCacheReady(false);
     } catch (error) {
@@ -1846,26 +1835,13 @@ function StaffApp() {
               <p className="text-xs leading-relaxed text-amber-50">
                 Pulihkan undangan untuk akun yang sedang tersimpan{auth.currentUser?.email ? ` (${auth.currentUser.email})` : ''}. Proses ini memakai UID Firebase yang sama dan tidak membuat akun baru. Pemulihan ini hanya memberikan peran anggota pendamping; akun owner/supervisor harus dipulihkan melalui administrasi Firebase.
               </p>
-              <label htmlFor="sipandu-team-recovery-code" className="mt-3 block text-xs font-semibold text-neutral-100">
-                Kode pendaftaran tim dari administrator
-              </label>
-              <input
-                id="sipandu-team-recovery-code"
-                type="password"
-                autoComplete="off"
-                value={teamRecoveryCode}
-                onChange={(event) => setTeamRecoveryCode(event.target.value)}
-                placeholder="Masukkan kode tim"
-                className="mt-1 w-full rounded-lg border border-white/20 bg-white/10 px-3 py-2.5 text-sm text-white outline-none focus:border-emerald-400"
-              />
               <button
                 type="button"
                 onClick={() => void handleRestoreTeamInvitation()}
-                disabled={!teamRecoveryCode.trim()}
-                className="mt-2 w-full rounded-xl bg-amber-500 px-4 py-3 text-sm font-bold text-black hover:bg-amber-400 disabled:cursor-not-allowed disabled:opacity-50"
+                className="mt-3 w-full rounded-xl bg-amber-500 px-4 py-3 text-sm font-bold text-black hover:bg-amber-400"
               >
                 Pulihkan undangan akun yang sama
-              </button>
+              </button>>
             </div>
           )}
           <button type="button" onClick={() => void handleRetryStaffAccess()} className="mt-4 w-full rounded-xl bg-emerald-600 px-4 py-3 text-sm font-bold text-white hover:bg-emerald-500">
