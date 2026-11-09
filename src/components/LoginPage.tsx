@@ -175,20 +175,20 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
       />
 
       {/* Panel glassmorphism responsif; wallpaper asli tetap terlihat di belakangnya. */}
-      <main className="relative z-10 mx-auto grid w-full max-w-[1440px] grid-cols-1 items-stretch gap-0 min-[900px]:min-h-[min(92vh,760px)] min-[900px]:grid-cols-2 min-[900px]:overflow-hidden min-[900px]:rounded-[30px] min-[900px]:shadow-[0_24px_70px_rgba(2,12,35,0.38)]">
-        <section className="relative hidden min-[900px]:flex min-[900px]:flex-col min-[900px]:justify-between min-[900px]:p-9 min-[1200px]:p-12">
+      <main className="relative z-10 mx-auto grid w-full max-w-[700px] grid-cols-1 items-stretch gap-0 overflow-hidden rounded-[24px] border border-white/70 bg-white/[0.16] shadow-2xl backdrop-blur-[24px] min-[720px]:grid-cols-2">
+        <section className="relative hidden min-[720px]:flex min-[720px]:min-w-0 min-[720px]:flex-col min-[720px]:justify-between min-[720px]:p-5">
           <div className="absolute inset-0 bg-gradient-to-b from-slate-950/55 via-slate-950/45 to-slate-950/85" />
-          <div className="relative z-10 mt-8 max-w-[590px] text-white min-[1200px]:mt-12">
-            <h1 className="text-4xl font-bold leading-tight tracking-tight min-[1200px]:text-5xl">SIPANDU</h1>
-            <p className="mt-3 text-lg font-semibold leading-snug text-white/95 min-[1200px]:text-xl">
+          <div className="relative z-10 mt-5 max-w-full text-white">
+            <h1 className="text-3xl font-bold leading-tight tracking-tight">SIPANDU</h1>
+            <p className="mt-2 text-base font-semibold leading-snug text-white/95">
               Sistem Informasi &amp; Pendampingan Terpadu
             </p>
-            <p className="mt-4 max-w-[560px] text-sm leading-relaxed text-white/85 min-[1200px]:text-base">
+            <p className="mt-3 max-w-full text-xs leading-relaxed text-white/85">
               Layanan Terintegrasi Database PPKS ODHIV Sumatera Utara untuk pengelolaan data yang akurat, terpadu, dan akuntabel untuk program Asistensi (ATENSI).
             </p>
           </div>
-          <div className="relative z-10 mb-1 flex items-center gap-4">
-            <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl border border-white/15 bg-slate-900/55 p-2 shadow-lg backdrop-blur-md">
+          <div className="relative z-10 mt-5 flex items-center gap-3">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-white/15 bg-slate-900/55 p-1.5 shadow-lg backdrop-blur-md">
               <img
                 src={publicAssetUrl('uploads/Logo Kemensos.png')}
                 alt="Logo Kementerian Sosial RI"
@@ -198,34 +198,34 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
               />
             </div>
             <div className="min-w-0 text-white">
-              <p className="text-sm font-semibold">Kementerian Sosial RI</p>
-              <p className="mt-1 max-w-[420px] text-xs leading-relaxed text-white/75">
+              <p className="text-xs font-semibold">Kementerian Sosial RI</p>
+              <p className="mt-1 max-w-full text-[10px] leading-relaxed text-white/75">
                 Direktorat Rehabilitasi Sosial Korban Penyalahgunaan Narkoba &amp; ODHIV
               </p>
             </div>
           </div>
         </section>
 
-        <section className="w-full rounded-[22px] border border-white/85 bg-white/[0.78] p-6 shadow-[0_16px_44px_rgba(15,23,42,0.2),inset_0_1px_0_rgba(255,255,255,0.9)] backdrop-blur-[22px] min-[900px]:flex min-[900px]:flex-col min-[900px]:justify-center min-[900px]:rounded-none min-[900px]:rounded-r-[30px] min-[900px]:px-8 min-[1200px]:px-12 min-[900px]:py-9">
+        <section className="w-full min-w-0 bg-white/[0.82] p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.9)] backdrop-blur-[22px] min-[720px]:flex min-[720px]:flex-col min-[720px]:justify-center min-[720px]:rounded-none min-[720px]:px-5 min-[720px]:py-5">
           <div className="mb-5 flex flex-col items-center text-center">
-            <div className="mb-5 flex w-full items-center justify-center gap-5">
+            <div className="mb-4 flex w-full min-w-0 items-center justify-center gap-3">
               <img
-                src={publicAssetUrl('uploads/Logo Kemensos.png')}
+                src={publicAssetUrl('uploads/Logo Kemensos Hadir.png')}
                 alt="Logo Kementerian Sosial Republik Indonesia"
-                className="h-[56px] w-[88px] object-contain"
+                className="h-[42px] w-[72px] object-contain"
                 loading="eager"
                 decoding="async"
               />
-              <span aria-hidden="true" className="h-10 w-px bg-slate-300/90" />
+              <span aria-hidden="true" className="h-8 w-px shrink-0 bg-slate-300/90" />
               <img
                 src={publicAssetUrl('uploads/sipandu-logo.png')}
                 alt="Logo SIPANDU"
-                className="h-[56px] w-[116px] object-contain"
+                className="h-[42px] w-[92px] object-contain"
                 loading="eager"
                 decoding="async"
               />
             </div>
-            <h1 className="text-[22px] font-bold leading-tight tracking-tight text-slate-800">
+            <h1 className="text-xl font-bold leading-tight tracking-tight text-slate-800">
               Selamat Datang 👋
             </h1>
             <p className="mt-1 text-xs leading-relaxed text-slate-500">
@@ -242,7 +242,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
             </div>
           )}
 
-          <form ref={formRef} onSubmit={handleSubmit} className="space-y-3">
+          <form ref={formRef} onSubmit={handleSubmit} className="space-y-2.5">
             <div>
               <label
                 htmlFor="sipandu-email"
@@ -262,7 +262,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
                   readOnly={quickUnlockActive}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="Masukkan email akun SIPANDU Anda..."
-                  className="w-full rounded-lg border border-white/90 bg-white/55 py-3 pl-9 pr-3 text-sm text-slate-800 placeholder-slate-600/80 shadow-sm outline-none transition focus:border-teal-700 focus:bg-white/75 focus:ring-2 focus:ring-teal-700/25"
+                  className="w-full min-w-0 rounded-lg border border-white/90 bg-white/55 py-2.5 pl-9 pr-3 text-sm text-slate-800 placeholder-slate-600/80 shadow-sm outline-none transition focus:border-teal-700 focus:bg-white/75 focus:ring-2 focus:ring-teal-700/25"
                   required={!quickUnlockActive}
                 />
               </div>
@@ -287,7 +287,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
                   readOnly={quickUnlockActive}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="Masukkan password Anda..."
-                  className="w-full rounded-lg border border-white/90 bg-white/55 py-3 pl-9 pr-9 text-sm text-slate-800 placeholder-slate-600/80 shadow-sm outline-none transition focus:border-teal-700 focus:bg-white/75 focus:ring-2 focus:ring-teal-700/25"
+                  className="w-full min-w-0 rounded-lg border border-white/90 bg-white/55 py-2.5 pl-9 pr-9 text-sm text-slate-800 placeholder-slate-600/80 shadow-sm outline-none transition focus:border-teal-700 focus:bg-white/75 focus:ring-2 focus:ring-teal-700/25"
                   required={!quickUnlockActive}
                 />
                 {!quickUnlockActive && <button
@@ -306,7 +306,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
               onClick={() => void handlePrimaryAction()}
               disabled={isSubmitting || !authReady}
               aria-label="Masuk ke SIPANDU dengan username dan password atau biometrik yang telah diaktifkan"
-              className="mt-1 flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-indigo-600 via-blue-600 to-blue-500 px-3 py-3 text-sm font-semibold text-white shadow-[0_8px_20px_rgba(59,76,210,0.28)] transition hover:brightness-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
+              className="mt-1 flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-indigo-600 via-blue-600 to-blue-500 px-3 py-2.5 text-sm font-semibold text-white shadow-[0_8px_20px_rgba(59,76,210,0.28)] transition hover:brightness-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
             >
               <span>{!authReady ? 'Memulihkan sesi…' : (isSubmitting ? 'Memeriksa akun…' : (quickUnlockActive ? 'Masuk dengan biometrik' : 'Masuk'))}</span>
               {quickUnlockActive ? <Fingerprint className="h-5 w-5" aria-hidden="true" /> : <ArrowRight className="h-5 w-5" aria-hidden="true" />}
