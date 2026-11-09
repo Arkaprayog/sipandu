@@ -76,6 +76,19 @@ public class PrinterPlugin extends Plugin {
     private Printer implementation;
 
     @PluginMethod
+    public void printFile(PluginCall call) {
+        String path = call.getString("path");
+        String mimeType = call.getString("mimeType");
+        String name = call.getString("name", "Document");
+        try {
+            implementation.printFile(path, mimeType, name);
+            call.resolve();
+        } catch (Exception e) {
+            call.reject("Failed to print file: " + e.getMessage(), e);
+        }
+    }
+
+    @PluginMethod
     public void printWebView(PluginCall call) {
         String name = call.getString("name", "Document");
         try {
@@ -109,6 +122,8 @@ class NativePrinterPatchTests(unittest.TestCase):
             self.assertIn("new PrintFinishAdapter(", printer)
             self.assertIn("AtomicBoolean", printer)
             self.assertIn("new Printer.OnPrintFinishCallback()", plugin)
+            self.assertIn("new Printer.OnPrintStartCallback()", plugin)
+            self.assertIn("activity.runOnUiThread(", printer)
             self.assertIn("implementation.savePdfToAppStorage(data, name)", plugin)
             self.assertIn("call.resolve();", plugin)
 

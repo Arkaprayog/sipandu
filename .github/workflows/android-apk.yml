@@ -12,6 +12,8 @@ on:
       - "capacitor.config.json"
       - "vite.config.ts"
       - "scripts/patch_native_google_login.py"
+      - "scripts/patch_native_printer.py"
+      - "scripts/test_patch_native_printer.py"
       - "scripts/generate_pwa_icons.py"
       - "scripts/generate_android_icons.py"
       - "scripts/restore_original_app_icon.py"
@@ -80,11 +82,15 @@ jobs:
       - name: Verify PWA manifest, icons, relative assets, and version metadata
         run: node scripts/verify-dist.mjs
 
+      - name: Test native Android printer patch
+        run: python3 scripts/test_patch_native_printer.py
+
       - name: Create and sync Android project
         run: |
           npx cap add android
           npx cap sync android
           python3 scripts/ensure_android_location_permissions.py
+          python3 scripts/patch_native_printer.py --project android
 
       - name: Configure compact Gradle distribution and resilient download timeout
         run: python3 scripts/configure-gradle-wrapper.py
