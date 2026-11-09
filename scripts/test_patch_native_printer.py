@@ -126,6 +126,7 @@ class NativePrinterPatchTests(unittest.TestCase):
             self.assertIn("AtomicBoolean", printer)
             self.assertIn("new Printer.OnPrintFinishCallback()", plugin)
             self.assertIn("new Printer.OnPrintStartCallback()", plugin)
+            self.assertIn('call.reject("Failed to print file: " + message)', plugin)
             self.assertIn("activity.runOnUiThread(", printer)
             self.assertIn("implementation.savePdfToAppStorage(data, name)", plugin)
             self.assertIn("call.resolve();", plugin)
