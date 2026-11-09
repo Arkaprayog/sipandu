@@ -11,5 +11,8 @@ Tanggal: 9 November 2026
 - Workflow deployment Worker arsip kini mengikuti perubahan di branch `main`, bukan branch perbaikan sementara.
 - Job deployment dibatasi ke `main` agar branch lain tidak dapat menerbitkan Worker produksi.
 
+## Konsistensi metadata rilis
+- Metadata `application-version` di `index.html` disamakan dengan `package.json` agar verifikasi build web, Cloudflare Worker, dan APK memakai versi yang sama.
+
 ## Nomor versi
 Versi aplikasi web, PWA, dan paket Android dinaikkan ke **5.0.3**.
