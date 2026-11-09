@@ -514,6 +514,7 @@ def patch_plugin_source(source: str) -> str:
         "new Printer.OnPrintStartCallback()",
         "new Printer.OnPrintFinishCallback()",
         "call.resolve();",
+        "call.reject(\"Failed to print file: \" + message)",
         "call.reject(\"Failed to print web view: \" + message)",
     )
     missing = [item for item in required if item not in source]
