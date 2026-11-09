@@ -17,6 +17,7 @@ IMPORTS = (
     "import java.nio.charset.StandardCharsets;",
     "import java.util.Locale;",
     "import android.print.PrintJob;",
+    "import androidx.annotation.NonNull;",
     "import java.util.concurrent.atomic.AtomicBoolean;",
     "import java.util.concurrent.atomic.AtomicReference;",
 )
