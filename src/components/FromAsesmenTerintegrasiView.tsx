@@ -998,7 +998,7 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
             return (
               <label className="official-option" key={option}>
                 <input
-                  type={item.kind === 'multi' ? 'checkbox' : 'radio'}
+                  type="checkbox"
                   name={item.key}
                   checked={checked}
                   onChange={() => {
