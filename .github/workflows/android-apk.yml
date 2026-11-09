@@ -251,7 +251,20 @@ jobs:
 
       - name: Build signed release APK
         working-directory: android
-        run: ./gradlew --no-daemon assembleRelease
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3; do
+            if ./gradlew --no-daemon assembleRelease; then
+              exit 0
+            fi
+            if [ "$attempt" -lt 3 ]; then
+              echo "Gradle release build failed on attempt $attempt; retrying after a short delay."
+              sleep $((attempt * 15))
+            fi
+          done
+          echo "::error::Gradle release build failed after three attempts."
+          exit 1
 
       - name: Verify private release package, version, and signature
         shell: bash
