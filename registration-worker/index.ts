@@ -5,7 +5,6 @@ interface KVBinding {
 }
 
 interface Env {
-  TEAM_REGISTRATION_CODE?: string;
   FIREBASE_AUTH_API_KEY?: string;
   /** Legacy fallback for environments not yet deployed from the hardened config. */
   FIREBASE_WEB_API_KEY?: string;
@@ -58,18 +57,8 @@ function jsonResponse(payload: Record<string, unknown>, status: number, origin: 
   });
 }
 
-function safeEqual(left: string, right: string): boolean {
-  const a = new TextEncoder().encode(left);
-  const b = new TextEncoder().encode(right);
-  let diff = a.length ^ b.length;
-  const length = Math.max(a.length, b.length);
-  for (let i = 0; i < length; i++) diff |= (a[i] || 0) ^ (b[i] || 0);
-  return diff === 0;
-}
-
 function missingConfiguration(env: Env): string[] {
   const missing: string[] = [];
-  if (!env.TEAM_REGISTRATION_CODE) missing.push('TEAM_REGISTRATION_CODE');
   if (!env.FIREBASE_AUTH_API_KEY && !env.FIREBASE_WEB_API_KEY) missing.push('FIREBASE_AUTH_API_KEY');
   if (!env.FIREBASE_PROJECT_ID) missing.push('FIREBASE_PROJECT_ID');
   if (!env.FIREBASE_SERVICE_ACCOUNT_JSON) missing.push('FIREBASE_SERVICE_ACCOUNT_JSON');
@@ -142,11 +131,6 @@ async function allowAttempt(env: Env, request: Request, limit = 12): Promise<boo
   if (existing >= limit) return false;
   await env.PENDING_REGISTRATIONS.put(storageKey, String(existing + 1), { expirationTtl: 60 });
   return true;
-}
-
-async function validateCode(env: Env, code: string): Promise<boolean> {
-  if (!env.TEAM_REGISTRATION_CODE || code.length < 20 || code.length > 160) return false;
-  return safeEqual(code.trim(), env.TEAM_REGISTRATION_CODE.trim());
 }
 
 async function lookupFirebaseUser(env: Env, idToken: string): Promise<FirebaseUserLookup> {
@@ -428,21 +412,6 @@ export default {
       }
     }
 
-    if (path === '/validate-code' && request.method === 'POST') {
-      if (!(await allowAttempt(env, request))) {
-        return jsonResponse({ ok: false, message: 'Terlalu banyak percobaan. Coba kembali setelah satu menit.' }, 429, origin);
-      }
-      const body = await parseJson(request);
-      if (!body || typeof body.code !== 'string' || !(await validateCode(env, body.code))) {
-        return jsonResponse({ ok: false, message: 'Kode pendaftaran tim tidak benar.' }, 403, origin);
-      }
-      const missing = missingConfiguration(env);
-      if (missing.length) {
-        return jsonResponse({ ok: false, message: 'Layanan pendaftaran belum siap digunakan administrator.' }, 503, origin);
-      }
-      return jsonResponse({ ok: true }, 200, origin);
-    }
-
     if (path === '/register' && request.method === 'POST') {
       if (!(await allowAttempt(env, request))) {
         return jsonResponse({ ok: false, message: 'Terlalu banyak percobaan. Coba kembali setelah satu menit.' }, 429, origin);
@@ -450,17 +419,13 @@ export default {
       if (missingConfiguration(env).length) {
         return jsonResponse({ ok: false, message: 'Layanan pendaftaran belum siap digunakan administrator.' }, 503, origin);
       }
-      const body = await parseJson(request);
-      if (!body || typeof body.code !== 'string' || !(await validateCode(env, body.code))) {
-        return jsonResponse({ ok: false, message: 'Kode pendaftaran tim tidak benar.' }, 403, origin);
-      }
       const authorization = request.headers.get('Authorization') || '';
       const idToken = authorization.startsWith('Bearer ') ? authorization.slice(7).trim() : '';
       if (!idToken) return jsonResponse({ ok: false, message: 'Sesi Firebase tidak ditemukan.' }, 401, origin);
       try {
         const firebaseUser = await lookupFirebaseUser(env, idToken);
-        if (!firebaseUser.email || !firebaseUser.localId) {
-          return jsonResponse({ ok: false, message: 'Profil akun Firebase belum lengkap.' }, 400, origin);
+        if (!firebaseUser.email || !firebaseUser.localId || firebaseUser.emailVerified) {
+          return jsonResponse({ ok: false, message: 'Akun harus memiliki email valid yang belum diverifikasi.' }, 400, origin);
         }
         await env.PENDING_REGISTRATIONS!.put(`pending:${firebaseUser.localId}`, JSON.stringify({
           uid: firebaseUser.localId,
@@ -477,13 +442,9 @@ export default {
       if (!(await allowAttempt(env, request))) {
         return jsonResponse({ ok: false, message: 'Terlalu banyak percobaan. Coba kembali setelah satu menit.' }, 429, origin);
       }
-      const missing = missingConfiguration(env);
+      const missing = missingActivationConfiguration(env);
       if (missing.length) {
         return jsonResponse({ ok: false, message: `Layanan pemulihan undangan belum siap. Konfigurasi belum tersedia: ${missing.join(', ')}.`, missing }, 503, origin);
-      }
-      const body = await parseJson(request);
-      if (!body || typeof body.code !== 'string' || !(await validateCode(env, body.code))) {
-        return jsonResponse({ ok: false, message: 'Kode pendaftaran tim tidak benar.' }, 403, origin);
       }
       const authorization = request.headers.get('Authorization') || '';
       const idToken = authorization.startsWith('Bearer ') ? authorization.slice(7).trim() : '';
@@ -551,7 +512,7 @@ export default {
         const key = `pending:${firebaseUser.localId}`;
         const pendingRaw = await env.PENDING_REGISTRATIONS!.get(key);
         if (!pendingRaw) {
-          return jsonResponse({ ok: false, message: 'Undangan pendaftaran tim tidak ditemukan atau sudah kedaluwarsa. Minta kode pendaftaran baru dari administrator.' }, 403, origin);
+          return jsonResponse({ ok: false, message: 'Undangan pendaftaran tim tidak ditemukan atau sudah kedaluwarsa. Silakan daftar ulang atau hubungi administrator SIPANDU.' }, 403, origin);
         }
         const pending = JSON.parse(pendingRaw) as { uid?: string; email?: string };
         if (pending.uid !== firebaseUser.localId || pending.email !== String(firebaseUser.email || '').toLowerCase()) {
