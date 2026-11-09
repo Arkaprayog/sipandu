@@ -127,6 +127,8 @@ class NativePrinterPatchTests(unittest.TestCase):
             self.assertIn("new Printer.OnPrintFinishCallback()", plugin)
             self.assertIn("new Printer.OnPrintStartCallback()", plugin)
             self.assertIn('call.reject("Failed to print file: " + message)', plugin)
+            self.assertEqual(plugin.count("@PluginMethod\\n    public void printFile(PluginCall call)"), 1)
+            self.assertEqual(plugin.count("@PluginMethod\\n    public void printWebView(PluginCall call)"), 1)
             self.assertIn("activity.runOnUiThread(", printer)
             self.assertIn("implementation.savePdfToAppStorage(data, name)", plugin)
             self.assertIn("call.resolve();", plugin)
