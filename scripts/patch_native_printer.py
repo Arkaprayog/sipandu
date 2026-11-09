@@ -17,6 +17,7 @@ IMPORTS = (
     "import java.nio.charset.StandardCharsets;",
     "import java.util.Locale;",
     "import android.print.PrintJob;",
+    "import androidx.annotation.NonNull;",
     "import java.util.concurrent.atomic.AtomicBoolean;",
     "import java.util.concurrent.atomic.AtomicReference;",
 )
@@ -74,6 +75,79 @@ SAVE_PDF_METHOD = r'''
         }
 
         return Uri.fromFile(destination).toString();
+    }
+'''
+
+PRINT_FILE_METHODS = r'''
+    public void printFile(String path, String mimeType, String name) throws Exception {
+        printFile(path, mimeType, name, null);
+    }
+
+    /**
+     * Start PrintManager from the Activity UI thread, then resolve the bridge
+     * only after Android has accepted the print job and opened its print UI.
+     */
+    public void printFile(String path, String mimeType, String name, OnPrintStartCallback callback) throws Exception {
+        if (path == null || path.trim().isEmpty()) {
+            throw new Exception("File path is required");
+        }
+        activity.runOnUiThread(
+            new Runnable() {
+                @Override
+                public void run() {
+                    try {
+                        printFileNow(path, mimeType, name);
+                        if (callback != null) {
+                            callback.onStarted();
+                        }
+                    } catch (Exception error) {
+                        if (callback != null) {
+                            callback.onError(error.getMessage() == null
+                                ? "Unable to start Android file print job"
+                                : error.getMessage());
+                        }
+                    }
+                }
+            }
+        );
+    }
+
+    private void printFileNow(String path, String mimeType, String name) throws Exception {
+        Uri uri = Uri.parse(path);
+
+        // Handle content:// URIs.
+        if ("content".equals(uri.getScheme())) {
+            DocumentFile documentFile = DocumentFile.fromSingleUri(context, uri);
+            if (documentFile == null || !documentFile.exists()) {
+                throw new Exception("File not found: " + path);
+            }
+            if (mimeType == null) {
+                mimeType = documentFile.getType();
+            }
+            if (mimeType != null && mimeType.startsWith("image/")) {
+                printImageFromUri(uri, name);
+                return;
+            }
+            printDocumentFromUri(uri, name);
+        } else {
+            // Handle app-private file:// URIs.
+            File file = new File(uri.getPath());
+            if (!file.exists() || !file.isFile()) {
+                throw new Exception("File not found: " + path);
+            }
+            if (mimeType == null) {
+                mimeType = getMimeTypeFromPath(file.getPath());
+            }
+            if (mimeType != null && mimeType.startsWith("image/")) {
+                Bitmap bitmap = BitmapFactory.decodeFile(file.getPath());
+                if (bitmap == null) {
+                    throw new Exception("Failed to decode image from file");
+                }
+                printImage(bitmap, name);
+                return;
+            }
+            printDocument(file, name);
+        }
     }
 '''
 
@@ -227,6 +301,41 @@ SAVE_PDF_PLUGIN_METHOD = r'''
     }
 '''
 
+PRINT_FILE_PLUGIN_METHOD = r'''
+    @PluginMethod
+    public void printFile(PluginCall call) {
+        String path = call.getString("path");
+        String mimeType = call.getString("mimeType");
+        String name = call.getString("name", "Document");
+
+        if (path == null || path.trim().isEmpty()) {
+            call.reject("path is required");
+            return;
+        }
+
+        try {
+            implementation.printFile(
+                path,
+                mimeType,
+                name,
+                new Printer.OnPrintStartCallback() {
+                    @Override
+                    public void onStarted() {
+                        call.resolve();
+                    }
+
+                    @Override
+                    public void onError(String message) {
+                        call.reject("Failed to print file: " + message);
+                    }
+                }
+            );
+        } catch (Exception error) {
+            call.reject("Failed to print file: " + error.getMessage(), error);
+        }
+    }
+'''
+
 PRINT_WEBVIEW_PLUGIN_METHOD = r'''
     @PluginMethod
     public void printWebView(PluginCall call) {
@@ -303,15 +412,39 @@ def patch_printer_source(source: str) -> str:
         void onFinish();
         void onError(String message);
     }
-
 '''
         source = source.replace(class_marker, class_marker + interface, 1)
+
+    if "public interface OnPrintStartCallback" not in source:
+        finish_marker = r'''
+    public interface OnPrintFinishCallback {
+        void onFinish();
+        void onError(String message);
+    }
+'''
+        start_interface = r'''
+    public interface OnPrintStartCallback {
+        void onStarted();
+        void onError(String message);
+    }
+'''
+        if finish_marker not in source:
+            raise RuntimeError("Could not find OnPrintFinishCallback insertion point")
+        source = source.replace(finish_marker, finish_marker + start_interface, 1)
 
     if "public String savePdfToAppStorage(" not in source:
         marker = "    public void printBase64("
         if marker not in source:
             raise RuntimeError("Could not find Printer.printBase64 insertion point")
         source = source.replace(marker, SAVE_PDF_METHOD + "\n" + marker, 1)
+
+    if "public void printFile(String path, String mimeType, String name, OnPrintStartCallback callback)" not in source:
+        source = replace_java_method(
+            source,
+            r"public\s+void\s+printFile\s*\(\s*String\s+path\s*,\s*String\s+mimeType\s*,\s*String\s+name\s*\)\s*throws\s+Exception",
+            PRINT_FILE_METHODS,
+            "Printer.printFile",
+        )
 
     if "public void printWebView(WebView webView, String name, OnPrintFinishCallback callback)" not in source:
         source = replace_java_method(
@@ -338,6 +471,8 @@ def patch_printer_source(source: str) -> str:
     required = (
         "public String savePdfToAppStorage(",
         "public interface OnPrintFinishCallback",
+        "public interface OnPrintStartCallback",
+        "public void printFile(String path, String mimeType, String name, OnPrintStartCallback callback)",
         "activity.runOnUiThread(",
         "webView.createPrintDocumentAdapter(name)",
         "new PrintFinishAdapter(",
@@ -358,6 +493,14 @@ def patch_plugin_source(source: str) -> str:
             raise RuntimeError("Could not find PrinterPlugin.printWebView insertion point")
         source = source.replace(marker, SAVE_PDF_PLUGIN_METHOD + "\n" + marker, 1)
 
+    if "new Printer.OnPrintStartCallback()" not in source:
+        source = replace_java_method(
+            source,
+            r"public\s+void\s+printFile\s*\(\s*PluginCall\s+call\s*\)",
+            PRINT_FILE_PLUGIN_METHOD,
+            "PrinterPlugin.printFile",
+        )
+
     if "new Printer.OnPrintFinishCallback()" not in source:
         source = replace_java_method(
             source,
@@ -368,6 +511,7 @@ def patch_plugin_source(source: str) -> str:
 
     required = (
         "public void savePdfToAppStorage(PluginCall call)",
+        "new Printer.OnPrintStartCallback()",
         "new Printer.OnPrintFinishCallback()",
         "call.resolve();",
         "call.reject(\"Failed to print web view: \" + message)",
