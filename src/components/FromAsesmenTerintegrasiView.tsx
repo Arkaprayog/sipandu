@@ -4,7 +4,7 @@ import { PPKSRecord } from '../types';
 import { getAccessToken, invalidateAccessToken, refreshWorkspaceAccessToken } from '../lib/firebase';
 import { formatPPKSTimestamp } from '../lib/ppksData';
 import { publicAssetUrl } from '../lib/publicAssets';
-import { backupAssessmentToCentralDrive, deleteCentralDriveFile } from '../lib/googleDriveBackup';
+import { backupAssessmentViaArchiveWorker, deleteCentralDriveFile } from '../lib/googleDriveBackup';
 import { getIntegratedAssessmentBackupMetadata, saveIntegratedAssessmentBackupMetadata } from '../lib/firebase';
 import { printPreparedAssessmentWebView } from '../lib/printing';
 import { createOfficialAssessmentPdf } from '../lib/assessmentPdf';
@@ -530,13 +530,11 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
     driveUrl: string;
     backupError: string;
     printRootId?: string;
-    replacedExisting: boolean;
   }> => {
     const retainPrintRoot = options.retainPrintRoot === true;
     let pdf: Blob;
     let fileName: string;
     let printRootId: string | undefined;
-    let replacedExisting = false;
     setPreparingPrint(true);
     try {
       const prepared = await prepareAssessmentPdfRoot(record);
@@ -552,24 +550,14 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
         }
       }
 
-      const safeRespondent = (record.namaLengkap || record.id)
-        .normalize('NFKC').replace(/[\\/:*?"<>|]+/g, '_').replace(/\s+/g, '-').slice(0, 80);
-      const nikValue = String(record.nik || record.formAsesmenTerintegrasi?.q23 || '');
-      const safeNik = nikValue.replace(/\D/g, '') || 'tanpa-NIK';
       const stamp = new Date().toISOString().replace(/[:.]/g, '-');
-      fileName = `Form-Asesmen-Terintegrasi-${safeRespondent}-${safeNik}-${stamp}.pdf`;
+      fileName = `Form-Asesmen-Terintegrasi-${stamp}-${crypto.randomUUID().slice(0, 8)}.pdf`;
 
       try {
-        const previousArchive = await getIntegratedAssessmentBackupMetadata(record.id).catch(() => null);
-        const driveCopy = await backupAssessmentToCentralDrive({
+        const driveCopy = await backupAssessmentViaArchiveWorker({
           ppksId: record.id,
-          ppksName: record.namaLengkap || record.id,
-          nik: nikValue,
-          fileName,
-          existingFileId: previousArchive?.fileId || undefined,
           pdf,
         });
-        replacedExisting = driveCopy.replacedExisting;
         try {
           await saveIntegratedAssessmentBackupMetadata(record.id, {
             status: 'complete',
@@ -583,11 +571,10 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
             webViewLink: driveCopy.webViewLink || '',
             savedAt: new Date().toISOString(),
           });
-          return { pdf, fileName, driveUrl: driveCopy.webViewLink || '', backupError: '', replacedExisting, ...(printRootId ? { printRootId } : {}) };
+          return { pdf, fileName, driveUrl: driveCopy.webViewLink || '', backupError: '', ...(printRootId ? { printRootId } : {}) };
         } catch (metadataError) {
-          if (!driveCopy.replacedExisting) {
-            try { await deleteCentralDriveFile(driveCopy.id); } catch { /* preserve metadata error */ }
-          }
+          // Keep the verified Drive copy. A retry uses the same server-side
+          // idempotency key, so it updates this archive instead of duplicating it.
           throw metadataError;
         }
       } catch (driveError) {
@@ -598,7 +585,7 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
         } catch (metadataError) {
           console.error('SIPANDU could not record assessment PDF backup failure:', metadataError);
         }
-        return { pdf, fileName, driveUrl: '', backupError: detail, replacedExisting, ...(printRootId ? { printRootId } : {}) };
+        return { pdf, fileName, driveUrl: '', backupError: detail, ...(printRootId ? { printRootId } : {}) };
       }
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);
