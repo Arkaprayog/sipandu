@@ -20,7 +20,7 @@ async function requestJson(path: string, init?: RequestInit): Promise<ApiRespons
     throw new Error('Layanan pendaftaran SIPANDU belum dapat dijangkau. Administrator perlu mengaktifkan layanan pendaftaran.');
   }
   const body = await response.json().catch(() => ({})) as ApiResponse;
-  if (!response.ok) throw new Error(body.message || 'Permintaan pendaftaran belum berhasil. Periksa kode tim dan koneksi internet.');
+  if (!response.ok) throw new Error(body.message || 'Permintaan pendaftaran belum berhasil. Periksa koneksi internet.');
   return body;
 }
 
@@ -32,32 +32,26 @@ export async function checkTeamRegistrationService(): Promise<void> {
   }
 }
 
-export async function validateTeamRegistrationCode(code: string): Promise<void> {
-  await requestJson('/validate-code', { method: 'POST', body: JSON.stringify({ code: code.trim() }) });
-}
-
-export async function registerPendingTeamMember(user: User, code: string): Promise<void> {
-  const idToken = await user.getIdToken();
+export async function registerPendingTeamMember(user: User): Promise<void> {
+  const idToken = await user.getIdToken(true);
   await requestJson('/register', {
     method: 'POST',
     headers: { Authorization: `Bearer ${idToken}` },
-    body: JSON.stringify({ code: code.trim() }),
+    body: JSON.stringify({}),
   });
 }
 
-export async function restorePendingTeamInvitation(user: User, code: string): Promise<void> {
-  const normalizedCode = code.trim();
-  if (!normalizedCode) throw new Error('Masukkan kode pendaftaran tim dari administrator.');
+export async function restorePendingTeamInvitation(user: User): Promise<void> {
   const idToken = await user.getIdToken(true);
   await requestJson('/restore-invitation', {
     method: 'POST',
     headers: { Authorization: `Bearer ${idToken}` },
-    body: JSON.stringify({ code: normalizedCode }),
+    body: JSON.stringify({}),
   });
 }
 
 export async function activatePendingTeamMember(user: User): Promise<void> {
-  const idToken = await user.getIdToken();
+  const idToken = await user.getIdToken(true);
   await requestJson('/activate', {
     method: 'POST',
     headers: { Authorization: `Bearer ${idToken}` },
