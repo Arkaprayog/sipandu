@@ -74,71 +74,6 @@ jobs:
         with:
           node-version: 24
 
-      - name: Install pinned Firebase CLI
-        run: npm install --global firebase-tools@15.34.2
-
-      - name: Deploy Firestore Rules only to the configured SIPANDU project
-        shell: bash
-        env:
-          FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
-          FIREBASE_PROJECT_ID: gen-lang-client-0197631978
-        run: |
-          set -euo pipefail
-          if [ -z "${FIREBASE_SERVICE_ACCOUNT_JSON:-}" ]; then
-            echo "::error::GitHub Actions secret FIREBASE_SERVICE_ACCOUNT_JSON is missing. Add a Firebase service-account JSON key; never paste it into the repository or chat."
-            exit 1
-          fi
-
-          # Fail closed if this repository is pointed at another project/database.
-          node --input-type=commonjs - <<'NODE'
-          const fs = require('node:fs');
-          const config = JSON.parse(fs.readFileSync('firebase.json', 'utf8'));
-          const entries = Array.isArray(config.firestore)
-            ? config.firestore
-            : config.firestore ? [config.firestore] : [];
-          const expectedDatabase = 'ai-studio-sipanduodhiv-985a0308-7693-46e1-b6d3-fdbce52371a8';
-          const expectedProject = 'gen-lang-client-0197631978';
-          if (entries.length !== 1 || entries[0].database !== expectedDatabase || entries[0].rules !== 'firestore.rules') {
-            throw new Error('Refusing deployment: firebase.json does not target the expected SIPANDU Firestore database and rules file.');
-          }
-          const aliases = JSON.parse(fs.readFileSync('.firebaserc', 'utf8'));
-          if (aliases.projects?.default !== expectedProject) {
-            throw new Error('Refusing deployment: .firebaserc default project does not match SIPANDU production.');
-          }
-          const credential = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_JSON);
-          if (credential.type !== 'service_account' || !credential.client_email || !credential.private_key) {
-            throw new Error('FIREBASE_SERVICE_ACCOUNT_JSON is not a complete service-account credential.');
-          }
-          if (credential.project_id !== expectedProject ||
-              credential.client_email !== 'sipandu-github-rules@gen-lang-client-0197631978.iam.gserviceaccount.com') {
-            throw new Error('Refusing deployment: service-account project or principal does not match the IAM principal verified for SIPANDU.');
-          }
-          console.log('Preflight OK: target project/database and service-account principal match.');
-          console.log('Credential principal:', credential.client_email);
-          console.log('Credential project:', credential.project_id);
-          NODE
-
-          KEY_FILE="$RUNNER_TEMP/firebase-service-account.json"
-          printf '%s' "$FIREBASE_SERVICE_ACCOUNT_JSON" > "$KEY_FILE"
-          chmod 600 "$KEY_FILE"
-          export GOOGLE_APPLICATION_CREDENTIALS="$KEY_FILE"
-          export GCLOUD_PROJECT="$FIREBASE_PROJECT_ID"
-          trap 'rm -f "$KEY_FILE"' EXIT
-
-          # Publish Firestore Rules only. Storage Rules remain emulator-tested but are not deployed:
-          # this Firebase project has no Storage bucket and the owner has declined a Blaze billing upgrade.
-          firebase deploy --only firestore:rules --project "$FIREBASE_PROJECT_ID" --non-interactive
-; then
-            echo "rules_changed=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "rules_changed=false" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Setup Node.js
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
-        with:
-          node-version: 24
-
       - name: Setup Java for Firebase Emulator
         uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
         with:
@@ -163,7 +98,7 @@ jobs:
     name: Deploy Firestore Rules to production
     needs: rules-emulator
     if: >-
-      (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+      (github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.rules-emulator.outputs.rules_changed == 'true') ||
       (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.deploy_production == true)
     runs-on: ubuntu-latest
     timeout-minutes: 15
