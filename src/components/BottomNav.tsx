@@ -113,7 +113,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({ activeTab, onSelectTab, cu
                 </span>
                 <span
                   className={isActive
-                    ? `sipandu-nav-label--active absolute bottom-full ${labelAlignment} z-[60] mb-2 max-w-[220px] rounded-xl px-2.5 py-1.5 text-center whitespace-normal break-words [overflow-wrap:anywhere] pointer-events-none`
+                    ? `sipandu-nav-label--active absolute bottom-full ${labelAlignment} z-[60] mb-2 w-max max-w-[calc(100vw-24px)] rounded-xl px-2.5 py-1.5 text-center whitespace-nowrap pointer-events-none`
                     : 'sipandu-nav-label--hidden'}
                 >
                   {tab.label}
