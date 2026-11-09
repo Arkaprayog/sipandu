@@ -62,7 +62,7 @@ test('archives a PDF only after Firebase and Google identity checks and Drive re
         return jsonResponse({ id });
       }
 
-      if (parsed.pathname.endsWith('/' + fileId)) return jsonResponse(savedFile);
+      if (parsed.pathname.endsWith('/' + fileId)) return jsonResponse(savedFileRef.current);
     }
     throw new Error('Unexpected mocked request: ' + method + ' ' + url);
   };
