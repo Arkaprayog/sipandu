@@ -181,6 +181,19 @@ export interface FieldVisitRecord {
   createdAt: string;
 }
 
+/** Privacy-minimized operational audit feed item; contains no respondent identity fields. */
+export interface SecurityAuditEntry {
+  id: string;
+  source: 'service-event' | 'field-visit';
+  ppksId: string;
+  label: string;
+  status: string;
+  eventDate: string;
+  actorUid: string;
+  assignedToUid: string;
+  createdAt: string;
+}
+
 export interface SuratRecord {
   id: string;
   nomorSurat: string;
