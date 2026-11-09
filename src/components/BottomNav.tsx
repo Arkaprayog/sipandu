@@ -9,6 +9,7 @@ import {
   MapPinned,
   Footprints,
   ChartNoAxesCombined,
+  ShieldCheck,
 } from 'lucide-react';
 
 export type TabKey =
@@ -20,14 +21,16 @@ export type TabKey =
   | 'layanan-ppks'
   | 'intelijen-wilayah'
   | 'pendampingan-lapangan'
-  | 'laporan-kinerja';
+  | 'laporan-kinerja'
+  | 'security-audit';
 
 interface BottomNavProps {
   activeTab: TabKey;
   onSelectTab: (tab: TabKey) => void;
+  currentUserRole: string;
 }
 
-export const BottomNav: React.FC<BottomNavProps> = ({ activeTab, onSelectTab }) => {
+export const BottomNav: React.FC<BottomNavProps> = ({ activeTab, onSelectTab, currentUserRole }) => {
   const tabs: { key: TabKey; label: string; icon: React.ReactNode }[] = [
     {
       key: 'beranda',
@@ -74,13 +77,18 @@ export const BottomNav: React.FC<BottomNavProps> = ({ activeTab, onSelectTab }) 
       label: 'LAPORAN',
       icon: <ChartNoAxesCombined className="w-4 h-4 md:w-5 md:h-5" />,
     },
+    {
+      key: 'security-audit',
+      label: 'KEAMANAN & AUDIT',
+      icon: <ShieldCheck className="w-4 h-4 md:w-5 md:h-5" />,
+    },
   ];
 
   return (
     <nav className="app-nav-bar fixed bottom-0 left-0 right-0 z-30 bg-[#0d180f]/95 border-t border-rose-500/40 shadow-[0_-4px_25px_rgba(244,63,94,0.18)] select-none">
       <div className="max-w-7xl mx-auto px-2 md:px-6">
         <div className="flex items-center justify-between md:justify-center md:gap-4 py-2 overflow-x-auto no-scrollbar">
-          {tabs.map((tab) => {
+          {tabs.filter((tab) => tab.key !== 'security-audit' || ['owner', 'supervisor'].includes(currentUserRole)).map((tab) => {
             const isActive = activeTab === tab.key;
             return (
               <button
