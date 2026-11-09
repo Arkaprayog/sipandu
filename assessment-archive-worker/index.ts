@@ -154,6 +154,23 @@ async function ensureArchiveFolder(accessToken: string, archiveKey: string): Pro
   return getOrCreateFolder(accessToken, archiveKey.slice(0, 20), assessments);
 }
 
+async function findArchiveFolder(accessToken: string, archiveKey: string): Promise<string | null> {
+  const names = ['SIPANDU', 'From Asesmen Terintegrasi', archiveKey.slice(0, 20)];
+  let parentId: string | undefined;
+  for (const name of names) {
+    const parentClause = parentId ? " and '" + escapeDriveQuery(parentId) + "' in parents" : " and 'root' in parents";
+    const query = "mimeType='application/vnd.google-apps.folder' and name='" + escapeDriveQuery(name) + "' and trashed=false" + parentClause;
+    const response = await driveRequest(accessToken, '/files?q=' + encodeURIComponent(query) + '&pageSize=2&fields=files(id,name,mimeType,parents)');
+    if (!response.ok) throw new Error('Google Drive gagal memeriksa folder arsip SIPANDU (HTTP ' + response.status + ').');
+    const payload = await response.json() as { files?: DriveFile[] };
+    const matches = payload.files || [];
+    if (matches.length > 1) throw new Error('Ditemukan beberapa folder dengan nama arsip yang sama. Perlu pemeriksaan administrator.');
+    if (!matches[0]?.id) return null;
+    parentId = matches[0].id;
+  }
+  return parentId || null;
+}
+
 async function sha256Hex(value: string): Promise<string> {
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value));
   return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('');
@@ -537,7 +554,8 @@ async function handleAssessmentArchiveDownload(
     }
 
     const archiveKey = await sha256Hex('sipandu-integrated-assessment:' + ppksId);
-    const folderId = await ensureArchiveFolder(googleAccessToken, archiveKey);
+    const folderId = await findArchiveFolder(googleAccessToken, archiveKey);
+    if (!folderId) return json({ ok: false, message: 'Arsip PDF asesmen belum ditemukan di Google Drive.' }, 404, origin);
     const metadata = await findExistingArchive(googleAccessToken, archiveKey, folderId);
     if (!metadata?.id) return json({ ok: false, message: 'Arsip PDF asesmen belum ditemukan di Google Drive.' }, 404, origin);
 
