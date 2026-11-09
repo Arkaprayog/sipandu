@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import {
   AlertCircle,
+  Bell,
   CheckCircle2,
   Fingerprint,
   Moon,
@@ -17,7 +18,9 @@ import {
   isBiometricLockEnabled,
   type BiometricDiagnostics,
 } from '../lib/biometricLock';
+import { Capacitor } from '@capacitor/core';
 import { auth } from '../lib/firebase';
+import { enableRespondentNotifications, refreshRespondentNotificationPermission } from '../lib/respondentNotifications';
 import { AppSettings } from '../types';
 import { detectPwaRuntimeCapabilities } from '../lib/platformCompatibility';
 
@@ -36,6 +39,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, s
   const [biometricMessage, setBiometricMessage] = useState('');
   const [biometricMessageType, setBiometricMessageType] = useState<'success' | 'error'>('success');
   const [activeTheme, setActiveTheme] = useState<'dark' | 'light'>(settings.theme === 'light' ? 'light' : 'dark');
+  const [notificationPermission, setNotificationPermission] = useState<NotificationPermission | 'unsupported'>('default');
+  const [notificationBusy, setNotificationBusy] = useState(false);
+  const [notificationMessage, setNotificationMessage] = useState('');
 
   useEffect(() => {
     if (!isOpen) return;
@@ -64,6 +70,17 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, s
     return () => {
       active = false;
     };
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    let active = true;
+    void refreshRespondentNotificationPermission().then((permission) => {
+      if (active) setNotificationPermission(permission);
+    }).catch(() => {
+      if (active) setNotificationPermission('unsupported');
+    });
+    return () => { active = false; };
   }, [isOpen]);
 
   useEffect(() => {
@@ -112,6 +129,23 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, s
     setBiometricEnabled(false);
     setBiometricMessageType('success');
     setBiometricMessage('Pengaman biometrik SIPANDU dinonaktifkan.');
+  };
+
+  const handleEnableNotifications = async () => {
+    if (!auth.currentUser) { setNotificationMessage('Masuk kembali ke SIPANDU sebelum mengaktifkan notifikasi.'); return; }
+    setNotificationBusy(true);
+    setNotificationMessage('');
+    try {
+      const permission = await enableRespondentNotifications();
+      setNotificationPermission(permission);
+      setNotificationMessage(permission === 'granted'
+        ? 'Izin notifikasi aktif. Pengingat lokal disinkronkan setelah data layanan dimuat.'
+        : permission === 'denied'
+          ? 'Izin notifikasi ditolak Android. Aktifkan izin SIPANDU melalui Pengaturan Aplikasi Android.'
+          : 'Izin notifikasi belum tersedia pada perangkat ini.');
+    } catch (error) {
+      setNotificationMessage(error instanceof Error ? error.message : 'Izin notifikasi belum berhasil diaktifkan.');
+    } finally { setNotificationBusy(false); }
   };
 
   const handleThemeChange = (theme: 'dark' | 'light') => {
@@ -224,6 +258,30 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, s
               </p>
             )}
           </section>
+
+          {Capacitor.isNativePlatform() && Capacitor.getPlatform() === 'android' && (
+            <section className="rounded-2xl border border-amber-300/20 bg-amber-950/20 p-4">
+              <div className="mb-3 flex items-center gap-2">
+                <Bell className="h-5 w-5 text-amber-200" />
+                <div className="min-w-0">
+                  <h3 className="text-sm font-bold text-amber-100">Pemberitahuan & Pengingat</h3>
+                  <p className="mt-0.5 text-[11px] text-neutral-400">Izin Android untuk respons baru dan pengingat tindak lanjut lokal.</p>
+                </div>
+                <span className="ml-auto shrink-0 rounded-full bg-white/10 px-2 py-1 text-[10px] font-bold text-neutral-200">
+                  {notificationPermission === 'granted' ? 'Izin aktif' : notificationPermission === 'denied' ? 'Ditolak' : 'Belum aktif'}
+                </span>
+              </div>
+              <p className="mb-3 text-[11px] leading-relaxed text-neutral-300">
+                Pengingat memakai tanggal tindak lanjut yang telah disimpan. Notifikasi layar kunci tidak memuat nama, NIK, alamat, status kesehatan, atau rincian layanan PPKS.
+              </p>
+              <button type="button" onClick={() => void handleEnableNotifications()} disabled={notificationBusy || !auth.currentUser} className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-amber-300 px-3 py-3 text-sm font-bold text-amber-950 disabled:cursor-not-allowed disabled:opacity-50">
+                {notificationBusy ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Bell className="h-4 w-4" />}
+                {notificationBusy ? 'Memeriksa izin…' : notificationPermission === 'granted' ? 'Periksa Izin Notifikasi' : 'Aktifkan Notifikasi Android'}
+              </button>
+              {notificationMessage && <p role="status" className="mt-3 rounded-xl border border-white/10 bg-black/20 p-3 text-xs leading-relaxed text-neutral-200">{notificationMessage}</p>}
+              <p className="mt-3 text-[10px] leading-relaxed text-neutral-500">Jadwal lokal disinkronkan saat SIPANDU terbuka dan data layanan berhasil dimuat. Ketepatan waktu mengikuti izin alarm dan kebijakan baterai Android.</p>
+            </section>
+          )}
 
           <section className="rounded-2xl border border-emerald-300/20 bg-emerald-950/20 p-4">
             <div className="mb-3 flex items-center gap-2">
