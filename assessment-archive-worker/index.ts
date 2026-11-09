@@ -603,7 +603,12 @@ export default {
       return handleStaffDocumentRoute(request, env, url, origin);
     }
 
-    if (url.pathname.startsWith('/archive/') && request.method === 'GET') {\n      if (missingConfiguration(env).length) return json({ ok: false, message: 'Layanan arsip belum dikonfigurasi administrator.' }, 503, origin);\n      return handleAssessmentArchiveDownload(request, env, url, origin);\n    }\n\n    if (url.pathname !== '/archive' || request.method !== 'POST') {
+    if (url.pathname.startsWith('/archive/') && request.method === 'GET') {
+      if (missingConfiguration(env).length) return json({ ok: false, message: 'Layanan arsip belum dikonfigurasi administrator.' }, 503, origin);
+      return handleAssessmentArchiveDownload(request, env, url, origin);
+    }
+
+    if (url.pathname !== '/archive' || request.method !== 'POST') {
       return json({ ok: false, message: 'Endpoint tidak ditemukan.' }, 404, origin);
     }
     if (missingConfiguration(env).length) {
