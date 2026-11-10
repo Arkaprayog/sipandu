@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { ArrowLeft, MessageCircle, Search, Send, ShieldCheck } from 'lucide-react';
 import type { PPKSRecord, PPKSServiceStatus } from '../types';
-import { sortPPKSRecordsByName } from '../lib/ppksData';
+import { deduplicatePPKSRecords, sortPPKSRecordsByName } from '../lib/ppksData';
 import {
   subscribeToDirectMessageConversation,
   subscribeToDirectMessages,
@@ -38,7 +38,9 @@ export const DirectMessageView: React.FC<DirectMessageViewProps> = ({
       : currentUserRole === 'pendamping'
         ? ppksList.filter((record) => assignedStatusById.get(record.id)?.assignedToUid === currentUserUid)
         : [];
-    return sortPPKSRecordsByName(permitted);
+    // The roster may combine cached, imported spreadsheet, and Firestore records.
+    // Collapse confident identity duplicates before displaying any contact twice.
+    return sortPPKSRecordsByName(deduplicatePPKSRecords(permitted));
   }, [ppksList, assignedStatusById, isManager, currentUserRole, currentUserUid]);
 
   const [search, setSearch] = useState('');
@@ -61,13 +63,12 @@ export const DirectMessageView: React.FC<DirectMessageViewProps> = ({
 
   const selectedRespondent = visibleRespondents.find((person) => person.id === selectedRespondentId) || null;
 
+  // Start on the full A–Z contact list. Open a chat only after explicit selection.
+  // If assignment is revoked or a contact leaves the permitted roster, return to
+  // the list instead of silently switching the conversation to another respondent.
   useEffect(() => {
-    if (!selectedRespondentId && visibleRespondents.length) {
-      setSelectedRespondentId(visibleRespondents[0].id);
-      return;
-    }
     if (selectedRespondentId && !visibleRespondents.some((person) => person.id === selectedRespondentId)) {
-      setSelectedRespondentId(visibleRespondents[0]?.id || '');
+      setSelectedRespondentId('');
     }
   }, [selectedRespondentId, visibleRespondents]);
 
@@ -162,7 +163,14 @@ export const DirectMessageView: React.FC<DirectMessageViewProps> = ({
       <div className="grid min-h-[min(68vh,720px)] overflow-hidden rounded-2xl border border-white/10 bg-[#102017]/80 shadow-2xl md:grid-cols-[300px_minmax(0,1fr)]">
         <aside className={`border-b border-white/10 bg-[#0c1912]/90 md:border-b-0 md:border-r ${selectedRespondent ? 'hidden md:block' : 'block'}`}>
           <div className="border-b border-white/10 p-3">
-            <p className="mb-3 text-sm font-bold text-white">Daftar responden A–Z</p>
+            <div className="mb-3 flex items-center justify-between gap-2">
+              <p className="text-sm font-bold text-white">Daftar responden A–Z</p>
+              <span className="shrink-0 text-[10px] font-medium text-emerald-100/45">
+                {filteredRespondents.length === visibleRespondents.length
+                  ? `${visibleRespondents.length} responden`
+                  : `${filteredRespondents.length} dari ${visibleRespondents.length}`}
+              </span>
+            </div>
             <label className="flex items-center gap-2 rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-emerald-100/70">
               <Search className="h-4 w-4 shrink-0" />
               <input
