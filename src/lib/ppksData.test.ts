@@ -185,7 +185,7 @@ test('preserves different respondents when a duplicated or mistyped NIK appears 
 });
 
 test('keeps all 46 owner-confirmed respondents when two different people share one NIK', () => {
-  const respondents = Array.from({ length: EXPECTED_REAL_PPKS_COUNT }, (_, index) => {
+  const respondents = Array.from({ length: 46 }, (_, index) => {
     const nik = String(index + 1).padStart(16, '0');
     return record({
       id: `sheet-row-${index + 2}`,
