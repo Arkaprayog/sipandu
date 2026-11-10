@@ -1034,12 +1034,14 @@ export async function replacePPKSCollectionFromSpreadsheet(
         ...sourceRecord,
         // The selected ATENSI response tab is authoritative for mapped profile
         // fields; continuation Form data may add assessment answers but cannot
-        // overwrite these columns (especially intervention/recommendation AO).
+        // overwrite these columns (especially recommendation/intervention AP).
         timestamp: authoritativeProfile.timestamp,
         namaLengkap: authoritativeProfile.namaLengkap,
         nik: authoritativeProfile.nik,
         usia: authoritativeProfile.usia,
+        jenisKelamin: authoritativeProfile.jenisKelamin,
         kotaDomisili: authoritativeProfile.kotaDomisili,
+        lamaTerapiArv: authoritativeProfile.lamaTerapiArv,
         alamatLengkap: authoritativeProfile.alamatLengkap,
         noHpWa: authoritativeProfile.noHpWa,
         jenisBantuan: authoritativeProfile.jenisBantuan,

@@ -13,10 +13,12 @@ export const ATENSI_PROFILE_COLUMN_INDEX = {
   kotaDomisili: 8,     // I
   alamatLengkap: 10,   // K
   usia: 11,            // L
+  jenisKelamin: 12,   // M
   noHpWa: 13,          // N
-  jenisBantuan: 39,    // AN
-  intervensiMental: 40,// AO
-  desil: 41,           // AP
+  jenisBantuan: 38,    // AM
+  lamaTerapiArv: 40,   // AO
+  intervensiMental: 41,// AP
+  desil: 42,           // AQ
 } as const;
 
 export type AtensiProfileColumn = keyof typeof ATENSI_PROFILE_COLUMN_INDEX;
