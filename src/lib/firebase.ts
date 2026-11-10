@@ -1026,14 +1026,17 @@ export async function syncPPKSCollectionFromSpreadsheet(
         ? ({ ...exactDoc.data(), id: exactDoc.id } as PPKSRecord)
         : null;
 
-      // Prefer the exact source ID. Consolidate other documents only when the
-      // exact document itself confirms the same identity; otherwise do not merge
-      // another person into a reused source ID.
+      // A spreadsheet ID collision with a different person must stop the sync;
+      // never overwrite one respondent with another. When a synthetic spreadsheet
+      // row ID changes, retain the existing Firestore ID so assignments, chats,
+      // assessment archives, and other ID-based references remain valid.
+      if (exactDoc && !samePPKSIdentity(exactRecord as PPKSRecord, sourceRecord)) {
+        throw new Error(`ID spreadsheet ${sourceRecord.id} sudah dipakai oleh responden lain. Sinkronisasi dihentikan untuk mencegah tertukarnya data.`);
+      }
       const matchedDocs = exactDoc
-        ? (samePPKSIdentity(exactRecord as PPKSRecord, sourceRecord)
-          ? [exactDoc, ...identityMatches.filter((candidate) => candidate.id !== exactDoc.id)]
-          : [exactDoc])
+        ? [exactDoc, ...identityMatches.filter((candidate) => candidate.id !== exactDoc.id)]
         : identityMatches;
+      const canonicalId = exactDoc?.id || [...identityMatches].sort((a, b) => a.id.localeCompare(b.id))[0]?.id || sourceRecord.id;
 
       for (const candidate of matchedDocs) matchedOldIds.add(candidate.id);
       const previousRecords = matchedDocs.map((candidate) =>
@@ -1052,7 +1055,9 @@ export async function syncPPKSCollectionFromSpreadsheet(
       ) as NonNullable<PPKSRecord['manualPhotoOverrides']>;
 
       const migrated: PPKSRecord = {
+        ...Object.assign({}, ...previousRecords),
         ...sourceRecord,
+        id: canonicalId,
         // The selected spreadsheet tab remains authoritative for profile fields.
         timestamp: authoritativeProfile.timestamp,
         namaLengkap: authoritativeProfile.namaLengkap,
@@ -1093,7 +1098,7 @@ export async function syncPPKSCollectionFromSpreadsheet(
       };
 
       planned.push({
-        id: sourceRecord.id,
+        id: canonicalId,
         data: stripUndefinedForFirestore(migrated) as PPKSRecord,
         matchedExistingIds: matchedDocs.map((candidate) => candidate.id),
       });
@@ -1126,29 +1131,23 @@ export async function syncPPKSCollectionFromSpreadsheet(
       return changed;
     });
 
-    // Remove only old document IDs that were matched confidently to the same
-    // respondent and migrated to the canonical spreadsheet ID. Unmatched records
-    // are retained; spreadsheet omissions never trigger bulk deletion.
-    const canonicalIds = new Set(planned.map((item) => item.id));
-    const duplicateIds = [...new Set(planned.flatMap((item) =>
-      item.matchedExistingIds.filter((id) => id !== item.id && !canonicalIds.has(id))
-    ))];
+    // Never delete historical roster document IDs during routine sync:
+    // assignment, conversation, and assessment collections may reference them.
+    // The UI deduplicates confirmed identities while a separate migration can
+    // reconcile legacy duplicate IDs with all dependent references safely.
+    const duplicateIds: string[] = [];
 
-    const operations: Array<
-      | { kind: 'set'; id: string; data: PPKSRecord }
-      | { kind: 'delete'; id: string }
-    > = [
-      ...changedRecords.map((item) => ({ kind: 'set' as const, id: item.id, data: item.data })),
-      ...duplicateIds.map((id) => ({ kind: 'delete' as const, id })),
-    ];
+    const operations = changedRecords.map((item) => ({
+      kind: 'set' as const,
+      id: item.id,
+      data: item.data,
+    }));
 
     // Firestore limits each write batch to 500 operations; use a margin.
     for (let offset = 0; offset < operations.length; offset += 400) {
       const batch = writeBatch(db);
       for (const operation of operations.slice(offset, offset + 400)) {
-        const reference = doc(db, 'ppks', operation.id);
-        if (operation.kind === 'set') batch.set(reference, operation.data);
-        else batch.delete(reference);
+        batch.set(doc(db, 'ppks', operation.id), operation.data);
       }
       await batch.commit();
     }
