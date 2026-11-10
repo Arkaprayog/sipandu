@@ -1147,9 +1147,7 @@ export async function syncPPKSCollectionFromSpreadsheet(
     for (let offset = 0; offset < operations.length; offset += 400) {
       const batch = writeBatch(db);
       for (const operation of operations.slice(offset, offset + 400)) {
-        const reference = doc(db, 'ppks', operation.id);
-        if (operation.kind === 'set') batch.set(reference, operation.data);
-        else batch.delete(reference);
+        batch.set(doc(db, 'ppks', operation.id), operation.data);
       }
       await batch.commit();
     }
