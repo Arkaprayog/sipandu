@@ -4,8 +4,9 @@ export interface PPKSRecord {
   namaLengkap: string;
   nik: string;
   usia: number;
-  jenisKelamin: 'Laki-laki' | 'Perempuan';
+  jenisKelamin: 'Laki-laki' | 'Perempuan' | '';
   kotaDomisili: string;
+  lamaTerapiArv?: string;
   alamatLengkap: string;
   noHpWa: string;
   jenisBantuan: string;
