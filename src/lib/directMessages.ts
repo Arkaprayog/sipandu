@@ -180,9 +180,21 @@ export async function sendDirectMessage(
     if (respondentClaim !== id) {
       throw new Error('Akun responden hanya dapat mengirim pesan pada percakapannya sendiri.');
     }
-    const conversation = await getDoc(doc(db, 'conversations', id));
+    const conversationRef = doc(db, 'conversations', id);
+    const conversation = await getDoc(conversationRef);
     if (!conversation.exists()) {
-      throw new Error('Percakapan belum dibuka oleh petugas SIPANDU. Hubungi pendamping untuk memulai percakapan.');
+      // The custom claim is server-issued and binds this account to this one ID.
+      // An empty staff list cannot grant the respondent access to any other record.
+      try {
+        await setDoc(conversationRef, {
+          respondentId: id,
+          assignedStaffUids: [],
+          createdAt: serverTimestamp(),
+        });
+      } catch (error) {
+        const concurrent = await getDoc(conversationRef).catch(() => null);
+        if (!concurrent?.exists()) throw error;
+      }
     }
   } else {
     await ensureStaffConversation(
