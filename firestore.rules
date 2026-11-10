@@ -458,6 +458,95 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
+    // Direct Message uses server-issued respondent custom claims. The claim
+    // binds one authenticated respondent UID to exactly one stable PPKS document ID.
+    // No client can create/change this identity mapping or enumerate conversations.
+    function isDirectMessageRespondent(ppksId) {
+      return signedIn()
+        && request.auth.token.role == 'responden'
+        && request.auth.token.ppksId == ppksId;
+    }
+
+    function hasDirectMessageAssignment(ppksId) {
+      let statusPath = /databases/$(database)/documents/ppksServiceStatus/$(ppksId);
+      return hasRole('pendamping')
+        && exists(statusPath)
+        && get(statusPath).data.assignedToUid == request.auth.uid;
+    }
+
+    function canAccessDirectMessage(ppksId) {
+      return canWritePpks()
+        || hasDirectMessageAssignment(ppksId)
+        || isDirectMessageRespondent(ppksId);
+    }
+
+    function expectedDirectMessageStaffUids(ppksId) {
+      let statusPath = /databases/$(database)/documents/ppksServiceStatus/$(ppksId);
+      return exists(statusPath)
+        && get(statusPath).data.assignedToUid is string
+        && get(statusPath).data.assignedToUid.size() > 0
+        ? [get(statusPath).data.assignedToUid]
+        : [];
+    }
+
+    match /conversations/{ppksId} {
+      // Direct get is constrained by the stable PPKS path ID. Listing the
+      // collection is denied so respondents cannot enumerate the roster.
+      allow get: if canAccessDirectMessage(ppksId);
+      allow list: if false;
+
+      // A conversation is created only by authorized staff. Pendamping must
+      // already be assigned in the server-managed service-status document.
+      allow create: if request.resource.data.keys().hasAll([
+          'respondentId', 'assignedStaffUids', 'createdAt'
+        ])
+        && request.resource.data.keys().hasOnly([
+          'respondentId', 'assignedStaffUids', 'createdAt'
+        ])
+        && request.resource.data.respondentId == ppksId
+        && request.resource.data.respondentId is string
+        && request.resource.data.respondentId.size() > 0
+        && request.resource.data.respondentId.size() <= 150
+        && request.resource.data.assignedStaffUids is list
+        && request.resource.data.assignedStaffUids.size() <= 1
+        && request.resource.data.assignedStaffUids == expectedDirectMessageStaffUids(ppksId)
+        && request.resource.data.createdAt == request.time
+        && (canWritePpks() || hasDirectMessageAssignment(ppksId)
+          || (isDirectMessageRespondent(ppksId) && request.resource.data.assignedStaffUids == []));
+
+      // Only an owner/supervisor can rebind the conversation after a legitimate
+      // reassignment already saved in ppksServiceStatus. Other metadata is immutable.
+      allow update: if canWritePpks()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['assignedStaffUids'])
+        && request.resource.data.assignedStaffUids is list
+        && request.resource.data.assignedStaffUids.size() <= 1
+        && request.resource.data.assignedStaffUids == expectedDirectMessageStaffUids(ppksId);
+      allow delete: if false;
+
+      match /messages/{messageId} {
+        allow get, list: if canAccessDirectMessage(ppksId)
+          && exists(/databases/$(database)/documents/conversations/$(ppksId));
+
+        // Text-only, append-only messages. The server timestamp and sender UID
+        // are verified by Rules; clients cannot edit/delete or impersonate.
+        allow create: if canAccessDirectMessage(ppksId)
+          && exists(/databases/$(database)/documents/conversations/$(ppksId))
+          && request.resource.data.keys().hasAll([
+            'senderUid', 'body', 'type', 'createdAt'
+          ])
+          && request.resource.data.keys().hasOnly([
+            'senderUid', 'body', 'type', 'createdAt'
+          ])
+          && request.resource.data.senderUid == request.auth.uid
+          && request.resource.data.body is string
+          && request.resource.data.body.size() >= 1
+          && request.resource.data.body.size() <= 4000
+          && request.resource.data.type == 'text'
+          && request.resource.data.createdAt == request.time;
+        allow update, delete: if false;
+      }
+    }
+
     // Deny all collections unless a collection-specific policy is added.
     match /{document=**} {
       allow read, write: if false;
