@@ -791,21 +791,20 @@ function StaffApp() {
     else void badgeNavigator.clearAppBadge?.().catch(() => undefined);
   }, [respondentNotifications]);
 
-  const replaceFirestoreRosterFromSheet = async (
+  const syncFirestoreRosterFromSheet = async (
     spreadsheetId: string,
     records: PPKSRecord[],
     authoritativeProfileRecords: PPKSRecord[] = records,
   ): Promise<string> => {
     try {
-      // The Firestore function performs a read/compare/write diff. Calling it
-      // after each successful import keeps the same spreadsheet ID synchronized
-      // when rows change and repairs any stale cloud edits without rewriting
-      // unchanged documents on every five-minute poll.
+      // Persist each spreadsheet respondent as an idempotent Firestore upsert.
+      // Contacts can be added without a fixed roster-size gate. Missing rows are
+      // retained rather than deleted after a partial or incomplete spreadsheet read.
       const result = await syncPPKSCollectionFromSpreadsheet(records, authoritativeProfileRecords);
-      return `Koleksi Firestore ppks diselaraskan dengan spreadsheet “${spreadsheetId}”: ${result.created} dibuat, ${result.updated} diperbarui, ${result.deleted} dokumen lama dihapus. Koleksi stageOneIntake tidak disentuh.`;
+      return `Kontak spreadsheet “${spreadsheetId}” tersimpan di Firestore: ${result.created} kontak baru, ${result.updated} diperbarui, ${result.duplicatesMerged} dokumen duplikat digabung. Dokumen yang tidak muncul pada impor ini tidak dihapus otomatis; data asesmen dipertahankan.`;
     } catch (error) {
-      console.error('SIPANDU could not replace the legacy Firestore PPKS roster:', error);
-      return `Penyelarasan Firestore belum berhasil: ${error instanceof Error ? error.message : String(error)}. Data tabel tetap memakai spreadsheet sebagai sumber utama.`;
+      console.error('SIPANDU could not sync the Firestore PPKS roster:', error);
+      return `Penyimpanan kontak ke Firestore belum berhasil: ${error instanceof Error ? error.message : String(error)}. Data tabel tetap memakai spreadsheet sebagai sumber utama.`;
     }
   };
 
