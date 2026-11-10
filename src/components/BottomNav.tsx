@@ -10,11 +10,13 @@ import {
   Footprints,
   ChartNoAxesCombined,
   ShieldCheck,
+  MessageCircle,
 } from 'lucide-react';
 
 export type TabKey =
   | 'beranda'
   | 'database-ppks'
+  | 'direct-message'
   | 'asesmen'
   | 'from-asesmen-terintegrasi'
   | 'dokumen'
@@ -41,6 +43,11 @@ export const BottomNav: React.FC<BottomNavProps> = ({ activeTab, onSelectTab, cu
       key: 'database-ppks',
       label: 'DATABASE PPKS',
       icon: <Users className="w-4 h-4 md:w-5 md:h-5" />,
+    },
+    {
+      key: 'direct-message',
+      label: 'DIRECT MESSAGE',
+      icon: <MessageCircle className="w-4 h-4 md:w-5 md:h-5" />,
     },
     {
       key: 'asesmen',
