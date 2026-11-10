@@ -6,6 +6,8 @@ import { importLazyModuleWithRecovery } from './lib/lazyImportRecovery';
 import { initialPPKSList, initialProfileUser, initialAppSettings, isLegacySamplePPKS } from './data/initialData';
 import { LoginPage } from './components/LoginPage';
 import { StageOneRespondentPage } from './components/StageOneRespondentPage';
+import { DirectMessageView } from './components/DirectMessageView';
+import { RespondentDirectMessagePage } from './components/RespondentDirectMessagePage';
 import { Header } from './components/Header';
 import { BottomNav } from './components/BottomNav';
 import type { TabKey } from './components/BottomNav';
@@ -1872,6 +1874,7 @@ function StaffApp() {
   // Part 2: DASHBOARD
   const isImmersiveDashboard = [
     'database-ppks',
+    'direct-message',
     'asesmen',
     'from-asesmen-terintegrasi',
     'dokumen',
@@ -1967,6 +1970,15 @@ function StaffApp() {
             <DatabasePpksView
               ppksList={ppksList}
               settings={settings}
+            />
+          )}
+
+          {activeTab === 'direct-message' && (
+            <DirectMessageView
+              ppksList={ppksList}
+              serviceStatuses={serviceStatuses}
+              currentUserUid={currentUserUid}
+              currentUserRole={currentUserRole}
             />
           )}
 
@@ -2089,8 +2101,10 @@ function StaffApp() {
 
 /** Public respondent flow: the shareable URL bypasses the staff dashboard and login. */
 export default function App() {
-  if (typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('mode') === 'asesmen-tahap-awal') {
-    return <StageOneRespondentPage />;
+  if (typeof window !== 'undefined') {
+    const mode = new URLSearchParams(window.location.search).get('mode');
+    if (mode === 'direct-message') return <RespondentDirectMessagePage />;
+    if (mode === 'asesmen-tahap-awal') return <StageOneRespondentPage />;
   }
   return <StaffApp />;
 }

@@ -686,3 +686,33 @@ test('Direct Message hanya dapat dibuat oleh petugas yang memiliki akses PPKS', 
     createdAt: serverTimestamp(),
   }));
 });
+
+
+test('Responden dapat memulai hanya percakapan dengan ID PPKS pada custom claim', async () => {
+  await environment.withSecurityRulesDisabled(async (context) => {
+    await setDoc(doc(context.firestore(), 'ppksServiceStatus', 'respondent-start'), {
+      ppksId: 'respondent-start',
+      assignedToUid: PENDAMPING_UID,
+    });
+  });
+
+  const respondent = environment.authenticatedContext('respondent-start-uid', {
+    role: 'responden',
+    ppksId: 'respondent-start',
+  }).firestore();
+
+  await assertSucceeds(setDoc(doc(respondent, 'conversations', 'respondent-start'), {
+    respondentId: 'respondent-start',
+    assignedStaffUids: [],
+    createdAt: serverTimestamp(),
+  }));
+  await assertSucceeds(setDoc(doc(respondent, 'conversations', 'respondent-start', 'messages', 'first-message'), {
+    senderUid: 'respondent-start-uid',
+    body: 'Saya ingin menghubungi pendamping.',
+    type: 'text',
+    createdAt: serverTimestamp(),
+  }));
+  await assertFails(updateDoc(doc(respondent, 'conversations', 'respondent-start'), {
+    assignedStaffUids: [PENDAMPING_UID],
+  }));
+});
