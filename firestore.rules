@@ -509,10 +509,12 @@ service cloud.firestore {
         && request.resource.data.respondentId.size() <= 150
         && request.resource.data.assignedStaffUids is list
         && request.resource.data.assignedStaffUids.size() <= 1
-        && request.resource.data.assignedStaffUids == expectedDirectMessageStaffUids(ppksId)
         && request.resource.data.createdAt == request.time
-        && (canWritePpks() || hasDirectMessageAssignment(ppksId)
-          || (isDirectMessageRespondent(ppksId) && request.resource.data.assignedStaffUids == []));
+        && (
+          ((canWritePpks() || hasDirectMessageAssignment(ppksId))
+            && request.resource.data.assignedStaffUids == expectedDirectMessageStaffUids(ppksId))
+          || (isDirectMessageRespondent(ppksId) && request.resource.data.assignedStaffUids == [])
+        );
 
       // Only an owner/supervisor can rebind the conversation after a legitimate
       // reassignment already saved in ppksServiceStatus. Other metadata is immutable.
