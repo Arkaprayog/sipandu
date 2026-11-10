@@ -40,7 +40,7 @@ import {
 } from 'firebase/auth';
 import firebaseConfig from '../../firebase-applet-config.json';
 import { PPKSRecord, ProfileUser, StageOneIntakePayload, PPKSServiceStatus, PPKSServiceEvent, PPKSServiceUpdateInput, FieldVisitRecord, SecurityAuditEntry } from '../types';
-import { deduplicatePPKSRecords, EXPECTED_REAL_PPKS_COUNT, parsePPKSTimestamp, samePPKSIdentity } from './ppksData';
+import { deduplicatePPKSRecords, parsePPKSTimestamp, samePPKSIdentity } from './ppksData';
 import { isLegacySamplePPKS } from '../data/initialData';
 import { GOOGLE_WORKSPACE_EMAIL } from './googleSIPANDUResources';
 import { normalizePPKSPhotoSource } from './photoSources';
@@ -951,44 +951,58 @@ export function subscribeToIntegratedAssessmentAnswers(
  * and explicitly uploaded photo overrides are carried forward for the same person.
  * The separate stageOneIntake collection is intentionally untouched.
  */
-export async function replacePPKSCollectionFromSpreadsheet(
+/**
+ * Idempotently synchronize the current respondent roster from the authoritative
+ * spreadsheet into Firestore. Existing spreadsheet rows are matched by stable ID
+ * first and by the conservative PPKS identity matcher second, so repeated imports
+ * update the same document instead of creating duplicate contacts.
+ *
+ * Documents absent from the current sheet are deliberately retained. A missing row
+ * can be a temporary import/permission issue; automatic sync must never erase a
+ * respondent's profile or assessment history merely because a row was not returned.
+ * Only positively identified legacy duplicate documents are consolidated.
+ */
+export async function syncPPKSCollectionFromSpreadsheet(
   records: PPKSRecord[],
   authoritativeProfileRecords: PPKSRecord[] = records,
-): Promise<{ created: number; updated: number; deleted: number }> {
+): Promise<{ created: number; updated: number; duplicatesMerged: number }> {
   const user = auth.currentUser;
   if (!user) throw new Error('Belum masuk ke Firebase Auth sebagai akun SIPANDU.');
   const token = await getIdTokenResult(user);
   const role = token.claims.role;
   if (role !== 'owner' && role !== 'supervisor') {
-    throw new Error('Penggantian data Firestore hanya diizinkan untuk akun owner atau supervisor SIPANDU.');
+    throw new Error('Penyimpanan roster spreadsheet ke Firestore hanya diizinkan untuk akun owner atau supervisor SIPANDU.');
   }
   if (!Array.isArray(records) || records.length === 0) {
-    throw new Error('Penggantian Firestore dibatalkan: data spreadsheet kosong.');
-  }
-  if (records.length !== EXPECTED_REAL_PPKS_COUNT) {
-    throw new Error(
-      `Penggantian Firestore dibatalkan: roster spreadsheet berisi ${records.length} PPKS unik, sedangkan roster terverifikasi saat ini ${EXPECTED_REAL_PPKS_COUNT}. Tidak ada dokumen lama yang dihapus.`
-    );
+    throw new Error('Penyimpanan Firestore dibatalkan: data spreadsheet kosong.');
   }
 
   const recordIds = records.map((record) => String(record.id || '').trim());
   if (recordIds.some((id) => !id) || new Set(recordIds).size !== recordIds.length) {
-    throw new Error('Penggantian Firestore dibatalkan: ID PPKS kosong atau duplikat pada hasil impor.');
+    throw new Error('Penyimpanan Firestore dibatalkan: ID PPKS kosong atau duplikat pada hasil impor.');
   }
 
   try {
     const snapshot = await getDocs(collection(db, 'ppks'));
     const oldDocs = snapshot.docs;
     const matchedOldIds = new Set<string>();
-    const planned: Array<{ id: string; data: PPKSRecord }> = [];
+    const planned: Array<{
+      id: string;
+      data: PPKSRecord;
+      matchedExistingIds: string[];
+    }> = [];
 
     const mergeSupplemental = <T extends object>(
       current: T | undefined,
-      previous: T | undefined,
+      previousValues: Array<T | undefined>,
     ): T | undefined => {
-      const merged = { ...(previous || {}), ...(current || {}) };
+      const merged: Record<string, unknown> = {};
+      for (const previous of previousValues) Object.assign(merged, previous || {});
+      Object.assign(merged, current || {});
       const nonEmpty = Object.fromEntries(
-        Object.entries(merged).filter(([, value]) => value !== '' && value !== undefined && value !== null)
+        Object.entries(merged).filter(([, value]) =>
+          value !== '' && value !== undefined && value !== null
+        )
       );
       return Object.keys(nonEmpty).length ? nonEmpty as T : undefined;
     };
@@ -999,42 +1013,47 @@ export async function replacePPKSCollectionFromSpreadsheet(
       ) || authoritativeProfileRecords.find((candidate) =>
         samePPKSIdentity(candidate, sourceRecord)
       ) || sourceRecord;
-      let oldDoc = oldDocs.find((candidate) =>
+
+      const exactDoc = oldDocs.find((candidate) =>
         candidate.id === sourceRecord.id && !matchedOldIds.has(candidate.id)
       );
+      const identityMatches = oldDocs.filter((candidate) => {
+        if (matchedOldIds.has(candidate.id)) return false;
+        const previousRecord = { ...candidate.data(), id: candidate.id } as PPKSRecord;
+        return samePPKSIdentity(previousRecord, sourceRecord);
+      });
+      const exactRecord = exactDoc
+        ? ({ ...exactDoc.data(), id: exactDoc.id } as PPKSRecord)
+        : null;
 
-      if (!oldDoc) {
-        const candidates = oldDocs.filter((candidate) => {
-          if (matchedOldIds.has(candidate.id)) return false;
-          const previousRecord = { ...candidate.data(), id: candidate.id } as PPKSRecord;
-          return samePPKSIdentity(previousRecord, sourceRecord);
-        });
-        if (candidates.length > 1) {
-          throw new Error(
-            `Penggantian Firestore dihentikan demi keamanan: lebih dari satu dokumen lama cocok dengan PPKS “${sourceRecord.namaLengkap}”. Data lama tidak dihapus.`
-          );
-        }
-        oldDoc = candidates[0];
-      }
+      // Prefer the exact source ID. Consolidate other documents only when the
+      // exact document itself confirms the same identity; otherwise do not merge
+      // another person into a reused source ID.
+      const matchedDocs = exactDoc
+        ? (samePPKSIdentity(exactRecord as PPKSRecord, sourceRecord)
+          ? [exactDoc, ...identityMatches.filter((candidate) => candidate.id !== exactDoc.id)]
+          : [exactDoc])
+        : identityMatches;
 
-      const previous = oldDoc
-        ? ({ ...oldDoc.data(), id: oldDoc.id } as Partial<PPKSRecord>)
-        : undefined;
-      if (oldDoc) matchedOldIds.add(oldDoc.id);
+      for (const candidate of matchedDocs) matchedOldIds.add(candidate.id);
+      const previousRecords = matchedDocs.map((candidate) =>
+        ({ ...candidate.data(), id: candidate.id } as PPKSRecord)
+      );
 
-      const manualPhotoOverrides = {
-        ...(previous?.manualPhotoOverrides || {}),
-        ...(sourceRecord.manualPhotoOverrides || {}),
-      };
+      const manualPhotoOverrides = Object.assign(
+        {},
+        ...previousRecords.map((previous) => previous.manualPhotoOverrides || {}),
+        sourceRecord.manualPhotoOverrides || {},
+      );
       const normalizedOverrides = Object.fromEntries(
-        Object.entries(manualPhotoOverrides).filter(([, value]) => Boolean(normalizePPKSPhotoSource(value)))
+        Object.entries(manualPhotoOverrides).filter(([, value]) =>
+          Boolean(normalizePPKSPhotoSource(value))
+        )
       ) as NonNullable<PPKSRecord['manualPhotoOverrides']>;
 
       const migrated: PPKSRecord = {
         ...sourceRecord,
-        // The selected ATENSI response tab is authoritative for mapped profile
-        // fields; continuation Form data may add assessment answers but cannot
-        // overwrite these columns (especially recommendation/intervention AP).
+        // The selected spreadsheet tab remains authoritative for profile fields.
         timestamp: authoritativeProfile.timestamp,
         namaLengkap: authoritativeProfile.namaLengkap,
         nik: authoritativeProfile.nik,
@@ -1047,34 +1066,39 @@ export async function replacePPKSCollectionFromSpreadsheet(
         jenisBantuan: authoritativeProfile.jenisBantuan,
         intervensiMental: authoritativeProfile.intervensiMental,
         desil: authoritativeProfile.desil,
-        // New spreadsheet photo values win; a user-uploaded photo is only a fallback
-        // when the corresponding source-sheet upload cell is empty.
+        // Preserve manually uploaded photos only as fallback when the source cell is empty.
         fotoDiri: normalizePPKSPhotoSource(normalizedOverrides.fotoDiri) || normalizePPKSPhotoSource(authoritativeProfile.fotoDiri) || '',
         fotoKtp: normalizePPKSPhotoSource(normalizedOverrides.fotoKtp) || normalizePPKSPhotoSource(authoritativeProfile.fotoKtp) || '',
         fotoKk: normalizePPKSPhotoSource(normalizedOverrides.fotoKk) || normalizePPKSPhotoSource(authoritativeProfile.fotoKk) || '',
         fotoRumah: normalizePPKSPhotoSource(normalizedOverrides.fotoRumah) || normalizePPKSPhotoSource(authoritativeProfile.fotoRumah) || '',
         manualPhotoOverrides: Object.keys(normalizedOverrides).length ? normalizedOverrides : undefined,
-        integratedForm: mergeSupplemental(sourceRecord.integratedForm, previous?.integratedForm),
-        officialAssessment: mergeSupplemental(sourceRecord.officialAssessment, previous?.officialAssessment),
+        integratedForm: mergeSupplemental(
+          sourceRecord.integratedForm,
+          previousRecords.map((previous) => previous.integratedForm),
+        ),
+        officialAssessment: mergeSupplemental(
+          sourceRecord.officialAssessment,
+          previousRecords.map((previous) => previous.officialAssessment),
+        ),
         formAsesmenTerintegrasi: mergeSupplemental(
           sourceRecord.formAsesmenTerintegrasi,
-          previous?.formAsesmenTerintegrasi,
+          previousRecords.map((previous) => previous.formAsesmenTerintegrasi),
         ),
         statusAsesmen:
-          sourceRecord.statusAsesmen === 'Tahap Awal' &&
-          previous?.statusAsesmen &&
-          previous.statusAsesmen !== 'Tahap Awal'
-            ? previous.statusAsesmen
+          sourceRecord.statusAsesmen === 'Tahap Awal'
+            ? previousRecords.find((previous) =>
+                previous.statusAsesmen && previous.statusAsesmen !== 'Tahap Awal'
+              )?.statusAsesmen || sourceRecord.statusAsesmen
             : sourceRecord.statusAsesmen,
       };
+
       planned.push({
         id: sourceRecord.id,
         data: stripUndefinedForFirestore(migrated) as PPKSRecord,
+        matchedExistingIds: matchedDocs.map((candidate) => candidate.id),
       });
     }
 
-    const newIds = new Set(planned.map((item) => item.id));
-    const staleDocs = oldDocs.filter((candidate) => !newIds.has(candidate.id));
     const stableValue = (value: unknown): unknown => {
       if (Array.isArray(value)) return value.map(stableValue);
       if (value && typeof value === 'object') {
@@ -1087,19 +1111,35 @@ export async function replacePPKSCollectionFromSpreadsheet(
       }
       return value;
     };
+
+    let created = 0;
+    let updated = 0;
     const changedRecords = planned.filter((item) => {
       const current = oldDocs.find((candidate) => candidate.id === item.id);
-      if (!current) return true;
-      return JSON.stringify(stableValue(current.data())) !== JSON.stringify(stableValue(item.data));
+      if (!current) {
+        if (item.matchedExistingIds.length) updated += 1;
+        else created += 1;
+        return true;
+      }
+      const changed = JSON.stringify(stableValue(current.data())) !== JSON.stringify(stableValue(item.data));
+      if (changed) updated += 1;
+      return changed;
     });
-    const created = changedRecords.filter((item) => !oldDocs.some((candidate) => candidate.id === item.id)).length;
-    const updated = changedRecords.length - created;
+
+    // Remove only old document IDs that were matched confidently to the same
+    // respondent and migrated to the canonical spreadsheet ID. Unmatched records
+    // are retained; spreadsheet omissions never trigger bulk deletion.
+    const canonicalIds = new Set(planned.map((item) => item.id));
+    const duplicateIds = [...new Set(planned.flatMap((item) =>
+      item.matchedExistingIds.filter((id) => id !== item.id && !canonicalIds.has(id))
+    ))];
+
     const operations: Array<
       | { kind: 'set'; id: string; data: PPKSRecord }
       | { kind: 'delete'; id: string }
     > = [
-      ...changedRecords.map((item) => ({ kind: 'set' as const, ...item })),
-      ...staleDocs.map((candidate) => ({ kind: 'delete' as const, id: candidate.id })),
+      ...changedRecords.map((item) => ({ kind: 'set' as const, id: item.id, data: item.data })),
+      ...duplicateIds.map((id) => ({ kind: 'delete' as const, id })),
     ];
 
     // Firestore limits each write batch to 500 operations; use a margin.
@@ -1113,7 +1153,7 @@ export async function replacePPKSCollectionFromSpreadsheet(
       await batch.commit();
     }
 
-    return { created, updated, deleted: staleDocs.length };
+    return { created, updated, duplicatesMerged: duplicateIds.length };
   } catch (error) {
     throw new Error(describeConnectionError(error));
   }
