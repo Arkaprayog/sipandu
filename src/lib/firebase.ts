@@ -40,7 +40,7 @@ import {
 } from 'firebase/auth';
 import firebaseConfig from '../../firebase-applet-config.json';
 import { PPKSRecord, ProfileUser, StageOneIntakePayload, PPKSServiceStatus, PPKSServiceEvent, PPKSServiceUpdateInput, FieldVisitRecord, SecurityAuditEntry } from '../types';
-import { deduplicatePPKSRecords, parsePPKSTimestamp, samePPKSIdentity } from './ppksData';
+import { deduplicatePPKSRecords, EXPECTED_REAL_PPKS_COUNT, parsePPKSTimestamp, samePPKSIdentity } from './ppksData';
 import { isLegacySamplePPKS } from '../data/initialData';
 import { GOOGLE_WORKSPACE_EMAIL } from './googleSIPANDUResources';
 import { normalizePPKSPhotoSource } from './photoSources';
