@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { deduplicatePPKSRecords, EXPECTED_REAL_PPKS_COUNT, formatPPKSTimestamp, getPPKSNIKCandidates, getSharedPPKSNIK, samePPKSIdentity, sortPPKSRecordsByName } from './ppksData';
+import { deduplicatePPKSRecords, formatPPKSTimestamp, getPPKSNIKCandidates, getSharedPPKSNIK, samePPKSIdentity, sortPPKSRecordsByName } from './ppksData';
 import type { PPKSRecord } from '../types';
 
 function record(overrides: Partial<PPKSRecord> = {}): PPKSRecord {
@@ -107,10 +107,6 @@ test('preserves the original timestamp string received from Google Sheets', () =
   assert.equal(formatPPKSTimestamp(sourceValue), sourceValue);
 });
 
-test('the destructive Firestore reconciliation guard matches the owner-confirmed 46-person roster', () => {
-  assert.equal(EXPECTED_REAL_PPKS_COUNT, 46);
-});
-
 test('uses official assessment Q23 to identify a duplicate when the secondary NIK field conflicts', () => {
   const first = record({
     nik: '1271011505920004',
@@ -140,7 +136,7 @@ test('uses official assessment Q23 to identify a duplicate when the secondary NI
 });
 
 test('collapses a 47-row import to the 46 verified unique PPKS when the extra row is a same-name repeat', () => {
-  const verified = Array.from({ length: EXPECTED_REAL_PPKS_COUNT }, (_, index) => {
+  const verified = Array.from({ length: 46 }, (_, index) => {
     const nik = String(index + 1).padStart(16, '0');
     return record({
       id: `sheet-row-${index + 2}`,
@@ -161,7 +157,7 @@ test('collapses a 47-row import to the 46 verified unique PPKS when the extra ro
   const importedRows = [...verified, duplicate];
   assert.equal(importedRows.length, 47);
   const unique = deduplicatePPKSRecords(importedRows);
-  assert.equal(unique.length, EXPECTED_REAL_PPKS_COUNT);
+  assert.equal(unique.length, 46);
   assert.equal(unique.filter((item) => item.officialAssessment?.q24 === 'Data tambahan dari pengiriman ulang').length, 1);
 });
 
@@ -189,7 +185,7 @@ test('preserves different respondents when a duplicated or mistyped NIK appears 
 });
 
 test('keeps all 46 owner-confirmed respondents when two different people share one NIK', () => {
-  const respondents = Array.from({ length: EXPECTED_REAL_PPKS_COUNT }, (_, index) => {
+  const respondents = Array.from({ length: 46 }, (_, index) => {
     const nik = String(index + 1).padStart(16, '0');
     return record({
       id: `sheet-row-${index + 2}`,
@@ -213,4 +209,32 @@ test('keeps all 46 owner-confirmed respondents when two different people share o
   const sourceRows = [...respondents.slice(0, 45), falseNIKCollision];
   assert.equal(sourceRows.length, 46);
   assert.equal(deduplicatePPKSRecords(sourceRows).length, 46);
+});
+
+
+test('a re-imported spreadsheet respondent with a changed synthetic row ID stays one contact', () => {
+  const firstSync = record({
+    id: 'SHEET-old-row-hash',
+    namaLengkap: 'Responden Spreadsheet',
+    nik: '1271011505920003',
+    timestamp: '2026-10-26T08:00:00',
+    officialAssessment: { q23: '1271011505920003', q24: 'Jawaban awal' },
+  });
+  const nextSync = record({
+    id: 'SHEET-new-row-hash',
+    namaLengkap: 'RESPONDEN SPREADSHEET',
+    nik: '1271011505920003',
+    timestamp: '2026-10-27T09:00:00',
+    officialAssessment: { q23: '1271011505920003', q25: 'Jawaban terbaru' },
+  });
+
+  const merged = deduplicatePPKSRecords([
+    ...deduplicatePPKSRecords([firstSync]),
+    ...deduplicatePPKSRecords([nextSync]),
+  ]);
+
+  assert.equal(merged.length, 1);
+  assert.equal(merged[0].id, 'SHEET-new-row-hash');
+  assert.equal(merged[0].officialAssessment?.q24, 'Jawaban awal');
+  assert.equal(merged[0].officialAssessment?.q25, 'Jawaban terbaru');
 });
