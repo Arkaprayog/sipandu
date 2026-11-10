@@ -2,6 +2,12 @@ import { PPKSRecord } from '../types';
 import { normalizePPKSPhotoSource } from './photoSources';
 
 /**
+ * Expected count used only by the legacy destructive Firestore reconciliation
+ * guard. Incremental spreadsheet sync must not use this fixed count.
+ */
+export const EXPECTED_REAL_PPKS_COUNT = 46;
+
+/**
  * Parses spreadsheet timestamps without trusting the browser's locale-dependent
  * Date.parse behavior for Indonesian dd/MM/yyyy values.
  * Google Sheets may show either dd/MM/yyyy or M/d/yyyy. When one component is
