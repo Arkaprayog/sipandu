@@ -1033,11 +1033,15 @@ function mapRowsToPPKSRecords(rows: string[][], useATENSIColumnPositions = false
     seen.add(recordId);
 
     const usia = parseSheetNumber(useATENSIColumnPositions ? readAtensiProfileCell(row, 'usia') : readCellByAliases(headers, row, ['usia', 'umur', 'umurTahun', 'usiaSaatIni', 'umurSaatIni']), 0);
-    const gender = readCellByAliases(headers, row, ['jenisKelamin', 'gender', 'jenisKelaminResponden']) ||
-      (useATENSIColumnPositions ? readAtensiGender(row) : '');
+    const gender = useATENSIColumnPositions
+      ? readAtensiGender(row, readAtensiProfileCell(row, 'jenisKelamin'))
+      : readCellByAliases(headers, row, ['jenisKelamin', 'gender', 'jenisKelaminResponden']);
     const domisili = useATENSIColumnPositions ? readAtensiProfileCell(row, 'kotaDomisili') : readCellByAliases(headers, row, ['kotaDomisili', 'kabupatenKota', 'kotaKabupaten', 'domisili', 'kota', 'kabupaten']);
     const alamat = useATENSIColumnPositions ? readAtensiProfileCell(row, 'alamatLengkap') : readCellByAliases(headers, row, ['alamatLengkap', 'alamatDomisili', 'alamatResponden', 'alamat']);
     const jenisBantuan = useATENSIColumnPositions ? readAtensiProfileCell(row, 'jenisBantuan') : readCellByAliases(headers, row, ['jenisBantuan', 'bantuanDibutuhkan', 'jenisBantuanAtensi', 'kebutuhanBantuan']);
+    const lamaTerapiArv = useATENSIColumnPositions
+      ? readAtensiProfileCell(row, 'lamaTerapiArv')
+      : readCellByAliases(headers, row, ['lamaTerapiArv', 'durasiTerapiArv', 'lamaARV', 'durasiARV', 'lamaPengobatanARV']);
     const integratedValues: Partial<Record<keyof IntegratedFormData, string | number | boolean>> = {};
     const integratedMarkerKeys = new Set<keyof IntegratedFormData>([
       'nomorRegistrasi', 'noBpjs', 'tahunDiagnosa', 'faskesPdpRujukan',
@@ -1082,13 +1086,16 @@ function mapRowsToPPKSRecords(rows: string[][], useATENSIColumnPositions = false
       namaLengkap,
       nik,
       usia,
-      jenisKelamin: /perempuan|wanita/i.test(gender) ? 'Perempuan' : 'Laki-laki',
+      jenisKelamin: /perempuan|wanita|female/i.test(gender)
+        ? 'Perempuan'
+        : /laki[\s-]*laki|pria|male/i.test(gender) ? 'Laki-laki' : '',
       kotaDomisili: domisili,
       alamatLengkap: alamat,
       noHpWa: useATENSIColumnPositions ? readAtensiProfileCell(row, 'noHpWa') : readCellByAliases(headers, row, ['noHPWA', 'nomorHPWA', 'noWhatsApp', 'nomorTelepon', 'telepon', 'hp']),
       jenisBantuan,
-      // The ATENSI response tab uses its explicit AO mapping; other source tabs
-      // continue to use the configured BE position with a header-based fallback.
+      lamaTerapiArv,
+      // The ATENSI response tab uses column AP for recommendation/intervention;
+      // other source tabs continue to use the configured BE position with a header-based fallback.
       intervensiMental: useATENSIColumnPositions
         ? readAtensiProfileCell(row, 'intervensiMental')
         : (readInterventionRecommendationFromRow(headers, row)
@@ -1556,7 +1563,7 @@ export async function importPPKSFromSpreadsheet(
   photoRecoveryDiagnostics: { responseCount: number; responsesWithUploads: number; recordsMatched: number };
   photoCounts: { diri: number; ktp: number; kk: number; rumah: number };
   records: PPKSRecord[];
-  /** Imported rows with a mapped intervention/recommendation (AO for ATENSI; BE/header fallback for other sources). */
+  /** Imported rows with a mapped intervention/recommendation (AP for ATENSI; BE/header fallback for other sources). */
   recordsWithInterventionRecommendation: number;
   recordsWithNIK: number;
   recordsMissingNIK: number;
