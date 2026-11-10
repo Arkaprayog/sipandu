@@ -62,12 +62,11 @@ export const DirectMessageView: React.FC<DirectMessageViewProps> = ({
   const selectedRespondent = visibleRespondents.find((person) => person.id === selectedRespondentId) || null;
 
   useEffect(() => {
-    if (!selectedRespondentId && visibleRespondents.length) {
-      setSelectedRespondentId(visibleRespondents[0].id);
-      return;
-    }
+    // Do not auto-open the first respondent's conversation. On shared staff
+    // devices the operator must deliberately select a person before messages
+    // can appear; clearing selection on mobile returns to the A–Z roster.
     if (selectedRespondentId && !visibleRespondents.some((person) => person.id === selectedRespondentId)) {
-      setSelectedRespondentId(visibleRespondents[0]?.id || '');
+      setSelectedRespondentId('');
     }
   }, [selectedRespondentId, visibleRespondents]);
 
