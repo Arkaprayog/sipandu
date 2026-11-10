@@ -559,3 +559,130 @@ test('field visit documents are scoped to the assigned pendamping and immutable'
     ...record, id: 'visit-spoof', assignedToUid: 'pendamping-002',
   }));
 });
+
+
+test('Direct Message membatasi percakapan ke petugas yang ditugaskan dan akun responden yang terikat', async () => {
+  await environment.withSecurityRulesDisabled(async (context) => {
+    const firestore = context.firestore();
+    await setDoc(doc(firestore, 'ppksServiceStatus', 'ppks-demo'), {
+      ppksId: 'ppks-demo',
+      assignedToUid: PENDAMPING_UID,
+    });
+    await setDoc(doc(firestore, 'ppksServiceStatus', 'ppks-other'), {
+      ppksId: 'ppks-other',
+      assignedToUid: 'pendamping-002',
+    });
+  });
+
+  const owner = environment.authenticatedContext('owner-001', {
+    role: 'owner',
+  }).firestore();
+  await assertSucceeds(setDoc(doc(owner, 'conversations', 'ppks-demo'), {
+    respondentId: 'ppks-demo',
+    assignedStaffUids: [PENDAMPING_UID],
+    createdAt: serverTimestamp(),
+  }));
+  await assertSucceeds(setDoc(doc(owner, 'conversations', 'ppks-other'), {
+    respondentId: 'ppks-other',
+    assignedStaffUids: ['pendamping-002'],
+    createdAt: serverTimestamp(),
+  }));
+
+  const assignedPendamping = environment.authenticatedContext(PENDAMPING_UID, {
+    role: 'pendamping',
+  }).firestore();
+  await assertSucceeds(getDoc(doc(assignedPendamping, 'conversations', 'ppks-demo')));
+  await assertSucceeds(setDoc(doc(assignedPendamping, 'conversations', 'ppks-demo', 'messages', 'staff-message'), {
+    senderUid: PENDAMPING_UID,
+    body: 'Halo, saya pendamping SIPANDU.',
+    type: 'text',
+    createdAt: serverTimestamp(),
+  }));
+  await assertFails(getDoc(doc(assignedPendamping, 'conversations', 'ppks-other')));
+  await assertFails(setDoc(doc(assignedPendamping, 'conversations', 'ppks-other', 'messages', 'blocked-message'), {
+    senderUid: PENDAMPING_UID,
+    body: 'Pesan yang tidak boleh terkirim.',
+    type: 'text',
+    createdAt: serverTimestamp(),
+  }));
+
+  const respondent = environment.authenticatedContext('respondent-001', {
+    role: 'responden',
+    ppksId: 'ppks-demo',
+  }).firestore();
+  await assertSucceeds(getDoc(doc(respondent, 'conversations', 'ppks-demo')));
+  await assertSucceeds(getDocs(collection(respondent, 'conversations', 'ppks-demo', 'messages')));
+  await assertSucceeds(setDoc(doc(respondent, 'conversations', 'ppks-demo', 'messages', 'respondent-message'), {
+    senderUid: 'respondent-001',
+    body: 'Terima kasih atas informasinya.',
+    type: 'text',
+    createdAt: serverTimestamp(),
+  }));
+  await assertFails(getDoc(doc(respondent, 'conversations', 'ppks-other')));
+  await assertFails(getDocs(collection(respondent, 'conversations', 'ppks-other', 'messages')));
+  await assertFails(setDoc(doc(respondent, 'conversations', 'ppks-other', 'messages', 'cross-message'), {
+    senderUid: 'respondent-001',
+    body: 'Tidak boleh mengirim ke akun lain.',
+    type: 'text',
+    createdAt: serverTimestamp(),
+  }));
+  await assertFails(setDoc(doc(respondent, 'conversations', 'ppks-other'), {
+    respondentId: 'ppks-other',
+    assignedStaffUids: [],
+    createdAt: serverTimestamp(),
+  }));
+
+  await assertFails(updateDoc(doc(assignedPendamping, 'conversations', 'ppks-demo', 'messages', 'staff-message'), {
+    body: 'Pesan tidak boleh diubah.',
+  }));
+  await assertFails(deleteDoc(doc(assignedPendamping, 'conversations', 'ppks-demo', 'messages', 'staff-message')));
+  await assertFails(setDoc(doc(assignedPendamping, 'conversations', 'ppks-demo', 'messages', 'forged-sender'), {
+    senderUid: 'another-uid',
+    body: 'Impersonation attempt.',
+    type: 'text',
+    createdAt: serverTimestamp(),
+  }));
+  await assertFails(setDoc(doc(assignedPendamping, 'conversations', 'ppks-demo', 'messages', 'oversized'), {
+    senderUid: PENDAMPING_UID,
+    body: 'x'.repeat(4001),
+    type: 'text',
+    createdAt: serverTimestamp(),
+  }));
+
+  const outsider = environment.authenticatedContext('outsider-002').firestore();
+  await assertFails(getDoc(doc(outsider, 'conversations', 'ppks-demo')));
+  await assertFails(getDocs(collection(outsider, 'conversations', 'ppks-demo', 'messages')));
+});
+
+test('Direct Message hanya dapat dibuat oleh petugas yang memiliki akses PPKS', async () => {
+  await environment.withSecurityRulesDisabled(async (context) => {
+    await setDoc(doc(context.firestore(), 'ppksServiceStatus', 'assigned-new'), {
+      ppksId: 'assigned-new',
+      assignedToUid: PENDAMPING_UID,
+    });
+  });
+
+  const assignedPendamping = environment.authenticatedContext(PENDAMPING_UID, {
+    role: 'pendamping',
+  }).firestore();
+  await assertSucceeds(setDoc(doc(assignedPendamping, 'conversations', 'assigned-new'), {
+    respondentId: 'assigned-new',
+    assignedStaffUids: [PENDAMPING_UID],
+    createdAt: serverTimestamp(),
+  }));
+
+  const wrongPendamping = environment.authenticatedContext('pendamping-002', {
+    role: 'pendamping',
+  }).firestore();
+  await assertFails(setDoc(doc(wrongPendamping, 'conversations', 'assigned-new'), {
+    respondentId: 'assigned-new',
+    assignedStaffUids: ['pendamping-002'],
+    createdAt: serverTimestamp(),
+  }));
+
+  await assertFails(setDoc(doc(assignedPendamping, 'conversations', 'forged-assignment'), {
+    respondentId: 'forged-assignment',
+    assignedStaffUids: [PENDAMPING_UID],
+    createdAt: serverTimestamp(),
+  }));
+});
