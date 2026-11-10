@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { PPKSRecord, AppSettings } from '../types';
 import { PrivateDriveImage } from './PrivateDriveImage';
 import { analyzePPKSDataQuality } from '../lib/dataQuality';
-import { deduplicatePPKSRecords, formatPPKSTimestamp, sortPPKSRecordsByName } from '../lib/ppksData';
+import { deduplicatePPKSRecords, sortPPKSRecordsByName } from '../lib/ppksData';
 import {
   buildGoogleFormsPrefilledUrl,
   buildWhatsAppMessage,
@@ -12,8 +12,6 @@ import {
 import {
   Search,
   MessageCircle,
-  Save,
-  Check,
   UserCheck,
   Calendar,
   Phone,
@@ -27,7 +25,6 @@ import {
 
 interface DatabasePpksViewProps {
   ppksList: PPKSRecord[];
-  onUpdatePPKS: (updated: PPKSRecord) => void;
   settings: AppSettings;
 }
 
@@ -47,14 +44,10 @@ function resolveProfileNIK(record: PPKSRecord): string {
 }
 export const DatabasePpksView: React.FC<DatabasePpksViewProps> = ({
   ppksList,
-  onUpdatePPKS,
   settings,
 }) => {
   const [selectedPPKSId, setSelectedPPKSId] = useState<string>('');
   const suppressAutoSelectAfterBackRef = useRef(false);
-  const [editingDesil, setEditingDesil] = useState<number>(0);
-  const [editingIntervensi, setEditingIntervensi] = useState<string>('');
-  const [saveSuccess, setSaveSuccess] = useState<boolean>(false);
   const [showWaPreview, setShowWaPreview] = useState<boolean>(false);
   const [databaseSearch, setDatabaseSearch] = useState('');
   const [regionFilter, setRegionFilter] = useState('');
@@ -98,15 +91,8 @@ export const DatabasePpksView: React.FC<DatabasePpksViewProps> = ({
   const currentPPKS = displayPPKSList.find((p) => p.id === selectedPPKSId);
   const currentNIK = currentPPKS ? resolveProfileNIK(currentPPKS) : '';
 
-  // Sync internal edit state when a PPKS is selected
   const handleSelectPPKS = (id: string) => {
     setSelectedPPKSId(id);
-    setSaveSuccess(false);
-    const target = displayPPKSList.find((p) => p.id === id);
-    if (target) {
-      setEditingDesil(target.desil);
-      setEditingIntervensi(target.intervensiMental);
-    }
   };
 
   // Auto-select the first respondent after a live spreadsheet import populates an empty view.
@@ -137,32 +123,12 @@ export const DatabasePpksView: React.FC<DatabasePpksViewProps> = ({
         // Temporarily preserve the empty selection instead of auto-selecting the first row again.
         suppressAutoSelectAfterBackRef.current = true;
         setSelectedPPKSId('');
-        setSaveSuccess(false);
         detail.handled = true;
       }
     };
     window.addEventListener('sipandu:navigate-back', onAppNavigateBack);
     return () => window.removeEventListener('sipandu:navigate-back', onAppNavigateBack);
   }, [selectedPPKSId, showWaPreview]);
-
-  // Refresh the visible intervention field when the authoritative ATENSI
-  // spreadsheet sync updates the selected respondent (source column AO).
-  useEffect(() => {
-    if (!currentPPKS) return;
-    setEditingIntervensi(currentPPKS.intervensiMental || '');
-  }, [currentPPKS?.id, currentPPKS?.intervensiMental]);
-
-  const handleSave = () => {
-    if (!currentPPKS) return;
-    const updated: PPKSRecord = {
-      ...currentPPKS,
-      desil: editingDesil,
-      intervensiMental: editingIntervensi,
-    };
-    onUpdatePPKS(updated);
-    setSaveSuccess(true);
-    setTimeout(() => setSaveSuccess(false), 3000);
-  };
 
   const currentWaMessage = currentPPKS
     ? buildWhatsAppMessage(currentPPKS, {
@@ -376,15 +342,6 @@ export const DatabasePpksView: React.FC<DatabasePpksViewProps> = ({
                   <tbody>
                     <tr className="border-b border-rose-500/20 hover:bg-emerald-950/20">
                       <td className="py-2.5 px-3 font-bold text-sky-200 w-[220px] min-w-[220px] bg-[#112415]">
-                        Timestamp
-                      </td>
-                      <td className="py-2.5 px-3 font-mono text-emerald-300">
-                        {formatPPKSTimestamp(currentPPKS.timestamp)}
-                      </td>
-                    </tr>
-
-                    <tr className="border-b border-rose-500/20 hover:bg-emerald-950/20">
-                      <td className="py-2.5 px-3 font-bold text-sky-200 w-[220px] min-w-[220px] bg-[#112415]">
                         Nama Lengkap
                       </td>
                       <td className="py-2.5 px-3 font-bold text-white text-sm">
@@ -406,7 +363,16 @@ export const DatabasePpksView: React.FC<DatabasePpksViewProps> = ({
                         Usia
                       </td>
                       <td className="py-2.5 px-3 text-white">
-                        {currentPPKS.usia} Tahun ({currentPPKS.jenisKelamin})
+                        {currentPPKS.usia} Tahun
+                      </td>
+                    </tr>
+
+                    <tr className="border-b border-rose-500/20 hover:bg-emerald-950/20">
+                      <td className="py-2.5 px-3 font-bold text-sky-200 bg-[#112415]">
+                        Jenis Kelamin
+                      </td>
+                      <td className="py-2.5 px-3 text-white">
+                        {currentPPKS.jenisKelamin || 'Belum tersedia pada kolom M sumber'}
                       </td>
                     </tr>
 
@@ -430,10 +396,10 @@ export const DatabasePpksView: React.FC<DatabasePpksViewProps> = ({
 
                     <tr className="border-b border-rose-500/20 hover:bg-emerald-950/20">
                       <td className="py-2.5 px-3 font-bold text-sky-200 bg-[#112415]">
-                        NO HP/WA
+                        Lama Terapi ARV
                       </td>
-                      <td className="py-2.5 px-3 font-mono text-emerald-400 font-bold">
-                        {currentPPKS.noHpWa}
+                      <td className="py-2.5 px-3 text-neutral-200 whitespace-pre-wrap break-words">
+                        {currentPPKS.lamaTerapiArv || 'Belum tersedia pada kolom AO sumber'}
                       </td>
                     </tr>
 
@@ -441,55 +407,43 @@ export const DatabasePpksView: React.FC<DatabasePpksViewProps> = ({
                       <td className="py-2.5 px-3 font-bold text-sky-200 bg-[#112415]">
                         Jenis Bantuan yang Diharapkan
                       </td>
-                      <td className="py-2.5 px-3 text-amber-200 font-medium">
-                        {currentPPKS.jenisBantuan}
+                      <td className="py-2.5 px-3 text-amber-200 font-medium whitespace-pre-wrap break-words">
+                        {currentPPKS.jenisBantuan || 'Belum tersedia pada kolom AM sumber'}
                       </td>
                     </tr>
 
                     <tr className="border-b border-rose-500/20 hover:bg-emerald-950/20">
                       <td className="py-2.5 px-3 font-bold text-sky-200 bg-[#112415]">
-                        Intervensi & Rekomendasi Tindak Lanjut
-                        <span className="block text-[10px] text-neutral-400 font-normal">
-                          (Asesmen Kesehatan Mental ODHIV)
-                        </span>
+                        Desil
                       </td>
                       <td className="py-2.5 px-3">
-                        <textarea
-                          rows={2}
-                          value={editingIntervensi}
-                          onChange={(e) => setEditingIntervensi(e.target.value)}
-                          className="w-full p-2 rounded bg-black/60 border border-rose-500/30 text-white text-xs focus:outline-none focus:border-sky-400"
-                          placeholder="Ketik intervensi & rekomendasi tindak lanjut..."
-                        />
+                        <div className="flex flex-col gap-1">
+                          <span className="font-bold text-sky-300">Desil {currentPPKS.desil}</span>
+                          <span className="text-[11px] text-emerald-300 font-medium">
+                            {getDesilDescription(currentPPKS.desil)}
+                          </span>
+                        </div>
+                      </td>
+                    </tr>
+
+                    <tr className="border-b border-rose-500/20 hover:bg-emerald-950/20">
+                      <td className="py-2.5 px-3 font-bold text-sky-200 bg-[#112415]">
+                        NO HP/WA
+                      </td>
+                      <td className="py-2.5 px-3 font-mono text-emerald-400 font-bold">
+                        {currentPPKS.noHpWa || 'Nomor belum tersedia pada kolom N sumber'}
                       </td>
                     </tr>
 
                     <tr className="hover:bg-emerald-950/20">
                       <td className="py-2.5 px-3 font-bold text-sky-200 bg-[#112415]">
-                        Desil
-                        <span className="block text-[10px] text-neutral-400 font-normal">
-                          (Pilihan 0-10, diisi user/spreadsheet)
-                        </span>
+                        Rekomendasi & Intervensi Tingkat Lanjut
                       </td>
-                      <td className="py-2.5 px-3">
-                        <div className="flex flex-col sm:flex-row sm:items-center gap-2">
-                          <select
-                            value={editingDesil}
-                            onChange={(e) => setEditingDesil(Number(e.target.value))}
-                            className="py-1.5 px-3 rounded-lg bg-black/60 border border-rose-500/40 text-sky-300 font-bold text-xs focus:outline-none focus:border-sky-400"
-                          >
-                            {Array.from({ length: 11 }, (_, i) => (
-                              <option key={i} value={i}>
-                                {i === 0 ? 'Desil 0 (Belum Terdata/Non-DTKS)' : `Desil ${i}`}
-                              </option>
-                            ))}
-                          </select>
-                          <span className="text-[11px] text-emerald-300 font-medium">
-                            {getDesilDescription(editingDesil)}
-                          </span>
-                        </div>
+                      <td className="py-2.5 px-3 min-w-[300px] text-neutral-100 leading-relaxed whitespace-pre-wrap break-words">
+                        {currentPPKS.intervensiMental || 'Belum tersedia pada kolom AP sumber'}
                       </td>
                     </tr>
+
                   </tbody>
                 </table>
                 </div>
@@ -540,22 +494,9 @@ export const DatabasePpksView: React.FC<DatabasePpksViewProps> = ({
                 </div>
               )}
 
-              {/* Tombol Simpan di bawah tombol whatsapp */}
-              <button
-                type="button"
-                onClick={handleSave}
-                className="sipandu-database-save w-full py-2.5 px-4 rounded-xl font-bold text-xs tracking-wider uppercase text-white bg-gradient-to-r from-[#1b3d1f] to-[#122e15] hover:from-[#234f29] hover:to-[#1a401e] active:scale-[0.99] transition border border-rose-500/45 shadow-[0_0_12px_rgba(244,63,94,0.2)] flex items-center justify-center gap-2 cursor-pointer"
-              >
-                <Save className="w-4 h-4 text-sky-300" />
-                <span>Simpan Perubahan Database</span>
-              </button>
-
-              {saveSuccess && (
-                <div className="flex items-center gap-1.5 text-xs text-emerald-300 bg-emerald-950/80 px-3 py-1 rounded border border-emerald-500/50 animate-bounce">
-                  <Check className="w-3.5 h-3.5 text-emerald-400" />
-                  <span>Data profil PPKS & desil berhasil disimpan dan disinkronkan!</span>
-                </div>
-              )}
+              <p className="text-center text-[10px] leading-relaxed text-neutral-400">
+                Profil ini dibaca dari spreadsheet sumber <strong>From Responses 1</strong>. Data diperbarui melalui sinkronisasi Google SIPANDU.
+              </p>
             </div>
           </div>
         )}
