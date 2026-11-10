@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { deduplicatePPKSRecords, formatPPKSTimestamp, getPPKSNIKCandidates, getSharedPPKSNIK, samePPKSIdentity, sortPPKSRecordsByName } from './ppksData';
+import { deduplicatePPKSRecords, EXPECTED_REAL_PPKS_COUNT, formatPPKSTimestamp, getPPKSNIKCandidates, getSharedPPKSNIK, samePPKSIdentity, sortPPKSRecordsByName } from './ppksData';
 import type { PPKSRecord } from '../types';
 
 function record(overrides: Partial<PPKSRecord> = {}): PPKSRecord {
@@ -211,6 +211,10 @@ test('keeps all 46 owner-confirmed respondents when two different people share o
   assert.equal(deduplicatePPKSRecords(sourceRows).length, 46);
 });
 
+
+test('fixed respondent count is retained only as the legacy destructive-cleanup safety threshold', () => {
+  assert.equal(EXPECTED_REAL_PPKS_COUNT, 46);
+});
 
 test('a re-imported spreadsheet respondent with a changed synthetic row ID stays one contact', () => {
   const firstSync = record({
