@@ -101,9 +101,10 @@ function mergePPKSRecords(localRecords: PPKSRecord[], cloudRecords: PPKSRecord[]
       // A continuation Form may ask only for the PPKS ID and assessment answers.
       // Blank identity fields from that sheet must not erase the stage-one profile.
       namaLengkap: next.namaLengkap || previous.namaLengkap,
-      jenisKelamin: next.namaLengkap ? next.jenisKelamin : previous.jenisKelamin,
+      jenisKelamin: next.jenisKelamin || previous.jenisKelamin,
       nik: next.nik || previous.nik,
       usia: next.usia || previous.usia,
+      lamaTerapiArv: next.lamaTerapiArv || previous.lamaTerapiArv,
       desil: next.desil || previous.desil,
       alamatLengkap: next.alamatLengkap || previous.alamatLengkap,
       kotaDomisili: next.kotaDomisili || previous.kotaDomisili,
@@ -225,8 +226,10 @@ function reconcileSpreadsheetPPKSRecords(
       namaLengkap: source.namaLengkap,
       nik: source.nik,
       usia: source.usia,
+      jenisKelamin: source.jenisKelamin,
       alamatLengkap: source.alamatLengkap,
       kotaDomisili: source.kotaDomisili,
+      lamaTerapiArv: source.lamaTerapiArv,
       noHpWa: source.noHpWa,
       jenisBantuan: source.jenisBantuan,
       intervensiMental: source.intervensiMental,
@@ -1963,7 +1966,6 @@ function StaffApp() {
           {activeTab === 'database-ppks' && (
             <DatabasePpksView
               ppksList={ppksList}
-              onUpdatePPKS={handleUpdatePPKS}
               settings={settings}
             />
           )}
