@@ -35,7 +35,7 @@ const FieldAssistanceView = lazyWithRecovery('FieldAssistanceView', () => import
 const SecurityAuditView = lazyWithRecovery('SecurityAuditView', () => import('./components/SecurityAuditView').then((module) => ({ default: module.SecurityAuditView })));
 import { onAuthStateChanged, signOut, getIdTokenResult } from 'firebase/auth';
 import { SIPANDU_AI_WORKER_URL } from './lib/sipanduAI';
-import { auth, getAccessToken, savePPKSToFirestore, saveIntegratedAssessmentToFirestore, replacePPKSCollectionFromSpreadsheet, googleLogout, subscribeToPPKSChanges, subscribeToPPKSServiceStatus, savePPKSServiceUpdate, subscribeToFieldVisits, createFieldVisit, subscribeToIntegratedAssessmentAnswers, fetchSecurityAuditActivity, saveStageOneIntakeToFirestore, subscribeToStageOneIntake, staffAuthPersistenceReady, isWorkspaceAccountConnected, invalidateAccessToken, getSIPANDUUserProfile, saveSIPANDUUserProfile } from './lib/firebase';
+import { auth, getAccessToken, savePPKSToFirestore, saveIntegratedAssessmentToFirestore, syncPPKSCollectionFromSpreadsheet, googleLogout, subscribeToPPKSChanges, subscribeToPPKSServiceStatus, savePPKSServiceUpdate, subscribeToFieldVisits, createFieldVisit, subscribeToIntegratedAssessmentAnswers, fetchSecurityAuditActivity, saveStageOneIntakeToFirestore, subscribeToStageOneIntake, staffAuthPersistenceReady, isWorkspaceAccountConnected, invalidateAccessToken, getSIPANDUUserProfile, saveSIPANDUUserProfile } from './lib/firebase';
 import { activatePendingTeamMember, restorePendingTeamInvitation } from './lib/teamRegistration';
 import { ensureSIPANDUDatabaseSheet, extractSpreadsheetId, getLinkedSpreadsheetUrlForForm, importPPKSFromSpreadsheet, upsertPPKSInSpreadsheet } from './lib/googleWorkspace';
 import { GOOGLE_SIPANDU_RESOURCES, SIPANDU_OWNER_WHATSAPP_PHONE } from './lib/googleSIPANDUResources';
@@ -801,7 +801,7 @@ function StaffApp() {
       // after each successful import keeps the same spreadsheet ID synchronized
       // when rows change and repairs any stale cloud edits without rewriting
       // unchanged documents on every five-minute poll.
-      const result = await replacePPKSCollectionFromSpreadsheet(records, authoritativeProfileRecords);
+      const result = await syncPPKSCollectionFromSpreadsheet(records, authoritativeProfileRecords);
       return `Koleksi Firestore ppks diselaraskan dengan spreadsheet “${spreadsheetId}”: ${result.created} dibuat, ${result.updated} diperbarui, ${result.deleted} dokumen lama dihapus. Koleksi stageOneIntake tidak disentuh.`;
     } catch (error) {
       console.error('SIPANDU could not replace the legacy Firestore PPKS roster:', error);
@@ -1204,7 +1204,7 @@ function StaffApp() {
       googleSpreadsheetSourceName: imported.spreadsheetTitle,
       googleSpreadsheetSourceTab: imported.selectedTab,
     }));
-    const firestoreMessage = await replaceFirestoreRosterFromSheet(imported.spreadsheetId, recordsForSync, imported.records);
+    const firestoreMessage = await syncFirestoreRosterFromSheet(imported.spreadsheetId, recordsForSync, imported.records);
     const updatedAt = new Date().toLocaleString('id-ID');
     setLiveSyncState({
       type: 'success',
@@ -1724,7 +1724,7 @@ function StaffApp() {
         await processGoogleFormNotifications(imported.records, continuation.records);
         const recordsForSync = continuation.records;
         setPpksList((current) => reconcileSpreadsheetPPKSRecords(current, recordsForSync, imported.records));
-        const firestoreMessage = await replaceFirestoreRosterFromSheet(imported.spreadsheetId, recordsForSync, imported.records);
+        const firestoreMessage = await syncFirestoreRosterFromSheet(imported.spreadsheetId, recordsForSync, imported.records);
         setSettings((current) => {
           if (
             current.googleSpreadsheetSourceName === imported.spreadsheetTitle &&
