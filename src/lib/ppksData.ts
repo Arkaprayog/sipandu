@@ -1,6 +1,9 @@
 import { PPKSRecord } from '../types';
 import { normalizePPKSPhotoSource } from './photoSources';
 
+/** Guardrail: the owner-confirmed source roster currently contains 46 real PPKS. Update only after verifying the official response tab. */
+export const EXPECTED_REAL_PPKS_COUNT = 46;
+
 /**
  * Parses spreadsheet timestamps without trusting the browser's locale-dependent
  * Date.parse behavior for Indonesian dd/MM/yyyy values.
