@@ -85,9 +85,37 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
       const signedInToken = await credential.user.getIdTokenResult(true);
       const existingStaffRole = signedInToken.claims.role;
       if (!credential.user.emailVerified && existingStaffRole !== 'owner' && existingStaffRole !== 'supervisor' && existingStaffRole !== 'pendamping') {
-        await sendEmailVerification(credential.user);
+        const idToken = await credential.user.getIdToken(true);
+        const statusResponse = await fetch('https://sipandu-registration.aryprayoga139.workers.dev/registration-status', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: 'Bearer ' + idToken,
+          },
+          body: JSON.stringify({}),
+        });
+        const registration = await statusResponse.json().catch(() => ({})) as { ok?: boolean; status?: string; message?: string };
         await signOut(auth);
-        setRegistrationNotice('Email akun belum terverifikasi. Tautan verifikasi baru telah dikirim. Buka email tersebut, verifikasi akun, lalu masuk kembali.');
+        if (!statusResponse.ok || !registration.ok) {
+          setErrorMsg(registration.message || 'Status permohonan belum dapat diperiksa. Coba kembali beberapa saat lagi.');
+          return;
+        }
+        if (registration.status === 'pending_owner') {
+          setRegistrationNotice('Permohonan Anda masih menunggu persetujuan Owner atau Supervisor yang ditunjuk. Tautan verifikasi belum dikirim.');
+          setErrorMsg('');
+          return;
+        }
+        if (registration.status === 'rejected') {
+          setErrorMsg(registration.message || 'Permohonan pendaftaran ditolak. Hubungi administrator SIPANDU.');
+          return;
+        }
+        if (registration.status !== 'approved' && registration.status !== 'pending_email') {
+          setErrorMsg(registration.message || 'Permohonan belum disetujui. Akun belum dapat diaktifkan.');
+          return;
+        }
+        // Send the Firebase verification link only after the Worker confirms approval.
+        await sendEmailVerification(credential.user);
+        setRegistrationNotice('Permohonan telah disetujui. Tautan verifikasi email baru telah dikirim. Buka email tersebut, verifikasi, lalu masuk kembali.');
         setErrorMsg('');
         return;
       }
