@@ -34,7 +34,7 @@ async function requestJson(path: string, user: User): Promise<ApiResponse> {
  * The Worker assigns the least-privilege pendamping role; no invitation,
  * team code, or client-supplied role is accepted.
  */
-export async function activatePendingTeamMember(user: User): Promise<void> {
+export async function activateVerifiedTeamMember(user: User): Promise<void> {
   await requestJson('/activate', user);
   await user.getIdToken(true);
 }
