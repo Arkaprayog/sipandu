@@ -3,7 +3,7 @@ import { App as CapacitorApp } from '@capacitor/app';
 import { Capacitor } from '@capacitor/core';
 import { onAuthStateChanged } from 'firebase/auth';
 import { auth } from '../lib/firebase';
-import { isQuickUnlockEnabled } from '../lib/biometricLock';
+import { isBiometricLockEnabled } from '../lib/biometricLock';
 import { LoginPage } from './LoginPage';
 
 /**
@@ -29,7 +29,7 @@ export const BiometricGate: React.FC<{ children: React.ReactNode }> = ({ childre
   useEffect(() => {
     const lockApp = () => {
       const user = auth.currentUser;
-      if (user && isQuickUnlockEnabled(user.uid)) setLocked(true);
+      if (user && isBiometricLockEnabled(user.uid)) setLocked(true);
     };
     window.addEventListener('sipandu:lock-app', lockApp);
     return () => window.removeEventListener('sipandu:lock-app', lockApp);
