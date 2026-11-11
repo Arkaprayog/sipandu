@@ -11,6 +11,7 @@ import {
   ATENSI_ASSESSMENT_RESPONSE_TAB_NAME,
   isAtensiProfileResponseTab,
   readAtensiProfileCell,
+  readAtensiProfileArvDuration,
   readAtensiGender,
   readAtensiCurrentDomicileAddress,
   findAtensiCurrentDomicileAddressColumn,
@@ -1060,10 +1061,12 @@ function mapRowsToPPKSRecords(
       ? readAtensiCurrentDomicileAddress(headers, row)
       : readCellByAliases(headers, row, ['alamatDomisiliSaatIni', 'alamatDomisiliSekarang', 'alamatDomisili', 'alamatTempatTinggalSaatIni']);
     const jenisBantuan = useATENSIColumnPositions ? readAtensiProfileCell(row, 'jenisBantuan') : readCellByAliases(headers, row, ['jenisBantuan', 'bantuanDibutuhkan', 'jenisBantuanAtensi', 'kebutuhanBantuan']);
-    const lamaTerapiArv = useATENSIAssessmentColumnPositions
-      ? readAtensiProfileCell(row, 'lamaTerapiArv')
-      : useATENSIColumnPositions
-        ? ''
+    // The ATENSI profile response sheet itself contains the authoritative ARV value in AO.
+    // Older workbooks may still have values on the separate assessment tab, used only as fallback.
+    const lamaTerapiArv = useATENSIColumnPositions
+      ? readAtensiProfileArvDuration(row)
+      : useATENSIAssessmentColumnPositions
+        ? readAtensiProfileCell(row, 'lamaTerapiArv')
         : readCellByAliases(headers, row, ['lamaTerapiArv', 'durasiTerapiArv', 'lamaARV', 'durasiARV', 'lamaPengobatanARV']);
     const integratedValues: Partial<Record<keyof IntegratedFormData, string | number | boolean>> = {};
     const integratedMarkerKeys = new Set<keyof IntegratedFormData>([
@@ -1663,14 +1666,11 @@ export async function importPPKSFromSpreadsheet(
   let records = sortPPKSRecordsByTimestamp(deduplicatePPKSRecords(recordsAfterSampleFilter));
   const sampleRecordsFiltered = allMappedRecords.length - recordsAfterSampleFilter.length;
   const duplicateRowsCollapsed = recordsAfterSampleFilter.length - records.length;
-  let arvAssessmentTab = useATENSIAssessmentColumnPositions ? selectedTab : '';
-  let arvDurationMatched = useATENSIAssessmentColumnPositions
-    ? records.filter((record) => Boolean(String(record.lamaTerapiArv || '').trim())).length
-    : 0;
+  let arvAssessmentTab = selectedTab;
+  let arvDurationMatched = records.filter((record) => Boolean(String(record.lamaTerapiArv || '').trim())).length;
 
-  // The respondent profile and the ARV duration are stored in separate Forms
-  // response tabs. Read AO from From Asesmen 1 and join it to the profile by
-  // PPKS ID / NIK / unique full name instead of assuming AO exists on tab one.
+  // Form Responses 1!AO is the primary source. The separate From Asesmen 1!AO
+  // sheet is retained only as a fallback for profile rows whose AO cell is blank.
   if (useATENSIColumnPositions) {
     const assessmentTab = metadata.sheetTitles.find(
       (title) => normalizeSheetHeader(title) === normalizeSheetHeader(ATENSI_ASSESSMENT_RESPONSE_TAB_NAME)
@@ -1687,8 +1687,9 @@ export async function importPPKSFromSpreadsheet(
       );
       const joined = mergeAtensiArvDurations(records, assessmentRecords);
       records = joined.records;
-      arvAssessmentTab = assessmentTab;
-      arvDurationMatched = joined.matched;
+      // Report the legacy tab only when it actually filled at least one blank profile AO value.
+      if (joined.matched > 0) arvAssessmentTab = assessmentTab;
+      arvDurationMatched = records.filter((record) => Boolean(String(record.lamaTerapiArv || '').trim())).length;
     }
   }
   let photosRecoveredFromForm = 0;

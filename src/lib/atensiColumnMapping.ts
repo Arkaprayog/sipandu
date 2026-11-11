@@ -121,7 +121,12 @@ export function readAtensiCurrentDomicileAddress(
   return index >= 0 ? String(row[index] ?? '').trim() : '';
 }
 
-/** Lama terapi ARV is owned by the separate "From Asesmen 1" response tab, column AO. */
-export function readAtensiAssessmentArvDuration(row: readonly unknown[]): string {
+/** Primary Lama Terapi ARV source: column AO on the ATENSI profile response tab. */
+export function readAtensiProfileArvDuration(row: readonly unknown[]): string {
   return readAtensiProfileCell(row, 'lamaTerapiArv');
+}
+
+/** Legacy fallback reader for older workbooks that stored AO on the separate assessment tab. */
+export function readAtensiAssessmentArvDuration(row: readonly unknown[]): string {
+  return readAtensiProfileArvDuration(row);
 }

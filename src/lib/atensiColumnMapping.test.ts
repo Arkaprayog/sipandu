@@ -8,6 +8,7 @@ import {
   findAtensiCurrentDomicileAddressColumn,
   readAtensiCurrentDomicileAddress,
   readAtensiAssessmentArvDuration,
+  readAtensiProfileArvDuration,
   ATENSI_ASSESSMENT_RESPONSE_TAB_NAME,
   isAtensiProfileResponseTab,
 } from './atensiColumnMapping';
@@ -91,7 +92,13 @@ test('current domicile uses the current-residence header and never falls back to
   assert.equal(readAtensiCurrentDomicileAddress(headers, row), '');
 });
 
-test('ARV duration is read from AO on the separate From Asesmen 1 tab', () => {
+test('Lama Terapi ARV is read directly from column AO on the Form Responses 1 profile row', () => {
+  const row = Array.from({ length: 43 }, () => '');
+  row[40] = '6 tahun 3 bulan';
+  assert.equal(readAtensiProfileArvDuration(row), '6 tahun 3 bulan');
+});
+
+test('legacy assessment-tab ARV reader remains available as a fallback', () => {
   const row = Array.from({ length: 43 }, () => '');
   row[40] = '5 tahun 2 bulan';
   assert.equal(ATENSI_ASSESSMENT_RESPONSE_TAB_NAME, 'From Asesmen 1');
