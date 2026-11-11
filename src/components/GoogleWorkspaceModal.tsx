@@ -54,7 +54,7 @@ interface GoogleWorkspaceModalProps {
   ppksList: PPKSRecord[];
   settings: AppSettings;
   onUpdateSettings: (settings: AppSettings) => void;
-  onLoadPPKSFromCloud: (records: PPKSRecord[]) => void;
+  onLoadPPKSFromCloud: (records: PPKSRecord[], spreadsheetId?: string, spreadsheetUrl?: string) => void | Promise<void>;
 }
 
 export const GoogleWorkspaceModal: React.FC<GoogleWorkspaceModalProps> = ({
@@ -455,7 +455,7 @@ export const GoogleWorkspaceModal: React.FC<GoogleWorkspaceModalProps> = ({
           `Berhasil membaca ${imported.rowsRead} baris dari “${imported.spreadsheetTitle}” (tab “${imported.selectedTab}”), tetapi tidak menemukan kolom Nama PPKS/responden yang dikenali. Header terdeteksi: ${headerPreview || '(kosong)'}. Pilih tab respons yang benar atau periksa nama kolom.`
         );
       }
-      onLoadPPKSFromCloud(imported.records);
+      await onLoadPPKSFromCloud(imported.records, imported.spreadsheetId, sourceUrl);
       const diagnosticSummary = imported.nikColumnDiagnostics.length
         ? imported.nikColumnDiagnostics.map((column) =>
             `${column.header}: ${column.validNIKValues}/${column.nonEmptyValues} nilai valid 16 digit${column.scientificNotationValues ? ` (${column.scientificNotationValues} notasi ilmiah)` : ''}`
