@@ -20,7 +20,6 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
   const [showPassword, setShowPassword] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [quickPin, setQuickPin] = useState('');
   const [forcePasswordLogin, setForcePasswordLogin] = useState(false);
   const [showRegistration, setShowRegistration] = useState(false);
   const [registrationNotice, setRegistrationNotice] = useState('');
