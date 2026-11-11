@@ -165,7 +165,7 @@ export const DirectMessageView: React.FC<DirectMessageViewProps> = ({
     }
     setError('');
     window.open(createWhatsAppLink(selectedRespondent.noHpWa, draft.trim()), '_blank', 'noopener,noreferrer');
-    setSuccessNotice('WhatsApp dibuka dengan teks pesan. Pesan belum terkirim sampai Anda menekan tombol Kirim di aplikasi WhatsApp.');
+    setSuccessNotice('Tautan WhatsApp dibuka atau disiapkan dengan teks pesan. Jika WhatsApp belum terbuka, periksa izin pop-up atau aplikasi WhatsApp. Pesan belum terkirim sampai Anda menekan tombol Kirim di WhatsApp.');
   };
 
   return (
@@ -331,6 +331,7 @@ export const DirectMessageView: React.FC<DirectMessageViewProps> = ({
                   </div>
                 </div>
                 <p className="mt-1 px-2 text-right text-[10px] text-emerald-100/45">{draft.length}/4.000 karakter · WhatsApp dibuka sebagai draf; pengiriman harus dikonfirmasi di WhatsApp.</p>
+                {selectedRespondent && !canOpenWhatsApp && <p className="mt-1 px-2 text-[11px] text-amber-200">Nomor WhatsApp responden tidak tersedia atau tidak valid. Perbarui nomor pada Data PPKS untuk mengaktifkan tombol Buka WhatsApp.</p>}
               </form>
             </>
           ) : (
