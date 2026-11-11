@@ -270,7 +270,7 @@ function normalizeAppSettings(value: unknown): AppSettings {
   const savedSourceUrl = String(
     saved.googleSpreadsheetSourceUrl || initialAppSettings.googleSpreadsheetSourceUrl || ''
   ).trim();
-  let configuredSourceId = GOOGLE_SIPANDU_RESOURCES.responseSpreadsheetId;
+  let configuredSourceId: string = GOOGLE_SIPANDU_RESOURCES.responseSpreadsheetId;
   try {
     if (savedSourceUrl) configuredSourceId = extractSpreadsheetId(savedSourceUrl);
   } catch { /* Keep the first-install fallback source ID. */ }
@@ -286,7 +286,7 @@ function normalizeAppSettings(value: unknown): AppSettings {
 
   // Keep the owner-selected Google response workbook. The original resource URL
   // is only a first-install fallback; a recreated spreadsheet has a different ID.
-  let resolvedSourceUrl = GOOGLE_SIPANDU_RESOURCES.responseSpreadsheetUrl;
+  let resolvedSourceUrl: string = GOOGLE_SIPANDU_RESOURCES.responseSpreadsheetUrl;
   try {
     if (savedSourceUrl) {
       extractSpreadsheetId(savedSourceUrl);
