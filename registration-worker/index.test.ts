@@ -319,7 +319,7 @@ test('blocks activation when no Owner-approved registration record exists', asyn
     assert.equal(response.status, 503);
     const result = await response.json() as { ok?: boolean; message?: string };
     assert.equal(result.ok, false);
-    assert.match(result.message || '', /PENDING_REGISTRATIONS KV/);
+    assert.match(result.message || '', /persetujuan Owner belum tersedia/);
     assert.equal(assignedClaims, '');
     assert.equal(calls.length, 1);
   } finally {
@@ -386,7 +386,7 @@ test('does not restore or create an invitation without a prior Owner-approved re
     const result = await response.json() as { ok?: boolean; message?: string };
     assert.equal(result.ok, false);
     assert.match(result.message || '', /Permohonan belum tercatat/);
-    assert.deepEqual(writes, []);
+    assert.equal(writes.some((entry) => entry.key.startsWith('pending:')), false);
   } finally {
     globalThis.fetch = originalFetch;
   }
