@@ -188,6 +188,7 @@ export const TeamRegistrationAdminView: React.FC<TeamRegistrationAdminViewProps>
             <h2 className="text-lg font-bold">Delegasi kewenangan Supervisor</h2>
           </div>
           <p className="mt-1 text-xs leading-relaxed text-emerald-100/70">Hanya Owner yang dapat memberi atau mencabut kewenangan. Supervisor lain tidak otomatis dapat menyetujui permohonan.</p>
+          <p className="mt-2 text-[11px] leading-relaxed text-emerald-100/60">UID dapat disalin dari Firebase Console → Authentication → Users → pilih akun Supervisor → User UID. Sistem memeriksa peran Supervisor di backend sebelum menyimpan delegasi.</p>
           <form onSubmit={(event) => { event.preventDefault(); void setDelegate(true); }} className="mt-4 flex flex-col gap-2 sm:flex-row">
             <input value={supervisorUid} onChange={(event) => setSupervisorUid(event.target.value)} placeholder="Firebase UID Supervisor" className="min-w-0 flex-1 rounded-xl border border-white/15 bg-black/30 px-3 py-3 text-sm text-white outline-none focus:border-sky-300/60" />
             <button type="submit" disabled={Boolean(workingUid)} className="inline-flex items-center justify-center gap-2 rounded-xl bg-sky-700 px-4 py-3 text-xs font-bold hover:bg-sky-600 disabled:opacity-50">
