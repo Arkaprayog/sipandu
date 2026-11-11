@@ -49,6 +49,14 @@ test('ATENSI cell reader maps the requested profile fields without header depend
   assert.equal(readAtensiProfileCell(row, 'desil'), 'COLUMN-43');
 });
 
+test('maps the respondent address from column K and ARV duration from column AO', () => {
+  const row = Array.from({ length: 43 }, () => '');
+  row[10] = 'Alamat lengkap dari Google Sheets K';
+  row[40] = '4 tahun 6 bulan';
+  assert.equal(readAtensiProfileCell(row, 'alamatLengkap'), 'Alamat lengkap dari Google Sheets K');
+  assert.equal(readAtensiProfileCell(row, 'lamaTerapiArv'), '4 tahun 6 bulan');
+});
+
 test('ATENSI cell reader returns blank for an empty or missing source cell', () => {
   assert.equal(readAtensiProfileCell([], 'intervensiMental'), '');
   assert.equal(readAtensiProfileCell([], 'lamaTerapiArv'), '');

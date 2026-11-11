@@ -25,13 +25,19 @@ function record(overrides: Partial<PPKSRecord> = {}): PPKSRecord {
 }
 
 test('deduplicates multiple records for the same person and keeps the newest timestamp/details', () => {
-  const older = record({ fotoDiri: 'https://example.test/foto.jpg' });
+  const older = record({
+    fotoDiri: 'https://example.test/foto.jpg',
+    alamatLengkap: 'Alamat dari kolom K',
+    lamaTerapiArv: '2 tahun',
+  });
   const newer = record({
     id: 'record-2',
     timestamp: '10/26/2026 11:29:19 AM',
     namaLengkap: 'LES MANA',
     fotoDiri: '',
     fotoKtp: 'https://example.test/ktp.jpg',
+    alamatLengkap: '',
+    lamaTerapiArv: '',
   });
   const result = deduplicatePPKSRecords([older, newer]);
   assert.equal(result.length, 1);
@@ -39,6 +45,8 @@ test('deduplicates multiple records for the same person and keeps the newest tim
   assert.equal(result[0].timestamp, '10/26/2026 11:29:19 AM');
   assert.equal(result[0].fotoDiri, 'https://example.test/foto.jpg');
   assert.equal(result[0].fotoKtp, 'https://example.test/ktp.jpg');
+  assert.equal(result[0].alamatLengkap, 'Alamat dari kolom K');
+  assert.equal(result[0].lamaTerapiArv, '2 tahun');
 });
 
 test('does not combine people with a different confirmed NIK or conflicting phone number', () => {

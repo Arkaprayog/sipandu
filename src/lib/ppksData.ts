@@ -187,6 +187,7 @@ export function deduplicatePPKSRecords<T extends PPKSRecord>(records: T[]): T[] 
       usia: next.usia || previous.usia,
       kotaDomisili: next.kotaDomisili || previous.kotaDomisili,
       alamatLengkap: next.alamatLengkap || previous.alamatLengkap,
+      lamaTerapiArv: next.lamaTerapiArv || previous.lamaTerapiArv,
       noHpWa: next.noHpWa || previous.noHpWa,
       jenisBantuan: next.jenisBantuan || previous.jenisBantuan,
       intervensiMental: next.intervensiMental || previous.intervensiMental,
