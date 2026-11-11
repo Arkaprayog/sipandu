@@ -267,11 +267,18 @@ function normalizeAppSettings(value: unknown): AppSettings {
   // Backward-compatible URL field used by the Google Workspace Forms diagnostic.
   // The native SIPANDU stage-one form no longer uses a Google Form URL.
   const stageOneFormUrl = saved.googleFormTahapAwalUrl?.trim() || GOOGLE_SIPANDU_RESOURCES.formRespondentUrl;
+  const savedSourceUrl = String(
+    saved.googleSpreadsheetSourceUrl || initialAppSettings.googleSpreadsheetSourceUrl || ''
+  ).trim();
+  let configuredSourceId = GOOGLE_SIPANDU_RESOURCES.responseSpreadsheetId;
+  try {
+    if (savedSourceUrl) configuredSourceId = extractSpreadsheetId(savedSourceUrl);
+  } catch { /* Keep the first-install fallback source ID. */ }
   let databaseUrl = saved.googleSpreadsheetUrl?.trim() || '';
   if (databaseUrl.includes('1yA8KemensosODHIVSumut2026_LiveSync')) databaseUrl = '';
   if (databaseUrl) {
     try {
-      if (extractSpreadsheetId(databaseUrl) === GOOGLE_SIPANDU_RESOURCES.responseSpreadsheetId) databaseUrl = '';
+      if (extractSpreadsheetId(databaseUrl) === configuredSourceId) databaseUrl = '';
     } catch {
       databaseUrl = '';
     }
@@ -279,9 +286,6 @@ function normalizeAppSettings(value: unknown): AppSettings {
 
   // Keep the owner-selected Google response workbook. The original resource URL
   // is only a first-install fallback; a recreated spreadsheet has a different ID.
-  const savedSourceUrl = String(
-    saved.googleSpreadsheetSourceUrl || initialAppSettings.googleSpreadsheetSourceUrl || ''
-  ).trim();
   let resolvedSourceUrl = GOOGLE_SIPANDU_RESOURCES.responseSpreadsheetUrl;
   try {
     if (savedSourceUrl) {
@@ -950,7 +954,8 @@ function StaffApp() {
     } else {
       try {
         const targetId = extractSpreadsheetId(sheetUrl);
-        if (targetId === GOOGLE_SIPANDU_RESOURCES.responseSpreadsheetId) {
+        const configuredSourceId = extractSpreadsheetId(settings.googleSpreadsheetSourceUrl || GOOGLE_SIPANDU_RESOURCES.responseSpreadsheetUrl);
+        if (targetId === configuredSourceId) {
           throw new Error('Spreadsheet respons Google Form tidak boleh menjadi tujuan database PPKS.');
         }
         const accessToken = await getAccessToken();
