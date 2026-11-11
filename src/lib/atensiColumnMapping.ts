@@ -32,7 +32,7 @@ export const ATENSI_ASSESSMENT_RESPONSE_TAB_NAME = 'From Asesmen 1';
 export function isAtensiProfileResponseTab(title: unknown): boolean {
   const normalized = String(title ?? '')
     .normalize('NFD')
-    .replace(/[\\u0300-\\u036f]/g, '')
+    .replace(/[\u0300-\u036f]/g, '')
     .toLocaleLowerCase('id-ID')
     .replace(/[^a-z0-9]/g, '');
   return normalized === 'formresponses1' || normalized === 'fromresponses1';
