@@ -19,6 +19,7 @@ interface FirebaseUserLookup {
   localId: string;
   email?: string;
   emailVerified?: boolean;
+  disabled?: boolean;
   customAttributes?: string;
 }
 
@@ -72,7 +73,6 @@ function missingConfiguration(env: Env): string[] {
    if (!env.FIREBASE_AUTH_API_KEY && !env.FIREBASE_WEB_API_KEY) missing.push('FIREBASE_AUTH_API_KEY');
    if (!env.FIREBASE_PROJECT_ID) missing.push('FIREBASE_PROJECT_ID');
    if (!env.FIREBASE_SERVICE_ACCOUNT_JSON) missing.push('FIREBASE_SERVICE_ACCOUNT_JSON');
-   if (!env.PENDING_REGISTRATIONS) missing.push('PENDING_REGISTRATIONS KV');
    return missing;
  }
 
@@ -390,7 +390,7 @@ export default {
     const path = url.pathname.length > 1 && url.pathname.endsWith('/') ? url.pathname.slice(0, -1) : url.pathname;
 
     if (path === '/health' && request.method === 'GET') {
-      const missing = missingConfiguration(env);
+      const missing = missingActivationConfiguration(env);
       return jsonResponse({ ok: true, ready: missing.length === 0, missing }, 200, origin);
     }
 
@@ -508,31 +508,31 @@ export default {
           missing: activationMissing,
         }, 503, origin);
       }
+      // Use the existing KV limiter when provisioned. Activation itself does not
+      // depend on invitation records or KV, so a verified member is never blocked
+      // merely because a pending-registration namespace is absent.
+      if (env.PENDING_REGISTRATIONS && !(await allowAttempt(env, request, 12))) {
+        return jsonResponse({ ok: false, message: 'Terlalu banyak percobaan aktivasi. Coba kembali setelah satu menit.' }, 429, origin);
+      }
       const authorization = request.headers.get('Authorization') || '';
       const idToken = authorization.startsWith('Bearer ') ? authorization.slice(7).trim() : '';
       if (!idToken) return jsonResponse({ ok: false, message: 'Sesi Firebase tidak ditemukan.' }, 401, origin);
       try {
         const firebaseUser = await lookupFirebaseUser(env, idToken);
+        if (!firebaseUser.localId || !firebaseUser.email) {
+          return jsonResponse({ ok: false, message: 'Akun Firebase belum memiliki email yang valid.' }, 400, origin);
+        }
+        if (firebaseUser.disabled) {
+          return jsonResponse({ ok: false, message: 'Akun SIPANDU telah dinonaktifkan administrator. Hubungi administrator untuk pemulihan akses.' }, 403, origin);
+        }
         if (!firebaseUser.emailVerified) {
           return jsonResponse({ ok: false, message: 'Email belum diverifikasi. Buka tautan verifikasi terlebih dahulu.' }, 403, origin);
         }
-        const key = `pending:${firebaseUser.localId}`;
-        const pendingRaw = await env.PENDING_REGISTRATIONS!.get(key);
-        if (!pendingRaw) {
-          return jsonResponse({ ok: false, message: 'Undangan pendaftaran tim tidak ditemukan atau sudah kedaluwarsa. Silakan daftar ulang atau hubungi administrator SIPANDU.' }, 403, origin);
-        }
-        const pending = JSON.parse(pendingRaw) as { uid?: string; email?: string };
-        if (pending.uid !== firebaseUser.localId || pending.email !== String(firebaseUser.email || '').toLowerCase()) {
-          return jsonResponse({ ok: false, message: 'Undangan tidak cocok dengan akun Firebase yang masuk.' }, 403, origin);
-        }
         await assignPendampingRole(env, firebaseUser);
-        await env.PENDING_REGISTRATIONS!.delete(key);
-        return jsonResponse({ ok: true, message: 'Akun SIPANDU telah diaktifkan sebagai pendamping.' }, 200, origin);
+        return jsonResponse({ ok: true, message: 'Email terverifikasi. Akun SIPANDU aktif sebagai anggota.' }, 200, origin);
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Aktivasi akun belum berhasil.';
         const permissionFailure = /INSUFFICIENT_PERMISSION|PERMISSION_DENIED|firebaseauth[.]users[.]update/i.test(message);
-        // Keep the pending invitation when Google Cloud IAM blocks role assignment.
-        // The user can retry after the service-account permission is corrected.
         return jsonResponse({ ok: false, message }, permissionFailure ? 503 : 500, origin);
       }
     }
