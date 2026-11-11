@@ -6,7 +6,16 @@ import { classifyPPKSPhotoHeader, normalizePPKSPhotoSource, readPPKSPhotoSourceB
 import { countSharedPhotoFileIds, extractGoogleDriveFileId, googleDriveViewUrl, matchFormPhotoResponseForPPKS, isGoogleFormLinkedToSpreadsheet, type FormPhotoResponseCandidate } from './formPhotoRecovery';
 import { GOOGLE_SIPANDU_RESOURCES, GOOGLE_WORKSPACE_EMAIL } from './googleSIPANDUResources';
 import { getPhotoUploadMimeType, isSupportedPhotoFile, MAX_PPKS_PHOTO_FILE_BYTES } from './photoFilePreview';
-import { ATENSI_PHOTO_COLUMN_INDICES, readAtensiProfileCell, readAtensiGender } from './atensiColumnMapping';
+import {
+  ATENSI_PHOTO_COLUMN_INDICES,
+  ATENSI_PROFILE_RESPONSE_TAB_NAME,
+  ATENSI_ASSESSMENT_RESPONSE_TAB_NAME,
+  readAtensiProfileCell,
+  readAtensiGender,
+  readAtensiCurrentDomicileAddress,
+  findAtensiCurrentDomicileAddressColumn,
+} from './atensiColumnMapping';
+import { mergeAtensiArvDurations } from './atensiAssessmentJoin';
 import { readInterventionRecommendationFromRow } from './interventionMapping';
 import { isLegacySamplePPKSId, isObviousDemoMarker, LEGACY_SAMPLE_PPKS_IDS, LEGACY_SAMPLE_PPKS_NAMES } from '../data/initialData';
 
@@ -909,7 +918,11 @@ const INTEGRATED_SHEET_FIELDS: Array<{
   { key: 'supervisorKemensos', aliases: ['supervisorKemensos', 'namaSupervisor'] },
 ];
 
-function mapRowsToPPKSRecords(rows: string[][], useATENSIColumnPositions = false): PPKSRecord[] {
+function mapRowsToPPKSRecords(
+  rows: string[][],
+  useATENSIColumnPositions = false,
+  useATENSIAssessmentColumnPositions = false,
+): PPKSRecord[] {
   if (rows.length < 2) return [];
   const headers = rows[0].map((value) => String(value ?? '').trim());
   if (!headers.some(Boolean)) return [];
@@ -1037,11 +1050,15 @@ function mapRowsToPPKSRecords(rows: string[][], useATENSIColumnPositions = false
       ? readAtensiGender(row, readAtensiProfileCell(row, 'jenisKelamin'))
       : readCellByAliases(headers, row, ['jenisKelamin', 'gender', 'jenisKelaminResponden']);
     const domisili = useATENSIColumnPositions ? readAtensiProfileCell(row, 'kotaDomisili') : readCellByAliases(headers, row, ['kotaDomisili', 'kabupatenKota', 'kotaKabupaten', 'domisili', 'kota', 'kabupaten']);
-    const alamat = useATENSIColumnPositions ? readAtensiProfileCell(row, 'alamatLengkap') : readCellByAliases(headers, row, ['alamatLengkap', 'alamatDomisili', 'alamatResponden', 'alamat']);
+    const alamat = useATENSIColumnPositions
+      ? readAtensiCurrentDomicileAddress(headers, row)
+      : readCellByAliases(headers, row, ['alamatDomisiliSaatIni', 'alamatDomisiliSekarang', 'alamatDomisili', 'alamatTempatTinggalSaatIni']);
     const jenisBantuan = useATENSIColumnPositions ? readAtensiProfileCell(row, 'jenisBantuan') : readCellByAliases(headers, row, ['jenisBantuan', 'bantuanDibutuhkan', 'jenisBantuanAtensi', 'kebutuhanBantuan']);
-    const lamaTerapiArv = useATENSIColumnPositions
+    const lamaTerapiArv = useATENSIAssessmentColumnPositions
       ? readAtensiProfileCell(row, 'lamaTerapiArv')
-      : readCellByAliases(headers, row, ['lamaTerapiArv', 'durasiTerapiArv', 'lamaARV', 'durasiARV', 'lamaPengobatanARV']);
+      : useATENSIColumnPositions
+        ? ''
+        : readCellByAliases(headers, row, ['lamaTerapiArv', 'durasiTerapiArv', 'lamaARV', 'durasiARV', 'lamaPengobatanARV']);
     const integratedValues: Partial<Record<keyof IntegratedFormData, string | number | boolean>> = {};
     const integratedMarkerKeys = new Set<keyof IntegratedFormData>([
       'nomorRegistrasi', 'noBpjs', 'tahunDiagnosa', 'faskesPdpRujukan',
@@ -1550,6 +1567,9 @@ export async function importPPKSFromSpreadsheet(
   spreadsheetTitle: string;
   sheetTitles: string[];
   selectedTab: string;
+  arvAssessmentTab: string;
+  arvDurationMatched: number;
+  domicileAddressHeader: string;
   rowsRead: number;
   sourceDataRows: number;
   sourceRowsWithName: number;
@@ -1581,8 +1601,11 @@ export async function importPPKSFromSpreadsheet(
   const metadata = await getSpreadsheetMetadata(spreadsheetUrlOrId);
   if (!metadata.sheetTitles.length) throw new Error('Spreadsheet tidak memiliki tab yang dapat dibaca.');
   const preferred = preferredTab?.trim();
+  const requestedPreferredTab = preferred
+    ? metadata.sheetTitles.find((title) => normalizeSheetHeader(title) === normalizeSheetHeader(preferred))
+    : undefined;
   const requestedFromResponsesTab = metadata.sheetTitles.find(
-    (title) => normalizeSheetHeader(title) === normalizeSheetHeader('From Responses 1')
+    (title) => normalizeSheetHeader(title) === normalizeSheetHeader(ATENSI_PROFILE_RESPONSE_TAB_NAME)
   );
   const responseTab = metadata.sheetTitles.find((title) => {
     const normalized = normalizeSheetHeader(title);
@@ -1590,8 +1613,9 @@ export async function importPPKSFromSpreadsheet(
   });
   // The owner's specified source tab is authoritative when present. This avoids
   // silently selecting a different response tab due to spreadsheet tab ordering.
-  const selectedTab = requestedFromResponsesTab
-    || (preferred && metadata.sheetTitles.includes(preferred) ? preferred : (responseTab || metadata.sheetTitles[0]));
+  // A caller's explicit tab selection must take precedence. The previous order
+  // always picked From Responses 1, even when the caller asked for From Asesmen 1.
+  const selectedTab = requestedPreferredTab || requestedFromResponsesTab || responseTab || metadata.sheetTitles[0];
   const escapedTitle = selectedTab.replace(/'/g, "''");
   const isKnownATENSIResponseSheet =
     metadata.spreadsheetId === GOOGLE_SIPANDU_RESOURCES.responseSpreadsheetId ||
@@ -1607,7 +1631,9 @@ export async function importPPKSFromSpreadsheet(
   // Keep positional field mapping tied to this tab's schema, not to its
   // spreadsheet ID: recreating the Google Sheet changes the ID but not columns K/AO.
   const useATENSIColumnPositions =
-    normalizeSheetHeader(selectedTab) === normalizeSheetHeader('From Responses 1');
+    normalizeSheetHeader(selectedTab) === normalizeSheetHeader(ATENSI_PROFILE_RESPONSE_TAB_NAME);
+  const useATENSIAssessmentColumnPositions =
+    normalizeSheetHeader(selectedTab) === normalizeSheetHeader(ATENSI_ASSESSMENT_RESPONSE_TAB_NAME);
   const rows = await readSpreadsheetRichData(
     metadata.spreadsheetId,
     `'${escapedTitle}'!A1:ZZ2000`,
@@ -1618,11 +1644,39 @@ export async function importPPKSFromSpreadsheet(
   const sourceRowsWithName = dataRows.filter((row) =>
     Boolean(useATENSIColumnPositions ? String(row[2] ?? '').trim() : readRespondentName(headers, row))
   ).length;
-  const allMappedRecords = mapRowsToPPKSRecords(rows, useATENSIColumnPositions);
+  const allMappedRecords = mapRowsToPPKSRecords(rows, useATENSIColumnPositions, useATENSIAssessmentColumnPositions);
   const recordsAfterSampleFilter = allMappedRecords.filter((record) => !isLegacySamplePPKSId(record.id));
   let records = sortPPKSRecordsByTimestamp(deduplicatePPKSRecords(recordsAfterSampleFilter));
   const sampleRecordsFiltered = allMappedRecords.length - recordsAfterSampleFilter.length;
   const duplicateRowsCollapsed = recordsAfterSampleFilter.length - records.length;
+  let arvAssessmentTab = useATENSIAssessmentColumnPositions ? selectedTab : '';
+  let arvDurationMatched = useATENSIAssessmentColumnPositions
+    ? records.filter((record) => Boolean(String(record.lamaTerapiArv || '').trim())).length
+    : 0;
+
+  // The respondent profile and the ARV duration are stored in separate Forms
+  // response tabs. Read AO from From Asesmen 1 and join it to the profile by
+  // PPKS ID / NIK / unique full name instead of assuming AO exists on tab one.
+  if (useATENSIColumnPositions) {
+    const assessmentTab = metadata.sheetTitles.find(
+      (title) => normalizeSheetHeader(title) === normalizeSheetHeader(ATENSI_ASSESSMENT_RESPONSE_TAB_NAME)
+    );
+    if (assessmentTab) {
+      const escapedAssessmentTitle = assessmentTab.replace(/'/g, "''");
+      const assessmentRows = await readSpreadsheetRichData(
+        metadata.spreadsheetId,
+        `'${escapedAssessmentTitle}'!A1:ZZ2000`,
+      );
+      const assessmentRecords = deduplicatePPKSRecords(
+        mapRowsToPPKSRecords(assessmentRows, false, true)
+          .filter((record) => !isLegacySamplePPKSId(record.id))
+      );
+      const joined = mergeAtensiArvDurations(records, assessmentRecords);
+      records = joined.records;
+      arvAssessmentTab = assessmentTab;
+      arvDurationMatched = joined.matched;
+    }
+  }
   let photosRecoveredFromForm = 0;
   let photoRecoveryStatus: PhotoRecoveryStatus = 'not-applicable';
   let photoRecoveryDetail = 'Sumber ini tidak dikenali sebagai spreadsheet respons ATENSI; pemulihan Google Forms tidak dijalankan.';
@@ -1699,6 +1753,11 @@ export async function importPPKSFromSpreadsheet(
     spreadsheetTitle: metadata.title,
     sheetTitles: metadata.sheetTitles,
     selectedTab,
+    arvAssessmentTab,
+    arvDurationMatched,
+    domicileAddressHeader: useATENSIColumnPositions
+      ? String(headers[findAtensiCurrentDomicileAddressColumn(headers)] ?? '')
+      : '',
     rowsRead: rows.length,
     sourceDataRows: dataRows.length,
     sourceRowsWithName,
