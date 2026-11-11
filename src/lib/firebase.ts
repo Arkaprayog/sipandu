@@ -483,7 +483,7 @@ export const googleSignIn = async (): Promise<{
       const message = nativeGoogleErrorMessage(error);
       if (/You CANNOT use scopes without modifying the main activity/i.test(message)) {
         throw new Error(
-          'Login Google native gagal karena MainActivity pada APK yang sedang berjalan tidak memuat bridge izin Google API. Ini bukan kesalahan SHA-1. Tutup aplikasi sepenuhnya lalu pasang ulang APK SIPANDU ODHIV Release v2.2.1 atau versi terbaru dari GitHub Releases. Jika error tetap muncul di versi terbaru, kirim tangkapan layar versi aplikasi pada perangkat agar build yang terpasang dapat dibandingkan dengan APK yang diverifikasi CI.'
+          'Login Google native gagal karena MainActivity pada APK yang sedang berjalan tidak memuat bridge izin Google API. Ini bukan kesalahan SHA-1. Tutup aplikasi sepenuhnya lalu pasang ulang APK SIPANDU ODHIV terbaru dari bagian GitHub Releases (versi 5.0.12 atau lebih baru setelah tersedia). Jika error tetap muncul di versi terbaru, kirim tangkapan layar versi aplikasi pada perangkat agar build yang terpasang dapat dibandingkan dengan APK yang diverifikasi CI.'
         );
       }
       if (/DEVELOPER_ERROR|status code:?\s*10|\[28444\]/i.test(message)) {
