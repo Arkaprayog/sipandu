@@ -381,7 +381,7 @@ export const DatabasePpksView: React.FC<DatabasePpksViewProps> = ({
                         Alamat Domisili Saat Ini
                       </td>
                       <td className="py-2.5 px-3 min-w-[380px] text-neutral-200 leading-snug whitespace-pre-wrap break-words">
-                        {currentPPKS.alamatLengkap || 'Alamat belum tersedia pada kolom K sumber'}
+                        {currentPPKS.alamatLengkap || 'Alamat domisili belum ditemukan pada kolom K tab From Responses 1'}
                       </td>
                     </tr>
 
@@ -399,7 +399,7 @@ export const DatabasePpksView: React.FC<DatabasePpksViewProps> = ({
                         Lama Terapi ARV
                       </td>
                       <td className="py-2.5 px-3 text-neutral-200 whitespace-pre-wrap break-words">
-                        {currentPPKS.lamaTerapiArv || 'Belum tersedia pada kolom AO sumber'}
+                        {currentPPKS.lamaTerapiArv || 'Lama terapi ARV belum ditemukan pada kolom AO tab From Asesmen 1'}
                       </td>
                     </tr>
 

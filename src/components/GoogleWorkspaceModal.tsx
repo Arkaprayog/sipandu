@@ -54,7 +54,7 @@ interface GoogleWorkspaceModalProps {
   ppksList: PPKSRecord[];
   settings: AppSettings;
   onUpdateSettings: (settings: AppSettings) => void;
-  onLoadPPKSFromCloud: (records: PPKSRecord[]) => void;
+  onLoadPPKSFromCloud: (records: PPKSRecord[], spreadsheetId?: string, spreadsheetUrl?: string) => void | Promise<void>;
 }
 
 export const GoogleWorkspaceModal: React.FC<GoogleWorkspaceModalProps> = ({
@@ -83,7 +83,7 @@ export const GoogleWorkspaceModal: React.FC<GoogleWorkspaceModalProps> = ({
     // the Form response sheet. Never use that sheet as the PPKS write destination.
     if (!configured || configured.includes('1yA8KemensosODHIVSumut2026_LiveSync')) return '';
     try {
-      if (extractSpreadsheetId(configured) === GOOGLE_SIPANDU_RESOURCES.responseSpreadsheetId) return '';
+      if (extractSpreadsheetId(configured) === extractSpreadsheetId(settings.googleSpreadsheetSourceUrl || GOOGLE_SIPANDU_RESOURCES.responseSpreadsheetUrl)) return '';
     } catch {
       return '';
     }
@@ -172,7 +172,8 @@ export const GoogleWorkspaceModal: React.FC<GoogleWorkspaceModalProps> = ({
           return `Folder sumber dapat dibaca; ${files.length} berkas ditemukan pada halaman pertama.`;
         });
         await runCheck('Google Sheets respons', async () => {
-          const titles = await getSpreadsheetSheetTitles(GOOGLE_SIPANDU_RESOURCES.responseSpreadsheetId);
+          const configuredSource = sourceSpreadsheetUrl.trim() || settings.googleSpreadsheetSourceUrl?.trim() || GOOGLE_SIPANDU_RESOURCES.responseSpreadsheetUrl;
+          const titles = await getSpreadsheetSheetTitles(configuredSource);
           if (!titles.length) throw new Error('Tidak ada tab spreadsheet yang terbaca. Periksa ID dan izin berbagi.');
           return `Spreadsheet respons dapat dibaca; tab: ${titles.join(', ')}.`;
         });
@@ -264,7 +265,7 @@ export const GoogleWorkspaceModal: React.FC<GoogleWorkspaceModalProps> = ({
       return;
     }
     try {
-      if (extractSpreadsheetId(configured) === GOOGLE_SIPANDU_RESOURCES.responseSpreadsheetId) {
+      if (extractSpreadsheetId(configured) === extractSpreadsheetId(settings.googleSpreadsheetSourceUrl || GOOGLE_SIPANDU_RESOURCES.responseSpreadsheetUrl)) {
         setSpreadsheetIdInput('');
           return;
       }
@@ -392,31 +393,54 @@ export const GoogleWorkspaceModal: React.FC<GoogleWorkspaceModalProps> = ({
     }
   };
 
-  const handleSourceSpreadsheetSelect = (fileId: string) => {
+  const handleSourceSpreadsheetSelect = async (fileId: string) => {
     const file = spreadsheetFiles.find((candidate) => candidate.id === fileId);
     if (!file) return;
-    if (file.id !== GOOGLE_SIPANDU_RESOURCES.responseSpreadsheetId) {
-      setStatusMessage({
-        type: 'error',
-        text: 'Sumber profil PPKS dikunci ke spreadsheet ATENSI resmi. File lain tidak akan digunakan sebagai sumber roster utama.',
+    setLoading(true);
+    setStatusMessage(null);
+    try {
+      // The official response workbook may be recreated by the owner. Its new
+      // ID must be selectable; hard-pinning this list to the retired ID caused
+      // imports to keep reading stale profile and ARV values.
+      const url = `https://docs.google.com/spreadsheets/d/${file.id}/edit`;
+      const tabs = await getSpreadsheetSheetTitles(url);
+      const normalizeTab = (value: string) => value.normalize('NFD')
+        .replace(/[\\u0300-\\u036f]/g, '')
+        .toLocaleLowerCase('id-ID')
+        .replace(/[^a-z0-9]/g, '');
+      const profileTabExists = tabs.some((tab) => normalizeTab(tab) === 'fromresponses1');
+      const arvTabExists = tabs.some((tab) => normalizeTab(tab) === 'fromasesmen1');
+      if (!profileTabExists) {
+        throw new Error(`Spreadsheet “${file.name}” tidak memiliki tab “From Responses 1”. Pilih spreadsheet respons ATENSI yang benar.`);
+      }
+      setSourceSpreadsheetUrl(url);
+      onUpdateSettings({
+        ...settings,
+        googleSpreadsheetSourceUrl: url,
+        googleSpreadsheetSourceName: file.name,
+        googleSpreadsheetSourceTab: 'From Responses 1',
       });
-      return;
+      setStatusMessage({
+        type: 'success',
+        text: arvTabExists
+          ? `Sumber “${file.name}” diverifikasi: From Responses 1 (profil) dan From Asesmen 1 (ARV kolom AO) tersedia.`
+          : `Sumber “${file.name}” diverifikasi: From Responses 1 tersedia. Tab From Asesmen 1 belum terlihat pada spreadsheet ini; sinkronisasi akan memeriksa tautan respons Form terpisah dan menampilkan diagnostik bila belum tersedia.`,
+      });
+    } catch (error: any) {
+      setStatusMessage({ type: 'error', text: error?.message || String(error) });
+    } finally {
+      setLoading(false);
     }
-    const url = GOOGLE_SIPANDU_RESOURCES.responseSpreadsheetUrl;
-    setSourceSpreadsheetUrl(url);
-    onUpdateSettings({
-      ...settings,
-      googleSpreadsheetSourceUrl: url,
-      googleSpreadsheetSourceName: file.name,
-      googleSpreadsheetSourceTab: '',
-    });
-    setStatusMessage({ type: 'success', text: `Spreadsheet sumber dipilih: ${file.name}. Tekan “Muat Data PPKS + Asesmen” untuk membaca data asli.` });
   };
 
   const handleTargetSpreadsheetSelect = (fileId: string) => {
     const file = spreadsheetFiles.find((candidate) => candidate.id === fileId);
     if (!file) return;
-    if (file.id === GOOGLE_SIPANDU_RESOURCES.responseSpreadsheetId) {
+    const configuredSourceId = (() => {
+      try { return extractSpreadsheetId(sourceSpreadsheetUrl || settings.googleSpreadsheetSourceUrl || GOOGLE_SIPANDU_RESOURCES.responseSpreadsheetUrl); }
+      catch { return GOOGLE_SIPANDU_RESOURCES.responseSpreadsheetId; }
+    })();
+    if (file.id === configuredSourceId) {
       setStatusMessage({
         type: 'error',
         text: 'Spreadsheet respons Google Form hanya sumber baca dan tidak boleh dipakai sebagai database tujuan.',
@@ -436,7 +460,8 @@ export const GoogleWorkspaceModal: React.FC<GoogleWorkspaceModalProps> = ({
     setLoading(true);
     setStatusMessage(null);
     try {
-      const sourceUrl = GOOGLE_SIPANDU_RESOURCES.responseSpreadsheetUrl;
+      const sourceUrl = sourceSpreadsheetUrl.trim() || settings.googleSpreadsheetSourceUrl?.trim() || GOOGLE_SIPANDU_RESOURCES.responseSpreadsheetUrl;
+      extractSpreadsheetId(sourceUrl);
       const sourceTab = 'From Responses 1';
       setSourceSpreadsheetUrl(sourceUrl);
       const imported = await importPPKSFromSpreadsheet(sourceUrl, sourceTab);
@@ -453,7 +478,7 @@ export const GoogleWorkspaceModal: React.FC<GoogleWorkspaceModalProps> = ({
           `Berhasil membaca ${imported.rowsRead} baris dari “${imported.spreadsheetTitle}” (tab “${imported.selectedTab}”), tetapi tidak menemukan kolom Nama PPKS/responden yang dikenali. Header terdeteksi: ${headerPreview || '(kosong)'}. Pilih tab respons yang benar atau periksa nama kolom.`
         );
       }
-      onLoadPPKSFromCloud(imported.records);
+      await onLoadPPKSFromCloud(imported.records, imported.spreadsheetId, sourceUrl);
       const diagnosticSummary = imported.nikColumnDiagnostics.length
         ? imported.nikColumnDiagnostics.map((column) =>
             `${column.header}: ${column.validNIKValues}/${column.nonEmptyValues} nilai valid 16 digit${column.scientificNotationValues ? ` (${column.scientificNotationValues} notasi ilmiah)` : ''}`
@@ -466,7 +491,7 @@ export const GoogleWorkspaceModal: React.FC<GoogleWorkspaceModalProps> = ({
           : `NIK belum terpetakan. Kolom dikenali: ${imported.nikHeadersFound.join(', ') || 'tidak ditemukan'}. Diagnostik kolom sumber: ${diagnosticSummary}. Jika nilai memakai notasi ilmiah/terpotong, perbaiki nilai NIK pada spreadsheet menjadi teks 16 digit, lalu sinkronkan kembali.`;
       setStatusMessage({
         type: imported.recordsWithNIK === 0 ? 'error' : 'success',
-        text: `Berhasil memuat ${imported.records.length} PPKS dari “${imported.spreadsheetTitle}” → tab “${imported.selectedTab}”. Baris sumber: ${imported.sourceDataRows} (di luar header), baris bernama: ${imported.sourceRowsWithName}, tidak dikenali sebagai nama: ${imported.rowsWithoutRecognizedName}, data contoh disaring: ${imported.sampleRecordsFiltered}. ${nikStatus} ${imported.photoDriveOrganization?.detail ? 'Penataan foto Google Drive: ' + imported.photoDriveOrganization.detail + ' ' : ''}Data tersedia di Database PPKS dan From Asesmen Terintegrasi, diurutkan dari timestamp terbaru. Sumber tidak diubah.`,
+        text: `Berhasil memuat ${imported.records.length} PPKS dari “${imported.spreadsheetTitle}” → tab “${imported.selectedTab}”. Alamat domisili dibaca melalui header “${imported.domicileAddressHeader || 'kolom K'}” (kolom K From Responses 1). ARV dibaca dari ${imported.arvAssessmentTab || 'From Asesmen 1 tidak ditemukan'}!AO dan cocok ${imported.arvDurationMatched} responden. Baris sumber: ${imported.sourceDataRows} (di luar header), baris bernama: ${imported.sourceRowsWithName}, tidak dikenali sebagai nama: ${imported.rowsWithoutRecognizedName}, data contoh disaring: ${imported.sampleRecordsFiltered}. ${nikStatus} ${imported.photoDriveOrganization?.detail ? 'Penataan foto Google Drive: ' + imported.photoDriveOrganization.detail + ' ' : ''}Data tersedia di Database PPKS dan From Asesmen Terintegrasi, diurutkan dari timestamp terbaru. Sumber tidak diubah.`,
       });
     } catch (err: any) {
       setStatusMessage({ type: 'error', text: err?.message || String(err) });
@@ -560,7 +585,8 @@ export const GoogleWorkspaceModal: React.FC<GoogleWorkspaceModalProps> = ({
     try {
       const targetUrl = spreadsheetIdInput.trim();
       const targetId = extractSpreadsheetId(targetUrl);
-      if (targetId === GOOGLE_SIPANDU_RESOURCES.responseSpreadsheetId) {
+      const configuredSourceId = extractSpreadsheetId(sourceSpreadsheetUrl || settings.googleSpreadsheetSourceUrl || GOOGLE_SIPANDU_RESOURCES.responseSpreadsheetUrl);
+      if (targetId === configuredSourceId) {
         throw new Error('Spreadsheet respons Google Form tidak boleh menjadi target database PPKS.');
       }
       onUpdateSettings({ ...settings, googleSpreadsheetUrl: targetUrl });
@@ -588,7 +614,8 @@ export const GoogleWorkspaceModal: React.FC<GoogleWorkspaceModalProps> = ({
         throw new Error('Tujuan database Google Sheets belum diatur. Klik “Buat Spreadsheet Baru SIPANDU ODHIV” atau masukkan URL spreadsheet database khusus.');
       }
       const targetId = extractSpreadsheetId(target);
-      if (targetId === GOOGLE_SIPANDU_RESOURCES.responseSpreadsheetId) {
+      const configuredSourceId = extractSpreadsheetId(sourceSpreadsheetUrl || settings.googleSpreadsheetSourceUrl || GOOGLE_SIPANDU_RESOURCES.responseSpreadsheetUrl);
+      if (targetId === configuredSourceId) {
         throw new Error('Demi menjaga respons Google Form tetap utuh, data PPKS tidak boleh diekspor ke spreadsheet respons Form. Buat spreadsheet database SIPANDU terpisah terlebih dahulu.');
       }
       await ensureSIPANDUDatabaseSheet(target);
@@ -1076,7 +1103,7 @@ export const GoogleWorkspaceModal: React.FC<GoogleWorkspaceModalProps> = ({
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                   <div>
                     <h5 className="text-sky-100 font-bold text-xs">Sumber Spreadsheet PPKS & Asesmen</h5>
-                    <p className="text-[10px] text-neutral-300">Pilih nama sumber resmi dari Google Drive. Alamat tautan sumber disimpan internal dan tidak ditampilkan.</p>
+                    <p className="text-[10px] text-neutral-300">Pilih spreadsheet respons yang benar-benar berisi tab “From Responses 1” dan “From Asesmen 1”. ID/URL spreadsheet baru dapat berubah; tautan disimpan internal dan tidak ditampilkan.</p>
                   </div>
                   <button
                     type="button"
@@ -1092,11 +1119,10 @@ export const GoogleWorkspaceModal: React.FC<GoogleWorkspaceModalProps> = ({
                   value={(() => { try { return extractSpreadsheetId(sourceSpreadsheetUrl); } catch { return ''; } })()}
                   onChange={(e) => handleSourceSpreadsheetSelect(e.target.value)}
                   className="w-full p-2.5 rounded bg-black/70 border border-sky-500/30 text-xs text-white"
-                  disabled={loading || !token || !spreadsheetFiles.some((file) => file.id === GOOGLE_SIPANDU_RESOURCES.responseSpreadsheetId)}
+                  disabled={loading || !token || spreadsheetFiles.length === 0}
                 >
                   <option value="">— Pilih sumber Spreadsheet PPKS —</option>
                   {spreadsheetFiles
-                    .filter((file) => file.id === GOOGLE_SIPANDU_RESOURCES.responseSpreadsheetId)
                     .map((file) => (
                       <option key={file.id} value={file.id}>{file.name}</option>
                     ))}
@@ -1142,7 +1168,13 @@ export const GoogleWorkspaceModal: React.FC<GoogleWorkspaceModalProps> = ({
                     <option value={extractSpreadsheetId(spreadsheetIdInput)}>Database SIPANDU tersimpan</option>
                   )}
                   {spreadsheetFiles
-                    .filter((file) => file.id !== GOOGLE_SIPANDU_RESOURCES.responseSpreadsheetId)
+                    .filter((file) => {
+                      try {
+                        return file.id !== extractSpreadsheetId(sourceSpreadsheetUrl || settings.googleSpreadsheetSourceUrl || GOOGLE_SIPANDU_RESOURCES.responseSpreadsheetUrl);
+                      } catch {
+                        return true;
+                      }
+                    })
                     .map((file) => (
                       <option key={file.id} value={file.id}>{file.name}</option>
                     ))}
