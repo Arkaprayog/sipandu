@@ -43,7 +43,7 @@ import { GOOGLE_SIPANDU_RESOURCES, SIPANDU_OWNER_WHATSAPP_PHONE } from './lib/go
 import { getLiveSyncRetryDelay, LIVE_SYNC_INTERVAL_MS } from './lib/liveSyncPolicy';
 import { getCloudOnlyCompletedAssessments, mergeIntegratedAssessmentAnswers, type IntegratedAssessmentAnswersById } from './lib/integratedAssessmentArchive';
 import { preservePPKSRecordOrder } from './lib/ppksRecordState';
-import { ATENSI_ASSESSMENT_RESPONSE_TAB_NAME } from './lib/atensiColumnMapping';
+import { ATENSI_PROFILE_RESPONSE_TAB_NAME, ATENSI_ASSESSMENT_RESPONSE_TAB_NAME } from './lib/atensiColumnMapping';
 import { clearFollowUpLocalNotifications, syncFollowUpLocalNotifications } from './lib/followUpNotificationScheduler';
 import { filterStageOneNotificationSubmissions } from './lib/stageOneRespondents';
 import { deduplicatePPKSRecords, parsePPKSTimestamp, samePPKSIdentity, sortPPKSRecordsByName, sortPPKSRecordsByTimestamp } from './lib/ppksData';
@@ -296,7 +296,7 @@ function normalizeAppSettings(value: unknown): AppSettings {
     // Invalid saved URLs fall back to the original verified source.
   }
   const sourceName = String(saved.googleSpreadsheetSourceName || '').trim() || 'Sumber ATENSI SIPANDU';
-  const sourceTab = 'From Responses 1';
+  const sourceTab = ATENSI_PROFILE_RESPONSE_TAB_NAME;
 
   return {
     ...initialAppSettings,
@@ -1072,12 +1072,13 @@ function StaffApp() {
         ...current,
         googleSpreadsheetSourceUrl: sourceSpreadsheetUrl,
         googleSpreadsheetSourceName: current.googleSpreadsheetSourceName || 'Sumber ATENSI SIPANDU',
-        googleSpreadsheetSourceTab: 'From Responses 1',
+        googleSpreadsheetSourceTab: ATENSI_PROFILE_RESPONSE_TAB_NAME,
       }));
     }
+    const profileArvCount = cloudRecords.filter((record) => Boolean(String(record.lamaTerapiArv || '').trim())).length;
     setLiveSyncState({
       type: 'success',
-      message: `Impor manual selesai: ${recordsForSync.length} PPKS dipadankan. ARV dari From Asesmen 1!AO cocok ${continuation.arvDurationMatched} responden. ${continuation.warning ? continuation.warning + ' ' : ''}${firestoreMessage}`,
+      message: `Impor manual selesai: ${recordsForSync.length} PPKS dipadankan. Lama Terapi ARV dari ${ATENSI_PROFILE_RESPONSE_TAB_NAME}!AO terisi pada ${profileArvCount} responden. ${continuation.warning ? continuation.warning + ' ' : ''}${firestoreMessage}`,
       lastUpdatedAt: new Date().toLocaleString('id-ID'),
     });
   };
@@ -1202,8 +1203,14 @@ function StaffApp() {
       const enrichedMatched = matchedPairs.map(({ response, stageOne }) => {
         // Normalize the response key to the already-verified master PPKS ID.
         const normalizedResponse = { ...response, id: stageOne.id };
-        return mergePPKSRecords([stageOne], [normalizedResponse]).find((record) => record.id === stageOne.id)
+        const merged = mergePPKSRecords([stageOne], [normalizedResponse]).find((record) => record.id === stageOne.id)
           || { ...stageOne, lamaTerapiArv: response.lamaTerapiArv || stageOne.lamaTerapiArv };
+        // The primary profile spreadsheet AO cell outranks this optional continuation feed.
+        const primaryProfile = mainFormRecords.find((record) =>
+          record.id === stageOne.id || samePPKSIdentity(record, stageOne)
+        );
+        const primaryArv = String(primaryProfile?.lamaTerapiArv || '').trim();
+        return primaryArv ? { ...merged, lamaTerapiArv: primaryArv } : merged;
       });
       const byId = new Map(enrichedMatched.map((record) => [record.id, record]));
       // Keep the master PPKS roster limited to records present in the primary
@@ -1251,7 +1258,7 @@ function StaffApp() {
 
   const handleSyncGoogleSpreadsheet = async (): Promise<{ records: number; sourceDataRows: number; sourceRowsWithName: number; sampleRecordsFiltered: number; duplicateRowsCollapsed: number; photosRecoveredFromForm: number; photoRecoveryStatus: string; photoRecoveryDetail: string; photoRecoveryDiagnostics: { responseCount: number; responsesWithUploads: number; recordsMatched: number }; photoCounts: { diri: number; ktp: number; kk: number; rumah: number } }> => {
     const sourceUrl = settings.googleSpreadsheetSourceUrl?.trim() || GOOGLE_SIPANDU_RESOURCES.responseSpreadsheetUrl;
-    const sourceTab = 'From Responses 1';
+    const sourceTab = ATENSI_PROFILE_RESPONSE_TAB_NAME;
     extractSpreadsheetId(sourceUrl);
     const imported = await importPPKSFromSpreadsheet(sourceUrl, sourceTab);
     if (!imported.records.length) {
@@ -1275,7 +1282,7 @@ function StaffApp() {
     const updatedAt = new Date().toLocaleString('id-ID');
     setLiveSyncState({
       type: 'success',
-      message: `Sumber “${imported.spreadsheetTitle}” → “${imported.selectedTab}”: ${imported.sourceDataRows} baris data, ${recordsForSync.length} PPKS unik dimuat, ${imported.duplicateRowsCollapsed} duplikat spreadsheet digabung, ${imported.sampleRecordsFiltered} contoh disaring. Intervensi & rekomendasi mengikuti pemetaan kolom spreadsheet: ${imported.recordsWithInterventionRecommendation}/${imported.records.length} responden terisi. Respons Form lanjutan dipadankan: ${continuation.matchedResponses}. ${continuation.warning ? continuation.warning + ' ' : ''}Foto sumber: diri ${imported.photoCounts.diri}/${imported.records.length}, KTP ${imported.photoCounts.ktp}/${imported.records.length}, KK ${imported.photoCounts.kk}/${imported.records.length}, rumah ${imported.photoCounts.rumah}/${imported.records.length}; tautan dipulihkan dari Forms: ${imported.photosRecoveredFromForm}; status pemulihan: ${imported.photoRecoveryStatus} — ${imported.photoRecoveryDetail}. ${firestoreMessage} Alamat domisili dibaca dari ${imported.selectedTab}!K (header: ${imported.domicileAddressHeader || 'kolom K'}). Lama ARV: ${continuation.arvAssessmentTab || imported.arvAssessmentTab || 'tab From Asesmen 1 belum ditemukan'}!AO, cocok ${Math.max(imported.arvDurationMatched, continuation.arvDurationMatched)} responden. NIK terpetakan ${imported.recordsWithNIK}/${imported.records.length}. Sinkronisasi otomatis setiap 5 menit saat dashboard terbuka dan izin Google masih berlaku.`,
+      message: `Sumber “${imported.spreadsheetTitle}” → “${imported.selectedTab}”: ${imported.sourceDataRows} baris data, ${recordsForSync.length} PPKS unik dimuat, ${imported.duplicateRowsCollapsed} duplikat spreadsheet digabung, ${imported.sampleRecordsFiltered} contoh disaring. Intervensi & rekomendasi mengikuti pemetaan kolom spreadsheet: ${imported.recordsWithInterventionRecommendation}/${imported.records.length} responden terisi. Respons Form lanjutan dipadankan: ${continuation.matchedResponses}. ${continuation.warning ? continuation.warning + ' ' : ''}Foto sumber: diri ${imported.photoCounts.diri}/${imported.records.length}, KTP ${imported.photoCounts.ktp}/${imported.records.length}, KK ${imported.photoCounts.kk}/${imported.records.length}, rumah ${imported.photoCounts.rumah}/${imported.records.length}; tautan dipulihkan dari Forms: ${imported.photosRecoveredFromForm}; status pemulihan: ${imported.photoRecoveryStatus} — ${imported.photoRecoveryDetail}. ${firestoreMessage} Alamat domisili dibaca dari ${imported.selectedTab}!K (header: ${imported.domicileAddressHeader || 'kolom K'}). Lama Terapi ARV sumber utama ${imported.selectedTab}!AO: ${imported.arvDurationMatched}/${imported.records.length} responden terisi${imported.arvAssessmentTab && imported.arvAssessmentTab !== imported.selectedTab ? `; sumber cadangan ${imported.arvAssessmentTab}!AO juga digunakan untuk baris yang kosong` : ''}. NIK terpetakan ${imported.recordsWithNIK}/${imported.records.length}. Sinkronisasi otomatis setiap 5 menit saat dashboard terbuka dan izin Google masih berlaku.`,
       lastUpdatedAt: updatedAt,
     });
     return {
@@ -1721,7 +1728,7 @@ function StaffApp() {
     if (!authReady || !localCacheReady) return;
 
     const sourceUrl = settings.googleSpreadsheetSourceUrl?.trim() || GOOGLE_SIPANDU_RESOURCES.responseSpreadsheetUrl;
-    const sourceTab = 'From Responses 1';
+    const sourceTab = ATENSI_PROFILE_RESPONSE_TAB_NAME;
     if (!isAuthenticated) {
       setLiveSyncState({
         type: 'idle',
@@ -1809,7 +1816,7 @@ function StaffApp() {
         failedAttempts = 0;
         setLiveSyncState({
           type: 'success',
-          message: `LIVE SYNC aktif berulang — “${imported.spreadsheetTitle}” → “${imported.selectedTab}”: ${recordsForSync.length} PPKS unik dimuat dari ${imported.sourceDataRows} baris sumber (${imported.sourceRowsWithName} bernama, ${imported.rowsWithoutRecognizedName} tanpa nama dikenali); ${imported.duplicateRowsCollapsed} duplikat digabung; ${imported.sampleRecordsFiltered} ID demo disaring; intervensi & rekomendasi terpetakan dari kolom spreadsheet yang ditetapkan: ${imported.recordsWithInterventionRecommendation}/${imported.records.length} responden; respons Google Form lanjutan yang dipadankan: ${continuation.matchedResponses}. Lama ARV sumber ${continuation.arvAssessmentTab || imported.arvAssessmentTab || 'From Asesmen 1 tidak ditemukan'}!AO, cocok ${Math.max(imported.arvDurationMatched, continuation.arvDurationMatched)} responden. ARV dari ${imported.arvAssessmentTab || 'From Asesmen 1'}!AO cocok ${imported.arvDurationMatched} PPKS; alamat domisili sumber ${imported.selectedTab}!K (header: ${imported.domicileAddressHeader || 'kolom K'}). ${continuation.warning ? continuation.warning + ' ' : ''}Foto diri ${imported.photoCounts.diri}/${imported.records.length}, KTP ${imported.photoCounts.ktp}/${imported.records.length}, KK ${imported.photoCounts.kk}/${imported.records.length}, rumah ${imported.photoCounts.rumah}/${imported.records.length}; tautan Forms dipulihkan: ${imported.photosRecoveredFromForm} (${imported.photoRecoveryStatus}); diagnosis: ${imported.photoRecoveryDetail}. ${firestoreMessage}`,
+          message: `LIVE SYNC aktif berulang — “${imported.spreadsheetTitle}” → “${imported.selectedTab}”: ${recordsForSync.length} PPKS unik dimuat dari ${imported.sourceDataRows} baris sumber (${imported.sourceRowsWithName} bernama, ${imported.rowsWithoutRecognizedName} tanpa nama dikenali); ${imported.duplicateRowsCollapsed} duplikat digabung; ${imported.sampleRecordsFiltered} ID demo disaring; intervensi & rekomendasi terpetakan dari kolom spreadsheet yang ditetapkan: ${imported.recordsWithInterventionRecommendation}/${imported.records.length} responden; respons Google Form lanjutan yang dipadankan: ${continuation.matchedResponses}. Lama Terapi ARV sumber utama ${imported.selectedTab}!AO: ${imported.arvDurationMatched}/${imported.records.length} responden terisi${imported.arvAssessmentTab && imported.arvAssessmentTab !== imported.selectedTab ? `; fallback ${imported.arvAssessmentTab}!AO dipakai untuk baris yang kosong` : ''}. Alamat domisili sumber ${imported.selectedTab}!K (header: ${imported.domicileAddressHeader || 'kolom K'}). ${continuation.warning ? continuation.warning + ' ' : ''}Foto diri ${imported.photoCounts.diri}/${imported.records.length}, KTP ${imported.photoCounts.ktp}/${imported.records.length}, KK ${imported.photoCounts.kk}/${imported.records.length}, rumah ${imported.photoCounts.rumah}/${imported.records.length}; tautan Forms dipulihkan: ${imported.photosRecoveredFromForm} (${imported.photoRecoveryStatus}); diagnosis: ${imported.photoRecoveryDetail}. ${firestoreMessage}`,
           lastUpdatedAt: new Date().toLocaleString('id-ID'),
         });
       } catch (error) {

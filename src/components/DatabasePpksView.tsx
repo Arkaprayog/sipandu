@@ -399,7 +399,7 @@ export const DatabasePpksView: React.FC<DatabasePpksViewProps> = ({
                         Lama Terapi ARV
                       </td>
                       <td className="py-2.5 px-3 text-neutral-200 whitespace-pre-wrap break-words">
-                        {currentPPKS.lamaTerapiArv || 'Lama terapi ARV belum ditemukan pada kolom AO tab From Asesmen 1'}
+                        {currentPPKS.lamaTerapiArv || 'Lama terapi ARV belum diisi pada kolom AO tab Form Responses 1'}
                       </td>
                     </tr>
 
