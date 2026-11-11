@@ -3,6 +3,7 @@ import { createUserWithEmailAndPassword, signOut, updateProfile } from 'firebase
 import { ArrowLeft, Eye, EyeOff, UserPlus, MailCheck } from 'lucide-react';
 import { auth, staffAuthPersistenceReady, createSIPANDUUserProfile } from '../lib/firebase';
 import { publicAssetUrl } from '../lib/publicAssets';
+import { TEAM_REGISTRATION_API } from '../lib/teamRegistration';
 
 interface RegistrationPageProps {
   onBack: (email?: string, notice?: string) => void;
@@ -44,7 +45,23 @@ export const RegistrationPage: React.FC<RegistrationPageProps> = ({ onBack }) =>
         noHp: '',
         photoUrl: '',
       });
-      await sendEmailVerification(credential.user);
+      const idToken = await credential.user.getIdToken(true);
+      const registrationResponse = await fetch(`${TEAM_REGISTRATION_API}/register`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${idToken}`,
+        },
+        body: JSON.stringify({}),
+      });
+      const registrationResult = await registrationResponse.json().catch(() => ({})) as {
+        ok?: boolean;
+        status?: string;
+        message?: string;
+      };
+      if (!registrationResponse.ok || registrationResult.status !== 'pending_owner') {
+        throw new Error(registrationResult.message || 'Permohonan belum berhasil dikirim untuk persetujuan Owner.');
+      }
       await signOut(auth);
       setEmail(normalizedEmail);
       setCompleted(true);
@@ -100,8 +117,8 @@ export const RegistrationPage: React.FC<RegistrationPageProps> = ({ onBack }) =>
             <div className="rounded-xl border border-emerald-700/30 bg-white/75 p-4 text-center text-black">
               <MailCheck className="mx-auto mb-2 h-9 w-9 text-emerald-700" />
               <h2 className="text-base font-bold">Permohonan menunggu persetujuan</h2>
-              <p className="mt-2 text-xs leading-relaxed">Tautan verifikasi telah dikirim ke <strong>{email}</strong>. Buka tautan tersebut untuk memverifikasi email. Setelah berhasil, masuk ke SIPANDU menggunakan email dan kata sandi yang baru dibuat. Anda tidak memerlukan kode tim atau undangan administrator.</p>
-              <button type="button" onClick={() => onBack(email, 'Pendaftaran akun berhasil. Silakan verifikasi email terlebih dahulu, lalu masuk dengan email dan Password.')} className="mt-4 w-full rounded-xl bg-teal-700 px-4 py-3 text-sm font-bold text-white">Kembali ke halaman login</button>
+              <p className="mt-2 text-xs leading-relaxed">Permohonan dengan email <strong>{email}</strong> sudah tercatat dan menunggu persetujuan Owner atau Supervisor yang secara khusus ditunjuk. Tautan verifikasi email baru akan dikirim setelah permohonan disetujui. Anda belum dapat login sebelum proses persetujuan dan verifikasi selesai.</p>
+              <button type="button" onClick={() => onBack(email, 'Permohonan pendaftaran sedang menunggu persetujuan administrator.')} className="mt-4 w-full rounded-xl bg-teal-700 px-4 py-3 text-sm font-bold text-white">Kembali ke halaman login</button>
             </div>
           ) : (
             <>
