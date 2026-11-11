@@ -24,15 +24,17 @@ export type TabKey =
   | 'intelijen-wilayah'
   | 'pendampingan-lapangan'
   | 'laporan-kinerja'
-  | 'security-audit'\n  | 'pendaftaran-tim';
+  | 'security-audit'
+  | 'pendaftaran-tim';
 
 interface BottomNavProps {
   activeTab: TabKey;
   onSelectTab: (tab: TabKey) => void;
   currentUserRole: string;
+  canManageTeamRegistrations: boolean;
 }
 
-export const BottomNav: React.FC<BottomNavProps> = ({ activeTab, onSelectTab, currentUserRole }) => {
+export const BottomNav: React.FC<BottomNavProps> = ({ activeTab, onSelectTab, currentUserRole, canManageTeamRegistrations }) => {
   const tabs: { key: TabKey; label: string; icon: React.ReactNode }[] = [
     {
       key: 'beranda',
@@ -100,7 +102,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({ activeTab, onSelectTab, cu
     <nav className="app-nav-bar fixed bottom-0 left-0 right-0 z-30 bg-[#0d180f]/95 border-t border-rose-500/40 shadow-[0_-4px_25px_rgba(244,63,94,0.18)] select-none">
       <div className="max-w-7xl mx-auto px-2 md:px-6">
         <div className="flex items-center justify-between gap-0.5 sm:gap-1 md:justify-center md:gap-3 py-2 overflow-visible no-scrollbar">
-          {tabs.filter((tab) => tab.key !== 'security-audit' || ['owner', 'supervisor'].includes(currentUserRole)).filter((tab) => tab.key !== 'pendaftaran-tim' || ['owner', 'supervisor'].includes(currentUserRole)).map((tab, index, visibleTabs) => {
+          {tabs.filter((tab) => tab.key !== 'security-audit' || ['owner', 'supervisor'].includes(currentUserRole)).filter((tab) => tab.key !== 'pendaftaran-tim' || canManageTeamRegistrations).map((tab, index, visibleTabs) => {
             const isActive = activeTab === tab.key;
             const labelAlignment = index < 3
               ? 'left-0'
