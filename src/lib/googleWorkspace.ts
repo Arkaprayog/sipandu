@@ -1603,8 +1603,10 @@ export async function importPPKSFromSpreadsheet(
   // For the owner's exact ATENSI response tab, use the known E-H attachment
   // columns to recover actual Drive hyperlink targets even when Forms shows
   // a short display label instead of the underlying URL in each cell.
+  // "From Responses 1" has the owner-confirmed ATENSI column contract.
+  // Keep positional field mapping tied to this tab's schema, not to its
+  // spreadsheet ID: recreating the Google Sheet changes the ID but not columns K/AO.
   const useATENSIColumnPositions =
-    isKnownATENSIResponseSheet &&
     normalizeSheetHeader(selectedTab) === normalizeSheetHeader('From Responses 1');
   const rows = await readSpreadsheetRichData(
     metadata.spreadsheetId,
