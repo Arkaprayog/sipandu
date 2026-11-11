@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { createUserWithEmailAndPassword, sendEmailVerification, signOut, updateProfile } from 'firebase/auth';
+import { createUserWithEmailAndPassword, signOut, updateProfile } from 'firebase/auth';
 import { ArrowLeft, Eye, EyeOff, UserPlus, MailCheck } from 'lucide-react';
 import { auth, staffAuthPersistenceReady, createSIPANDUUserProfile } from '../lib/firebase';
 import { publicAssetUrl } from '../lib/publicAssets';
@@ -93,13 +93,13 @@ export const RegistrationPage: React.FC<RegistrationPageProps> = ({ onBack }) =>
           <div className="mb-4 text-center">
             <img src={publicAssetUrl('uploads/Logo Kemensos Hadir.png')} alt="Logo resmi Kemensos Hadir" className="mx-auto mb-2 h-auto w-[135px] max-w-full object-contain" />
             <h1 className="text-xl font-extrabold text-black">Pendaftaran Akun SIPANDU</h1>
-            <p className="mt-1 text-xs text-black">Cukup nama, email aktif, dan kata sandi. Verifikasi melalui tautan email.</p>
+            <p className="mt-1 text-xs text-black">Cukup nama, email aktif, dan kata sandi. Persetujuan administrator diperlukan sebelum verifikasi email.</p>
           </div>
 
           {completed ? (
             <div className="rounded-xl border border-emerald-700/30 bg-white/75 p-4 text-center text-black">
               <MailCheck className="mx-auto mb-2 h-9 w-9 text-emerald-700" />
-              <h2 className="text-base font-bold">Pendaftaran berhasil dikirim</h2>
+              <h2 className="text-base font-bold">Permohonan menunggu persetujuan</h2>
               <p className="mt-2 text-xs leading-relaxed">Tautan verifikasi telah dikirim ke <strong>{email}</strong>. Buka tautan tersebut untuk memverifikasi email. Setelah berhasil, masuk ke SIPANDU menggunakan email dan kata sandi yang baru dibuat. Anda tidak memerlukan kode tim atau undangan administrator.</p>
               <button type="button" onClick={() => onBack(email, 'Pendaftaran akun berhasil. Silakan verifikasi email terlebih dahulu, lalu masuk dengan email dan Password.')} className="mt-4 w-full rounded-xl bg-teal-700 px-4 py-3 text-sm font-bold text-white">Kembali ke halaman login</button>
             </div>
