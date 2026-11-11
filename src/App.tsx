@@ -849,34 +849,6 @@ function StaffApp() {
     }
   };
 
-  const handleRestoreTeamInvitation = async () => {
-    const user = auth.currentUser;
-    if (!user) {
-      setAuthError('Sesi akun sudah tidak ditemukan. Masuk kembali dengan akun yang sama.');
-      return;
-    }
-    setAuthReady(false);
-    setAuthError('');
-    try {
-      await user.reload();
-      if (!user.emailVerified) throw new Error('Email belum diverifikasi. Selesaikan verifikasi email sebelum memulihkan undangan.');
-      await restorePendingTeamInvitation(user);
-      await activatePendingTeamMember(user);
-      const token = await getIdTokenResult(user, true);
-      const role = token.claims.role;
-      if (role !== 'pendamping') throw new Error('Peran pendamping belum muncul pada token Firebase terbaru. Coba verifikasi akses lagi.');
-      setCurrentUserRole(role);
-      setCurrentUserName(user.displayName || user.email || '');
-      setIsAuthenticated(true);
-      setLocalCacheReady(false);
-    } catch (error) {
-      setIsAuthenticated(false);
-      setAuthError(describeTeamActivationError(error));
-    } finally {
-      setAuthReady(true);
-    }
-  };
-
   const handleRetryStaffAccess = async () => {
     const user = auth.currentUser;
     if (!user) {
@@ -1832,21 +1804,7 @@ function StaffApp() {
         <section className="w-full max-w-md rounded-2xl border border-amber-400/30 bg-[#112214] p-5 shadow-2xl">
           <h1 className="text-lg font-extrabold text-amber-100">Sesi SIPANDU masih tersimpan</h1>
           <p className="mt-2 text-sm leading-relaxed text-neutral-200">{authError || 'Akses akun sedang diperiksa.'}</p>
-          {/undangan pendaftaran tim tidak ditemukan atau telah kedaluwarsa/i.test(authError) && (
-            <div className="mt-4 rounded-xl border border-amber-300/30 bg-black/20 p-3">
-              <p className="text-xs leading-relaxed text-amber-50">
-                Pulihkan undangan untuk akun yang sedang tersimpan{auth.currentUser?.email ? ` (${auth.currentUser.email})` : ''}. Proses ini memakai UID Firebase yang sama dan tidak membuat akun baru. Pemulihan ini hanya memberikan peran anggota pendamping; akun owner/supervisor harus dipulihkan melalui administrasi Firebase.
-              </p>
-              <button
-                type="button"
-                onClick={() => void handleRestoreTeamInvitation()}
-                className="mt-3 w-full rounded-xl bg-amber-500 px-4 py-3 text-sm font-bold text-black hover:bg-amber-400"
-              >
-                Pulihkan undangan akun yang sama
-              </button>
-            </div>
-          )}
-          <button type="button" onClick={() => void handleRetryStaffAccess()} className="mt-4 w-full rounded-xl bg-emerald-600 px-4 py-3 text-sm font-bold text-white hover:bg-emerald-500">
+                    <button type="button" onClick={() => void handleRetryStaffAccess()} className="mt-4 w-full rounded-xl bg-emerald-600 px-4 py-3 text-sm font-bold text-white hover:bg-emerald-500">
             Coba verifikasi akses lagi
           </button>
           <button type="button" onClick={() => void handleLogout()} className="mt-2 w-full rounded-xl border border-rose-400/30 px-4 py-3 text-xs font-semibold text-rose-200 hover:bg-rose-950/40">
