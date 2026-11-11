@@ -72,9 +72,6 @@ function describeTeamActivationError(error: unknown): string {
   if (/PERMISSION_DENIED|INSUFFICIENT[_ ]+PERMISSION|firebaseauth[.]users[.]update|not authorized|insufficient[_ ]+permission/i.test(detail)) {
     return 'Email sudah diverifikasi, tetapi Firebase menolak pemberian peran pendamping karena izin service account belum lengkap. Pada Google Cloud Console proyek gen-lang-client-0197631978, buka IAM & Admin → IAM, cari service account yang tercantum sebagai client_email di secret FIREBASE_SERVICE_ACCOUNT_JSON milik Worker sipandu-registration, lalu berikan izin IAM firebaseauth.users.update (gunakan custom role khusus dengan izin tersebut). Setelah izin tersimpan, tekan “Coba verifikasi akses lagi”. Sesi akun tetap tersimpan; tidak perlu membuat akun baru.';
   }
-  if (/undangan.*(tidak ditemukan|kedaluwarsa)|pending.*(not found|expired)/i.test(detail)) {
-    return 'Email sudah diverifikasi, tetapi undangan pendaftaran tim tidak ditemukan atau telah kedaluwarsa. Pulihkan undangan untuk email yang sama; jangan membuat akun baru. Sesi akun tetap tersimpan.';
-  }
   if (/email belum diverifikasi|not verified/i.test(detail)) {
     return 'Firebase belum membaca status verifikasi email. Buka kembali tautan verifikasi, lalu masuk dan coba lagi. Sesi akun tetap tersimpan.';
   }
