@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { App as CapacitorApp } from '@capacitor/app';
 import { Capacitor } from '@capacitor/core';
 import { onAuthStateChanged } from 'firebase/auth';
@@ -14,6 +14,8 @@ import { LoginPage } from './LoginPage';
  */
 export const BiometricGate: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [locked, setLocked] = useState(false);
+  const nativeGoogleAuthInProgress = useRef(false);
+  const backgroundedDuringGoogleAuth = useRef(false);
 
   const unlock = useCallback(() => {
     setLocked(false);
@@ -41,11 +43,39 @@ export const BiometricGate: React.FC<{ children: React.ReactNode }> = ({ childre
 
     let mounted = true;
     let listener: { remove: () => Promise<void> } | undefined;
+    const lockCurrentUser = () => {
+      const user = auth.currentUser;
+      if (user && isBiometricLockEnabled(user.uid)) setLocked(true);
+    };
+    const handleGoogleAuthStart = () => {
+      nativeGoogleAuthInProgress.current = true;
+    };
+    const handleGoogleAuthEnd = () => {
+      nativeGoogleAuthInProgress.current = false;
+      if (!backgroundedDuringGoogleAuth.current) return;
+      backgroundedDuringGoogleAuth.current = false;
+
+      // Do not lock while returning from Google's account/consent Activity.
+      // If the user actually left SIPANDU in the background, lock it as soon
+      // as the native OAuth hand-off ends.
+      void CapacitorApp.getState().then((state) => {
+        if (mounted && !state.isActive) lockCurrentUser();
+      }).catch((error) => {
+        console.warn('SIPANDU could not inspect app state after Google Sign-In:', error);
+        if (mounted) lockCurrentUser();
+      });
+    };
+
+    window.addEventListener('sipandu:native-google-auth-start', handleGoogleAuthStart);
+    window.addEventListener('sipandu:native-google-auth-end', handleGoogleAuthEnd);
 
     void CapacitorApp.addListener('appStateChange', ({ isActive }) => {
       if (isActive) return;
-      const user = auth.currentUser;
-      if (user && isBiometricLockEnabled(user.uid)) setLocked(true);
+      if (nativeGoogleAuthInProgress.current) {
+        backgroundedDuringGoogleAuth.current = true;
+        return;
+      }
+      lockCurrentUser();
     }).then((handle) => {
       if (!mounted) {
         void handle.remove();
@@ -58,6 +88,8 @@ export const BiometricGate: React.FC<{ children: React.ReactNode }> = ({ childre
 
     return () => {
       mounted = false;
+      window.removeEventListener('sipandu:native-google-auth-start', handleGoogleAuthStart);
+      window.removeEventListener('sipandu:native-google-auth-end', handleGoogleAuthEnd);
       if (listener) void listener.remove();
     };
   }, []);
