@@ -1042,8 +1042,39 @@ function StaffApp() {
     });
   };
 
-  const handleLoadPPKSFromCloud = (cloudRecords: PPKSRecord[]) => {
-    setPpksList((localRecords) => preservePPKSRecordOrder(localRecords, mergePPKSRecords(localRecords, cloudRecords)));
+  const handleLoadPPKSFromCloud = async (
+    cloudRecords: PPKSRecord[],
+    sourceSpreadsheetId?: string,
+    sourceSpreadsheetUrl?: string,
+  ) => {
+    const continuation = await mergeContinuationResponses(cloudRecords);
+    await processGoogleFormNotifications(cloudRecords, continuation.records);
+    const recordsForSync = continuation.records;
+    const authoritativeProfileRecords = overlayMatchedARVDurations(cloudRecords, recordsForSync);
+    setPpksList((localRecords) => preservePPKSRecordOrder(
+      localRecords,
+      reconcileSpreadsheetPPKSRecords(localRecords, recordsForSync, authoritativeProfileRecords),
+    ));
+    const spreadsheetId = sourceSpreadsheetId
+      || extractSpreadsheetId(sourceSpreadsheetUrl || settings.googleSpreadsheetSourceUrl || GOOGLE_SIPANDU_RESOURCES.responseSpreadsheetUrl);
+    const firestoreMessage = await syncFirestoreRosterFromSheet(
+      spreadsheetId,
+      recordsForSync,
+      authoritativeProfileRecords,
+    );
+    if (sourceSpreadsheetUrl) {
+      setSettings((current) => ({
+        ...current,
+        googleSpreadsheetSourceUrl: sourceSpreadsheetUrl,
+        googleSpreadsheetSourceName: current.googleSpreadsheetSourceName || 'Sumber ATENSI SIPANDU',
+        googleSpreadsheetSourceTab: 'From Responses 1',
+      }));
+    }
+    setLiveSyncState({
+      type: 'success',
+      message: `Impor manual selesai: ${recordsForSync.length} PPKS dipadankan. ARV dari From Asesmen 1!AO cocok ${continuation.arvDurationMatched} responden. ${continuation.warning ? continuation.warning + ' ' : ''}${firestoreMessage}`,
+      lastUpdatedAt: new Date().toLocaleString('id-ID'),
+    });
   };
 
   const handleSendFollowUpFromNotification = (notification: RespondentNotification) => {
