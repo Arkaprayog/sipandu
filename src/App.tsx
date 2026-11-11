@@ -1164,8 +1164,8 @@ function StaffApp() {
 
       const linkedMetadata = await getSpreadsheetMetadata(spreadsheetUrl);
       const hasDedicatedAssessmentTab = linkedMetadata.sheetTitles.some(
-        (title) => title.normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').toLocaleLowerCase('id-ID').replace(/[^a-z0-9]/g, '') ===
-          ATENSI_ASSESSMENT_RESPONSE_TAB_NAME.normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').toLocaleLowerCase('id-ID').replace(/[^a-z0-9]/g, '')
+        (title) => title.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('id-ID').replace(/[^a-z0-9]/g, '') ===
+          ATENSI_ASSESSMENT_RESPONSE_TAB_NAME.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('id-ID').replace(/[^a-z0-9]/g, '')
       );
       const mainFormImport = await importPPKSFromSpreadsheet(
         spreadsheetUrl,
@@ -1174,12 +1174,12 @@ function StaffApp() {
       const stageOneById = new Map(stageOneRespondentsRef.current.map((record) => [record.id, record]));
       const normalizePersonName = (value: unknown) => String(value ?? '')
         .normalize('NFD')
-        .replace(/[\\u0300-\\u036f]/g, '')
+        .replace(/[\u0300-\u036f]/g, '')
         .toLocaleLowerCase('id-ID')
         .replace(/[^a-z0-9]/g, '');
       const resolveNIK = (record: PPKSRecord) => {
-        const candidate = String(record.nik || record.officialAssessment?.q23 || '').replace(/\\D/g, '');
-        return /^\\d{16}$/.test(candidate) ? candidate : '';
+        const candidate = String(record.nik || record.officialAssessment?.q23 || '').replace(/\D/g, '');
+        return /^\d{16}$/.test(candidate) ? candidate : '';
       };
 
       // Prefilled IDs can be edited by respondents, so reject identity conflicts.
