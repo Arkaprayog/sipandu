@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { ProfileUser } from '../types';
-import { BellRing, Settings2, LogOut, Edit3, Cloud, User, Sunrise, Sun, Sunset, Moon, MapPin, Thermometer } from 'lucide-react';
+import { BellRing, Settings2, LogOut, Edit3, Cloud, User, LockKeyhole, Sunrise, Sun, Sunset, Moon, MapPin, Thermometer } from 'lucide-react';
 import { SipanduLogo } from './SipanduLogo';
 import { getPreciseDevicePosition } from '../lib/deviceGeolocation';
 
@@ -14,6 +14,7 @@ interface HeaderProps {
   onOpenSettings: () => void;
   onOpenNotifications: () => void;
   onOpenGoogleWorkspace?: () => void;
+  onLock?: () => void;
   onLogout: () => void;
 }
 
@@ -26,6 +27,7 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenSettings,
   onOpenNotifications,
   onOpenGoogleWorkspace,
+  onLock,
   onLogout,
 }) => {
   const [currentTimeStr, setCurrentTimeStr] = useState<string>('');
@@ -396,7 +398,20 @@ export const Header: React.FC<HeaderProps> = ({
               <Settings2 className="sipandu-action-icon sipandu-action-icon--settings w-5 h-5" aria-hidden="true" />
             </button>
 
-            {/* 3. Pintu untuk Keluar */}
+            {/* Kunci aplikasi tanpa mengakhiri sesi Firebase */}
+            {onLock && (
+              <button
+                type="button"
+                onClick={onLock}
+                className="p-2 rounded-lg text-amber-200 hover:text-amber-100 hover:bg-amber-950/50 active:scale-95 transition cursor-pointer"
+                title="Kunci SIPANDU (sesi akun tetap aktif)"
+                aria-label="Kunci SIPANDU"
+              >
+                <LockKeyhole className="w-5 h-5" aria-hidden="true" />
+              </button>
+            )}
+
+            {/* Logout mengakhiri sesi Firebase */}
             <button
               type="button"
               onClick={onLogout}
