@@ -186,7 +186,9 @@ export function deduplicatePPKSRecords<T extends PPKSRecord>(records: T[]): T[] 
         previous.nik,
       usia: next.usia || previous.usia,
       kotaDomisili: next.kotaDomisili || previous.kotaDomisili,
-      alamatLengkap: next.alamatLengkap || previous.alamatLengkap,
+      // The newest From Responses 1 row is authoritative for current domicile.
+      // Never carry forward an older address that may actually be the KTP address.
+      alamatLengkap: next.alamatLengkap,
       lamaTerapiArv: next.lamaTerapiArv || previous.lamaTerapiArv,
       noHpWa: next.noHpWa || previous.noHpWa,
       jenisBantuan: next.jenisBantuan || previous.jenisBantuan,

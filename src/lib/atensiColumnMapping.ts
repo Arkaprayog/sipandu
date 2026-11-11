@@ -21,6 +21,9 @@ export const ATENSI_PROFILE_COLUMN_INDEX = {
   desil: 42,           // AQ
 } as const;
 
+export const ATENSI_PROFILE_RESPONSE_TAB_NAME = 'From Responses 1';
+export const ATENSI_ASSESSMENT_RESPONSE_TAB_NAME = 'From Asesmen 1';
+
 export type AtensiProfileColumn = keyof typeof ATENSI_PROFILE_COLUMN_INDEX;
 
 export function readAtensiProfileCell(
@@ -51,4 +54,60 @@ export function readAtensiGender(
     if (/laki[\s-]*laki|pria|male/i.test(candidate)) return 'Laki-laki';
   }
   return '';
+}
+
+
+/** Normalize a Google Forms column label for safe semantic matching. */
+function normalizeAtensiHeader(value: unknown): string {
+  return String(value ?? '')
+    .normalize('NFD')
+    .replace(/[\\u0300-\\u036f]/g, '')
+    .toLocaleLowerCase('id-ID')
+    .replace(/[^a-z0-9]/g, '');
+}
+
+/**
+ * Resolve the current-residence address. Column K is the agreed fallback,
+ * but a column explicitly labelled as KTP/address-on-identity-card is never
+ * allowed to populate the current-domicile profile field.
+ */
+export function findAtensiCurrentDomicileAddressColumn(headers: readonly unknown[]): number {
+  const normalized = headers.map(normalizeAtensiHeader);
+  const isKTPAddress = (header: string) =>
+    /ktp|kartutandapenduduk|identitaspenduduk|sesuaiktp/.test(header);
+  const isCurrentAddress = (header: string) =>
+    header.includes('alamat') &&
+    !isKTPAddress(header) &&
+    /(domisili|tempattinggal|alamatsekarang|tempattinggalsekarang|domisilisekarang)/.test(header);
+
+  if (isCurrentAddress(normalized[ATENSI_PROFILE_COLUMN_INDEX.alamatLengkap])) {
+    return ATENSI_PROFILE_COLUMN_INDEX.alamatLengkap;
+  }
+
+  const semanticMatches = normalized
+    .map((header, index) => ({ header, index }))
+    .filter(({ header }) => isCurrentAddress(header));
+
+  if (semanticMatches.length === 1) return semanticMatches[0].index;
+  if (semanticMatches.length > 1) {
+    const columnK = semanticMatches.find(({ index }) => index === ATENSI_PROFILE_COLUMN_INDEX.alamatLengkap);
+    return columnK?.index ?? -1;
+  }
+
+  // Do not reuse the KTP address just because it currently occupies column K.
+  const fallbackHeader = normalized[ATENSI_PROFILE_COLUMN_INDEX.alamatLengkap] || '';
+  return isKTPAddress(fallbackHeader) ? -1 : ATENSI_PROFILE_COLUMN_INDEX.alamatLengkap;
+}
+
+export function readAtensiCurrentDomicileAddress(
+  headers: readonly unknown[],
+  row: readonly unknown[],
+): string {
+  const index = findAtensiCurrentDomicileAddressColumn(headers);
+  return index >= 0 ? String(row[index] ?? '').trim() : '';
+}
+
+/** Lama terapi ARV is owned by the separate "From Asesmen 1" response tab, column AO. */
+export function readAtensiAssessmentArvDuration(row: readonly unknown[]): string {
+  return readAtensiProfileCell(row, 'lamaTerapiArv');
 }

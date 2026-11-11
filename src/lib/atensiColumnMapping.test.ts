@@ -5,6 +5,10 @@ import {
   ATENSI_PROFILE_COLUMN_INDEX,
   readAtensiProfileCell,
   readAtensiGender,
+  findAtensiCurrentDomicileAddressColumn,
+  readAtensiCurrentDomicileAddress,
+  readAtensiAssessmentArvDuration,
+  ATENSI_ASSESSMENT_RESPONSE_TAB_NAME,
 } from './atensiColumnMapping';
 
 test('ATENSI profile mapping uses the requested spreadsheet columns', () => {
@@ -55,6 +59,34 @@ test('maps the respondent address from column K and ARV duration from column AO'
   row[40] = '4 tahun 6 bulan';
   assert.equal(readAtensiProfileCell(row, 'alamatLengkap'), 'Alamat lengkap dari Google Sheets K');
   assert.equal(readAtensiProfileCell(row, 'lamaTerapiArv'), '4 tahun 6 bulan');
+});
+
+
+test('current domicile uses the current-residence header and never falls back to an address labelled KTP', () => {
+  const headers = Array.from({ length: 13 }, () => '');
+  const row = Array.from({ length: 13 }, () => '');
+  headers[10] = 'Alamat Domisili Saat Ini';
+  row[10] = 'Jl. Domisili Baru, Deli Serdang';
+  assert.equal(findAtensiCurrentDomicileAddressColumn(headers), 10);
+  assert.equal(readAtensiCurrentDomicileAddress(headers, row), 'Jl. Domisili Baru, Deli Serdang');
+
+  headers[10] = 'Alamat Sesuai KTP';
+  headers[9] = 'Alamat Domisili Saat Ini';
+  row[10] = 'Alamat KTP Lama, Sibolga';
+  row[9] = 'Alamat tinggal sekarang, Deli Serdang';
+  assert.equal(findAtensiCurrentDomicileAddressColumn(headers), 9);
+  assert.equal(readAtensiCurrentDomicileAddress(headers, row), 'Alamat tinggal sekarang, Deli Serdang');
+
+  headers[9] = '';
+  assert.equal(findAtensiCurrentDomicileAddressColumn(headers), -1);
+  assert.equal(readAtensiCurrentDomicileAddress(headers, row), '');
+});
+
+test('ARV duration is read from AO on the separate From Asesmen 1 tab', () => {
+  const row = Array.from({ length: 43 }, () => '');
+  row[40] = '5 tahun 2 bulan';
+  assert.equal(ATENSI_ASSESSMENT_RESPONSE_TAB_NAME, 'From Asesmen 1');
+  assert.equal(readAtensiAssessmentArvDuration(row), '5 tahun 2 bulan');
 });
 
 test('ATENSI cell reader returns blank for an empty or missing source cell', () => {
