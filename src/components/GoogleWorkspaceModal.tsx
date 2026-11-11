@@ -83,7 +83,7 @@ export const GoogleWorkspaceModal: React.FC<GoogleWorkspaceModalProps> = ({
     // the Form response sheet. Never use that sheet as the PPKS write destination.
     if (!configured || configured.includes('1yA8KemensosODHIVSumut2026_LiveSync')) return '';
     try {
-      if (extractSpreadsheetId(configured) === GOOGLE_SIPANDU_RESOURCES.responseSpreadsheetId) return '';
+      if (extractSpreadsheetId(configured) === extractSpreadsheetId(settings.googleSpreadsheetSourceUrl || GOOGLE_SIPANDU_RESOURCES.responseSpreadsheetUrl)) return '';
     } catch {
       return '';
     }
@@ -265,7 +265,7 @@ export const GoogleWorkspaceModal: React.FC<GoogleWorkspaceModalProps> = ({
       return;
     }
     try {
-      if (extractSpreadsheetId(configured) === GOOGLE_SIPANDU_RESOURCES.responseSpreadsheetId) {
+      if (extractSpreadsheetId(configured) === extractSpreadsheetId(settings.googleSpreadsheetSourceUrl || GOOGLE_SIPANDU_RESOURCES.responseSpreadsheetUrl)) {
         setSpreadsheetIdInput('');
           return;
       }
@@ -1145,7 +1145,13 @@ export const GoogleWorkspaceModal: React.FC<GoogleWorkspaceModalProps> = ({
                     <option value={extractSpreadsheetId(spreadsheetIdInput)}>Database SIPANDU tersimpan</option>
                   )}
                   {spreadsheetFiles
-                    .filter((file) => file.id !== GOOGLE_SIPANDU_RESOURCES.responseSpreadsheetId)
+                    .filter((file) => {
+                      try {
+                        return file.id !== extractSpreadsheetId(sourceSpreadsheetUrl || settings.googleSpreadsheetSourceUrl || GOOGLE_SIPANDU_RESOURCES.responseSpreadsheetUrl);
+                      } catch {
+                        return true;
+                      }
+                    })
                     .map((file) => (
                       <option key={file.id} value={file.id}>{file.name}</option>
                     ))}
