@@ -1,7 +1,7 @@
 import React, { useRef, useState } from 'react';
 import { onAuthStateChanged, signInWithEmailAndPassword, sendEmailVerification, signOut, type User as FirebaseUser } from 'firebase/auth';
 import { auth, staffAuthPersistenceReady } from '../lib/firebase';
-import { authenticateBiometricLock, isAppPinConfigured, isBiometricLockEnabled, verifyAppPin } from '../lib/biometricLock';
+import { authenticateBiometricLock, isBiometricLockEnabled } from '../lib/biometricLock';
 import { Lock, User, Eye, EyeOff, Fingerprint, ArrowRight } from 'lucide-react';
 import { publicAssetUrl } from '../lib/publicAssets';
 import { RegistrationPage } from './RegistrationPage';
@@ -54,7 +54,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
         onLogin(currentUser.displayName || currentUser.email || 'Pengguna SIPANDU');
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Verifikasi biometrik gagal.';
-        setErrorMsg(`Biometrik belum berhasil. ${message} Pilih “Gunakan email dan kata sandi” untuk cara masuk alternatif.`);
+        setErrorMsg(`Biometrik belum berhasil. ${message} Pilih “Gunakan email dan kata sandi” untuk pemulihan akun.`);
       } finally {
         setIsSubmitting(false);
       }
@@ -62,31 +62,6 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
     }
     // Preserve browser validation and the existing email/password login flow.
     formRef.current?.requestSubmit();
-  };
-
-  const handleQuickPin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const currentUser = restoredUser || auth.currentUser;
-    if (!currentUser || !isAppPinConfigured(currentUser.uid)) {
-      setErrorMsg('Sesi akun tidak tersedia untuk membuka dengan PIN. Masuk menggunakan email dan kata sandi.');
-      return;
-    }
-    setIsSubmitting(true);
-    setErrorMsg('');
-    try {
-      const result = await verifyAppPin(quickPin, currentUser.uid);
-      if (!result.ok) {
-        setErrorMsg(result.message || 'PIN SIPANDU belum dapat diverifikasi.');
-        if (result.retryAfterMs) setQuickPin('');
-        return;
-      }
-      setQuickPin('');
-      onLogin(currentUser.displayName || currentUser.email || 'Pengguna SIPANDU');
-    } catch (error) {
-      setErrorMsg(error instanceof Error ? error.message : 'PIN SIPANDU belum dapat diverifikasi.');
-    } finally {
-      setIsSubmitting(false);
-    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -398,40 +373,6 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
           )}
 
           {/* Buka cepat stays within the existing login card; no separate biometric page. */}
-          {quickUnlockUser && isAppPinConfigured(quickUnlockUser.uid) && (
-            <form
-              onSubmit={(event) => void handleQuickPin(event)}
-              className="mt-3 rounded-xl border border-white/55 bg-white/30 p-2.5"
-            >
-              <label htmlFor="sipandu-login-quick-pin" className="mb-1.5 block text-[10px] font-semibold text-black">
-                Atau buka dengan PIN SIPANDU
-              </label>
-              <div className="flex items-center gap-2">
-                <input
-                  id="sipandu-login-quick-pin"
-                  type="password"
-                  inputMode="numeric"
-                  autoComplete="one-time-code"
-                  pattern="[0-9]{4}"
-                  maxLength={4}
-                  value={quickPin}
-                  onChange={(event) => setQuickPin(event.target.value.replace(/\D/g, '').slice(0, 4))}
-                  placeholder="4 angka"
-                  aria-label="PIN SIPANDU empat angka"
-                  className="min-w-0 flex-1 rounded-lg border border-white bg-white/70 px-3 py-2 text-center text-sm tracking-[0.35em] text-black outline-none focus:border-teal-700 focus:ring-2 focus:ring-teal-700/20"
-                  required
-                />
-                <button
-                  type="submit"
-                  disabled={isSubmitting || quickPin.length !== 4}
-                  className="rounded-lg bg-slate-800 px-3 py-2 text-[10px] font-bold text-white transition hover:bg-slate-700 disabled:opacity-50"
-                >
-                  Buka
-                </button>
-              </div>
-            </form>
-          )}
-
           {/* Footer berada di dalam card, tepat di bawah tombol masuk. */}
           <footer className="mt-4 border-t border-slate-300/60 pt-3 text-center">
             <p className="text-[10px] font-medium leading-snug text-slate-500">
