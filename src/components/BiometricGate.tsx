@@ -9,7 +9,8 @@ import { LoginPage } from './LoginPage';
 /**
  * The Firebase session remains active across page reloads. A reload/visibility
  * transition must not be treated as an app-lock event. Native backgrounding
- * and the explicit SIPANDU lock action still require quick unlock.
+ * outside an intentional Google OAuth hand-off and the explicit SIPANDU lock
+ * action still require quick unlock.
  */
 export const BiometricGate: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [locked, setLocked] = useState(false);
