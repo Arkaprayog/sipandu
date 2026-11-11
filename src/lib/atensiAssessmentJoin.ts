@@ -14,9 +14,10 @@ function normalizedNIK(record: PPKSRecord): string {
 }
 
 /**
- * Join the profile feed ("From Responses 1") to the ARV answer in
- * "From Asesmen 1". A linked PPKS ID is preferred; otherwise the full name
- * must be unique, and two present NIKs must agree. Ambiguous rows are skipped.
+ * Fill only blank profile ARV values from the legacy "From Asesmen 1" feed.
+ * A value already present on the primary "Form Responses 1"!AO cell always wins.
+ * A linked PPKS ID is preferred; otherwise the full name must be unique and two
+ * present NIKs must agree. Ambiguous rows are skipped.
  */
 export function mergeAtensiArvDurations(
   profileRecords: PPKSRecord[],
@@ -35,6 +36,10 @@ export function mergeAtensiArvDurations(
 
   let matched = 0;
   const records = profileRecords.map((profile) => {
+    // The same-row AO value on Form Responses 1 is authoritative and must not
+    // be replaced by an older/secondary response from the legacy assessment tab.
+    if (String(profile.lamaTerapiArv || '').trim()) return profile;
+
     const profileName = normalizedName(profile.namaLengkap);
     const profileNIK = normalizedNIK(profile);
     const idMatches = assessmentRecords.filter((assessment) =>

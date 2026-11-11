@@ -32,6 +32,14 @@ test('joins AO ARV duration to the exact PPKS identity', () => {
   assert.equal(result.records[0].lamaTerapiArv, '5 tahun');
 });
 
+test('keeps the primary Form Responses 1 column AO value instead of overwriting it from the fallback tab', () => {
+  const profile = record({ lamaTerapiArv: '7 tahun 4 bulan' });
+  const assessment = record({ lamaTerapiArv: '2 tahun', timestamp: '2026-11-02T12:00:00' });
+  const result = mergeAtensiArvDurations([profile], [assessment]);
+  assert.equal(result.records[0].lamaTerapiArv, '7 tahun 4 bulan');
+  assert.equal(result.matched, 0);
+});
+
 test('does not join a same-name assessment row with a conflicting NIK', () => {
   const profile = record();
   const assessment = record({ nik: '0000000000000456', lamaTerapiArv: '5 tahun' });

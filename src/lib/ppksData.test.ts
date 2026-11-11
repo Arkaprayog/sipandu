@@ -49,6 +49,18 @@ test('deduplicates multiple records for the same person and keeps the newest tim
   assert.equal(result[0].lamaTerapiArv, '2 tahun');
 });
 
+test('updates Lama Terapi ARV when a newer Form Responses 1 row has a newer AO value', () => {
+  const older = record({ lamaTerapiArv: '2 tahun' });
+  const newer = record({
+    id: 'record-new',
+    timestamp: '10/26/2026 11:29:19 AM',
+    lamaTerapiArv: '6 tahun 3 bulan',
+  });
+  const result = deduplicatePPKSRecords([older, newer]);
+  assert.equal(result.length, 1);
+  assert.equal(result[0].lamaTerapiArv, '6 tahun 3 bulan');
+});
+
 test('clears an older address when the newest source response has no current-domicile value', () => {
   const older = record({ alamatLengkap: 'Alamat KTP lama, Sibolga' });
   const newer = record({
