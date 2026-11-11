@@ -792,7 +792,7 @@ export default {
           approved ? 'Pendaftaran SIPANDU disetujui' : 'Informasi hasil pendaftaran SIPANDU',
           approved ? 'Permohonan Anda disetujui' : 'Permohonan pendaftaran belum dapat disetujui',
           approved
-            ? 'Permohonan Anda telah disetujui. Silakan masuk ke SIPANDU menggunakan email dan kata sandi saat mendaftar. Sistem akan mengirim tautan verifikasi email setelah persetujuan ini.'
+            ? 'Permohonan Anda telah disetujui. Silakan kembali ke halaman login SIPANDU dan masuk menggunakan email serta kata sandi saat mendaftar. SIPANDU akan mengirim tautan verifikasi email ketika Anda mencoba masuk setelah persetujuan ini.'
             : 'Mohon maaf, permohonan pendaftaran SIPANDU Anda belum dapat disetujui. Silakan hubungi administrator SIPANDU untuk informasi lebih lanjut.',
         ).catch(() => false);
         return jsonResponse({
