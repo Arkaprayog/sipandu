@@ -301,7 +301,7 @@ export async function enableBiometricLock(user?: QuickUnlockUser): Promise<void>
     reason: 'Verifikasi identitas untuk mengaktifkan pengaman SIPANDU ODHIV',
     androidTitle: 'Aktifkan pengaman SIPANDU',
     androidSubtitle: 'Konfirmasi dengan sidik jari atau face unlock',
-    allowDeviceCredential: true,
+    allowDeviceCredential: false,
   });
   storage().setItem(BIOMETRIC_USER_KEY, user.uid);
   storage().setItem(BIOMETRIC_LOCK_KEY, 'true');
@@ -309,7 +309,7 @@ export async function enableBiometricLock(user?: QuickUnlockUser): Promise<void>
 
 export async function authenticateBiometricLock(userId?: string): Promise<void> {
   if (!isBiometricLockEnabled(userId)) {
-    throw new Error('Biometrik belum diaktifkan untuk akun ini. Gunakan PIN atau aktifkan biometrik melalui Pengaturan.');
+    throw new Error('Biometrik belum diaktifkan untuk akun ini. Gunakan email dan kata sandi akun SIPANDU.');
   }
 
   if (!Capacitor.isNativePlatform()) {
@@ -357,7 +357,7 @@ export async function authenticateBiometricLock(userId?: string): Promise<void> 
     reason: 'Buka SIPANDU ODHIV',
     androidTitle: 'Pengaman SIPANDU ODHIV',
     androidSubtitle: 'Gunakan sidik jari atau face unlock',
-    allowDeviceCredential: true,
+    allowDeviceCredential: false,
   });
 }
 

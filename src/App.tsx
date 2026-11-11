@@ -9,6 +9,7 @@ import { StageOneRespondentPage } from './components/StageOneRespondentPage';
 import { DirectMessageView } from './components/DirectMessageView';
 import { RespondentDirectMessagePage } from './components/RespondentDirectMessagePage';
 import { Header } from './components/Header';
+import { isBiometricLockEnabled } from './lib/biometricLock';
 import { BottomNav } from './components/BottomNav';
 import type { TabKey } from './components/BottomNav';
 
@@ -809,6 +810,16 @@ function StaffApp() {
   const handleLogin = (user: string) => {
     // Firebase's auth-state observer updates the authenticated UI after sign-in.
     setCurrentUserName(user);
+  };
+
+  const handleLock = () => {
+    const uid = auth.currentUser?.uid;
+    if (!uid || !isBiometricLockEnabled(uid)) {
+      window.alert('Aktifkan Face ID/biometrik terlebih dahulu melalui Pengaturan SIPANDU.');
+      return;
+    }
+    if (!window.confirm('Kunci tampilan SIPANDU sekarang? Sesi akun tetap aktif dan dapat dibuka kembali dengan biometrik perangkat.')) return;
+    window.dispatchEvent(new Event('sipandu:lock-app'));
   };
 
   const handleLogout = async () => {
@@ -1860,6 +1871,7 @@ function StaffApp() {
             setIsNotificationsOpen(true);
           }}
           onOpenGoogleWorkspace={() => setIsGoogleWorkspaceOpen(true)}
+          onLock={handleLock}
           onLogout={handleLogout}
         />
       </div>
