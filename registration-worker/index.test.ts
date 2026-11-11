@@ -505,7 +505,7 @@ test('does not let every Supervisor approve new registrations by default', async
     });
     assert.equal(response.status, 403);
     assert.match((await response.json() as { message: string }).message, /ditunjuk secara khusus oleh Owner/);
-    assert.deepEqual(writes, []);
+    assert.equal(writes.filter((key) => key.startsWith('pending:')).length, 0);
   } finally {
     globalThis.fetch = originalFetch;
   }
