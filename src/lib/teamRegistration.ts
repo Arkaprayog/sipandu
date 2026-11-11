@@ -9,53 +9,32 @@ type ApiResponse = {
   missing?: string[];
 };
 
-async function requestJson(path: string, init?: RequestInit): Promise<ApiResponse> {
+async function requestJson(path: string, user: User): Promise<ApiResponse> {
   let response: Response;
   try {
+    const idToken = await user.getIdToken(true);
     response = await fetch(`${TEAM_REGISTRATION_API}${path}`, {
-      ...init,
-      headers: { 'Content-Type': 'application/json', ...(init?.headers || {}) },
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${idToken}`,
+      },
+      body: JSON.stringify({}),
     });
   } catch {
-    throw new Error('Layanan pendaftaran SIPANDU belum dapat dijangkau. Administrator perlu mengaktifkan layanan pendaftaran.');
+    throw new Error('Layanan aktivasi SIPANDU belum dapat dijangkau. Periksa koneksi internet lalu coba lagi.');
   }
   const body = await response.json().catch(() => ({})) as ApiResponse;
-  if (!response.ok) throw new Error(body.message || 'Permintaan pendaftaran belum berhasil. Periksa koneksi internet.');
+  if (!response.ok) throw new Error(body.message || 'Aktivasi akun SIPANDU belum berhasil.');
   return body;
 }
 
-export async function checkTeamRegistrationService(): Promise<void> {
-  const result = await requestJson('/health', { method: 'GET', headers: {} });
-  if (!result.ready) {
-    const missing = result.missing?.join(', ') || 'konfigurasi layanan';
-    throw new Error(`Pendaftaran akun belum diaktifkan sepenuhnya oleh administrator SIPANDU (${missing}).`);
-  }
-}
-
-export async function registerPendingTeamMember(user: User): Promise<void> {
-  const idToken = await user.getIdToken(true);
-  await requestJson('/register', {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${idToken}` },
-    body: JSON.stringify({}),
-  });
-}
-
-export async function restorePendingTeamInvitation(user: User): Promise<void> {
-  const idToken = await user.getIdToken(true);
-  await requestJson('/restore-invitation', {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${idToken}` },
-    body: JSON.stringify({}),
-  });
-}
-
+/**
+ * Activates any Firebase account only after Firebase confirms its email.
+ * The Worker assigns the least-privilege pendamping role; no invitation,
+ * team code, or client-supplied role is accepted.
+ */
 export async function activatePendingTeamMember(user: User): Promise<void> {
-  const idToken = await user.getIdToken(true);
-  await requestJson('/activate', {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${idToken}` },
-    body: JSON.stringify({}),
-  });
+  await requestJson('/activate', user);
   await user.getIdToken(true);
 }
