@@ -26,6 +26,7 @@ interface Env {
 interface FirebaseUserLookup {
   localId: string;
   email?: string;
+  displayName?: string;
   emailVerified?: boolean;
   disabled?: boolean;
   customAttributes?: string;
@@ -534,6 +535,7 @@ export default {
             return {
               uid: String(item.uid || key.slice('pending:'.length)),
               email: String(item.email || ''),
+              name: String(item.name || ''),
               createdAt: Number(item.createdAt || 0),
               status: 'pending_owner',
             };
@@ -656,6 +658,7 @@ export default {
         await env.PENDING_REGISTRATIONS!.put(key, JSON.stringify({
           uid: firebaseUser.localId,
           email: firebaseUser.email.toLowerCase(),
+          name: String(firebaseUser.displayName || ''),
           createdAt: Date.now(),
           status: 'pending_owner',
         }), { expirationTtl: 7 * 24 * 60 * 60 });
