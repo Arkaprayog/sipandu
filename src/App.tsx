@@ -341,8 +341,40 @@ function StaffApp() {
   const [authReady, setAuthReady] = useState(false);
   const [currentUserName, setCurrentUserName] = useState('');
   const [currentUserRole, setCurrentUserRole] = useState('');
+  const [canManageTeamRegistrations, setCanManageTeamRegistrations] = useState(false);
   const [authError, setAuthError] = useState('');
   const [localCacheReady, setLocalCacheReady] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    if (!isAuthenticated) {
+      setCanManageTeamRegistrations(false);
+      return () => { active = false; };
+    }
+    if (currentUserRole === 'owner') {
+      setCanManageTeamRegistrations(true);
+      return () => { active = false; };
+    }
+    if (currentUserRole !== 'supervisor') {
+      setCanManageTeamRegistrations(false);
+      return () => { active = false; };
+    }
+    void (async () => {
+      try {
+        const user = auth.currentUser;
+        if (!user || user.uid !== currentUserUid) throw new Error('Sesi berubah.');
+        const token = await user.getIdToken(true);
+        const response = await fetch('https://sipandu-registration.aryprayoga139.workers.dev/owner/pending', {
+          method: 'GET',
+          headers: { Authorization: 'Bearer ' + token },
+        });
+        if (active) setCanManageTeamRegistrations(response.ok);
+      } catch {
+        if (active) setCanManageTeamRegistrations(false);
+      }
+    })();
+    return () => { active = false; };
+  }, [isAuthenticated, currentUserRole, currentUserUid]);
 
   useEffect(() => {
     let active = true;
@@ -2092,7 +2124,7 @@ function StaffApp() {
         {isAICopilotOpen && <SIPANDUAICopilot onClose={() => setIsAICopilotOpen(false)} />}
       </Suspense>
 
-      <BottomNav activeTab={activeTab} onSelectTab={navigateToTab} currentUserRole={currentUserRole} />
+      <BottomNav activeTab={activeTab} onSelectTab={navigateToTab} currentUserRole={currentUserRole} canManageTeamRegistrations={canManageTeamRegistrations} />
 
       {/* Load rarely used modal code only after the user opens that modal. */}
       <Suspense fallback={null}>
