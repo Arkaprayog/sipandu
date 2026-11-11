@@ -30,6 +30,7 @@ import {
   GoogleDriveFile,
 } from '../lib/googleWorkspace';
 import { GOOGLE_SIPANDU_RESOURCES, GOOGLE_WORKSPACE_EMAIL } from '../lib/googleSIPANDUResources';
+import { isAtensiProfileResponseTab } from '../lib/atensiColumnMapping';
 import { PPKSRecord, AppSettings } from '../types';
 import {
   X,
@@ -408,23 +409,23 @@ export const GoogleWorkspaceModal: React.FC<GoogleWorkspaceModalProps> = ({
         .replace(/[\\u0300-\\u036f]/g, '')
         .toLocaleLowerCase('id-ID')
         .replace(/[^a-z0-9]/g, '');
-      const profileTabExists = tabs.some((tab) => normalizeTab(tab) === 'fromresponses1');
+      const profileTab = tabs.find(isAtensiProfileResponseTab);
       const arvTabExists = tabs.some((tab) => normalizeTab(tab) === 'fromasesmen1');
-      if (!profileTabExists) {
-        throw new Error(`Spreadsheet “${file.name}” tidak memiliki tab “From Responses 1”. Pilih spreadsheet respons ATENSI yang benar.`);
+      if (!profileTab) {
+        throw new Error(`Spreadsheet “${file.name}” tidak memiliki tab “Form Responses 1” (atau alias lama “From Responses 1”). Tab yang tersedia: ${tabs.join(', ')}. Pilih spreadsheet respons ATENSI yang benar.`);
       }
       setSourceSpreadsheetUrl(url);
       onUpdateSettings({
         ...settings,
         googleSpreadsheetSourceUrl: url,
         googleSpreadsheetSourceName: file.name,
-        googleSpreadsheetSourceTab: 'From Responses 1',
+        googleSpreadsheetSourceTab: profileTab,
       });
       setStatusMessage({
         type: 'success',
         text: arvTabExists
-          ? `Sumber “${file.name}” diverifikasi: From Responses 1 (profil) dan From Asesmen 1 (ARV kolom AO) tersedia.`
-          : `Sumber “${file.name}” diverifikasi: From Responses 1 tersedia. Tab From Asesmen 1 belum terlihat pada spreadsheet ini; sinkronisasi akan memeriksa tautan respons Form terpisah dan menampilkan diagnostik bila belum tersedia.`,
+          ? `Sumber “${file.name}” diverifikasi: tab “${profileTab}” (profil) dan From Asesmen 1 (ARV kolom AO) tersedia.`
+          : `Sumber “${file.name}” diverifikasi: tab profil “${profileTab}” tersedia. Tab From Asesmen 1 belum terlihat pada spreadsheet ini; data responden tetap dapat dimuat, sedangkan kolom ARV akan dilewati sampai tab asesmen tersedia.`,
       });
     } catch (error: any) {
       setStatusMessage({ type: 'error', text: error?.message || String(error) });
@@ -462,7 +463,7 @@ export const GoogleWorkspaceModal: React.FC<GoogleWorkspaceModalProps> = ({
     try {
       const sourceUrl = sourceSpreadsheetUrl.trim() || settings.googleSpreadsheetSourceUrl?.trim() || GOOGLE_SIPANDU_RESOURCES.responseSpreadsheetUrl;
       extractSpreadsheetId(sourceUrl);
-      const sourceTab = 'From Responses 1';
+      const sourceTab = settings.googleSpreadsheetSourceTab?.trim() || 'Form Responses 1';
       setSourceSpreadsheetUrl(sourceUrl);
       const imported = await importPPKSFromSpreadsheet(sourceUrl, sourceTab);
       setSheetRows(imported.previewRows);
