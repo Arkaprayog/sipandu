@@ -34,6 +34,7 @@ const RegionalIntelligenceView = lazyWithRecovery('RegionalIntelligenceView', ()
 const ProgramPerformanceView = lazyWithRecovery('ProgramPerformanceView', () => import('./components/ProgramPerformanceView').then((module) => ({ default: module.ProgramPerformanceView })));
 const FieldAssistanceView = lazyWithRecovery('FieldAssistanceView', () => import('./components/FieldAssistanceView').then((module) => ({ default: module.FieldAssistanceView })));
 const SecurityAuditView = lazyWithRecovery('SecurityAuditView', () => import('./components/SecurityAuditView').then((module) => ({ default: module.SecurityAuditView })));
+const TeamRegistrationAdminView = lazyWithRecovery('TeamRegistrationAdminView', () => import('./components/TeamRegistrationAdminView').then((module) => ({ default: module.TeamRegistrationAdminView })));
 import { onAuthStateChanged, signOut, getIdTokenResult } from 'firebase/auth';
 import { SIPANDU_AI_WORKER_URL } from './lib/sipanduAI';
 import { auth, getAccessToken, savePPKSToFirestore, saveIntegratedAssessmentToFirestore, syncPPKSCollectionFromSpreadsheet, googleLogout, subscribeToPPKSChanges, subscribeToPPKSServiceStatus, savePPKSServiceUpdate, subscribeToFieldVisits, createFieldVisit, subscribeToIntegratedAssessmentAnswers, fetchSecurityAuditActivity, saveStageOneIntakeToFirestore, subscribeToStageOneIntake, staffAuthPersistenceReady, isWorkspaceAccountConnected, invalidateAccessToken, getSIPANDUUserProfile, saveSIPANDUUserProfile } from './lib/firebase';
@@ -2027,6 +2028,7 @@ function StaffApp() {
 
           {activeTab === 'intelijen-wilayah' && <RegionalIntelligenceView ppksList={ppksList} />}
           {activeTab === 'security-audit' && <SecurityAuditView entries={securityAuditEntries} loading={securityAuditLoading} error={securityAuditError} currentUserRole={currentUserRole} />}
+          {activeTab === 'pendaftaran-tim' && <TeamRegistrationAdminView currentUserRole={currentUserRole} />}
           {activeTab === 'laporan-kinerja' && <ProgramPerformanceView ppksList={ppksList} serviceStatuses={serviceStatuses} visits={fieldVisits} />}
 
           {activeTab === 'database-ppks' && (
