@@ -238,16 +238,11 @@ test('public intake refuses to run without a Turnstile secret', async () => {
   assert.equal(response.status, 503);
 });
 
-test('activation configuration does not require a shared team code', () => {
+test('activation configuration does not require a team code or pending-registration KV', () => {
   const env = {
     FIREBASE_AUTH_API_KEY: 'worker-secret-api-key',
     FIREBASE_PROJECT_ID: 'gen-lang-client-0197631978',
     FIREBASE_SERVICE_ACCOUNT_JSON: '{"project_id":"gen-lang-client-0197631978"}',
-    PENDING_REGISTRATIONS: {
-      get: async () => null,
-      put: async () => undefined,
-      delete: async () => undefined,
-    },
   };
   assert.deepEqual(missingActivationConfiguration(env), []);
 });
