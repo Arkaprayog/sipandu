@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { createUserWithEmailAndPassword, sendEmailVerification, signOut, updateProfile } from 'firebase/auth';
 import { ArrowLeft, Eye, EyeOff, UserPlus, MailCheck } from 'lucide-react';
 import { auth, staffAuthPersistenceReady, createSIPANDUUserProfile } from '../lib/firebase';
-import { checkTeamRegistrationService, registerPendingTeamMember } from '../lib/teamRegistration';
 import { publicAssetUrl } from '../lib/publicAssets';
 
 interface RegistrationPageProps {
@@ -11,9 +10,6 @@ interface RegistrationPageProps {
 
 export const RegistrationPage: React.FC<RegistrationPageProps> = ({ onBack }) => {
   const [nama, setNama] = useState('');
-  const [nip, setNip] = useState('');
-  const [jabatan, setJabatan] = useState('');
-  const [unitKerja, setUnitKerja] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [repeatPassword, setRepeatPassword] = useState('');
@@ -37,21 +33,17 @@ export const RegistrationPage: React.FC<RegistrationPageProps> = ({ onBack }) =>
     setIsSubmitting(true);
     try {
       await staffAuthPersistenceReady;
-      // Ensure the activation service is ready before creating the Firebase account.
-      await checkTeamRegistrationService();
-
       const normalizedEmail = email.trim().toLowerCase();
       const credential = await createUserWithEmailAndPassword(auth, normalizedEmail, password);
       await updateProfile(credential.user, { displayName: nama.trim() });
       await createSIPANDUUserProfile(credential.user.uid, normalizedEmail, {
         nama: nama.trim(),
-        nip: nip.trim(),
-        jabatan: jabatan.trim(),
-        unitKerja: unitKerja.trim(),
+        nip: '',
+        jabatan: '',
+        unitKerja: '',
         noHp: '',
         photoUrl: '',
       });
-      await registerPendingTeamMember(credential.user);
       await sendEmailVerification(credential.user);
       await signOut(auth);
       setEmail(normalizedEmail);
@@ -101,14 +93,14 @@ export const RegistrationPage: React.FC<RegistrationPageProps> = ({ onBack }) =>
           <div className="mb-4 text-center">
             <img src={publicAssetUrl('uploads/Logo Kemensos Hadir.png')} alt="Logo resmi Kemensos Hadir" className="mx-auto mb-2 h-auto w-[135px] max-w-full object-contain" />
             <h1 className="text-xl font-extrabold text-black">Pendaftaran Akun SIPANDU</h1>
-            <p className="mt-1 text-xs text-black">Daftarkan identitas petugas dan akun email Anda</p>
+            <p className="mt-1 text-xs text-black">Cukup nama, email aktif, dan kata sandi. Verifikasi melalui tautan email.</p>
           </div>
 
           {completed ? (
             <div className="rounded-xl border border-emerald-700/30 bg-white/75 p-4 text-center text-black">
               <MailCheck className="mx-auto mb-2 h-9 w-9 text-emerald-700" />
               <h2 className="text-base font-bold">Pendaftaran berhasil dikirim</h2>
-              <p className="mt-2 text-xs leading-relaxed">Tautan verifikasi telah dikirim ke <strong>{email}</strong>. Buka email tersebut dan tekan tautan verifikasi. Setelah berhasil, kembali ke SIPANDU lalu masuk menggunakan email dan Password yang baru dibuat.</p>
+              <p className="mt-2 text-xs leading-relaxed">Tautan verifikasi telah dikirim ke <strong>{email}</strong>. Buka tautan tersebut untuk memverifikasi email. Setelah berhasil, masuk ke SIPANDU menggunakan email dan kata sandi yang baru dibuat. Anda tidak memerlukan kode tim atau undangan administrator.</p>
               <button type="button" onClick={() => onBack(email, 'Pendaftaran akun berhasil. Silakan verifikasi email terlebih dahulu, lalu masuk dengan email dan Password.')} className="mt-4 w-full rounded-xl bg-teal-700 px-4 py-3 text-sm font-bold text-white">Kembali ke halaman login</button>
             </div>
           ) : (
@@ -117,15 +109,6 @@ export const RegistrationPage: React.FC<RegistrationPageProps> = ({ onBack }) =>
               <form onSubmit={(event) => void handleSubmit(event)} className="space-y-2.5">
                 <label className="block text-xs font-semibold text-black">Nama
                   <input value={nama} onChange={(event) => setNama(event.target.value)} autoComplete="name" maxLength={120} required placeholder="Nama lengkap" className="mt-1 w-full rounded-lg border border-white bg-white/75 px-3 py-2.5 text-sm text-black placeholder-slate-500 outline-none focus:border-teal-700 focus:ring-2 focus:ring-teal-700/20" />
-                </label>
-                <label className="block text-xs font-semibold text-black">NIP
-                  <input value={nip} onChange={(event) => setNip(event.target.value)} autoComplete="off" maxLength={40} required placeholder="Nomor Induk Pegawai" className="mt-1 w-full rounded-lg border border-white bg-white/75 px-3 py-2.5 text-sm text-black placeholder-slate-500 outline-none focus:border-teal-700 focus:ring-2 focus:ring-teal-700/20" />
-                </label>
-                <label className="block text-xs font-semibold text-black">Jabatan
-                  <input value={jabatan} onChange={(event) => setJabatan(event.target.value)} autoComplete="organization-title" maxLength={120} required placeholder="Jabatan" className="mt-1 w-full rounded-lg border border-white bg-white/75 px-3 py-2.5 text-sm text-black placeholder-slate-500 outline-none focus:border-teal-700 focus:ring-2 focus:ring-teal-700/20" />
-                </label>
-                <label className="block text-xs font-semibold text-black">Unit Kerja
-                  <input value={unitKerja} onChange={(event) => setUnitKerja(event.target.value)} autoComplete="organization" maxLength={160} required placeholder="Unit kerja" className="mt-1 w-full rounded-lg border border-white bg-white/75 px-3 py-2.5 text-sm text-black placeholder-slate-500 outline-none focus:border-teal-700 focus:ring-2 focus:ring-teal-700/20" />
                 </label>
                 <label className="block text-xs font-semibold text-black">Email
                   <input type="email" value={email} onChange={(event) => setEmail(event.target.value)} autoComplete="email" maxLength={254} required placeholder="nama@instansi.go.id" className="mt-1 w-full rounded-lg border border-white bg-white/75 px-3 py-2.5 text-sm text-black placeholder-slate-500 outline-none focus:border-teal-700 focus:ring-2 focus:ring-teal-700/20" />
