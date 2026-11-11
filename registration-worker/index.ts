@@ -255,7 +255,7 @@ async function sendSIPANDUEmail(
       from: env.SIPANDU_EMAIL_FROM,
       to: [to],
       subject,
-      text: title + '\\n\\n' + message,
+      text: title + '\n\n' + message,
       html: '<div style="font-family:Arial,sans-serif;max-width:560px;margin:auto;padding:24px;color:#17251a">'
         + '<h2>' + safeTitle + '</h2><p style="line-height:1.6">' + safeMessage + '</p>'
         + '<p style="font-size:12px;color:#647366">SIPANDU ODHIV · Pemberitahuan otomatis</p></div>',
@@ -570,7 +570,7 @@ export default {
       const body = await parseJson(request);
       const targetUid = typeof body?.uid === 'string' ? body.uid.trim() : '';
       const enabled = body?.enabled === true;
-      if (!targetUid || targetUid.length > 128 || /[\\/\\s]/.test(targetUid)) {
+      if (!targetUid || targetUid.length > 128 || targetUid.includes('/') || targetUid.includes('\\') || /\s/.test(targetUid)) {
         return jsonResponse({ ok: false, message: 'UID Supervisor tidak valid.' }, 400, origin);
       }
       const authorization = request.headers.get('Authorization') || '';
