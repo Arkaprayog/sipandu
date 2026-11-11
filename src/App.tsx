@@ -36,7 +36,7 @@ const SecurityAuditView = lazyWithRecovery('SecurityAuditView', () => import('./
 import { onAuthStateChanged, signOut, getIdTokenResult } from 'firebase/auth';
 import { SIPANDU_AI_WORKER_URL } from './lib/sipanduAI';
 import { auth, getAccessToken, savePPKSToFirestore, saveIntegratedAssessmentToFirestore, syncPPKSCollectionFromSpreadsheet, googleLogout, subscribeToPPKSChanges, subscribeToPPKSServiceStatus, savePPKSServiceUpdate, subscribeToFieldVisits, createFieldVisit, subscribeToIntegratedAssessmentAnswers, fetchSecurityAuditActivity, saveStageOneIntakeToFirestore, subscribeToStageOneIntake, staffAuthPersistenceReady, isWorkspaceAccountConnected, invalidateAccessToken, getSIPANDUUserProfile, saveSIPANDUUserProfile } from './lib/firebase';
-import { activatePendingTeamMember, restorePendingTeamInvitation } from './lib/teamRegistration';
+import { activatePendingTeamMember } from './lib/teamRegistration';
 import { ensureSIPANDUDatabaseSheet, extractSpreadsheetId, getLinkedSpreadsheetUrlForForm, importPPKSFromSpreadsheet, upsertPPKSInSpreadsheet } from './lib/googleWorkspace';
 import { GOOGLE_SIPANDU_RESOURCES, SIPANDU_OWNER_WHATSAPP_PHONE } from './lib/googleSIPANDUResources';
 import { getLiveSyncRetryDelay, LIVE_SYNC_INTERVAL_MS } from './lib/liveSyncPolicy';
@@ -70,10 +70,7 @@ function describeTeamActivationError(error: unknown): string {
     return 'Email sudah diverifikasi, tetapi Worker pendaftaran belum memiliki kredensial service account Firebase. Administrator perlu memasang secret FIREBASE_SERVICE_ACCOUNT_JSON pada Worker sipandu-registration dan memastikan izin IAM firebaseauth.users.update. Sesi akun tetap tersimpan.';
   }
   if (/PERMISSION_DENIED|INSUFFICIENT[_ ]+PERMISSION|firebaseauth[.]users[.]update|not authorized|insufficient[_ ]+permission/i.test(detail)) {
-    return 'Email sudah diverifikasi, tetapi Firebase menolak pemberian peran pendamping karena izin service account belum lengkap. Pada Google Cloud Console proyek gen-lang-client-0197631978, buka IAM & Admin → IAM, cari service account yang tercantum sebagai client_email di secret FIREBASE_SERVICE_ACCOUNT_JSON milik Worker sipandu-registration, lalu berikan izin IAM firebaseauth.users.update (gunakan custom role khusus dengan izin tersebut). Setelah izin tersimpan, tekan “Coba verifikasi akses lagi”. Undangan dan sesi akun tetap tersimpan; tidak perlu mendaftar ulang.';
-  }
-  if (/undangan.*(tidak ditemukan|kedaluwarsa)|pending.*(not found|expired)/i.test(detail)) {
-    return 'Email sudah diverifikasi, tetapi undangan pendaftaran tim tidak ditemukan atau telah kedaluwarsa. Pulihkan undangan untuk email yang sama; jangan membuat akun baru. Sesi akun tetap tersimpan.';
+    return 'Email sudah diverifikasi, tetapi Firebase menolak pemberian peran pendamping karena izin service account belum lengkap. Pada Google Cloud Console proyek gen-lang-client-0197631978, buka IAM & Admin → IAM, cari service account yang tercantum sebagai client_email di secret FIREBASE_SERVICE_ACCOUNT_JSON milik Worker sipandu-registration, lalu berikan izin IAM firebaseauth.users.update (gunakan custom role khusus dengan izin tersebut). Setelah izin tersimpan, tekan “Coba verifikasi akses lagi”. Sesi akun tetap tersimpan; tidak perlu membuat akun baru.';
   }
   if (/email belum diverifikasi|not verified/i.test(detail)) {
     return 'Firebase belum membaca status verifikasi email. Buka kembali tautan verifikasi, lalu masuk dan coba lagi. Sesi akun tetap tersimpan.';

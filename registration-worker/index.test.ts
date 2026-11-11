@@ -238,16 +238,11 @@ test('public intake refuses to run without a Turnstile secret', async () => {
   assert.equal(response.status, 503);
 });
 
-test('activation configuration does not require a shared team code', () => {
+test('activation configuration does not require a team code or pending-registration KV', () => {
   const env = {
     FIREBASE_AUTH_API_KEY: 'worker-secret-api-key',
     FIREBASE_PROJECT_ID: 'gen-lang-client-0197631978',
     FIREBASE_SERVICE_ACCOUNT_JSON: '{"project_id":"gen-lang-client-0197631978"}',
-    PENDING_REGISTRATIONS: {
-      get: async () => null,
-      put: async () => undefined,
-      delete: async () => undefined,
-    },
   };
   assert.deepEqual(missingActivationConfiguration(env), []);
 });
@@ -265,6 +260,76 @@ test('activation reports missing Firebase service-account configuration', () => 
   assert.deepEqual(missingActivationConfiguration(env), ['FIREBASE_SERVICE_ACCOUNT_JSON']);
 });
 
+
+test('activates a verified Firebase member without any invitation KV record', async () => {
+  const { generateKeyPairSync } = await import('node:crypto');
+  const { privateKey } = generateKeyPairSync('rsa', {
+    modulusLength: 2048,
+    privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
+    publicKeyEncoding: { type: 'spki', format: 'pem' },
+  });
+  const originalFetch = globalThis.fetch;
+  const calls: string[] = [];
+  let assignedClaims = '';
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input);
+    calls.push(url);
+    if (url.includes('/accounts:lookup?key=')) {
+      return new Response(JSON.stringify({
+        users: [{
+          localId: 'firebase-uid-open-member',
+          email: 'member@example.test',
+          emailVerified: true,
+          customAttributes: '{}',
+        }],
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }
+    if (url === 'https://oauth2.googleapis.com/token') {
+      return new Response(JSON.stringify({ access_token: 'service-account-test-token', expires_in: 3600 }), {
+        status: 200, headers: { 'Content-Type': 'application/json' },
+      });
+    }
+    if (url.includes('/accounts:update')) {
+      assignedClaims = String(init?.body || '');
+      return new Response(JSON.stringify({ localId: 'firebase-uid-open-member' }), {
+        status: 200, headers: { 'Content-Type': 'application/json' },
+      });
+    }
+    throw new Error('Unexpected outbound request: ' + url);
+  }) as typeof fetch;
+
+  try {
+    const response = await worker.fetch(new Request('https://sipandu-registration.test/activate', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: 'Bearer verified-member-id-token',
+      },
+      body: JSON.stringify({}),
+    }), {
+      FIREBASE_AUTH_API_KEY: 'test-worker-secret-api-key',
+      FIREBASE_PROJECT_ID: 'gen-lang-client-0197631978',
+      FIREBASE_SERVICE_ACCOUNT_JSON: JSON.stringify({
+        project_id: 'gen-lang-client-0197631978',
+        client_email: 'test@example.iam.gserviceaccount.com',
+        private_key: privateKey,
+      }),
+    });
+
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), {
+      ok: true,
+      message: 'Email terverifikasi. Akun SIPANDU aktif sebagai anggota.',
+    });
+    assert.deepEqual(JSON.parse(assignedClaims), {
+      localId: 'firebase-uid-open-member',
+      customAttributes: JSON.stringify({ role: 'pendamping' }),
+    });
+    assert.equal(calls.length, 3);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
 
 test('allows the configured SIPANDU custom domain to call registration endpoints', async () => {
   const origin = 'https://sipanduodhiv.my.id';
