@@ -751,7 +751,7 @@ export default {
       }
       const body = await parseJson(request);
       const targetUid = typeof body?.uid === 'string' ? body.uid.trim() : '';
-      if (!targetUid || targetUid.length > 128 || /[\\/\\s]/.test(targetUid)) {
+      if (!targetUid || targetUid.length > 128 || targetUid.includes('/') || targetUid.includes(String.fromCharCode(92)) || [...targetUid].some((char) => char.charCodeAt(0) <= 32)) {
         return jsonResponse({ ok: false, message: 'UID pendaftar tidak valid.' }, 400, origin);
       }
       const authorization = request.headers.get('Authorization') || '';
