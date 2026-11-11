@@ -61,7 +61,7 @@ export function readAtensiGender(
 function normalizeAtensiHeader(value: unknown): string {
   return String(value ?? '')
     .normalize('NFD')
-    .replace(/[\\u0300-\\u036f]/g, '')
+    .replace(/[\u0300-\u036f]/g, '')
     .toLocaleLowerCase('id-ID')
     .replace(/[^a-z0-9]/g, '');
 }
