@@ -67,7 +67,7 @@ function missingConfiguration(env: Env): string[] {
   return missing;
 }
 
- // Activation requires Firebase identity, verified email, and a matching pending invitation.
+ // Activation requires a valid Firebase identity and verified email; no team invitation is required.
  export function missingActivationConfiguration(env: Env): string[] {
    const missing: string[] = [];
    if (!env.FIREBASE_AUTH_API_KEY && !env.FIREBASE_WEB_API_KEY) missing.push('FIREBASE_AUTH_API_KEY');
@@ -369,7 +369,7 @@ async function assignPendampingRole(env: Env, user: FirebaseUserLookup): Promise
     const firebaseError = `${body.error?.status || ''} ${body.error?.message || ''}`.trim();
     if (/INSUFFICIENT_PERMISSION|PERMISSION_DENIED|firebaseauth[.]users[.]update/i.test(firebaseError)) {
       throw new Error(
-        'Service account Firebase pada Worker sipandu-registration belum memiliki izin IAM firebaseauth.users.update pada proyek gen-lang-client-0197631978. Berikan izin tersebut kepada email client_email di secret FIREBASE_SERVICE_ACCOUNT_JSON, lalu tekan Coba verifikasi akses lagi. Undangan pendaftaran tetap tersimpan dan tidak perlu membuat akun baru.',
+        'Service account Firebase pada Worker sipandu-registration belum memiliki izin IAM firebaseauth.users.update pada proyek gen-lang-client-0197631978. Berikan izin tersebut kepada email client_email di secret FIREBASE_SERVICE_ACCOUNT_JSON, lalu tekan Coba verifikasi akses lagi. Pengguna tidak perlu membuat akun baru.',
       );
     }
     throw new Error(body.error?.message || 'Firebase gagal menerapkan peran pendamping pada akun.');
