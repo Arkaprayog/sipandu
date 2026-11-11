@@ -1625,24 +1625,22 @@ export async function importPPKSFromSpreadsheet(
   // always picked From Responses 1, even when the caller asked for From Asesmen 1.
   const selectedTab = requestedPreferredTab || requestedFromResponsesTab || responseTab || metadata.sheetTitles[0];
   const escapedTitle = selectedTab.replace(/'/g, "''");
-  const isKnownATENSIResponseSheet =
-    !useATENSIAssessmentColumnPositions && (
-    metadata.spreadsheetId === GOOGLE_SIPANDU_RESOURCES.responseSpreadsheetId ||
-    (
-      normalizeSheetHeader(metadata.title).includes('asesmenprogramasistensirehabilitasisosial') &&
-      normalizeSheetHeader(metadata.title).includes('responses') &&
-      normalizeSheetHeader(selectedTab).includes('fromresponses')
-    ));
-  // For the owner's exact ATENSI response tab, use the known E-H attachment
-  // columns to recover actual Drive hyperlink targets even when Forms shows
-  // a short display label instead of the underlying URL in each cell.
-  // "From Responses 1" has the owner-confirmed ATENSI column contract.
-  // Keep positional field mapping tied to this tab's schema, not to its
-  // spreadsheet ID: recreating the Google Sheet changes the ID but not columns K/AO.
+  // Resolve schema flags before using them in the source/photo-recovery guards.
   const useATENSIColumnPositions =
     normalizeSheetHeader(selectedTab) === normalizeSheetHeader(ATENSI_PROFILE_RESPONSE_TAB_NAME);
   const useATENSIAssessmentColumnPositions =
     normalizeSheetHeader(selectedTab) === normalizeSheetHeader(ATENSI_ASSESSMENT_RESPONSE_TAB_NAME);
+  const isKnownATENSIResponseSheet =
+    !useATENSIAssessmentColumnPositions && (
+      metadata.spreadsheetId === GOOGLE_SIPANDU_RESOURCES.responseSpreadsheetId ||
+      (
+        normalizeSheetHeader(metadata.title).includes('asesmenprogramasistensirehabilitasisosial') &&
+        normalizeSheetHeader(metadata.title).includes('responses') &&
+        normalizeSheetHeader(selectedTab).includes('fromresponses')
+      )
+    );
+  // For the owner's exact ATENSI profile tab, use known E-H upload columns.
+  // Profile fields follow From Responses 1; ARV is read from From Asesmen 1.
   const rows = await readSpreadsheetRichData(
     metadata.spreadsheetId,
     `'${escapedTitle}'!A1:ZZ2000`,
