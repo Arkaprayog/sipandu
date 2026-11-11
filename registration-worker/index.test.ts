@@ -261,7 +261,7 @@ test('activation reports missing Firebase service-account configuration', () => 
 });
 
 
-test('activates a verified Firebase member without any invitation KV record', async () => {
+test('blocks activation when no Owner-approved registration record exists', async () => {
   const { generateKeyPairSync } = await import('node:crypto');
   const { privateKey } = generateKeyPairSync('rsa', {
     modulusLength: 2048,
@@ -316,16 +316,12 @@ test('activates a verified Firebase member without any invitation KV record', as
       }),
     });
 
-    assert.equal(response.status, 200);
-    assert.deepEqual(await response.json(), {
-      ok: true,
-      message: 'Email terverifikasi. Akun SIPANDU aktif sebagai anggota.',
-    });
-    assert.deepEqual(JSON.parse(assignedClaims), {
-      localId: 'firebase-uid-open-member',
-      customAttributes: JSON.stringify({ role: 'pendamping' }),
-    });
-    assert.equal(calls.length, 3);
+    assert.equal(response.status, 503);
+    const result = await response.json() as { ok?: boolean; message?: string };
+    assert.equal(result.ok, false);
+    assert.match(result.message || '', /PENDING_REGISTRATIONS KV/);
+    assert.equal(assignedClaims, '');
+    assert.equal(calls.length, 1);
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -351,7 +347,7 @@ test('rejects untrusted origins at the registration Worker boundary', async () =
 });
 
 
-test('restores an invitation for the same verified Firebase account without creating a new account', async () => {
+test('does not restore or create an invitation without a prior Owner-approved request', async () => {
   const originalFetch = globalThis.fetch;
   const writes: Array<{ key: string; value: string; expirationTtl?: number }> = [];
   const kv = {
@@ -386,20 +382,11 @@ test('restores an invitation for the same verified Firebase account without crea
       PENDING_REGISTRATIONS: kv,
     });
 
-    assert.equal(response.status, 200);
-    assert.deepEqual(await response.json(), {
-      ok: true,
-      message: 'Undangan tim berhasil dipulihkan untuk akun dan email yang sama. Lanjutkan aktivasi.',
-    });
-    const invitation = writes.find((entry) => entry.key === 'pending:firebase-uid-existing-123');
-    assert.ok(invitation);
-    assert.equal(invitation.expirationTtl, 7 * 24 * 60 * 60);
-    assert.deepEqual(JSON.parse(invitation.value), {
-      uid: 'firebase-uid-existing-123',
-      email: 'aryprayoga139@gmail.com',
-      createdAt: JSON.parse(invitation.value).createdAt,
-      restoredAt: JSON.parse(invitation.value).restoredAt,
-    });
+    assert.equal(response.status, 404);
+    const result = await response.json() as { ok?: boolean; message?: string };
+    assert.equal(result.ok, false);
+    assert.match(result.message || '', /Permohonan belum tercatat/);
+    assert.deepEqual(writes, []);
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -473,9 +460,12 @@ test('registration accepts a Firebase identity token without any team code', asy
       FIREBASE_SERVICE_ACCOUNT_JSON: '{"project_id":"gen-lang-client-0197631978","client_email":"test@example.iam.gserviceaccount.com","private_key":"test"}',
       PENDING_REGISTRATIONS: kv,
     });
-    assert.equal(response.status, 200);
+    assert.equal(response.status, 202);
+    const result = await response.json() as { ok?: boolean; status?: string };
+    assert.equal(result.status, 'pending_owner');
     const invitation = writes.find((entry) => entry.key === 'pending:firebase-uid-new-member');
     assert.ok(invitation);
+    assert.equal(JSON.parse(invitation.value).status, 'pending_owner');
     assert.equal(invitation.expirationTtl, 7 * 24 * 60 * 60);
   } finally {
     globalThis.fetch = originalFetch;
@@ -496,6 +486,7 @@ test('activation explains missing firebaseauth.users.update permission and prese
     uid: 'firebase-uid-permission-test',
     email: 'member@example.test',
     createdAt: Date.now(),
+    status: 'approved',
   });
   const deletedKeys: string[] = [];
   const kv = {
