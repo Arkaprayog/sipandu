@@ -390,27 +390,89 @@ async function initializeNativeGoogleSignIn(): Promise<void> {
   nativeGoogleSignInInitialized = true;
 }
 
-function nativeGoogleErrorMessage(error: unknown): string {
-  const candidate = error as { message?: unknown };
-  return typeof candidate?.message === 'string'
-    ? candidate.message
-    : error instanceof Error ? error.message : String(error);
+export type WorkspaceGoogleSignInProgress = (message: string) => void;
+
+const GOOGLE_AUTH_SETUP_TIMEOUT_MS = 20_000;
+const GOOGLE_AUTH_RESULT_TIMEOUT_MS = 90_000;
+const GOOGLE_FIREBASE_SIGNIN_TIMEOUT_MS = 60_000;
+
+/**
+ * Native Google Credential Manager / Firebase callbacks can remain pending when
+ * Android drops an Activity result. Bound the wait so the UI can report a useful
+ * error instead of leaving the user with an endless spinner. The original
+ * operation retains rejection handlers, so a late native callback is not an
+ * unhandled promise rejection.
+ */
+function waitForWorkspaceLogin<T>(
+  operation: Promise<T>,
+  timeoutMs: number,
+  timeoutMessage: string
+): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    let settled = false;
+    const timeoutId = setTimeout(() => {
+      settled = true;
+      reject(new Error(timeoutMessage));
+    }, timeoutMs);
+
+    operation.then(
+      (value) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timeoutId);
+        resolve(value);
+      },
+      (error: unknown) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timeoutId);
+        reject(error);
+      }
+    );
+  });
 }
 
-export const googleSignIn = async (): Promise<{
+function nativeGoogleErrorMessage(error: unknown): string {
+  const candidate = error as { message?: unknown; code?: unknown };
+  const message = typeof candidate?.message === 'string'
+    ? candidate.message
+    : error instanceof Error ? error.message : String(error);
+  const code = typeof candidate?.code === 'string' ? candidate.code : '';
+  return code && !message.includes(code) ? `${code}: ${message}` : message;
+}
+
+export const googleSignIn = async (
+  onProgress?: WorkspaceGoogleSignInProgress
+): Promise<{
   user: User;
   accessToken: string;
 } | null> => {
+  const reportProgress = (message: string) => {
+    try { onProgress?.(message); } catch { /* progress UI must never break authentication */ }
+  };
+
   // Keep the Workspace identity across reloads; the short-lived Google API
   // access token is still held only in sessionStorage for security.
-  await setPersistence(workspaceAuth, browserLocalPersistence);
+  reportProgress('Menyiapkan sesi autentikasi Google…');
+  await waitForWorkspaceLogin(
+    setPersistence(workspaceAuth, browserLocalPersistence),
+    GOOGLE_AUTH_SETUP_TIMEOUT_MS,
+    'SIPANDU belum mendapat jawaban dari Firebase saat menyiapkan sesi Google. Periksa koneksi internet, lalu coba kembali.'
+  );
 
   // Android/iOS must use the operating-system Google sign-in flow. Firebase JS
   // popup/redirect OAuth runs on Capacitor's localhost origin and is unreliable
   // or rejected inside a WebView. The native plugin returns both an ID token for
   // Firebase identity and a scoped Google API access token for Drive/Sheets/Forms.
   if (Capacitor.isNativePlatform()) {
+    // Opening Google's native account/consent UI can report the Capacitor app as
+    // backgrounded. Tell BiometricGate this is an intentional OAuth hand-off so
+    // it does not unmount this modal before Google's Activity result returns.
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new Event('sipandu:native-google-auth-start'));
+    }
     try {
+      reportProgress('Membuka pemilih akun Google pada perangkat…');
       const nativeScopes = [
         'email',
         'profile',
@@ -436,8 +498,16 @@ export const googleSignIn = async (): Promise<{
       let nativeResponse: any = null;
       for (let attempt = 0; attempt < 2; attempt += 1) {
         try {
-          if (!nativeGoogleSignInInitialized) await initializeNativeGoogleSignIn();
-          nativeResponse = await requestNativeLogin();
+          if (!nativeGoogleSignInInitialized) {
+            reportProgress('Menyiapkan layanan Google Sign-In Android…');
+            await initializeNativeGoogleSignIn();
+          }
+          reportProgress('Menunggu Anda memilih akun Google dan menyetujui izin API…');
+          nativeResponse = await waitForWorkspaceLogin(
+            requestNativeLogin(),
+            GOOGLE_AUTH_RESULT_TIMEOUT_MS,
+            'Google tidak mengembalikan hasil login dalam 90 detik. Tutup dialog Google, pastikan koneksi internet aktif, lalu tekan “Masuk dengan Google” sekali lagi. Jika masalah berulang, kirim waktu percobaan dan versi SIPANDU kepada administrator; jangan kirim kata sandi atau token.'
+          );
           break;
         } catch (loginError) {
           const loginMessage = nativeGoogleErrorMessage(loginError);
@@ -453,6 +523,7 @@ export const googleSignIn = async (): Promise<{
       if (!nativeResponse) {
         throw new Error('Native Google login ended without a response after reinitializing the provider.');
       }
+      reportProgress('Memeriksa akun Google dan persetujuan izin Drive, Sheets, serta Forms…');
       const nativeResult = nativeResponse?.result;
       const selectedEmail = nativeResult?.profile?.email?.trim();
       if (!selectedEmail || selectedEmail.toLowerCase() !== GOOGLE_WORKSPACE_EMAIL.toLowerCase()) {
@@ -473,8 +544,14 @@ export const googleSignIn = async (): Promise<{
         throw new Error('Login berhasil, tetapi token Google API tidak tersedia. Ulangi persetujuan akses Drive, Sheets, dan Forms.');
       }
 
+      reportProgress('Menghubungkan identitas Google ke Firebase SIPANDU…');
       const firebaseCredential = GoogleAuthProvider.credential(idToken);
-      const userCredential = await signInWithCredential(workspaceAuth, firebaseCredential);
+      const userCredential = await waitForWorkspaceLogin(
+        signInWithCredential(workspaceAuth, firebaseCredential),
+        GOOGLE_FIREBASE_SIGNIN_TIMEOUT_MS,
+        'Google sudah mengirim identitas, tetapi Firebase belum memberi jawaban dalam 60 detik. Periksa koneksi internet dan pengaturan Google pada Firebase Authentication, lalu coba kembali.'
+      );
+      reportProgress('Login Google berhasil. Menyimpan izin API untuk sesi SIPANDU…');
       markWorkspaceAuthorization();
       cacheWorkspaceToken(accessToken);
       return { user: userCredential.user, accessToken };
@@ -483,7 +560,7 @@ export const googleSignIn = async (): Promise<{
       const message = nativeGoogleErrorMessage(error);
       if (/You CANNOT use scopes without modifying the main activity/i.test(message)) {
         throw new Error(
-          'Login Google native gagal karena MainActivity pada APK yang sedang berjalan tidak memuat bridge izin Google API. Ini bukan kesalahan SHA-1. Tutup aplikasi sepenuhnya lalu pasang ulang APK SIPANDU ODHIV Release v2.2.1 atau versi terbaru dari GitHub Releases. Jika error tetap muncul di versi terbaru, kirim tangkapan layar versi aplikasi pada perangkat agar build yang terpasang dapat dibandingkan dengan APK yang diverifikasi CI.'
+          'Login Google native gagal karena MainActivity pada APK yang sedang berjalan tidak memuat bridge izin Google API. Ini bukan kesalahan SHA-1. Tutup aplikasi sepenuhnya lalu pasang ulang APK SIPANDU ODHIV terbaru dari bagian GitHub Releases (versi 5.0.12 atau lebih baru setelah tersedia). Jika error tetap muncul di versi terbaru, kirim tangkapan layar versi aplikasi pada perangkat agar build yang terpasang dapat dibandingkan dengan APK yang diverifikasi CI.'
         );
       }
       if (/DEVELOPER_ERROR|status code:?\s*10|\[28444\]/i.test(message)) {
@@ -491,7 +568,17 @@ export const googleSignIn = async (): Promise<{
           `Login Google native gagal karena konfigurasi OAuth Android (DEVELOPER_ERROR). Periksa OAuth client ID, package id.my.sipandu.odhiv, serta SHA-1 sertifikat penandatangan APK Release pada proyek Firebase/Google Cloud gen-lang-client-0197631978. Detail: ${message}`
         );
       }
+      if (message.includes('auth/operation-not-allowed')) {
+        throw new Error('Penyedia Google belum diaktifkan pada Firebase Authentication proyek SIPANDU. Administrator perlu mengaktifkan Google pada Authentication → Sign-in method.');
+      }
+      if (message.includes('auth/network-request-failed')) {
+        throw new Error('Login Google gagal karena koneksi jaringan. Periksa internet perangkat, lalu ulangi login.');
+      }
       throw new Error(`Login Google native SIPANDU gagal: ${message}`);
+    } finally {
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new Event('sipandu:native-google-auth-end'));
+      }
     }
   }
 
@@ -517,6 +604,7 @@ export const googleSignIn = async (): Promise<{
     }
   }
 
+  reportProgress('Menyiapkan jendela otorisasi Google…');
   const existingUser = workspaceAuth.currentUser;
   if (
     existingUser &&
@@ -525,9 +613,11 @@ export const googleSignIn = async (): Promise<{
     // User-initiated recovery must show Google's consent screen so newly added
     // scopes (especially Forms responses read-only) are actually granted.
     try {
-      const refreshed = await reauthenticateWithPopup(
-        existingUser,
-        buildWorkspaceProvider('consent')
+      reportProgress('Memperbarui persetujuan izin Google untuk akun yang sudah terhubung…');
+      const refreshed = await waitForWorkspaceLogin(
+        reauthenticateWithPopup(existingUser, buildWorkspaceProvider('consent')),
+        GOOGLE_AUTH_RESULT_TIMEOUT_MS,
+        'Jendela persetujuan Google belum selesai dalam 90 detik. Pastikan popup Google tidak diblokir, lalu muat ulang SIPANDU dan coba kembali.'
       );
       return await finishWorkspaceSignIn(refreshed);
     } catch (silentRefreshError: any) {
@@ -550,7 +640,13 @@ export const googleSignIn = async (): Promise<{
 
   const provider = buildWorkspaceProvider('select_account consent');
   try {
-    const result = await signInWithPopup(workspaceAuth, provider);
+    reportProgress('Menunggu Anda memilih akun Google pada jendela browser…');
+    const result = await waitForWorkspaceLogin(
+      signInWithPopup(workspaceAuth, provider),
+      GOOGLE_AUTH_RESULT_TIMEOUT_MS,
+      'Google belum menyelesaikan login dalam 90 detik. Pastikan popup tidak diblokir dan selesaikan layar persetujuan Google, lalu coba kembali.'
+    );
+    reportProgress('Memeriksa identitas dan token Google API…');
     return await finishWorkspaceSignIn(result);
   } catch (error: any) {
     const code = error?.code ? String(error.code) : '';

@@ -70,7 +70,7 @@ export const GoogleWorkspaceModal: React.FC<GoogleWorkspaceModalProps> = ({
   const [token, setToken] = useState<string | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
   const [photoOrganizationRunning, setPhotoOrganizationRunning] = useState<boolean>(false);
-  const [statusMessage, setStatusMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [statusMessage, setStatusMessage] = useState<{ type: 'success' | 'error' | 'pending'; text: string } | null>(null);
 
   // Drive state
   const [driveFiles, setDriveFiles] = useState<GoogleDriveFile[]>([]);
@@ -285,7 +285,9 @@ export const GoogleWorkspaceModal: React.FC<GoogleWorkspaceModalProps> = ({
       text: 'Menghubungkan ke Google… Jendela login akan dibuka. Jangan tutup halaman sebelum proses selesai.',
     });
     try {
-      const res = await googleSignIn();
+      const res = await googleSignIn((message) => {
+        setStatusMessage({ type: 'pending', text: message });
+      });
       if (res) {
         setGoogleUser(res.user);
         setToken(res.accessToken);
@@ -296,9 +298,12 @@ export const GoogleWorkspaceModal: React.FC<GoogleWorkspaceModalProps> = ({
           text: 'Browser sedang dialihkan ke Google untuk menyelesaikan otorisasi. Setelah kembali ke SIPANDU, hasil dan token akan dipulihkan otomatis.',
         });
       }
-    } catch (err: any) {
-      console.error(err);
-      setStatusMessage({ type: 'error', text: err.message || 'Gagal masuk dengan Google' });
+    } catch (err: unknown) {
+      const message = err instanceof Error
+        ? err.message
+        : typeof err === 'string' ? err : 'Google Sign-In gagal tanpa pesan kesalahan dari penyedia.';
+      console.error('[SIPANDU Google Workspace Sign-In]', message);
+      setStatusMessage({ type: 'error', text: message || 'Gagal masuk dengan Google. Coba kembali atau jalankan Diagnostik Koneksi.' });
     } finally {
       setLoading(false);
     }
@@ -724,18 +729,25 @@ export const GoogleWorkspaceModal: React.FC<GoogleWorkspaceModalProps> = ({
         {/* Status Message Toast */}
         {statusMessage && (
           <div
-            className={`px-4 py-2.5 text-xs font-medium flex items-center gap-2 ${
+            role={statusMessage.type === 'error' ? 'alert' : 'status'}
+            aria-live={statusMessage.type === 'error' ? 'assertive' : 'polite'}
+            aria-atomic="true"
+            className={`px-4 py-3 text-xs font-medium flex items-start gap-2 border-b ${
               statusMessage.type === 'success'
-                ? 'bg-emerald-950/90 text-emerald-200 border-b border-emerald-500/40'
-                : 'bg-rose-950/90 text-rose-200 border-b border-rose-500/40'
+                ? 'bg-emerald-950/90 text-emerald-200 border-emerald-500/40'
+                : statusMessage.type === 'pending'
+                  ? 'bg-sky-950/95 text-sky-100 border-sky-500/50'
+                  : 'bg-rose-950/95 text-rose-100 border-rose-500/50'
             }`}
           >
             {statusMessage.type === 'success' ? (
-              <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+              <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+            ) : statusMessage.type === 'pending' ? (
+              <RefreshCw className="w-4 h-4 text-sky-300 shrink-0 mt-0.5 animate-spin" />
             ) : (
-              <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
+              <AlertCircle className="w-4 h-4 text-rose-300 shrink-0 mt-0.5" />
             )}
-            <span>{statusMessage.text}</span>
+            <span className="min-w-0 whitespace-normal break-words leading-relaxed">{statusMessage.text}</span>
           </div>
         )}
 
