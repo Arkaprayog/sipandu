@@ -44,7 +44,7 @@ export const BiometricGate: React.FC<{ children: React.ReactNode }> = ({ childre
     void CapacitorApp.addListener('appStateChange', ({ isActive }) => {
       if (isActive) return;
       const user = auth.currentUser;
-      if (user && isQuickUnlockEnabled(user.uid)) setLocked(true);
+      if (user && isBiometricLockEnabled(user.uid)) setLocked(true);
     }).then((handle) => {
       if (!mounted) {
         void handle.remove();
