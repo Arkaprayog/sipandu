@@ -1,6 +1,6 @@
 # SIPANDU Direct Message — audit and implementation blueprint
 
-Status: design/audit only. No production data, Firebase project settings, deployed rules, or user sessions were changed by this document.
+Status: Fondasi chat internal Direct Message tersedia di aplikasi dan menggunakan Firestore. Fitur ini bukan pengirim WhatsApp dan belum memiliki notifikasi latar belakang. Aktivasi responden, penyiapan akun responden yang tepercaya, serta pengujian dua perangkat tetap menjadi prasyarat penggunaan produksi.
 
 ## Product decision
 
@@ -112,9 +112,9 @@ The existing staff Auth persistence initialization is already present. Audit the
 - Existing PPKS roster, assessments, intake, and staff authentication remain intact.
 
 
-## Implementation status — feature branch `feature/direct-message-realtime`
+## Implementation status — fondasi chat internal
 
-The first text-chat foundation is now implemented on a separate feature branch for review:
+Fondasi chat teks dua arah tersedia di aplikasi SIPANDU dan menggunakan Firestore. Fitur ini tidak mengirim pesan WhatsApp secara otomatis. Pada layar petugas, tombol **Buka WhatsApp** hanya menyiapkan draf melalui tautan resmi `wa.me`; petugas tetap harus menekan **Kirim** di aplikasi WhatsApp untuk mengirim pesan.
 
 - Staff dashboard navigation includes **Direct Message**. The staff page displays the existing PPKS roster in Indonesian A–Z order and filters pendamping to records whose current `ppksServiceStatus/{ppksId}.assignedToUid` equals their UID.
 - The respondent portal is reachable at `/?mode=direct-message`. It uses the primary SIPANDU Firebase Auth session and accepts only a trusted custom claim pair `role: "responden"` and `ppksId: "<stable PPKS document ID>"`.
@@ -125,7 +125,7 @@ The first text-chat foundation is now implemented on a separate feature branch f
 ### Not yet implemented / release blockers
 
 - Trusted respondent account enrollment, account recovery, suspension, and custom-claim provisioning endpoint are not included in this first code slice. The login page is not an account-registration mechanism. An administrator must not manually grant arbitrary client-supplied `ppksId` claims; the trusted enrollment process described above must be built and reviewed before opening respondent access to the public.
-- Conversation notifications (FCM/APNs), attachment upload, unread counters, audit event pipeline, retention/export/deletion policy, rate limiting, and real-device tests are not included yet.
+- Conversation notifications (FCM/APNs), attachment upload, unread counters, audit event pipeline, retention/export/deletion policy, rate limiting, and real-device tests are not included yet. Consequently, a respondent must open the authenticated SIPANDU portal to read a new in-app message; no WhatsApp or background notification is triggered.
 - The latest 50-message query is a bounded initial view, not full historical pagination.
 - Firestore Rules have only been added to the branch and must pass the emulator test workflow. They have not been deployed to any Firebase project. No production code or service settings are changed by this PR.
 - The feature must not be enabled for live respondents until trusted claim provisioning exists, Rules Unit Tests pass, a two-account end-to-end test succeeds, and the data controller approves the privacy/retention policy.
