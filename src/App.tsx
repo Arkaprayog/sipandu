@@ -277,11 +277,21 @@ function normalizeAppSettings(value: unknown): AppSettings {
     }
   }
 
-  // SIPANDU ODHIV uses one verified ATENSI response spreadsheet as the
-  // authoritative PPKS roster. Do not let an older device/Firestore setting point
-  // the app back to a previous spreadsheet or a different response tab.
-  const resolvedSourceUrl = GOOGLE_SIPANDU_RESOURCES.responseSpreadsheetUrl;
-  const sourceName = 'Sumber ATENSI SIPANDU';
+  // Keep the owner-selected Google response workbook. The original resource URL
+  // is only a first-install fallback; a recreated spreadsheet has a different ID.
+  const savedSourceUrl = String(
+    saved.googleSpreadsheetSourceUrl || initialAppSettings.googleSpreadsheetSourceUrl || ''
+  ).trim();
+  let resolvedSourceUrl = GOOGLE_SIPANDU_RESOURCES.responseSpreadsheetUrl;
+  try {
+    if (savedSourceUrl) {
+      extractSpreadsheetId(savedSourceUrl);
+      resolvedSourceUrl = savedSourceUrl;
+    }
+  } catch {
+    // Invalid saved URLs fall back to the original verified source.
+  }
+  const sourceName = String(saved.googleSpreadsheetSourceName || '').trim() || 'Sumber ATENSI SIPANDU';
   const sourceTab = 'From Responses 1';
 
   return {
@@ -1204,8 +1214,9 @@ function StaffApp() {
   };
 
   const handleSyncGoogleSpreadsheet = async (): Promise<{ records: number; sourceDataRows: number; sourceRowsWithName: number; sampleRecordsFiltered: number; duplicateRowsCollapsed: number; photosRecoveredFromForm: number; photoRecoveryStatus: string; photoRecoveryDetail: string; photoRecoveryDiagnostics: { responseCount: number; responsesWithUploads: number; recordsMatched: number }; photoCounts: { diri: number; ktp: number; kk: number; rumah: number } }> => {
-    const sourceUrl = GOOGLE_SIPANDU_RESOURCES.responseSpreadsheetUrl;
+    const sourceUrl = settings.googleSpreadsheetSourceUrl?.trim() || GOOGLE_SIPANDU_RESOURCES.responseSpreadsheetUrl;
     const sourceTab = 'From Responses 1';
+    extractSpreadsheetId(sourceUrl);
     const imported = await importPPKSFromSpreadsheet(sourceUrl, sourceTab);
     if (!imported.records.length) {
       const headers = (imported.previewRows[0] || []).slice(0, 12).join(' | ');
@@ -1673,7 +1684,7 @@ function StaffApp() {
   useEffect(() => {
     if (!authReady || !localCacheReady) return;
 
-    const sourceUrl = GOOGLE_SIPANDU_RESOURCES.responseSpreadsheetUrl;
+    const sourceUrl = settings.googleSpreadsheetSourceUrl?.trim() || GOOGLE_SIPANDU_RESOURCES.responseSpreadsheetUrl;
     const sourceTab = 'From Responses 1';
     if (!isAuthenticated) {
       setLiveSyncState({
@@ -1731,6 +1742,7 @@ function StaffApp() {
           return;
         }
 
+        extractSpreadsheetId(sourceUrl);
         const imported = await importPPKSFromSpreadsheet(sourceUrl, sourceTab);
         if (!active) return;
         if (!imported.records.length) {
