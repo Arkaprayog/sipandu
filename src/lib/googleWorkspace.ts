@@ -931,7 +931,11 @@ function mapRowsToPPKSRecords(
 
   rows.slice(1).forEach((sourceRow, rowIndex) => {
     const row = sourceRow.map((value) => String(value ?? '').trim());
-    const namaLengkap = useATENSIColumnPositions ? readAtensiProfileCell(row, 'namaLengkap') : readRespondentName(headers, row);
+    const namaLengkap = useATENSIColumnPositions
+      ? readAtensiProfileCell(row, 'namaLengkap')
+      : (useATENSIAssessmentColumnPositions
+          ? (readRespondentName(headers, row) || readAtensiProfileCell(row, 'namaLengkap'))
+          : readRespondentName(headers, row));
     // The follow-up Form is prefilled with the original PPKS ID. It may not ask
     // for the respondent's name again, so an exact valid ID is enough to accept
     // that row for merging into its existing stage-one record.
@@ -944,7 +948,11 @@ function mapRowsToPPKSRecords(
     if (!namaLengkap && !linkedPPKSId) return;
 
     const timestamp = useATENSIColumnPositions ? readAtensiProfileCell(row, 'timestamp') : readCellByAliases(headers, row, ['timestamp', 'capWaktu', 'waktuPengiriman', 'waktuPengisian', 'tanggalWaktu', 'createTime']);
-    let nik = useATENSIColumnPositions ? normalizeNIKCellValue(readAtensiProfileCell(row, 'nik')) : readNIKFromSheetRow(headers, row);
+    let nik = useATENSIColumnPositions
+      ? normalizeNIKCellValue(readAtensiProfileCell(row, 'nik'))
+      : useATENSIAssessmentColumnPositions
+        ? (normalizeNIKCellValue(readAtensiProfileCell(row, 'nik')) || readNIKFromSheetRow(headers, row))
+        : readNIKFromSheetRow(headers, row);
     // Google Forms can append helper text/asterisks and may label the NIK as
     // "NIK / No. KTP", "Nomor KTP (16 digit)" or a numbered official-PDF field.
     // Use a second conservative pass over respondent identity headers before
@@ -1618,12 +1626,13 @@ export async function importPPKSFromSpreadsheet(
   const selectedTab = requestedPreferredTab || requestedFromResponsesTab || responseTab || metadata.sheetTitles[0];
   const escapedTitle = selectedTab.replace(/'/g, "''");
   const isKnownATENSIResponseSheet =
+    !useATENSIAssessmentColumnPositions && (
     metadata.spreadsheetId === GOOGLE_SIPANDU_RESOURCES.responseSpreadsheetId ||
     (
       normalizeSheetHeader(metadata.title).includes('asesmenprogramasistensirehabilitasisosial') &&
       normalizeSheetHeader(metadata.title).includes('responses') &&
       normalizeSheetHeader(selectedTab).includes('fromresponses')
-    );
+    ));
   // For the owner's exact ATENSI response tab, use the known E-H attachment
   // columns to recover actual Drive hyperlink targets even when Forms shows
   // a short display label instead of the underlying URL in each cell.
@@ -1642,7 +1651,9 @@ export async function importPPKSFromSpreadsheet(
   const headers = rows[0] || [];
   const dataRows = rows.slice(1);
   const sourceRowsWithName = dataRows.filter((row) =>
-    Boolean(useATENSIColumnPositions ? String(row[2] ?? '').trim() : readRespondentName(headers, row))
+    Boolean(useATENSIColumnPositions || useATENSIAssessmentColumnPositions
+      ? (String(row[2] ?? '').trim() || readRespondentName(headers, row))
+      : readRespondentName(headers, row))
   ).length;
   const allMappedRecords = mapRowsToPPKSRecords(rows, useATENSIColumnPositions, useATENSIAssessmentColumnPositions);
   const recordsAfterSampleFilter = allMappedRecords.filter((record) => !isLegacySamplePPKSId(record.id));
@@ -1723,7 +1734,9 @@ export async function importPPKSFromSpreadsheet(
   // Organize old and new Form photo links whenever the source roster syncs.
   let photoDriveOrganization: PPKSPhotoOrganizationReport | null = null;
   try {
-    photoDriveOrganization = await organizePPKSPhotosInDrive(records);
+    if (!useATENSIAssessmentColumnPositions) {
+      photoDriveOrganization = await organizePPKSPhotosInDrive(records);
+    }
   } catch (error) {
     console.warn('SIPANDU could not automatically organize respondent photos in Google Drive:', error);
     photoDriveOrganization = {
