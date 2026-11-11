@@ -6,6 +6,7 @@ import { Check, RefreshCw, ShieldCheck, UserMinus, UserPlus, X } from 'lucide-re
 type PendingRegistration = {
   uid: string;
   email: string;
+  name?: string;
   createdAt: number;
   status: 'pending_owner';
 };
@@ -159,7 +160,8 @@ export const TeamRegistrationAdminView: React.FC<TeamRegistrationAdminViewProps>
               <article key={item.uid} className="rounded-xl border border-emerald-100/15 bg-black/20 p-4">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <p className="break-all text-sm font-bold">{item.email || 'Email tidak tersedia'}</p>
+                    <p className="text-sm font-bold">{item.name || 'Nama belum tersedia'}</p>
+                    <p className="break-all text-xs text-emerald-50/80">{item.email || 'Email tidak tersedia'}</p>
                     <p className="mt-1 break-all text-[11px] text-emerald-100/55">UID: {item.uid}</p>
                     <p className="mt-1 text-xs text-emerald-100/70">Diajukan: {item.createdAt ? new Date(item.createdAt).toLocaleString('id-ID') : 'Tidak diketahui'}</p>
                   </div>
