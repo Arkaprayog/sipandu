@@ -100,6 +100,27 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
           setErrorMsg(registration.message || 'Status permohonan belum dapat diperiksa. Coba kembali beberapa saat lagi.');
           return;
         }
+        if (registration.status === 'not_registered') {
+          // Recover safely if Firebase account creation succeeded but the original
+          // registration request was interrupted before the Worker stored the request.
+          const retryResponse = await fetch('https://sipandu-registration.aryprayoga139.workers.dev/register', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: 'Bearer ' + idToken,
+            },
+            body: JSON.stringify({}),
+          });
+          const retry = await retryResponse.json().catch(() => ({})) as { ok?: boolean; status?: string; message?: string };
+          await signOut(auth);
+          if (!retryResponse.ok || !retry.ok || retry.status !== 'pending_owner') {
+            setErrorMsg(retry.message || 'Permohonan belum berhasil dikirim ulang untuk persetujuan Owner.');
+            return;
+          }
+          setRegistrationNotice('Permohonan pendaftaran berhasil dicatat dan sedang menunggu persetujuan Owner. Tautan verifikasi email belum dikirim.');
+          setErrorMsg('');
+          return;
+        }
         if (registration.status === 'pending_owner') {
           await signOut(auth);
           setRegistrationNotice('Permohonan Anda masih menunggu persetujuan Owner atau Supervisor yang ditunjuk. Tautan verifikasi belum dikirim.');
