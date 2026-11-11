@@ -8,7 +8,7 @@ function record(overrides: Partial<PPKSRecord> = {}): PPKSRecord {
     id: 'ppks-deny',
     timestamp: '2026-11-01T09:00:00',
     namaLengkap: 'Deny Arifin Martyon Sikumbang',
-    nik: '1273011312920001',
+    nik: '0000000000000123',
     usia: 33,
     jenisKelamin: 'Laki-laki',
     kotaDomisili: 'Kab Deli Serdang',
@@ -34,7 +34,7 @@ test('joins AO ARV duration to the exact PPKS identity', () => {
 
 test('does not join a same-name assessment row with a conflicting NIK', () => {
   const profile = record();
-  const assessment = record({ nik: '1273011312920099', lamaTerapiArv: '5 tahun' });
+  const assessment = record({ nik: '0000000000000456', lamaTerapiArv: '5 tahun' });
   const result = mergeAtensiArvDurations([profile], [assessment]);
   assert.equal(result.matched, 0);
   assert.equal(result.records[0].lamaTerapiArv, undefined);
