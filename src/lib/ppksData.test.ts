@@ -27,7 +27,7 @@ function record(overrides: Partial<PPKSRecord> = {}): PPKSRecord {
 test('deduplicates multiple records for the same person and keeps the newest timestamp/details', () => {
   const older = record({
     fotoDiri: 'https://example.test/foto.jpg',
-    alamatLengkap: 'Alamat dari kolom K',
+    alamatLengkap: 'Alamat KTP lama',
     lamaTerapiArv: '2 tahun',
   });
   const newer = record({
@@ -36,7 +36,7 @@ test('deduplicates multiple records for the same person and keeps the newest tim
     namaLengkap: 'LES MANA',
     fotoDiri: '',
     fotoKtp: 'https://example.test/ktp.jpg',
-    alamatLengkap: '',
+    alamatLengkap: 'Alamat domisili terbaru dari kolom K',
     lamaTerapiArv: '',
   });
   const result = deduplicatePPKSRecords([older, newer]);
@@ -45,7 +45,7 @@ test('deduplicates multiple records for the same person and keeps the newest tim
   assert.equal(result[0].timestamp, '10/26/2026 11:29:19 AM');
   assert.equal(result[0].fotoDiri, 'https://example.test/foto.jpg');
   assert.equal(result[0].fotoKtp, 'https://example.test/ktp.jpg');
-  assert.equal(result[0].alamatLengkap, 'Alamat dari kolom K');
+  assert.equal(result[0].alamatLengkap, 'Alamat domisili terbaru dari kolom K');
   assert.equal(result[0].lamaTerapiArv, '2 tahun');
 });
 
