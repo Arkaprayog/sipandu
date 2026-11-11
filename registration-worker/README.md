@@ -29,11 +29,11 @@ Open Cloudflare Dashboard → Workers & Pages → `sipandu-registration` → Set
 
 The Firebase project ID and named Firestore database ID are non-secret Worker variables in `wrangler.jsonc`. The KV binding is already included there. The app's Firebase client API key remains visible in `firebase-applet-config.json` by design; it must be restricted in Google Cloud Console to the Firebase APIs and application origins actually used by SIPANDU.
 
-New members register with their email and password, then activate only after Firebase confirms that the email is verified. The `/register` endpoint stores a seven-day pending invitation for the Firebase UID; `/activate` checks the verified email, UID, and email address before assigning the `pendamping` role. No shared team code is required.
+New members self-register with their name, email, and password. Firebase sends an email-verification link; after the link is opened, the member signs in and `/activate` verifies the Firebase ID token, the verified email, and the account status before assigning the least-privilege `pendamping` custom claim. Activation does not require a team code, invitation, pending KV record, or administrator-created account. Existing `owner` and `supervisor` claims are never overwritten. Disabled Firebase accounts are rejected.
 
-## Restore an invitation for an existing account
+## Legacy invitation recovery (deprecated)
 
-If Firebase already contains the member account but its pending KV invitation is missing or has expired, the signed-in user can restore it without creating another Firebase account:
+The old `/restore-invitation` endpoint is retained temporarily for backward compatibility only. New registrations and activations must not use it; no pending KV invitation is required.
 
 1. Sign in using the existing email and password, then finish email verification.
 2. On the retained-session screen, choose **Pulihkan undangan akun yang sama** after verifying the email.
