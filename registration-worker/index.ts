@@ -434,12 +434,22 @@ export default {
         if (!firebaseUser.email || !firebaseUser.localId || firebaseUser.emailVerified) {
           return jsonResponse({ ok: false, message: 'Akun harus memiliki email valid yang belum diverifikasi.' }, 400, origin);
         }
-        await env.PENDING_REGISTRATIONS!.put(`pending:${firebaseUser.localId}`, JSON.stringify({
+        const key = `pending:${firebaseUser.localId}`;
+        const existing = await env.PENDING_REGISTRATIONS!.get(key);
+        if (existing) {
+          let prior: Record<string, unknown> = {};
+          try { prior = JSON.parse(existing) as Record<string, unknown>; } catch { /* replace corrupt pending state safely */ }
+          if (prior.status === 'approved' || prior.status === 'pending_email' || prior.status === 'active') {
+            return jsonResponse({ ok: true, status: prior.status, message: 'Permohonan pendaftaran sudah tercatat.' }, 200, origin);
+          }
+        }
+        await env.PENDING_REGISTRATIONS!.put(key, JSON.stringify({
           uid: firebaseUser.localId,
           email: firebaseUser.email.toLowerCase(),
           createdAt: Date.now(),
+          status: 'pending_owner',
         }), { expirationTtl: 7 * 24 * 60 * 60 });
-        return jsonResponse({ ok: true, message: 'Pendaftaran tim tersimpan. Verifikasi email untuk mengaktifkan akun.' }, 200, origin);
+        return jsonResponse({ ok: true, status: 'pending_owner', message: 'Permohonan tersimpan dan menunggu persetujuan Owner atau administrator SIPANDU.' }, 202, origin);
       } catch (error) {
         return jsonResponse({ ok: false, message: error instanceof Error ? error.message : 'Sesi akun tidak dapat diverifikasi.' }, 401, origin);
       }
@@ -485,17 +495,77 @@ export default {
           return jsonResponse({ ok: false, message: 'Akun memiliki peran yang tidak dapat ditimpa melalui pemulihan undangan.' }, 403, origin);
         }
 
-        const email = firebaseUser.email.trim().toLowerCase();
+        const pendingKey = `pending:${firebaseUser.localId}`;
+        const pendingRaw = await env.PENDING_REGISTRATIONS!.get(pendingKey);
+        if (!pendingRaw) {
+          return jsonResponse({ ok: false, message: 'Permohonan belum tercatat. Daftarkan ulang dan tunggu persetujuan Owner.' }, 404, origin);
+        }
+        let pending: Record<string, unknown>;
+        try { pending = JSON.parse(pendingRaw) as Record<string, unknown>; } catch {
+          return jsonResponse({ ok: false, message: 'Data permohonan tidak valid. Hubungi administrator.' }, 409, origin);
+        }
+        if (pending.status !== 'approved' && pending.status !== 'pending_email') {
+          return jsonResponse({ ok: false, status: pending.status || 'pending_owner', message: pending.status === 'rejected' ? 'Permohonan pendaftaran ditolak oleh Owner.' : 'Permohonan masih menunggu persetujuan Owner.' }, 403, origin);
+        }
         const now = Date.now();
-        await env.PENDING_REGISTRATIONS!.put(`pending:${firebaseUser.localId}`, JSON.stringify({
-          uid: firebaseUser.localId,
-          email,
-          createdAt: now,
+        await env.PENDING_REGISTRATIONS!.put(pendingKey, JSON.stringify({
+          ...pending,
+          email: firebaseUser.email.trim().toLowerCase(),
+          status: 'pending_email',
+          emailVerifiedAt: now,
           restoredAt: now,
         }), { expirationTtl: 7 * 24 * 60 * 60 });
-        return jsonResponse({ ok: true, message: 'Undangan tim berhasil dipulihkan untuk akun dan email yang sama. Lanjutkan aktivasi.' }, 200, origin);
+        return jsonResponse({ ok: true, status: 'pending_email', message: 'Permohonan telah disetujui. Verifikasi email dapat dilanjutkan.' }, 200, origin);
       } catch (error) {
         return jsonResponse({ ok: false, message: error instanceof Error ? error.message : 'Undangan tim belum dapat dipulihkan.' }, 401, origin);
+      }
+    }
+
+    if ((path === '/owner/approve' || path === '/owner/reject') && request.method === 'POST') {
+      if (!(await allowAttempt(env, request, 20))) {
+        return jsonResponse({ ok: false, message: 'Terlalu banyak keputusan. Coba kembali satu menit lagi.' }, 429, origin);
+      }
+      const body = await parseJson(request);
+      const targetUid = typeof body?.uid === 'string' ? body.uid.trim() : '';
+      if (!targetUid || targetUid.length > 128 || /[\\/\\s]/.test(targetUid)) {
+        return jsonResponse({ ok: false, message: 'UID pendaftar tidak valid.' }, 400, origin);
+      }
+      const authorization = request.headers.get('Authorization') || '';
+      const idToken = authorization.startsWith('Bearer ') ? authorization.slice(7).trim() : '';
+      if (!idToken) return jsonResponse({ ok: false, message: 'Sesi administrator tidak ditemukan.' }, 401, origin);
+      try {
+        const actor = await lookupFirebaseUser(env, idToken);
+        let actorClaims: Record<string, unknown> = {};
+        try { actorClaims = actor.customAttributes ? JSON.parse(actor.customAttributes) as Record<string, unknown> : {}; } catch {
+          return jsonResponse({ ok: false, message: 'Klaim administrator tidak valid.' }, 403, origin);
+        }
+        if (actorClaims.role !== 'owner' && actorClaims.role !== 'supervisor') {
+          return jsonResponse({ ok: false, message: 'Hanya Owner atau administrator (Supervisor) yang dapat memutuskan pendaftaran.' }, 403, origin);
+        }
+        const key = `pending:${targetUid}`;
+        const raw = await env.PENDING_REGISTRATIONS?.get(key);
+        if (!raw) return jsonResponse({ ok: false, message: 'Permohonan pendaftaran tidak ditemukan atau sudah kedaluwarsa.' }, 404, origin);
+        let pending: Record<string, unknown>;
+        try { pending = JSON.parse(raw) as Record<string, unknown>; } catch {
+          return jsonResponse({ ok: false, message: 'Data permohonan tidak valid.' }, 409, origin);
+        }
+        if (pending.uid !== targetUid || pending.status !== 'pending_owner') {
+          return jsonResponse({ ok: false, message: 'Permohonan sudah diputuskan atau tidak cocok.' }, 409, origin);
+        }
+        const approved = path === '/owner/approve';
+        await env.PENDING_REGISTRATIONS!.put(key, JSON.stringify({
+          ...pending,
+          status: approved ? 'approved' : 'rejected',
+          decidedAt: Date.now(),
+          decidedByUid: actor.localId,
+        }), { expirationTtl: 7 * 24 * 60 * 60 });
+        return jsonResponse({
+          ok: true,
+          status: approved ? 'approved' : 'rejected',
+          message: approved ? 'Pendaftaran disetujui. Pendaftar dapat melanjutkan verifikasi email.' : 'Pendaftaran ditolak. Akun tidak dapat diaktifkan.',
+        }, 200, origin);
+      } catch (error) {
+        return jsonResponse({ ok: false, message: error instanceof Error ? error.message : 'Keputusan pendaftaran gagal diproses.' }, 401, origin);
       }
     }
 
@@ -528,8 +598,40 @@ export default {
         if (!firebaseUser.emailVerified) {
           return jsonResponse({ ok: false, message: 'Email belum diverifikasi. Buka tautan verifikasi terlebih dahulu.' }, 403, origin);
         }
+        if (firebaseUser.customAttributes) {
+          let claims: Record<string, unknown> = {};
+          try { claims = JSON.parse(firebaseUser.customAttributes) as Record<string, unknown>; } catch {
+            return jsonResponse({ ok: false, message: 'Klaim akun tidak dapat dibaca dengan aman.' }, 403, origin);
+          }
+          // Existing Owner, Supervisor, and already-activated staff keep their current access.
+          if (claims.role === 'owner' || claims.role === 'supervisor' || claims.role === 'pendamping') {
+            return jsonResponse({ ok: true, status: 'active', message: 'Akun SIPANDU yang sudah aktif dipertahankan.' }, 200, origin);
+          }
+        }
+        if (!env.PENDING_REGISTRATIONS) {
+          return jsonResponse({ ok: false, message: 'Pemeriksaan persetujuan Owner belum tersedia.' }, 503, origin);
+        }
+        const pendingRaw = await env.PENDING_REGISTRATIONS.get(`pending:${firebaseUser.localId}`);
+        if (!pendingRaw) {
+          return jsonResponse({ ok: false, message: 'Permohonan pendaftaran tidak ditemukan. Akun belum dapat diaktifkan.' }, 403, origin);
+        }
+        let pending: Record<string, unknown>;
+        try { pending = JSON.parse(pendingRaw) as Record<string, unknown>; } catch {
+          return jsonResponse({ ok: false, message: 'Data persetujuan tidak valid. Hubungi administrator.' }, 409, origin);
+        }
+        if (pending.status !== 'approved' && pending.status !== 'pending_email') {
+          const message = pending.status === 'rejected'
+            ? 'Permohonan pendaftaran ditolak oleh Owner. Hubungi administrator SIPANDU.'
+            : 'Akun belum dapat login. Menunggu persetujuan Owner atau administrator SIPANDU.';
+          return jsonResponse({ ok: false, status: pending.status || 'pending_owner', message }, 403, origin);
+        }
         await assignPendampingRole(env, firebaseUser);
-        return jsonResponse({ ok: true, message: 'Email terverifikasi. Akun SIPANDU aktif sebagai anggota.' }, 200, origin);
+        await env.PENDING_REGISTRATIONS.put(`pending:${firebaseUser.localId}`, JSON.stringify({
+          ...pending,
+          status: 'active',
+          activatedAt: Date.now(),
+        }), { expirationTtl: 365 * 24 * 60 * 60 });
+        return jsonResponse({ ok: true, status: 'active', message: 'Persetujuan Owner dan verifikasi email selesai. Akun SIPANDU aktif sebagai anggota.' }, 200, origin);
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Aktivasi akun belum berhasil.';
         const permissionFailure = /INSUFFICIENT_PERMISSION|PERMISSION_DENIED|firebaseauth[.]users[.]update/i.test(message);
