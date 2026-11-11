@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, MessageCircle, Search, Send, ShieldCheck } from 'lucide-react';
+import { ArrowLeft, ExternalLink, MessageCircle, Search, Send, ShieldCheck } from 'lucide-react';
 import type { PPKSRecord, PPKSServiceStatus } from '../types';
+import { createWhatsAppLink, formatPhoneNumberForWhatsApp } from '../utils/helpers';
 import { deduplicatePPKSRecords, sortPPKSRecordsByName } from '../lib/ppksData';
 import {
   subscribeToDirectMessageConversation,
@@ -52,6 +53,7 @@ export const DirectMessageView: React.FC<DirectMessageViewProps> = ({
   const [loadingMessages, setLoadingMessages] = useState(false);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState('');
+  const [successNotice, setSuccessNotice] = useState('');
 
   const filteredRespondents = useMemo(() => {
     const normalized = search.trim().toLocaleLowerCase('id-ID');
@@ -62,6 +64,10 @@ export const DirectMessageView: React.FC<DirectMessageViewProps> = ({
   }, [visibleRespondents, search]);
 
   const selectedRespondent = visibleRespondents.find((person) => person.id === selectedRespondentId) || null;
+  const whatsappPhone = selectedRespondent
+    ? formatPhoneNumberForWhatsApp(String(selectedRespondent.noHpWa || ''))
+    : '';
+  const canOpenWhatsApp = /^62[0-9]{8,13}$/.test(whatsappPhone);
 
   // Start on the full A–Z contact list. Open a chat only after explicit selection.
   // If assignment is revoked or a contact leaves the permitted roster, return to
@@ -77,6 +83,7 @@ export const DirectMessageView: React.FC<DirectMessageViewProps> = ({
     setConversationLoaded(false);
     setMessages([]);
     setError('');
+    setSuccessNotice('');
     if (!selectedRespondentId) return;
 
     try {
@@ -137,11 +144,28 @@ export const DirectMessageView: React.FC<DirectMessageViewProps> = ({
         canManageAssignments: isManager,
       });
       setDraft('');
+      setSuccessNotice('Pesan berhasil disimpan di chat SIPANDU. Pesan ini tidak dikirim ke WhatsApp; responden harus masuk ke portal SIPANDU untuk membacanya.');
     } catch (sendError) {
       setError(sendError instanceof Error ? sendError.message : String(sendError));
     } finally {
       setSending(false);
     }
+  };
+
+  const handleOpenWhatsApp = () => {
+    if (!selectedRespondent || !draft.trim()) {
+      setError('Tulis pesan terlebih dahulu sebelum membuka WhatsApp.');
+      setSuccessNotice('');
+      return;
+    }
+    if (!canOpenWhatsApp) {
+      setError('Nomor WhatsApp responden belum tersedia atau formatnya tidak valid. Perbarui nomor pada data PPKS.');
+      setSuccessNotice('');
+      return;
+    }
+    setError('');
+    window.open(createWhatsAppLink(selectedRespondent.noHpWa, draft.trim()), '_blank', 'noopener,noreferrer');
+    setSuccessNotice('WhatsApp dibuka dengan teks pesan. Pesan belum terkirim sampai Anda menekan tombol Kirim di aplikasi WhatsApp.');
   };
 
   return (
@@ -151,7 +175,7 @@ export const DirectMessageView: React.FC<DirectMessageViewProps> = ({
           <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-emerald-300">Kanal komunikasi resmi</p>
           <h1 className="mt-1 text-2xl font-black tracking-tight text-white">Direct Message</h1>
           <p className="mt-1 max-w-2xl text-sm text-emerald-100/70">
-            Percakapan dua arah dengan responden melalui SIPANDU. Pesan hanya dikirim saat petugas menekan tombol Kirim.
+            Percakapan dua arah melalui portal SIPANDU. Fitur ini bukan pengiriman WhatsApp.
           </p>
         </div>
         <div className="inline-flex items-center gap-2 rounded-xl border border-emerald-200/15 bg-emerald-950/40 px-3 py-2 text-xs text-emerald-100">
@@ -160,6 +184,9 @@ export const DirectMessageView: React.FC<DirectMessageViewProps> = ({
         </div>
       </header>
 
+      <div role="note" className="mb-3 rounded-xl border border-amber-300/25 bg-amber-950/25 px-3 py-3 text-xs leading-relaxed text-amber-100/90">
+        <strong>Info pengiriman:</strong> tombol Kirim ke SIPANDU hanya menyimpan pesan di ruang chat aplikasi. Responden tidak menerima pesan WhatsApp atau notifikasi otomatis. Untuk menghubungi nomor WhatsApp, gunakan tombol Buka WhatsApp; Anda tetap harus menekan Kirim di WhatsApp.
+      </div>
       <div className="grid min-h-[min(68vh,720px)] overflow-hidden rounded-2xl border border-white/10 bg-[#102017]/80 shadow-2xl md:grid-cols-[300px_minmax(0,1fr)]">
         <aside className={`border-b border-white/10 bg-[#0c1912]/90 md:border-b-0 md:border-r ${selectedRespondent ? 'hidden md:block' : 'block'}`}>
           <div className="border-b border-white/10 p-3">
@@ -267,7 +294,8 @@ export const DirectMessageView: React.FC<DirectMessageViewProps> = ({
                 })}
               </div>
 
-              {error && <p role="alert" className="mx-3 mb-2 rounded-lg border border-rose-400/25 bg-rose-950/30 px-3 py-2 text-xs text-rose-200">{error}</p>}
+              {successNotice && <p role="status" aria-live="polite" className="mx-3 mb-2 rounded-lg border border-emerald-300/25 bg-emerald-950/35 px-3 py-2 text-xs leading-relaxed text-emerald-100">{successNotice}</p>}
+              {error && <p role="alert" aria-live="assertive" className="mx-3 mb-2 rounded-lg border border-rose-400/25 bg-rose-950/30 px-3 py-2 text-xs leading-relaxed text-rose-200">{error}</p>}
               <form
                 className="border-t border-white/10 bg-[#0c1912]/80 p-3"
                 onSubmit={(event) => { event.preventDefault(); void handleSend(); }}
@@ -275,22 +303,34 @@ export const DirectMessageView: React.FC<DirectMessageViewProps> = ({
                 <div className="flex items-end gap-2 rounded-2xl border border-emerald-100/15 bg-black/20 p-2">
                   <textarea
                     value={draft}
-                    onChange={(event) => setDraft(event.target.value.slice(0, 4000))}
+                    onChange={(event) => { setDraft(event.target.value.slice(0, 4000)); setSuccessNotice(''); }}
                     rows={2}
                     maxLength={4000}
                     placeholder="Tulis pesan secara manual…"
                     className="max-h-36 min-h-12 flex-1 resize-y bg-transparent px-2 py-2 text-sm text-white outline-none placeholder:text-emerald-100/35"
                   />
-                  <button
-                    type="submit"
-                    disabled={!draft.trim() || sending}
-                    className="inline-flex h-10 shrink-0 items-center gap-2 rounded-xl bg-emerald-500 px-3 text-xs font-bold text-[#052216] transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-40"
-                  >
-                    <Send className="h-4 w-4" />
-                    {sending ? 'Mengirim' : 'Kirim'}
-                  </button>
+                  <div className="flex shrink-0 flex-col gap-2 sm:flex-row">
+                    <button
+                      type="button"
+                      onClick={handleOpenWhatsApp}
+                      disabled={!draft.trim() || sending || !canOpenWhatsApp}
+                      title={!canOpenWhatsApp ? 'Nomor WhatsApp responden belum valid' : 'Buka WhatsApp dengan teks pesan'}
+                      className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-emerald-300/35 bg-emerald-950/50 px-3 text-xs font-bold text-emerald-100 transition hover:bg-emerald-900/70 disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      <ExternalLink className="h-4 w-4" />
+                      Buka WhatsApp
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={!draft.trim() || sending}
+                      className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-3 text-xs font-bold text-[#052216] transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      <Send className="h-4 w-4" />
+                      {sending ? 'Menyimpan…' : 'Kirim ke SIPANDU'}
+                    </button>
+                  </div>
                 </div>
-                <p className="mt-1 px-2 text-right text-[10px] text-emerald-100/35">{draft.length}/4.000 karakter · Pesan tidak dikirim otomatis</p>
+                <p className="mt-1 px-2 text-right text-[10px] text-emerald-100/45">{draft.length}/4.000 karakter · WhatsApp dibuka sebagai draf; pengiriman harus dikonfirmasi di WhatsApp.</p>
               </form>
             </>
           ) : (
@@ -303,7 +343,7 @@ export const DirectMessageView: React.FC<DirectMessageViewProps> = ({
         </div>
       </div>
       <p className="mt-3 text-[11px] leading-relaxed text-emerald-100/45">
-        Direct Message menyimpan pesan teks di Firestore. Notifikasi latar belakang dan lampiran belum diaktifkan pada tahap ini; jangan kirim data medis atau identitas sensitif melalui isi pesan.
+        Chat SIPANDU hanya dapat dibaca melalui portal responden setelah akun aktif dan responden masuk. Fitur notifikasi latar belakang belum tersedia. Untuk WhatsApp, pastikan responden setuju dihubungi dan jangan tulis data medis, status kesehatan, NIK, atau informasi sensitif dalam pesan.
       </p>
     </section>
   );
