@@ -1,6 +1,6 @@
 /**
  * Zero-based columns for the verified ATENSI Google Form response tab
- * "From Responses 1". Keep this mapping in one place and cover it with tests.
+ * "Form Responses 1" (also accepts the historical app alias "From Responses 1"). Keep this mapping in one place and cover it with tests.
  */
 export const ATENSI_PROFILE_COLUMN_INDEX = {
   timestamp: 0,       // A
@@ -21,8 +21,22 @@ export const ATENSI_PROFILE_COLUMN_INDEX = {
   desil: 42,           // AQ
 } as const;
 
-export const ATENSI_PROFILE_RESPONSE_TAB_NAME = 'From Responses 1';
+export const ATENSI_PROFILE_RESPONSE_TAB_NAME = 'Form Responses 1';
 export const ATENSI_ASSESSMENT_RESPONSE_TAB_NAME = 'From Asesmen 1';
+
+/**
+ * Google Forms creates the response tab as "Form Responses 1".
+ * Older SIPANDU builds used the misspelled alias "From Responses 1".
+ * Accept both exact normalized names, but never a location/region tab.
+ */
+export function isAtensiProfileResponseTab(title: unknown): boolean {
+  const normalized = String(title ?? '')
+    .normalize('NFD')
+    .replace(/[\\u0300-\\u036f]/g, '')
+    .toLocaleLowerCase('id-ID')
+    .replace(/[^a-z0-9]/g, '');
+  return normalized === 'formresponses1' || normalized === 'fromresponses1';
+}
 
 export type AtensiProfileColumn = keyof typeof ATENSI_PROFILE_COLUMN_INDEX;
 

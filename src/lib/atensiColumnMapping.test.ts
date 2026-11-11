@@ -9,6 +9,7 @@ import {
   readAtensiCurrentDomicileAddress,
   readAtensiAssessmentArvDuration,
   ATENSI_ASSESSMENT_RESPONSE_TAB_NAME,
+  isAtensiProfileResponseTab,
 } from './atensiColumnMapping';
 
 test('ATENSI profile mapping uses the requested spreadsheet columns', () => {
@@ -31,6 +32,14 @@ test('ATENSI profile mapping uses the requested spreadsheet columns', () => {
     desil: 42,
   });
   assert.deepEqual(ATENSI_PHOTO_COLUMN_INDICES, [4, 5, 6, 7]);
+});
+
+test('accepts the real Google Forms response tab and the legacy SIPANDU alias only', () => {
+  assert.equal(isAtensiProfileResponseTab('Form Responses 1'), true);
+  assert.equal(isAtensiProfileResponseTab('From Responses 1'), true);
+  assert.equal(isAtensiProfileResponseTab('FORM RESPONSES 1'), true);
+  assert.equal(isAtensiProfileResponseTab('Kota Sibolga, Kab. Tapanuli Tengah'), false);
+  assert.equal(isAtensiProfileResponseTab('Responses Archive'), false);
 });
 
 test('ATENSI cell reader maps the requested profile fields without header dependence', () => {

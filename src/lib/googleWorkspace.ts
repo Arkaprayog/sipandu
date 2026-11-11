@@ -8,8 +8,8 @@ import { GOOGLE_SIPANDU_RESOURCES, GOOGLE_WORKSPACE_EMAIL } from './googleSIPAND
 import { getPhotoUploadMimeType, isSupportedPhotoFile, MAX_PPKS_PHOTO_FILE_BYTES } from './photoFilePreview';
 import {
   ATENSI_PHOTO_COLUMN_INDICES,
-  ATENSI_PROFILE_RESPONSE_TAB_NAME,
   ATENSI_ASSESSMENT_RESPONSE_TAB_NAME,
+  isAtensiProfileResponseTab,
   readAtensiProfileCell,
   readAtensiGender,
   readAtensiCurrentDomicileAddress,
@@ -1607,15 +1607,20 @@ export async function importPPKSFromSpreadsheet(
   const metadata = await getSpreadsheetMetadata(spreadsheetUrlOrId);
   if (!metadata.sheetTitles.length) throw new Error('Spreadsheet tidak memiliki tab yang dapat dibaca.');
   const preferred = preferredTab?.trim();
-  const requestedPreferredTab = preferred
+  const exactPreferredTab = preferred
     ? metadata.sheetTitles.find((title) => normalizeSheetHeader(title) === normalizeSheetHeader(preferred))
     : undefined;
+  // Treat the old SIPANDU label "From Responses 1" as an alias for the real
+  // Google Forms tab "Form Responses 1"; do not fall back to unrelated tabs.
+  const requestedPreferredTab = exactPreferredTab || (
+    preferred && isAtensiProfileResponseTab(preferred)
+      ? metadata.sheetTitles.find(isAtensiProfileResponseTab)
+      : undefined
+  );
   if (preferred && !requestedPreferredTab) {
     throw new Error(`Tab sumber “${preferred}” tidak ditemukan pada spreadsheet “${metadata.title}”. Tab yang tersedia: ${metadata.sheetTitles.join(', ')}.`);
   }
-  const requestedFromResponsesTab = metadata.sheetTitles.find(
-    (title) => normalizeSheetHeader(title) === normalizeSheetHeader(ATENSI_PROFILE_RESPONSE_TAB_NAME)
-  );
+  const requestedFromResponsesTab = metadata.sheetTitles.find(isAtensiProfileResponseTab);
   const responseTab = metadata.sheetTitles.find((title) => {
     const normalized = normalizeSheetHeader(title);
     return normalized.includes('formresponses') || normalized.includes('fromresponse') || normalized.includes('respon');
@@ -1627,8 +1632,7 @@ export async function importPPKSFromSpreadsheet(
   const selectedTab = requestedPreferredTab || requestedFromResponsesTab || responseTab || metadata.sheetTitles[0];
   const escapedTitle = selectedTab.replace(/'/g, "''");
   // Resolve schema flags before using them in the source/photo-recovery guards.
-  const useATENSIColumnPositions =
-    normalizeSheetHeader(selectedTab) === normalizeSheetHeader(ATENSI_PROFILE_RESPONSE_TAB_NAME);
+  const useATENSIColumnPositions = isAtensiProfileResponseTab(selectedTab);
   const useATENSIAssessmentColumnPositions =
     normalizeSheetHeader(selectedTab) === normalizeSheetHeader(ATENSI_ASSESSMENT_RESPONSE_TAB_NAME);
   const isKnownATENSIResponseSheet =
@@ -1637,7 +1641,7 @@ export async function importPPKSFromSpreadsheet(
       (
         normalizeSheetHeader(metadata.title).includes('asesmenprogramasistensirehabilitasisosial') &&
         normalizeSheetHeader(metadata.title).includes('responses') &&
-        normalizeSheetHeader(selectedTab).includes('fromresponses')
+        isAtensiProfileResponseTab(selectedTab)
       )
     );
   // For the owner's exact ATENSI profile tab, use known E-H upload columns.
