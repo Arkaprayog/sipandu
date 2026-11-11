@@ -393,21 +393,44 @@ export const GoogleWorkspaceModal: React.FC<GoogleWorkspaceModalProps> = ({
     }
   };
 
-  const handleSourceSpreadsheetSelect = (fileId: string) => {
+  const handleSourceSpreadsheetSelect = async (fileId: string) => {
     const file = spreadsheetFiles.find((candidate) => candidate.id === fileId);
     if (!file) return;
-    // The official response workbook may be recreated by the owner. Its new
-    // ID must be selectable; hard-pinning this list to the retired ID caused
-    // imports to keep reading stale profile and ARV values.
-    const url = `https://docs.google.com/spreadsheets/d/${file.id}/edit`;
-    setSourceSpreadsheetUrl(url);
-    onUpdateSettings({
-      ...settings,
-      googleSpreadsheetSourceUrl: url,
-      googleSpreadsheetSourceName: file.name,
-      googleSpreadsheetSourceTab: '',
-    });
-    setStatusMessage({ type: 'success', text: `Spreadsheet sumber dipilih: ${file.name}. Tekan “Muat Data PPKS + Asesmen” untuk membaca data asli.` });
+    setLoading(true);
+    setStatusMessage(null);
+    try {
+      // The official response workbook may be recreated by the owner. Its new
+      // ID must be selectable; hard-pinning this list to the retired ID caused
+      // imports to keep reading stale profile and ARV values.
+      const url = `https://docs.google.com/spreadsheets/d/${file.id}/edit`;
+      const tabs = await getSpreadsheetSheetTitles(url);
+      const normalizeTab = (value: string) => value.normalize('NFD')
+        .replace(/[\\u0300-\\u036f]/g, '')
+        .toLocaleLowerCase('id-ID')
+        .replace(/[^a-z0-9]/g, '');
+      const profileTabExists = tabs.some((tab) => normalizeTab(tab) === 'fromresponses1');
+      const arvTabExists = tabs.some((tab) => normalizeTab(tab) === 'fromasesmen1');
+      if (!profileTabExists) {
+        throw new Error(`Spreadsheet “${file.name}” tidak memiliki tab “From Responses 1”. Pilih spreadsheet respons ATENSI yang benar.`);
+      }
+      setSourceSpreadsheetUrl(url);
+      onUpdateSettings({
+        ...settings,
+        googleSpreadsheetSourceUrl: url,
+        googleSpreadsheetSourceName: file.name,
+        googleSpreadsheetSourceTab: 'From Responses 1',
+      });
+      setStatusMessage({
+        type: 'success',
+        text: arvTabExists
+          ? `Sumber “${file.name}” diverifikasi: From Responses 1 (profil) dan From Asesmen 1 (ARV kolom AO) tersedia.`
+          : `Sumber “${file.name}” diverifikasi: From Responses 1 tersedia. Tab From Asesmen 1 belum terlihat pada spreadsheet ini; sinkronisasi akan memeriksa tautan respons Form terpisah dan menampilkan diagnostik bila belum tersedia.`,
+      });
+    } catch (error: any) {
+      setStatusMessage({ type: 'error', text: error?.message || String(error) });
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleTargetSpreadsheetSelect = (fileId: string) => {
