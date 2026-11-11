@@ -473,6 +473,111 @@ test('registration accepts a Firebase identity token without any team code', asy
 });
 
 
+
+test('does not let every Supervisor approve new registrations by default', async () => {
+  const originalFetch = globalThis.fetch;
+  const writes: string[] = [];
+  globalThis.fetch = (async () => new Response(JSON.stringify({
+    users: [{
+      localId: 'firebase-supervisor-not-delegated',
+      email: 'supervisor@example.test',
+      customAttributes: JSON.stringify({ role: 'supervisor' }),
+    }],
+  }), { status: 200, headers: { 'Content-Type': 'application/json' } })) as typeof fetch;
+  const kv = {
+    get: async (_key: string) => null,
+    put: async (key: string) => { writes.push(key); },
+    delete: async (_key: string) => undefined,
+    list: async () => ({ keys: [], list_complete: true }),
+  };
+  try {
+    const response = await worker.fetch(new Request('https://sipandu-registration.test/owner/approve', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: 'Bearer supervisor-id-token',
+        'CF-Connecting-IP': '192.0.2.84',
+      },
+      body: JSON.stringify({ uid: 'firebase-new-applicant' }),
+    }), {
+      FIREBASE_AUTH_API_KEY: 'test-worker-secret-api-key',
+      PENDING_REGISTRATIONS: kv,
+    });
+    assert.equal(response.status, 403);
+    assert.match((await response.json() as { message: string }).message, /ditunjuk secara khusus oleh Owner/);
+    assert.deepEqual(writes, []);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('Owner can list only pending team registrations', async () => {
+  const originalFetch = globalThis.fetch;
+  const stored = new Map<string, string>([
+    ['pending:firebase-waiting', JSON.stringify({ uid: 'firebase-waiting', email: 'waiting@example.test', createdAt: 1234, status: 'pending_owner' })],
+    ['pending:firebase-approved', JSON.stringify({ uid: 'firebase-approved', email: 'approved@example.test', createdAt: 1234, status: 'approved' })],
+  ]);
+  globalThis.fetch = (async () => new Response(JSON.stringify({
+    users: [{
+      localId: 'firebase-existing-owner',
+      email: 'owner@example.test',
+      customAttributes: JSON.stringify({ role: 'owner' }),
+    }],
+  }), { status: 200, headers: { 'Content-Type': 'application/json' } })) as typeof fetch;
+  const kv = {
+    get: async (key: string) => stored.get(key) || null,
+    put: async (key: string, value: string) => { stored.set(key, value); },
+    delete: async (key: string) => { stored.delete(key); },
+    list: async (options?: { prefix?: string }) => ({
+      keys: [...stored.keys()].filter((key) => key.startsWith(options?.prefix || '')).map((name) => ({ name })),
+      list_complete: true,
+    }),
+  };
+  try {
+    const response = await worker.fetch(new Request('https://sipandu-registration.test/owner/pending', {
+      method: 'GET',
+      headers: { Authorization: 'Bearer owner-id-token' },
+    }), {
+      FIREBASE_AUTH_API_KEY: 'test-worker-secret-api-key',
+      PENDING_REGISTRATIONS: kv,
+    });
+    assert.equal(response.status, 200);
+    const result = await response.json() as { items: Array<{ uid: string; status: string }> };
+    assert.deepEqual(result.items.map((item) => item.uid), ['firebase-waiting']);
+    assert.equal(result.items[0].status, 'pending_owner');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('registration status returns the authenticated user own approval state', async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = (async () => new Response(JSON.stringify({
+    users: [{ localId: 'firebase-status-user', email: 'member@example.test' }],
+  }), { status: 200, headers: { 'Content-Type': 'application/json' } })) as typeof fetch;
+  try {
+    const response = await worker.fetch(new Request('https://sipandu-registration.test/registration-status', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer member-id-token', 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    }), {
+      FIREBASE_AUTH_API_KEY: 'test-worker-secret-api-key',
+      PENDING_REGISTRATIONS: {
+        get: async (key: string) => key === 'pending:firebase-status-user'
+          ? JSON.stringify({ uid: 'firebase-status-user', status: 'pending_owner' })
+          : null,
+        put: async () => undefined,
+        delete: async () => undefined,
+      },
+    });
+    assert.equal(response.status, 200);
+    const result = await response.json() as { status: string };
+    assert.equal(result.status, 'pending_owner');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test('activation explains missing firebaseauth.users.update permission and preserves the pending invitation', async () => {
   const { generateKeyPairSync } = await import('node:crypto');
   const { privateKey } = generateKeyPairSync('rsa', {
