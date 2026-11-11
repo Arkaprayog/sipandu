@@ -296,7 +296,7 @@ async function listKVKeys(
   const result = await kv.list({ prefix, limit });
   return result.keys.map((item) => item.name);
 }
-\n
+
 async function lookupFirebaseUserByUid(env: Env, uid: string): Promise<FirebaseUserLookup> {
   if (!env.FIREBASE_PROJECT_ID) throw new Error('ID proyek Firebase belum dikonfigurasi.');
   const accessToken = await getGoogleAccessToken(env);
@@ -312,7 +312,7 @@ async function lookupFirebaseUserByUid(env: Env, uid: string): Promise<FirebaseU
   if (!response.ok || !result.users?.[0]?.localId) throw new Error('Akun Firebase untuk UID tersebut tidak ditemukan.');
   return result.users[0];
 }
-\nconst MAX_PUBLIC_STAGE_ONE_BODY_BYTES = 980_000;
+const MAX_PUBLIC_STAGE_ONE_BODY_BYTES = 980_000;
 
 function missingPublicStageOneConfiguration(env: Env): string[] {
   const missing: string[] = [];
@@ -604,7 +604,7 @@ export default {
         return jsonResponse({ ok: false, message: error instanceof Error ? error.message : 'Delegasi belum dapat diperbarui.' }, 403, origin);
       }
     }
-\n    if (path === '/public-stage-one-intake' && request.method === 'POST') {
+    if (path === '/public-stage-one-intake' && request.method === 'POST') {
       if (!(await allowAttempt(env, request, 5))) {
         return jsonResponse({ ok: false, message: 'Terlalu banyak pengiriman dari jaringan ini. Coba kembali satu menit lagi.' }, 429, origin);
       }
