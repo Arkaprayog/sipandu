@@ -950,9 +950,7 @@ function mapRowsToPPKSRecords(
     const timestamp = useATENSIColumnPositions ? readAtensiProfileCell(row, 'timestamp') : readCellByAliases(headers, row, ['timestamp', 'capWaktu', 'waktuPengiriman', 'waktuPengisian', 'tanggalWaktu', 'createTime']);
     let nik = useATENSIColumnPositions
       ? normalizeNIKCellValue(readAtensiProfileCell(row, 'nik'))
-      : useATENSIAssessmentColumnPositions
-        ? (normalizeNIKCellValue(readAtensiProfileCell(row, 'nik')) || readNIKFromSheetRow(headers, row))
-        : readNIKFromSheetRow(headers, row);
+      : readNIKFromSheetRow(headers, row);
     // Google Forms can append helper text/asterisks and may label the NIK as
     // "NIK / No. KTP", "Nomor KTP (16 digit)" or a numbered official-PDF field.
     // Use a second conservative pass over respondent identity headers before
@@ -1612,6 +1610,9 @@ export async function importPPKSFromSpreadsheet(
   const requestedPreferredTab = preferred
     ? metadata.sheetTitles.find((title) => normalizeSheetHeader(title) === normalizeSheetHeader(preferred))
     : undefined;
+  if (preferred && !requestedPreferredTab) {
+    throw new Error(`Tab sumber “${preferred}” tidak ditemukan pada spreadsheet “${metadata.title}”. Tab yang tersedia: ${metadata.sheetTitles.join(', ')}.`);
+  }
   const requestedFromResponsesTab = metadata.sheetTitles.find(
     (title) => normalizeSheetHeader(title) === normalizeSheetHeader(ATENSI_PROFILE_RESPONSE_TAB_NAME)
   );
