@@ -3,14 +3,14 @@ import type { PPKSRecord } from '../types';
 function normalizedName(value: unknown): string {
   return String(value ?? '')
     .normalize('NFD')
-    .replace(/[\\u0300-\\u036f]/g, '')
+    .replace(/[\u0300-\u036f]/g, '')
     .toLocaleLowerCase('id-ID')
     .replace(/[^a-z0-9]/g, '');
 }
 
 function normalizedNIK(record: PPKSRecord): string {
-  const value = String(record.nik || record.officialAssessment?.q23 || '').replace(/\\D/g, '');
-  return /^\\d{16}$/.test(value) ? value : '';
+  const value = String(record.nik || record.officialAssessment?.q23 || '').replace(/\D/g, '');
+  return /^\d{16}$/.test(value) ? value : '';
 }
 
 /**
