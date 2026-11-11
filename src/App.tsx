@@ -36,7 +36,7 @@ const SecurityAuditView = lazyWithRecovery('SecurityAuditView', () => import('./
 import { onAuthStateChanged, signOut, getIdTokenResult } from 'firebase/auth';
 import { SIPANDU_AI_WORKER_URL } from './lib/sipanduAI';
 import { auth, getAccessToken, savePPKSToFirestore, saveIntegratedAssessmentToFirestore, syncPPKSCollectionFromSpreadsheet, googleLogout, subscribeToPPKSChanges, subscribeToPPKSServiceStatus, savePPKSServiceUpdate, subscribeToFieldVisits, createFieldVisit, subscribeToIntegratedAssessmentAnswers, fetchSecurityAuditActivity, saveStageOneIntakeToFirestore, subscribeToStageOneIntake, staffAuthPersistenceReady, isWorkspaceAccountConnected, invalidateAccessToken, getSIPANDUUserProfile, saveSIPANDUUserProfile } from './lib/firebase';
-import { activatePendingTeamMember } from './lib/teamRegistration';
+import { activateVerifiedTeamMember } from './lib/teamRegistration';
 import { ensureSIPANDUDatabaseSheet, extractSpreadsheetId, getLinkedSpreadsheetUrlForForm, importPPKSFromSpreadsheet, upsertPPKSInSpreadsheet } from './lib/googleWorkspace';
 import { GOOGLE_SIPANDU_RESOURCES, SIPANDU_OWNER_WHATSAPP_PHONE } from './lib/googleSIPANDUResources';
 import { getLiveSyncRetryDelay, LIVE_SYNC_INTERVAL_MS } from './lib/liveSyncPolicy';
@@ -364,7 +364,7 @@ function StaffApp() {
         }
         if (role !== 'owner' && role !== 'supervisor' && role !== 'pendamping') {
           try {
-            await activatePendingTeamMember(user);
+            await activateVerifiedTeamMember(user);
             token = await getIdTokenResult(user, true);
             role = token.claims.role;
           } catch (activationError) {
@@ -870,7 +870,7 @@ function StaffApp() {
         return;
       }
       if (role !== 'owner' && role !== 'supervisor' && role !== 'pendamping') {
-        await activatePendingTeamMember(user);
+        await activateVerifiedTeamMember(user);
         token = await getIdTokenResult(user, true);
         role = token.claims.role;
       }
