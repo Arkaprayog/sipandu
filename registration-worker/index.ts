@@ -2,6 +2,11 @@ interface KVBinding {
   get(key: string): Promise<string | null>;
   put(key: string, value: string, options?: { expirationTtl?: number }): Promise<void>;
   delete(key: string): Promise<void>;
+  list?(options?: { prefix?: string; limit?: number; cursor?: string }): Promise<{
+    keys: Array<{ name: string }>;
+    cursor?: string;
+    list_complete: boolean;
+  }>;
 }
 
 interface Env {
@@ -12,6 +17,9 @@ interface Env {
   FIREBASE_DATABASE_ID?: string;
   FIREBASE_SERVICE_ACCOUNT_JSON?: string;
   TURNSTILE_SECRET_KEY?: string;
+  RESEND_API_KEY?: string;
+  SIPANDU_EMAIL_FROM?: string;
+  OWNER_NOTIFICATION_EMAIL?: string;
   PENDING_REGISTRATIONS?: KVBinding;
 }
 
@@ -221,7 +229,90 @@ async function getGoogleAccessToken(env: Env, scope = 'https://www.googleapis.co
   return token;
 }
 
-const MAX_PUBLIC_STAGE_ONE_BODY_BYTES = 980_000;
+
+function escapeHtml(value: string): string {
+  return value.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;').replaceAll("'", '&#39;');
+}
+
+async function sendSIPANDUEmail(
+  env: Env,
+  to: string,
+  subject: string,
+  title: string,
+  message: string,
+): Promise<boolean> {
+  if (!env.RESEND_API_KEY || !env.SIPANDU_EMAIL_FROM || !to) return false;
+  const safeTitle = escapeHtml(title);
+  const safeMessage = escapeHtml(message);
+  const response = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: {
+      Authorization: 'Bearer ' + env.RESEND_API_KEY,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      from: env.SIPANDU_EMAIL_FROM,
+      to: [to],
+      subject,
+      text: title + '\\n\\n' + message,
+      html: '<div style="font-family:Arial,sans-serif;max-width:560px;margin:auto;padding:24px;color:#17251a">'
+        + '<h2>' + safeTitle + '</h2><p style="line-height:1.6">' + safeMessage + '</p>'
+        + '<p style="font-size:12px;color:#647366">SIPANDU ODHIV · Pemberitahuan otomatis</p></div>',
+    }),
+  });
+  return response.ok;
+}
+
+async function getActorRole(env: Env, idToken: string): Promise<{ user: FirebaseUserLookup; role: string }> {
+  const user = await lookupFirebaseUser(env, idToken);
+  let claims: Record<string, unknown> = {};
+  if (user.customAttributes) {
+    const parsed = JSON.parse(user.customAttributes) as unknown;
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      throw new Error('Klaim akun tidak valid.');
+    }
+    claims = parsed as Record<string, unknown>;
+  }
+  return { user, role: String(claims.role || '') };
+}
+
+async function canApproveRegistration(
+  env: Env,
+  user: FirebaseUserLookup,
+  role: string,
+): Promise<boolean> {
+  if (role === 'owner') return true;
+  if (role !== 'supervisor' || !env.PENDING_REGISTRATIONS) return false;
+  return Boolean(await env.PENDING_REGISTRATIONS.get('registration-approver:' + user.localId));
+}
+
+async function listKVKeys(
+  kv: KVBinding,
+  prefix: string,
+  limit = 500,
+): Promise<string[] | null> {
+  if (!kv.list) return null;
+  const result = await kv.list({ prefix, limit });
+  return result.keys.map((item) => item.name);
+}
+\n
+async function lookupFirebaseUserByUid(env: Env, uid: string): Promise<FirebaseUserLookup> {
+  if (!env.FIREBASE_PROJECT_ID) throw new Error('ID proyek Firebase belum dikonfigurasi.');
+  const accessToken = await getGoogleAccessToken(env);
+  const response = await fetch(
+    'https://identitytoolkit.googleapis.com/v1/projects/' + encodeURIComponent(env.FIREBASE_PROJECT_ID) + '/accounts:lookup',
+    {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + accessToken, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ localId: [uid] }),
+    },
+  );
+  const result = await response.json() as { users?: FirebaseUserLookup[] };
+  if (!response.ok || !result.users?.[0]?.localId) throw new Error('Akun Firebase untuk UID tersebut tidak ditemukan.');
+  return result.users[0];
+}
+\nconst MAX_PUBLIC_STAGE_ONE_BODY_BYTES = 980_000;
 
 function missingPublicStageOneConfiguration(env: Env): string[] {
   const missing: string[] = [];
@@ -394,7 +485,126 @@ export default {
       return jsonResponse({ ok: true, ready: missing.length === 0, missing }, 200, origin);
     }
 
-    if (path === '/public-stage-one-intake' && request.method === 'POST') {
+
+    if (path === '/registration-status' && request.method === 'POST') {
+      const authorization = request.headers.get('Authorization') || '';
+      const idToken = authorization.startsWith('Bearer ') ? authorization.slice(7).trim() : '';
+      if (!idToken) return jsonResponse({ ok: false, message: 'Sesi Firebase tidak ditemukan.' }, 401, origin);
+      try {
+        const user = await lookupFirebaseUser(env, idToken);
+        const raw = await env.PENDING_REGISTRATIONS?.get('pending:' + user.localId);
+        if (!raw) return jsonResponse({ ok: true, status: 'not_registered', message: 'Permohonan pendaftaran belum tercatat.' }, 200, origin);
+        const record = JSON.parse(raw) as Record<string, unknown>;
+        return jsonResponse({
+          ok: true,
+          status: String(record.status || 'pending_owner'),
+          message: record.status === 'rejected'
+            ? 'Permohonan pendaftaran ditolak. Silakan hubungi administrator SIPANDU.'
+            : record.status === 'pending_owner'
+              ? 'Permohonan masih menunggu persetujuan Owner.'
+              : record.status === 'approved'
+                ? 'Permohonan disetujui. Verifikasi email dapat dilanjutkan.'
+                : record.status === 'active'
+                  ? 'Akun SIPANDU sudah aktif.'
+                  : 'Status pendaftaran berhasil diperiksa.',
+        }, 200, origin);
+      } catch {
+        return jsonResponse({ ok: false, message: 'Sesi Firebase tidak valid.' }, 401, origin);
+      }
+    }
+
+    if (path === '/owner/pending' && request.method === 'GET') {
+      const authorization = request.headers.get('Authorization') || '';
+      const idToken = authorization.startsWith('Bearer ') ? authorization.slice(7).trim() : '';
+      if (!idToken) return jsonResponse({ ok: false, message: 'Sesi administrator tidak ditemukan.' }, 401, origin);
+      try {
+        const actor = await getActorRole(env, idToken);
+        if (!(await canApproveRegistration(env, actor.user, actor.role))) {
+          return jsonResponse({ ok: false, message: 'Hanya Owner atau Supervisor yang ditunjuk Owner yang dapat melihat permohonan.' }, 403, origin);
+        }
+        if (!env.PENDING_REGISTRATIONS) return jsonResponse({ ok: false, message: 'Penyimpanan permohonan belum dikonfigurasi.' }, 503, origin);
+        const keys = await listKVKeys(env.PENDING_REGISTRATIONS, 'pending:');
+        if (!keys) return jsonResponse({ ok: false, message: 'KV belum mendukung daftar permohonan.' }, 503, origin);
+        const records = await Promise.all(keys.map(async (key) => {
+          const raw = await env.PENDING_REGISTRATIONS!.get(key);
+          if (!raw) return null;
+          try {
+            const item = JSON.parse(raw) as Record<string, unknown>;
+            if (item.status !== 'pending_owner') return null;
+            return {
+              uid: String(item.uid || key.slice('pending:'.length)),
+              email: String(item.email || ''),
+              createdAt: Number(item.createdAt || 0),
+              status: 'pending_owner',
+            };
+          } catch { return null; }
+        }));
+        return jsonResponse({ ok: true, items: records.filter(Boolean) }, 200, origin);
+      } catch (error) {
+        return jsonResponse({ ok: false, message: error instanceof Error ? error.message : 'Permohonan belum dapat dimuat.' }, 401, origin);
+      }
+    }
+
+    if (path === '/owner/delegates' && request.method === 'GET') {
+      const authorization = request.headers.get('Authorization') || '';
+      const idToken = authorization.startsWith('Bearer ') ? authorization.slice(7).trim() : '';
+      if (!idToken) return jsonResponse({ ok: false, message: 'Sesi Owner tidak ditemukan.' }, 401, origin);
+      try {
+        const actor = await getActorRole(env, idToken);
+        if (actor.role !== 'owner') return jsonResponse({ ok: false, message: 'Hanya Owner yang dapat mengelola delegasi persetujuan.' }, 403, origin);
+        if (!env.PENDING_REGISTRATIONS) return jsonResponse({ ok: false, message: 'Penyimpanan delegasi belum dikonfigurasi.' }, 503, origin);
+        const keys = await listKVKeys(env.PENDING_REGISTRATIONS, 'registration-approver:');
+        if (!keys) return jsonResponse({ ok: false, message: 'KV belum mendukung daftar delegasi.' }, 503, origin);
+        const delegates = await Promise.all(keys.map(async (key) => {
+          const raw = await env.PENDING_REGISTRATIONS!.get(key);
+          if (!raw) return null;
+          try { return JSON.parse(raw) as Record<string, unknown>; } catch { return null; }
+        }));
+        return jsonResponse({ ok: true, delegates: delegates.filter(Boolean) }, 200, origin);
+      } catch (error) {
+        return jsonResponse({ ok: false, message: error instanceof Error ? error.message : 'Delegasi belum dapat dimuat.' }, 401, origin);
+      }
+    }
+
+    if (path === '/owner/delegates' && request.method === 'POST') {
+      const body = await parseJson(request);
+      const targetUid = typeof body?.uid === 'string' ? body.uid.trim() : '';
+      const enabled = body?.enabled === true;
+      if (!targetUid || targetUid.length > 128 || /[\\/\\s]/.test(targetUid)) {
+        return jsonResponse({ ok: false, message: 'UID Supervisor tidak valid.' }, 400, origin);
+      }
+      const authorization = request.headers.get('Authorization') || '';
+      const idToken = authorization.startsWith('Bearer ') ? authorization.slice(7).trim() : '';
+      if (!idToken) return jsonResponse({ ok: false, message: 'Sesi Owner tidak ditemukan.' }, 401, origin);
+      try {
+        const actor = await getActorRole(env, idToken);
+        if (actor.role !== 'owner') return jsonResponse({ ok: false, message: 'Hanya Owner yang dapat mengatur delegasi persetujuan.' }, 403, origin);
+        if (!env.PENDING_REGISTRATIONS) return jsonResponse({ ok: false, message: 'Penyimpanan delegasi belum dikonfigurasi.' }, 503, origin);
+        const key = 'registration-approver:' + targetUid;
+        if (enabled) {
+          const targetTokenUser = await lookupFirebaseUserByUid(env, targetUid);
+          let targetClaims: Record<string, unknown> = {};
+          try { targetClaims = targetTokenUser.customAttributes ? JSON.parse(targetTokenUser.customAttributes) as Record<string, unknown> : {}; } catch {
+            return jsonResponse({ ok: false, message: 'Klaim Supervisor tidak dapat diverifikasi.' }, 409, origin);
+          }
+          if (targetClaims.role !== 'supervisor') {
+            return jsonResponse({ ok: false, message: 'Delegasi hanya dapat diberikan kepada akun yang sudah memiliki peran Supervisor.' }, 400, origin);
+          }
+          await env.PENDING_REGISTRATIONS.put(key, JSON.stringify({
+            uid: targetUid,
+            email: String(targetTokenUser.email || ''),
+            assignedAt: Date.now(),
+            assignedByUid: actor.user.localId,
+          }));
+          return jsonResponse({ ok: true, enabled: true, message: 'Supervisor berhasil diberi kewenangan persetujuan.' }, 200, origin);
+        }
+        await env.PENDING_REGISTRATIONS.delete(key);
+        return jsonResponse({ ok: true, enabled: false, message: 'Kewenangan persetujuan Supervisor berhasil dicabut.' }, 200, origin);
+      } catch (error) {
+        return jsonResponse({ ok: false, message: error instanceof Error ? error.message : 'Delegasi belum dapat diperbarui.' }, 403, origin);
+      }
+    }
+\n    if (path === '/public-stage-one-intake' && request.method === 'POST') {
       if (!(await allowAttempt(env, request, 5))) {
         return jsonResponse({ ok: false, message: 'Terlalu banyak pengiriman dari jaringan ini. Coba kembali satu menit lagi.' }, 429, origin);
       }
@@ -449,7 +659,21 @@ export default {
           createdAt: Date.now(),
           status: 'pending_owner',
         }), { expirationTtl: 7 * 24 * 60 * 60 });
-        return jsonResponse({ ok: true, status: 'pending_owner', message: 'Permohonan tersimpan dan menunggu persetujuan Owner atau administrator SIPANDU.' }, 202, origin);
+        const ownerNotificationSent = env.OWNER_NOTIFICATION_EMAIL
+          ? await sendSIPANDUEmail(
+              env,
+              env.OWNER_NOTIFICATION_EMAIL,
+              'Permohonan tim baru menunggu persetujuan · SIPANDU',
+              'Permohonan pendaftaran tim baru',
+              'Permohonan baru dari ' + firebaseUser.email + ' menunggu pemeriksaan di panel Pendaftaran Tim SIPANDU.',
+            ).catch(() => false)
+          : false;
+        return jsonResponse({
+          ok: true,
+          status: 'pending_owner',
+          ownerNotificationSent,
+          message: 'Permohonan tersimpan dan menunggu persetujuan Owner atau administrator SIPANDU.',
+        }, 202, origin);
       } catch (error) {
         return jsonResponse({ ok: false, message: error instanceof Error ? error.message : 'Sesi akun tidak dapat diverifikasi.' }, 401, origin);
       }
@@ -539,8 +763,8 @@ export default {
         try { actorClaims = actor.customAttributes ? JSON.parse(actor.customAttributes) as Record<string, unknown> : {}; } catch {
           return jsonResponse({ ok: false, message: 'Klaim administrator tidak valid.' }, 403, origin);
         }
-        if (actorClaims.role !== 'owner' && actorClaims.role !== 'supervisor') {
-          return jsonResponse({ ok: false, message: 'Hanya Owner atau administrator (Supervisor) yang dapat memutuskan pendaftaran.' }, 403, origin);
+        if (!(await canApproveRegistration(env, actor, String(actorClaims.role || '')))) {
+          return jsonResponse({ ok: false, message: 'Hanya Owner atau Supervisor yang ditunjuk secara khusus oleh Owner yang dapat memutuskan pendaftaran.' }, 403, origin);
         }
         const key = `pending:${targetUid}`;
         const raw = await env.PENDING_REGISTRATIONS?.get(key);
@@ -559,10 +783,22 @@ export default {
           decidedAt: Date.now(),
           decidedByUid: actor.localId,
         }), { expirationTtl: 7 * 24 * 60 * 60 });
+        const emailNotificationSent = await sendSIPANDUEmail(
+          env,
+          String(pending.email || ''),
+          approved ? 'Pendaftaran SIPANDU disetujui' : 'Informasi hasil pendaftaran SIPANDU',
+          approved ? 'Permohonan Anda disetujui' : 'Permohonan pendaftaran belum dapat disetujui',
+          approved
+            ? 'Permohonan Anda telah disetujui. Silakan masuk ke SIPANDU menggunakan email dan kata sandi saat mendaftar. Sistem akan mengirim tautan verifikasi email setelah persetujuan ini.'
+            : 'Mohon maaf, permohonan pendaftaran SIPANDU Anda belum dapat disetujui. Silakan hubungi administrator SIPANDU untuk informasi lebih lanjut.',
+        ).catch(() => false);
         return jsonResponse({
           ok: true,
           status: approved ? 'approved' : 'rejected',
-          message: approved ? 'Pendaftaran disetujui. Pendaftar dapat melanjutkan verifikasi email.' : 'Pendaftaran ditolak. Akun tidak dapat diaktifkan.',
+          emailNotificationSent,
+          message: approved
+            ? 'Pendaftaran disetujui. Pendaftar dapat masuk untuk menerima tautan verifikasi email.'
+            : 'Pendaftaran ditolak. Akun tidak dapat diaktifkan.',
         }, 200, origin);
       } catch (error) {
         return jsonResponse({ ok: false, message: error instanceof Error ? error.message : 'Keputusan pendaftaran gagal diproses.' }, 401, origin);
