@@ -95,28 +95,35 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
           body: JSON.stringify({}),
         });
         const registration = await statusResponse.json().catch(() => ({})) as { ok?: boolean; status?: string; message?: string };
-        await signOut(auth);
         if (!statusResponse.ok || !registration.ok) {
+          await signOut(auth);
           setErrorMsg(registration.message || 'Status permohonan belum dapat diperiksa. Coba kembali beberapa saat lagi.');
           return;
         }
         if (registration.status === 'pending_owner') {
+          await signOut(auth);
           setRegistrationNotice('Permohonan Anda masih menunggu persetujuan Owner atau Supervisor yang ditunjuk. Tautan verifikasi belum dikirim.');
           setErrorMsg('');
           return;
         }
         if (registration.status === 'rejected') {
+          await signOut(auth);
           setErrorMsg(registration.message || 'Permohonan pendaftaran ditolak. Hubungi administrator SIPANDU.');
           return;
         }
         if (registration.status !== 'approved' && registration.status !== 'pending_email') {
+          await signOut(auth);
           setErrorMsg(registration.message || 'Permohonan belum disetujui. Akun belum dapat diaktifkan.');
           return;
         }
         // Send the Firebase verification link only after the Worker confirms approval.
-        await sendEmailVerification(credential.user);
-        setRegistrationNotice('Permohonan telah disetujui. Tautan verifikasi email baru telah dikirim. Buka email tersebut, verifikasi, lalu masuk kembali.');
-        setErrorMsg('');
+        try {
+          await sendEmailVerification(credential.user);
+          setRegistrationNotice('Permohonan telah disetujui. Tautan verifikasi email baru telah dikirim. Buka email tersebut, verifikasi, lalu masuk kembali.');
+          setErrorMsg('');
+        } finally {
+          await signOut(auth);
+        }
         return;
       }
       onLogin(credential.user.displayName || credential.user.email || 'Pengguna SIPANDU');
