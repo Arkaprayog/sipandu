@@ -90,6 +90,32 @@
 .official-option { display:flex; align-items:flex-start; gap:3px; line-height:1.1; cursor:pointer; }
 .official-option input { flex:0 0 auto; width:10px; height:10px; margin:1px 1px 0 0; accent-color:#111; }
 .official-option-number { flex:0 0 9px; }
+
+/* Keep every printed value inside the three fixed columns of the source form. */
+.official-table { width:100%; min-width:0; table-layout:fixed; }
+.official-table col.col-number { width:5%; }
+.official-table col.col-label { width:41%; }
+.official-table col.col-answer { width:54%; }
+.official-table td {
+  box-sizing:border-box;
+  min-width:0;
+  white-space:normal;
+  overflow-wrap:anywhere;
+}
+.official-input,.official-textarea { box-sizing:border-box; min-width:0; max-width:100%; }
+.official-options { width:100%; min-width:0; }
+.official-option { width:100%; min-width:0; box-sizing:border-box; }
+.official-option > span:last-child {
+  display:block;
+  flex:1 1 0%;
+  min-width:0;
+  max-width:100%;
+  white-space:normal;
+  overflow-wrap:anywhere;
+}
+.official-numbering-grid > label { min-width:0; }
+.official-numbering input { box-sizing:border-box; max-width:100%; }
+
 .official-footer-note { margin:5mm 0 0; text-align:center; font-style:italic; font-size:9pt; }
 .official-signature { width:30%; margin:12mm 10mm 0 auto; text-align:center; font-size:9pt; }
 .official-signature-line { margin-top:24mm; }
