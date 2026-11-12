@@ -1828,7 +1828,7 @@ export async function savePPKSServiceUpdate(input: PPKSServiceUpdateInput): Prom
   const user = auth.currentUser;
   if (!user) throw new Error('Sesi SIPANDU berakhir. Masuk kembali sebelum memperbarui layanan.');
   if (!input.ppksId.trim() || input.ppksId.includes('/')) throw new Error('ID PPKS tidak valid.');
-  if (!serviceDateIsValid(input.serviceDate) || !serviceDateIsValid(input.followUpAt)) {
+  if (!isValidFieldVisitDate(input.serviceDate) || !isValidFieldVisitDate(input.followUpAt)) {
     throw new Error('Tanggal layanan atau tindak lanjut tidak valid.');
   }
   const token = await getIdTokenResult(user);
