@@ -1745,8 +1745,7 @@ export async function saveSIPANDUUserProfile(uid: string, profile: ProfileUser):
 }
 
 
-const serviceDateIsValid = (value: string): boolean =>
-  value === '' || /^\d{4}-\d{2}-\d{2}$/.test(value);
+
 
 const toISODate = (value: any): string => {
   if (!value) return '';
