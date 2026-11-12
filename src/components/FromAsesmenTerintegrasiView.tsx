@@ -490,8 +490,26 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
       #${rootId} .official-letterhead { margin-bottom:6mm !important; }
       #${rootId} .official-table { font-size:7pt !important; }
       #${rootId} .official-table td { padding:1.5px 2px !important; }
-      #${rootId} .official-input,
-      #${rootId} .official-textarea { border:0 !important; min-height:12px !important; padding:0 !important; resize:none !important; }
+      #${rootId} .official-page:not(.official-photo-appendix) { overflow:visible !important; }
+      #${rootId} .official-table {
+        width:100% !important; min-width:0 !important; table-layout:fixed !important;
+      }
+      #${rootId} .official-table td {
+        white-space:normal !important; overflow-wrap:anywhere !important; word-break:normal !important;
+      }
+      #${rootId} .official-print-value {
+        display:block !important; width:100% !important; max-width:100% !important; min-width:0 !important;
+        box-sizing:border-box !important; min-height:12px !important; margin:0 !important; padding:0 1px !important;
+        color:#111 !important; font:inherit !important; line-height:1.2 !important; text-align:left !important;
+        white-space:pre-wrap !important; overflow-wrap:anywhere !important; word-break:normal !important;
+        overflow:visible !important;
+      }
+      #${rootId} .official-print-multiline {
+        min-height:calc(1.2em * 3) !important; padding:1px 2px !important;
+      }
+      #${rootId} .official-numbering .official-print-value {
+        border-bottom:1px solid #bbb !important; text-align:center !important;
+      }
       #${rootId} .official-option input { width:9px !important; height:9px !important; }
       #${rootId} input, #${rootId} textarea, #${rootId} select {
         print-color-adjust:exact !important; -webkit-print-color-adjust:exact !important;
@@ -504,24 +522,34 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
     sourceControls.forEach((sourceControl, index) => {
       const targetControl = targetControls[index];
       if (!targetControl) return;
-      if (sourceControl instanceof HTMLInputElement && targetControl instanceof HTMLInputElement) {
-        targetControl.value = sourceControl.value;
+
+      // Checkbox/radio controls remain native so selected options keep their
+      // official tick marks. Text fields are replaced with wrapping text blocks:
+      // native inputs are single-line and can silently clip long saved answers.
+      if (sourceControl instanceof HTMLInputElement
+        && (sourceControl.type === 'checkbox' || sourceControl.type === 'radio')
+        && targetControl instanceof HTMLInputElement) {
         targetControl.checked = sourceControl.checked;
         if (sourceControl.checked) targetControl.setAttribute('checked', '');
         else targetControl.removeAttribute('checked');
-        if (sourceControl.value) targetControl.setAttribute('value', sourceControl.value);
-        else targetControl.removeAttribute('value');
-      } else if (sourceControl instanceof HTMLTextAreaElement && targetControl instanceof HTMLTextAreaElement) {
-        targetControl.value = sourceControl.value;
-        targetControl.textContent = sourceControl.value;
-      } else if (sourceControl instanceof HTMLSelectElement && targetControl instanceof HTMLSelectElement) {
-        targetControl.selectedIndex = sourceControl.selectedIndex;
-        Array.from(targetControl.options).forEach((option, optionIndex) => {
-          option.selected = optionIndex === sourceControl.selectedIndex;
-          if (option.selected) option.setAttribute('selected', '');
-          else option.removeAttribute('selected');
-        });
+        return;
       }
+
+      const answerKey = sourceControl.getAttribute('data-answer-key');
+      const stateValue = answerKey ? answersRef.current[answerKey] : undefined;
+      const value = stateValue !== undefined
+        ? (Array.isArray(stateValue) ? stateValue.join(', ') : String(stateValue ?? ''))
+        : sourceControl instanceof HTMLSelectElement
+          ? (sourceControl.selectedOptions[0]?.textContent?.trim() || '')
+          : sourceControl.value;
+
+      const printValue = document.createElement('div');
+      printValue.className = 'official-print-value'
+        + (sourceControl instanceof HTMLTextAreaElement ? ' official-print-multiline' : '');
+      printValue.textContent = value;
+      const ariaLabel = sourceControl.getAttribute('aria-label');
+      if (ariaLabel) printValue.setAttribute('aria-label', ariaLabel);
+      targetControl.replaceWith(printValue);
     });
 
     root.append(pdfStyles, printClone);
@@ -1041,10 +1069,11 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
       );
     }
     if (item.kind === 'textarea') {
-      return <textarea className="official-input official-textarea" rows={3} value={typeof value === 'string' ? value : value.join(', ')} onChange={(event) => updateAnswer(item.key, event.target.value)} aria-label={item.label} />;
+      return <textarea data-answer-key={item.key} className="official-input official-textarea" rows={3} value={typeof value === 'string' ? value : value.join(', ')} onChange={(event) => updateAnswer(item.key, event.target.value)} aria-label={item.label} />;
     }
     return (
       <input
+        data-answer-key={item.key}
         className="official-input"
         type={item.kind === 'date' ? 'date' : item.kind === 'number' ? 'number' : 'text'}
         inputMode={[23, 24, 39, 40].includes(item.number || -1) ? 'numeric' : undefined}
@@ -1185,7 +1214,7 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
                     { key: 'metaSequence', label: 'Nomor Urut' },
                   ].map((item) => (
                     <label key={item.key}>{item.label}
-                      <input value={String(answers[item.key] ?? '')} onChange={(event) => updateAnswer(item.key, event.target.value)} aria-label={item.label} />
+                      <input data-answer-key={item.key} value={String(answers[item.key] ?? '')} onChange={(event) => updateAnswer(item.key, event.target.value)} aria-label={item.label} />
                     </label>
                   ))}
                 </div>
