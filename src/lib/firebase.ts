@@ -1613,7 +1613,7 @@ export async function reconcilePPKSFirestoreWithSpreadsheet(sourceRecords: PPKSR
     canonicalRecords.push(mergeSourceWithStored(source, matches.map((item) => item.record)));
   }
 
-  // Never delete existing documents until all 44 canonical records can be written.
+  // Never delete existing documents until all 46 canonical records can be written.
   const upsertBatch = writeBatch(db);
   for (const record of canonicalRecords) {
     upsertBatch.set(doc(db, 'ppks', record.id), stripUndefinedForFirestore(record) as PPKSRecord);
