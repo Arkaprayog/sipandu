@@ -677,7 +677,7 @@ test('activates a verified self-registered user as anggota and records activatio
       status: 'pending_email',
     })],
   ]);
-  let assignedClaims: Record<string, unknown> | null = null;
+  const assignedClaims: { value?: Record<string, unknown> } = {};
 
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
@@ -699,7 +699,7 @@ test('activates a verified self-registered user as anggota and records activatio
     }
     if (url.includes('/accounts:update')) {
       const body = JSON.parse(String(init?.body || '{}')) as { customAttributes?: string };
-      assignedClaims = JSON.parse(body.customAttributes || '{}') as Record<string, unknown>;
+      assignedClaims.value = JSON.parse(body.customAttributes || '{}') as Record<string, unknown>;
       return new Response(JSON.stringify({ localId: 'firebase-open-member' }), {
         status: 200, headers: { 'Content-Type': 'application/json' },
       });
@@ -738,7 +738,7 @@ test('activates a verified self-registered user as anggota and records activatio
     assert.equal(result.ok, true);
     assert.equal(result.status, 'active');
     assert.equal(result.role, 'anggota');
-    assert.equal(assignedClaims?.role, 'anggota');
+    assert.equal(assignedClaims.value?.role, 'anggota');
     const activated = JSON.parse(stored.get('pending:firebase-open-member') || '{}') as Record<string, unknown>;
     assert.equal(activated.status, 'active');
     assert.equal(typeof activated.activatedAt, 'number');
