@@ -517,8 +517,8 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
     `;
 
     const printClone = shell.cloneNode(true) as HTMLElement;
-    const sourceControls = Array.from(shell.querySelectorAll('input, textarea, select'));
-    const targetControls = Array.from(printClone.querySelectorAll('input, textarea, select'));
+    const sourceControls = Array.from(shell.querySelectorAll<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>('input, textarea, select'));
+    const targetControls = Array.from(printClone.querySelectorAll<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>('input, textarea, select'));
     sourceControls.forEach((sourceControl, index) => {
       const targetControl = targetControls[index];
       if (!targetControl) return;
