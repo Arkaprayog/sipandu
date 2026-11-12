@@ -1,3 +1,4 @@
+import { isValidFieldVisitDate } from './fieldVisitValidation';
 import { initializeApp, getApps } from 'firebase/app';
 import { Capacitor } from '@capacitor/core';
 import { SocialLogin } from '@capgo/capacitor-social-login';
@@ -1744,8 +1745,7 @@ export async function saveSIPANDUUserProfile(uid: string, profile: ProfileUser):
 }
 
 
-const serviceDateIsValid = (value: string): boolean =>
-  value === '' || /^\d{4}-\d{2}-\d{2}$/.test(value);
+
 
 const toISODate = (value: any): string => {
   if (!value) return '';
@@ -1828,7 +1828,7 @@ export async function savePPKSServiceUpdate(input: PPKSServiceUpdateInput): Prom
   const user = auth.currentUser;
   if (!user) throw new Error('Sesi SIPANDU berakhir. Masuk kembali sebelum memperbarui layanan.');
   if (!input.ppksId.trim() || input.ppksId.includes('/')) throw new Error('ID PPKS tidak valid.');
-  if (!serviceDateIsValid(input.serviceDate) || !serviceDateIsValid(input.followUpAt)) {
+  if (!isValidFieldVisitDate(input.serviceDate) || !isValidFieldVisitDate(input.followUpAt)) {
     throw new Error('Tanggal layanan atau tindak lanjut tidak valid.');
   }
   const token = await getIdTokenResult(user);
@@ -1995,8 +1995,7 @@ export async function fetchPPKSServiceEvents(ppksId: string): Promise<PPKSServic
 }
 
 
-const isValidFieldVisitDate = (value: string): boolean =>
-  value === '' || /^\\d{4}-\\d{2}-\\d{2}$/.test(value);
+
 
 /** Live field visit feed; pendamping can only query records assigned to their UID. */
 export function subscribeToFieldVisits(

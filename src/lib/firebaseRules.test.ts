@@ -716,3 +716,41 @@ test('Responden dapat memulai hanya percakapan dengan ID PPKS pada custom claim'
     assignedStaffUids: [PENDAMPING_UID],
   }));
 });
+
+
+test('Pendamping can create a field visit only with ISO-formatted calendar date fields', async () => {
+  const firestore = environment.authenticatedContext(PENDAMPING_UID, {
+    role: 'pendamping',
+  }).firestore();
+
+  const baseVisit = {
+    ppksId: 'ppks-demo',
+    visitType: 'kunjungan-rumah',
+    outcome: 'selesai',
+    summary: 'Kunjungan rumah terlaksana',
+    nextAction: '',
+    followUpAt: '',
+    assignedToUid: PENDAMPING_UID,
+    createdByUid: PENDAMPING_UID,
+    createdAt: serverTimestamp(),
+  };
+
+  await assertSucceeds(setDoc(doc(firestore, 'fieldVisits', 'visit-valid-date'), {
+    ...baseVisit,
+    id: 'visit-valid-date',
+    visitDate: '2026-11-12',
+  }));
+
+  await assertFails(setDoc(doc(firestore, 'fieldVisits', 'visit-invalid-date'), {
+    ...baseVisit,
+    id: 'visit-invalid-date',
+    visitDate: '12/11/2026',
+  }));
+
+  await assertFails(setDoc(doc(firestore, 'fieldVisits', 'visit-invalid-follow-up'), {
+    ...baseVisit,
+    id: 'visit-invalid-follow-up',
+    visitDate: '2026-11-12',
+    followUpAt: '2026-1-2',
+  }));
+});
