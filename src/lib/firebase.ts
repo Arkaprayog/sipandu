@@ -1432,7 +1432,7 @@ export async function removeLegacyDemoPPKSFromFirestore(): Promise<number> {
  *
  * All canonical documents are written first, merging non-empty stored details
  * (photos, assessments and interventions) into the matching source record. Only
- * after all canonical writes succeed are old documents outside the 44-item roster
+ * after all canonical writes succeed are old documents outside the 46-person roster
  * deleted. Access is restricted to the trusted owner/supervisor Firebase role.
  */
 export async function reconcilePPKSFirestoreWithSpreadsheet(sourceRecords: PPKSRecord[]): Promise<number> {
