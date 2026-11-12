@@ -3,6 +3,41 @@ export const A4_WIDTH_PT = (210 / 25.4) * 72;
 export const A4_HEIGHT_PT = (297 / 25.4) * 72;
 export const PAGE_MARGIN_PT = (8 / 25.4) * 72;
 
+/**
+ * Keep PDF rasterization at the CSS page width. A descendant's scrollWidth
+ * must never widen the canvas: doing so scales the complete page down to fit
+ * A4 and changes the official table's column proportions. Vertical overflow
+ * is still included so wrapped answers are not silently cut off.
+ */
+export interface AssessmentPageMetrics {
+  width: number;
+  height: number;
+  scrollHeight: number;
+  scrollWidth?: number;
+}
+
+export interface AssessmentPageRenderDimensions {
+  width: number;
+  height: number;
+}
+
+export function getAssessmentPageRenderDimensions(
+  metrics: AssessmentPageMetrics,
+): AssessmentPageRenderDimensions {
+  const { width, height, scrollHeight } = metrics;
+  if (
+    !Number.isFinite(width) || !Number.isFinite(height) || !Number.isFinite(scrollHeight) ||
+    width <= 0 || height <= 0 || scrollHeight < 0
+  ) {
+    throw new Error('Ukuran halaman asesmen tidak valid untuk dirender.');
+  }
+
+  return {
+    width: Math.ceil(width),
+    height: Math.ceil(Math.max(height, scrollHeight)),
+  };
+}
+
 export interface A4Placement {
   x: number;
   y: number;

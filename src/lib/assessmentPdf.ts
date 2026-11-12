@@ -1,6 +1,6 @@
 import html2canvas from 'html2canvas';
 import { PDFDocument } from 'pdf-lib';
-import { A4_HEIGHT_PT, A4_WIDTH_PT, fitImageToA4 } from './a4Layout';
+import { A4_HEIGHT_PT, A4_WIDTH_PT, fitImageToA4, getAssessmentPageRenderDimensions } from './a4Layout';
 export const PDF_RENDER_SCALES = [2.5, 2, 1.5, 1] as const;
 const JPEG_QUALITY = 0.94;
 
@@ -83,8 +83,14 @@ async function renderAssessmentPage(
 ): Promise<EncodedAssessmentPage> {
   let lastError: unknown = null;
   const bounds = element.getBoundingClientRect();
-  const width = Math.ceil(Math.max(bounds.width, element.scrollWidth));
-  const height = Math.ceil(Math.max(bounds.height, element.scrollHeight));
+  // Keep the canvas at the fixed A4 content width. A child with a long
+  // unwrapped label must not widen the canvas and shrink every column.
+  const { width, height } = getAssessmentPageRenderDimensions({
+    width: bounds.width,
+    height: bounds.height,
+    scrollHeight: element.scrollHeight,
+    scrollWidth: element.scrollWidth,
+  });
   if (width <= 0 || height <= 0) {
     throw new Error('Halaman ' + pageNumber + ' kosong dan tidak dapat dimasukkan ke PDF.');
   }

@@ -492,16 +492,41 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
       #${rootId} .official-table td { padding:1.5px 2px !important; }
       #${rootId} .official-page:not(.official-photo-appendix) { overflow:visible !important; }
       #${rootId} .official-table {
-        width:100% !important; min-width:0 !important; table-layout:fixed !important;
+        display:table !important; width:100% !important; min-width:0 !important;
+        max-width:100% !important; table-layout:fixed !important; border-spacing:0 !important;
       }
+      #${rootId} .official-table col.col-number { width:5% !important; }
+      #${rootId} .official-table col.col-label { width:41% !important; }
+      #${rootId} .official-table col.col-answer { width:54% !important; }
       #${rootId} .official-table td {
+        box-sizing:border-box !important; min-width:0 !important; max-width:100% !important;
         white-space:normal !important; overflow-wrap:anywhere !important; word-break:normal !important;
       }
+      #${rootId} .official-options {
+        display:flex !important; flex-direction:column !important;
+        width:100% !important; min-width:0 !important; max-width:100% !important;
+      }
+      #${rootId} .official-option {
+        display:flex !important; flex-direction:row !important; align-items:flex-start !important;
+        width:100% !important; min-width:0 !important; max-width:100% !important; box-sizing:border-box !important;
+      }
+      #${rootId} .official-option > .official-option-number {
+        display:block !important; flex:0 0 9px !important; min-width:9px !important;
+      }
+      #${rootId} .official-option > span:last-child {
+        display:block !important; flex:1 1 0% !important; min-width:0 !important; max-width:100% !important;
+        white-space:normal !important; overflow-wrap:anywhere !important; word-break:normal !important;
+      }
+      #${rootId} .official-input,
+      #${rootId} .official-textarea,
       #${rootId} .official-print-value {
-        display:block !important; width:100% !important; max-width:100% !important; min-width:0 !important;
-        box-sizing:border-box !important; min-height:12px !important; margin:0 !important; padding:0 1px !important;
+        display:block !important; box-sizing:border-box !important; width:100% !important;
+        max-width:100% !important; min-width:0 !important;
+      }
+      #${rootId} .official-print-value {
+        min-height:12px !important; margin:0 !important; padding:0 1px !important;
         color:#111 !important; font:inherit !important; line-height:1.2 !important; text-align:left !important;
-        white-space:pre-wrap !important; overflow-wrap:anywhere !important; word-break:normal !important;
+        white-space:pre-wrap !important; overflow-wrap:anywhere !important; word-break:break-word !important;
         overflow:visible !important;
       }
       #${rootId} .official-print-multiline {
