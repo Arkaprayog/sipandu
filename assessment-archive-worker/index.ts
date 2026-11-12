@@ -675,7 +675,7 @@ export default {
       const message = error instanceof Error ? error.message : 'Arsip PDF belum dapat disimpan.';
       const status = /sesi firebase/i.test(message) ? 401
         : /token oauth google|sesi google workspace/i.test(message) ? 401
-        : /peran sipandu|peran akun/i.test(message) ? 403
+        : /akun sipandu dinonaktifkan|peran sipandu|peran akun|token google bukan berasal/i.test(message) ? 403
         : 502;
       return json({ ok: false, verified: false, message }, status, origin);
     }
