@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { createUserWithEmailAndPassword, signOut, updateProfile } from 'firebase/auth';
+import { createUserWithEmailAndPassword, sendEmailVerification, signOut, updateProfile } from 'firebase/auth';
 import { ArrowLeft, Eye, EyeOff, UserPlus, MailCheck } from 'lucide-react';
 import { auth, staffAuthPersistenceReady, createSIPANDUUserProfile } from '../lib/firebase';
 import { publicAssetUrl } from '../lib/publicAssets';
@@ -59,9 +59,10 @@ export const RegistrationPage: React.FC<RegistrationPageProps> = ({ onBack }) =>
         status?: string;
         message?: string;
       };
-      if (!registrationResponse.ok || registrationResult.status !== 'pending_owner') {
-        throw new Error(registrationResult.message || 'Permohonan belum berhasil dikirim untuk persetujuan Owner.');
+      if (!registrationResponse.ok || registrationResult.status !== 'pending_email') {
+        throw new Error(registrationResult.message || 'Pendaftaran mandiri belum berhasil dicatat.');
       }
+      await sendEmailVerification(credential.user);
       await signOut(auth);
       setEmail(normalizedEmail);
       setCompleted(true);
@@ -110,15 +111,15 @@ export const RegistrationPage: React.FC<RegistrationPageProps> = ({ onBack }) =>
           <div className="mb-4 text-center">
             <img src={publicAssetUrl('uploads/Logo Kemensos Hadir.png')} alt="Logo resmi Kemensos Hadir" className="mx-auto mb-2 h-auto w-[135px] max-w-full object-contain" />
             <h1 className="text-xl font-extrabold text-black">Pendaftaran Akun SIPANDU</h1>
-            <p className="mt-1 text-xs text-black">Cukup nama, email aktif, dan kata sandi. Persetujuan administrator diperlukan sebelum verifikasi email.</p>
+            <p className="mt-1 text-xs text-black">Buat akun menggunakan nama, email aktif, dan kata sandi. Verifikasi email untuk mengaktifkan keanggotaan dasar SIPANDU.</p>
           </div>
 
           {completed ? (
             <div className="rounded-xl border border-emerald-700/30 bg-white/75 p-4 text-center text-black">
               <MailCheck className="mx-auto mb-2 h-9 w-9 text-emerald-700" />
-              <h2 className="text-base font-bold">Permohonan menunggu persetujuan</h2>
-              <p className="mt-2 text-xs leading-relaxed">Permohonan dengan email <strong>{email}</strong> sudah tercatat dan menunggu persetujuan Owner atau Supervisor yang secara khusus ditunjuk. Tautan verifikasi email baru akan dikirim setelah permohonan disetujui. Anda belum dapat login sebelum proses persetujuan dan verifikasi selesai.</p>
-              <button type="button" onClick={() => onBack(email, 'Permohonan pendaftaran sedang menunggu persetujuan administrator.')} className="mt-4 w-full rounded-xl bg-teal-700 px-4 py-3 text-sm font-bold text-white">Kembali ke halaman login</button>
+              <h2 className="text-base font-bold">Pendaftaran berhasil</h2>
+              <p className="mt-2 text-xs leading-relaxed">Akun untuk <strong>{email}</strong> sudah dibuat. Tautan verifikasi telah dikirim ke email tersebut. Buka tautan verifikasi, lalu masuk kembali ke SIPANDU. Setelah email terverifikasi, akun akan aktif otomatis sebagai anggota dengan hak dasar; akses data responden dan fitur staf tetap memerlukan pemberian peran oleh administrator.</p>
+              <button type="button" onClick={() => onBack(email, 'Tautan verifikasi email sudah dikirim. Verifikasi email terlebih dahulu, lalu masuk kembali.')} className="mt-4 w-full rounded-xl bg-teal-700 px-4 py-3 text-sm font-bold text-white">Kembali ke halaman login</button>
             </div>
           ) : (
             <>

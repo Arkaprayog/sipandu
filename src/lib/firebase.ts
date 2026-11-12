@@ -198,7 +198,7 @@ export type ConnectionCheckResult = {
   checkedAt: string;
 };
 
-const VALID_ROLES = ['owner', 'supervisor', 'pendamping'] as const;
+const VALID_ROLES = ['owner', 'supervisor', 'pendamping', 'anggota'] as const;
 type SipanduRole = typeof VALID_ROLES[number];
 
 /** Resolve the Google email from the primary Firebase user field or Google provider profile. */
@@ -252,6 +252,15 @@ export async function testFirestoreConnection(): Promise<ConnectionCheckResult> 
         service: 'Firestore',
         ok: false,
         message: `Akun ${user.email || user.uid} tidak memiliki custom claim role yang valid. Peran yang terbaca: ${role ? String(role) : 'tidak ada'}. Admin harus menetapkan role tepercaya di Firebase Admin SDK.`,
+        checkedAt,
+      };
+    }
+
+    if (role === 'anggota') {
+      return {
+        service: 'Firestore',
+        ok: true,
+        message: 'Klaim anggota valid. Pemeriksaan ini sengaja tidak membaca koleksi PPKS karena akun anggota tidak memiliki akses data responden.',
         checkedAt,
       };
     }

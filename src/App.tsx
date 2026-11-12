@@ -337,6 +337,7 @@ async function clearSipanduBrowserCaches(): Promise<void> {
 function StaffApp() {
   // Firebase Authentication is the source of truth; URL/localStorage flags cannot bypass login.
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isBasicMember, setIsBasicMember] = useState(false);
   const [currentUserUid, setCurrentUserUid] = useState(auth.currentUser?.uid || '');
   const [authReady, setAuthReady] = useState(false);
   const [currentUserName, setCurrentUserName] = useState('');
@@ -387,6 +388,7 @@ function StaffApp() {
       setAuthReady(false);
       // Hide the previous account while the next Firebase identity is verified.
       setIsAuthenticated(false);
+      setIsBasicMember(false);
       setCurrentUserUid(user?.uid || '');
       setRespondentNotifications(user ? loadRespondentNotifications(user.uid) : []);
       setCurrentUserName('');
@@ -404,9 +406,8 @@ function StaffApp() {
         return;
       }
       try {
-        // A verified member who registered with the shared team code is activated
-        // on the server. The Worker assigns only the pendamping claim after it
-        // confirms the pending invitation and the verified Firebase identity.
+        // A self-registered user is activated only after Firebase confirms the email.
+        // The Worker assigns the isolated anggota claim; it never grants staff data access.
         // Refresh Firebase's cached user profile and ID token before making
         // an authorization decision. Email verification may have happened in
         // another browser/app after this session was first created.
@@ -414,10 +415,10 @@ function StaffApp() {
         // cached, signed role claim. Reuse it during normal reloads; refreshing
         // the user/token on every startup made temporary network failures look
         // like a logout. Re-check with the server only when the cached role is
-        // missing or invalid (e.g. a newly activated invitation).
+        // missing or invalid (e.g. a newly verified self-registration).
         let token = await getIdTokenResult(user);
         let role = token.claims.role;
-        if (role !== 'owner' && role !== 'supervisor' && role !== 'pendamping') {
+        if (role !== 'owner' && role !== 'supervisor' && role !== 'pendamping' && role !== 'anggota') {
           await user.reload();
           token = await getIdTokenResult(user, true);
           role = token.claims.role;
@@ -427,6 +428,17 @@ function StaffApp() {
           setCurrentUserName('');
           setCurrentUserRole('');
           setAuthError('Email akun SIPANDU belum diverifikasi. Buka tautan verifikasi yang dikirim ke email, lalu masuk kembali.');
+          return;
+        }
+        if (role === 'anggota') {
+          if (!active || generation !== authEventGeneration || auth.currentUser?.uid !== user.uid) return;
+          setIsAuthenticated(false);
+          setIsBasicMember(true);
+          setCurrentUserRole('anggota');
+          setCurrentUserName(user.displayName || user.email || 'Anggota SIPANDU');
+          setPpksList([]);
+          setServiceStatuses([]);
+          setLocalCacheReady(false);
           return;
         }
         if (role !== 'owner' && role !== 'supervisor' && role !== 'pendamping') {
@@ -445,6 +457,16 @@ function StaffApp() {
           }
         }
         if (!active || generation !== authEventGeneration || auth.currentUser?.uid !== user.uid) return;
+        if (role === 'anggota') {
+          setIsAuthenticated(false);
+          setIsBasicMember(true);
+          setCurrentUserRole('anggota');
+          setCurrentUserName(user.displayName || user.email || 'Anggota SIPANDU');
+          setPpksList([]);
+          setServiceStatuses([]);
+          setLocalCacheReady(false);
+          return;
+        }
         if (role !== 'owner' && role !== 'supervisor' && role !== 'pendamping') {
           setIsAuthenticated(false);
           setCurrentUserName('');
@@ -910,6 +932,7 @@ function StaffApp() {
       // markers, and all service-worker caches even when one sign-out call fails.
       await clearSipanduBrowserCaches();
       setIsAuthenticated(false);
+      setIsBasicMember(false);
       setCurrentUserName('');
       setCurrentUserRole('');
       setCurrentUserUid('');
@@ -935,9 +958,8 @@ function StaffApp() {
     }
     setAuthReady(false);
     setAuthError('');
+    setIsBasicMember(false);
     try {
-      // A link may have been opened outside SIPANDU; reload the Firebase user
-      // before checking emailVerified or evaluating trusted role claims.
       await user.reload();
       let token = await getIdTokenResult(user, true);
       let role = token.claims.role;
@@ -946,16 +968,37 @@ function StaffApp() {
         setAuthError('Email akun belum diverifikasi. Verifikasi email terlebih dahulu, lalu coba lagi.');
         return;
       }
+      if (role === 'anggota') {
+        setIsAuthenticated(false);
+        setIsBasicMember(true);
+        setCurrentUserRole('anggota');
+        setCurrentUserName(user.displayName || user.email || 'Anggota SIPANDU');
+        setPpksList([]);
+        setServiceStatuses([]);
+        setLocalCacheReady(false);
+        return;
+      }
       if (role !== 'owner' && role !== 'supervisor' && role !== 'pendamping') {
         await activateVerifiedTeamMember(user);
         token = await getIdTokenResult(user, true);
         role = token.claims.role;
       }
-      if (role !== 'owner' && role !== 'supervisor' && role !== 'pendamping') {
+      if (role === 'anggota') {
         setIsAuthenticated(false);
-        setAuthError('Layanan aktivasi mengembalikan respons, tetapi klaim peran belum muncul pada token terbaru. Tunggu beberapa saat, lalu coba verifikasi lagi. Bila tetap terjadi, administrator perlu memeriksa custom claim akun Firebase.');
+        setIsBasicMember(true);
+        setCurrentUserRole('anggota');
+        setCurrentUserName(user.displayName || user.email || 'Anggota SIPANDU');
+        setPpksList([]);
+        setServiceStatuses([]);
+        setLocalCacheReady(false);
         return;
       }
+      if (role !== 'owner' && role !== 'supervisor' && role !== 'pendamping') {
+        setIsAuthenticated(false);
+        setAuthError('Layanan aktivasi merespons, tetapi peran staf belum tersedia. Akun anggota dasar tidak memperoleh akses data responden; hubungi administrator jika membutuhkan kewenangan staf.');
+        return;
+      }
+      setIsBasicMember(false);
       setCurrentUserRole(role);
       setCurrentUserName(user.displayName || user.email || '');
       setIsAuthenticated(true);
@@ -1931,6 +1974,20 @@ function StaffApp() {
   // Avoid showing protected UI until Firebase has resolved the current session.
   if (!authReady) {
     return <div className="min-h-screen flex items-center justify-center bg-[#0a140b] text-emerald-200">Memeriksa sesi SIPANDU…</div>;
+  }
+
+  if (isBasicMember && auth.currentUser) {
+    return (
+      <main className="min-h-screen flex items-center justify-center bg-[#0a140b] px-4 py-8 text-white">
+        <section className="w-full max-w-md rounded-2xl border border-emerald-400/30 bg-[#112214] p-6 shadow-2xl">
+          <div className="mb-3 text-xs font-bold uppercase tracking-[0.18em] text-emerald-300">SIPANDU · Anggota</div>
+          <h1 className="text-xl font-extrabold text-white">Akun berhasil diaktifkan</h1>
+          <p className="mt-2 text-sm leading-relaxed text-neutral-200">Selamat datang, {currentUserName || auth.currentUser.email || 'Anggota SIPANDU'}. Email Anda telah diverifikasi dan akun aktif dengan hak dasar.</p>
+          <p className="mt-3 rounded-xl border border-white/10 bg-black/20 p-3 text-xs leading-relaxed text-neutral-300">Akun anggota tidak dapat membuka data PPKS/responden, asesmen, dokumen staf, pesan langsung, atau modul operasional. Hubungi Owner SIPANDU untuk penetapan peran staf apabila Anda memang memiliki kewenangan tersebut.</p>
+          <button type="button" onClick={() => void handleLogout()} className="mt-5 w-full rounded-xl bg-emerald-700 px-4 py-3 text-sm font-bold text-white hover:bg-emerald-600">Keluar dari SIPANDU</button>
+        </section>
+      </main>
+    );
   }
 
   if (isAuthenticated && !localCacheReady) {

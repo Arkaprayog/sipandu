@@ -754,3 +754,62 @@ test('Pendamping can create a field visit only with ISO-formatted calendar date 
     followUpAt: '2026-1-2',
   }));
 });
+
+
+test('Akun anggota hanya memiliki profil sendiri dan tidak dapat membaca data staf atau responden', async () => {
+  const memberContext = environment.authenticatedContext('basic-member-001', {
+    role: 'anggota',
+    email: 'anggota@example.test',
+    email_verified: true,
+  });
+  const firestore = memberContext.firestore();
+
+  // All operational collections remain staff-only. The basic role is
+  // intentionally absent from isStaff() in both Firestore and Storage Rules.
+  await assertFails(getDoc(doc(firestore, 'ppks', 'ppks-demo')));
+  await assertFails(getDocs(collection(firestore, 'ppks')));
+  await assertFails(getDocs(collection(firestore, 'integratedAssessmentAnswers')));
+  await assertFails(getDoc(doc(firestore, 'integratedAssessmentBackups', 'ppks-demo')));
+  await assertFails(getDoc(doc(firestore, 'stageOneIntake', 'respondent-stage-one')));
+  await assertFails(getDoc(doc(firestore, 'staffDocuments', 'staff-document-001')));
+  await assertFails(getDoc(doc(firestore, 'staffLetters', 'letter-001')));
+  await assertFails(getDoc(doc(firestore, 'ppksServiceStatus', 'ppks-demo')));
+  await assertFails(getDoc(doc(firestore, 'ppksServiceEvents', 'event-001')));
+  await assertFails(getDoc(doc(firestore, 'fieldVisits', 'visit-001')));
+  await assertFails(getDoc(doc(firestore, 'conversations', 'ppks-demo')));
+  await assertFails(getDocs(collection(firestore, 'conversations', 'ppks-demo', 'messages')));
+  await assertFails(setDoc(doc(firestore, 'conversations', 'ppks-demo', 'messages', 'forged-message'), {
+    senderUid: 'basic-member-001',
+    body: 'Anggota tidak boleh mengirim pesan staf ke responden.',
+    type: 'text',
+    createdAt: serverTimestamp(),
+  }));
+
+  const ownProfile = doc(firestore, 'userProfiles', 'basic-member-001');
+  await assertSucceeds(setDoc(ownProfile, {
+    nama: 'Anggota SIPANDU',
+    nip: '',
+    jabatan: '',
+    unitKerja: '',
+    noHp: '',
+    photoUrl: '',
+    email: 'anggota@example.test',
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  }));
+  await assertSucceeds(getDoc(ownProfile));
+  await assertFails(updateDoc(ownProfile, {
+    role: 'pendamping',
+    updatedAt: serverTimestamp(),
+  }));
+
+  const staffStorage = memberContext.storage();
+  const privateFile = ref(staffStorage, 'staff-documents/basic-member-001/document-001/private.pdf');
+  await assertFails(uploadBytes(privateFile, new Blob(['%PDF'], { type: 'application/pdf' }), {
+    contentType: 'application/pdf',
+  }));
+  await assertFails(getBytes(privateFile));
+
+  const otherProfile = doc(firestore, 'userProfiles', 'another-member');
+  await assertFails(getDoc(otherProfile));
+});
