@@ -326,7 +326,8 @@ service cloud.firestore {
     // Service-center status is isolated from the spreadsheet-owned PPKS roster.
     function validServiceDate(value) {
       return value is string
-        && (value == '' || value.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}
+        && (value == '' || value.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$'));
+    }
 
     function validAssistanceStatus(value) {
       return value in ['belum-diverifikasi', 'dibutuhkan', 'dalam-proses', 'diterima', 'tidak-dibutuhkan'];
