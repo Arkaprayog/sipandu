@@ -85,6 +85,19 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
       const signedInToken = await credential.user.getIdTokenResult(true);
       const existingStaffRole = signedInToken.claims.role;
       if (!credential.user.emailVerified && existingStaffRole !== 'owner' && existingStaffRole !== 'supervisor' && existingStaffRole !== 'pendamping') {
+        // Basic members must retain verified-email status too. A previously
+        // activated member can request a fresh link, but never gains access while unverified.
+        if (existingStaffRole === 'anggota') {
+          try {
+            await sendEmailVerification(credential.user);
+            setRegistrationNotice('Akun anggota memerlukan email terverifikasi. Tautan verifikasi baru telah dikirim; buka email lalu masuk kembali.');
+            setErrorMsg('');
+          } finally {
+            await signOut(auth);
+          }
+          return;
+        }
+
         const idToken = await credential.user.getIdToken(true);
         const statusResponse = await fetch('https://sipandu-registration.aryprayoga139.workers.dev/registration-status', {
           method: 'POST',
@@ -97,12 +110,15 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
         const registration = await statusResponse.json().catch(() => ({})) as { ok?: boolean; status?: string; message?: string };
         if (!statusResponse.ok || !registration.ok) {
           await signOut(auth);
-          setErrorMsg(registration.message || 'Status permohonan belum dapat diperiksa. Coba kembali beberapa saat lagi.');
+          setErrorMsg(registration.message || 'Status pendaftaran belum dapat diperiksa. Coba kembali beberapa saat lagi.');
           return;
         }
-        if (registration.status === 'not_registered') {
-          // Recover safely if Firebase account creation succeeded but the original
-          // registration request was interrupted before the Worker stored the request.
+
+        // Retry the idempotent self-registration endpoint when the account was
+        // created but the original Worker request did not finish, or when it
+        // still carries a legacy pending_owner state.
+        let registrationStatus = registration.status;
+        if (registrationStatus === 'not_registered' || registrationStatus === 'pending_owner') {
           const retryResponse = await fetch('https://sipandu-registration.aryprayoga139.workers.dev/register', {
             method: 'POST',
             headers: {
@@ -112,35 +128,28 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
             body: JSON.stringify({}),
           });
           const retry = await retryResponse.json().catch(() => ({})) as { ok?: boolean; status?: string; message?: string };
-          await signOut(auth);
-          if (!retryResponse.ok || !retry.ok || retry.status !== 'pending_owner') {
-            setErrorMsg(retry.message || 'Permohonan belum berhasil dikirim ulang untuk persetujuan Owner.');
+          if (!retryResponse.ok || !retry.ok) {
+            await signOut(auth);
+            setErrorMsg(retry.message || 'Pendaftaran mandiri belum berhasil dipulihkan. Coba kembali.');
             return;
           }
-          setRegistrationNotice('Permohonan pendaftaran berhasil dicatat dan sedang menunggu persetujuan Owner. Tautan verifikasi email belum dikirim.');
-          setErrorMsg('');
-          return;
+          registrationStatus = retry.status;
         }
-        if (registration.status === 'pending_owner') {
+
+        if (registrationStatus === 'rejected') {
           await signOut(auth);
-          setRegistrationNotice('Permohonan Anda masih menunggu persetujuan Owner atau Supervisor yang ditunjuk. Tautan verifikasi belum dikirim.');
-          setErrorMsg('');
+          setErrorMsg(registration.message || 'Pendaftaran akun ditolak. Hubungi administrator SIPANDU.');
           return;
         }
-        if (registration.status === 'rejected') {
+        if (registrationStatus !== 'pending_email' && registrationStatus !== 'approved') {
           await signOut(auth);
-          setErrorMsg(registration.message || 'Permohonan pendaftaran ditolak. Hubungi administrator SIPANDU.');
+          setErrorMsg(registration.message || 'Status pendaftaran belum mengizinkan verifikasi email.');
           return;
         }
-        if (registration.status !== 'approved' && registration.status !== 'pending_email') {
-          await signOut(auth);
-          setErrorMsg(registration.message || 'Permohonan belum disetujui. Akun belum dapat diaktifkan.');
-          return;
-        }
-        // Send the Firebase verification link only after the Worker confirms approval.
+
         try {
           await sendEmailVerification(credential.user);
-          setRegistrationNotice('Permohonan telah disetujui. Tautan verifikasi email baru telah dikirim. Buka email tersebut, verifikasi, lalu masuk kembali.');
+          setRegistrationNotice('Tautan verifikasi email SIPANDU telah dikirim. Buka tautan pada email Anda, lalu masuk kembali. Akun akan aktif otomatis sebagai anggota dengan hak dasar.');
           setErrorMsg('');
         } finally {
           await signOut(auth);
