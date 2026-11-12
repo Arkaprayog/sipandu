@@ -261,7 +261,7 @@ test('activation reports missing Firebase service-account configuration', () => 
 });
 
 
-test('blocks activation when no Owner-approved registration record exists', async () => {
+test('blocks activation when no self-registration record exists', async () => {
   const { generateKeyPairSync } = await import('node:crypto');
   const { privateKey } = generateKeyPairSync('rsa', {
     modulusLength: 2048,
@@ -319,7 +319,7 @@ test('blocks activation when no Owner-approved registration record exists', asyn
     assert.equal(response.status, 503);
     const result = await response.json() as { ok?: boolean; message?: string };
     assert.equal(result.ok, false);
-    assert.match(result.message || '', /persetujuan Owner belum tersedia/);
+    assert.match(result.message || '', /Catatan pendaftaran anggota belum tersedia/);
     assert.equal(assignedClaims, '');
     assert.equal(calls.length, 1);
   } finally {
@@ -462,11 +462,12 @@ test('registration accepts a Firebase identity token without any team code', asy
     });
     assert.equal(response.status, 202);
     const result = await response.json() as { ok?: boolean; status?: string };
-    assert.equal(result.status, 'pending_owner');
+    assert.equal(result.status, 'pending_email');
     const invitation = writes.find((entry) => entry.key === 'pending:firebase-uid-new-member');
     assert.ok(invitation);
-    assert.equal(JSON.parse(invitation.value).status, 'pending_owner');
-    assert.equal(invitation.expirationTtl, 7 * 24 * 60 * 60);
+    assert.equal(JSON.parse(invitation.value).status, 'pending_email');
+    assert.equal(JSON.parse(invitation.value).registrationMode, 'self-service');
+    assert.equal(invitation.expirationTtl, 30 * 24 * 60 * 60);
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -652,6 +653,137 @@ test('activation explains missing firebaseauth.users.update permission and prese
     assert.match(result.message || '', /tidak perlu membuat akun baru/);
     assert.deepEqual(deletedKeys, []);
     assert.equal(await kv.get(pendingKey), pendingValue);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+
+
+test('activates a verified self-registered user as anggota and records activation', async () => {
+  const { generateKeyPairSync } = await import('node:crypto');
+  const { privateKey } = generateKeyPairSync('rsa', {
+    modulusLength: 2048,
+    privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
+    publicKeyEncoding: { type: 'spki', format: 'pem' },
+  });
+  const originalFetch = globalThis.fetch;
+  const stored = new Map<string, string>([
+    ['pending:firebase-open-member', JSON.stringify({
+      uid: 'firebase-open-member',
+      email: 'member@example.test',
+      name: 'Anggota Baru',
+      registrationMode: 'self-service',
+      status: 'pending_email',
+    })],
+  ]);
+  let assignedClaims: Record<string, unknown> | null = null;
+
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input);
+    if (url.includes('/accounts:lookup?key=')) {
+      return new Response(JSON.stringify({
+        users: [{
+          localId: 'firebase-open-member',
+          email: 'member@example.test',
+          emailVerified: true,
+          disabled: false,
+          customAttributes: '{}',
+        }],
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }
+    if (url === 'https://oauth2.googleapis.com/token') {
+      return new Response(JSON.stringify({ access_token: 'service-account-test-token', expires_in: 3600 }), {
+        status: 200, headers: { 'Content-Type': 'application/json' },
+      });
+    }
+    if (url.includes('/accounts:update')) {
+      const body = JSON.parse(String(init?.body || '{}')) as { customAttributes?: string };
+      assignedClaims = JSON.parse(body.customAttributes || '{}') as Record<string, unknown>;
+      return new Response(JSON.stringify({ localId: 'firebase-open-member' }), {
+        status: 200, headers: { 'Content-Type': 'application/json' },
+      });
+    }
+    throw new Error('Unexpected outbound request: ' + url);
+  }) as typeof fetch;
+
+  const kv = {
+    get: async (key: string) => stored.get(key) || null,
+    put: async (key: string, value: string) => { stored.set(key, value); },
+    delete: async (key: string) => { stored.delete(key); },
+  };
+
+  try {
+    const response = await worker.fetch(new Request('https://sipandu-registration.test/activate', {
+      method: 'POST',
+      headers: {
+        Origin: 'https://sipanduodhiv.my.id',
+        Authorization: 'Bearer verified-member-id-token',
+        'CF-Connecting-IP': '192.0.2.101',
+      },
+      body: JSON.stringify({}),
+    }), {
+      FIREBASE_AUTH_API_KEY: 'test-worker-secret-api-key',
+      FIREBASE_PROJECT_ID: 'gen-lang-client-0197631978',
+      FIREBASE_SERVICE_ACCOUNT_JSON: JSON.stringify({
+        project_id: 'gen-lang-client-0197631978',
+        client_email: 'test@example.iam.gserviceaccount.com',
+        private_key: privateKey,
+      }),
+      PENDING_REGISTRATIONS: kv,
+    });
+
+    assert.equal(response.status, 200);
+    const result = await response.json() as { ok?: boolean; status?: string; role?: string };
+    assert.equal(result.ok, true);
+    assert.equal(result.status, 'active');
+    assert.equal(result.role, 'anggota');
+    assert.equal(assignedClaims?.role, 'anggota');
+    const activated = JSON.parse(stored.get('pending:firebase-open-member') || '{}') as Record<string, unknown>;
+    assert.equal(activated.status, 'active');
+    assert.equal(typeof activated.activatedAt, 'number');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+
+test('disabled Firebase accounts cannot receive an anggota claim', async () => {
+  const originalFetch = globalThis.fetch;
+  const calls: string[] = [];
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    calls.push(String(input));
+    return new Response(JSON.stringify({
+      users: [{
+        localId: 'firebase-disabled-member',
+        email: 'disabled@example.test',
+        emailVerified: true,
+        disabled: true,
+        customAttributes: '{}',
+      }],
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+  }) as typeof fetch;
+  try {
+    const response = await worker.fetch(new Request('https://sipandu-registration.test/activate', {
+      method: 'POST',
+      headers: {
+        Authorization: 'Bearer disabled-member-id-token',
+        'CF-Connecting-IP': '192.0.2.102',
+      },
+      body: JSON.stringify({}),
+    }), {
+      FIREBASE_AUTH_API_KEY: 'test-worker-secret-api-key',
+      FIREBASE_PROJECT_ID: 'gen-lang-client-0197631978',
+      FIREBASE_SERVICE_ACCOUNT_JSON: '{"project_id":"gen-lang-client-0197631978","client_email":"test@example.iam.gserviceaccount.com","private_key":"unused"}',
+      PENDING_REGISTRATIONS: {
+        get: async () => JSON.stringify({ uid: 'firebase-disabled-member', email: 'disabled@example.test', status: 'pending_email' }),
+        put: async () => undefined,
+        delete: async () => undefined,
+      },
+    });
+    assert.equal(response.status, 403);
+    assert.equal(calls.length, 1);
+    assert.match((await response.json() as { message: string }).message, /dinonaktifkan administrator/);
   } finally {
     globalThis.fetch = originalFetch;
   }
