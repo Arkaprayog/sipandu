@@ -1,6 +1,6 @@
-# SIPANDU team registration service
+# SIPANDU registration service
 
-The registration Worker is separate from the static `sipandu` app Worker. It verifies Firebase ID tokens and verified email ownership, then assigns only the `pendamping` custom claim. New member activation does not use team codes, invitations, or pending-registration KV records.
+The registration Worker is separate from the static `sipandu` app Worker. It verifies Firebase ID tokens, records a short-lived self-registration state, checks verified email ownership and disabled-account status, then assigns only the least-privilege `anggota` custom claim. New self-registration requires no team code, invitation, or administrator approval. The `anggota` role is deliberately excluded from Firestore and Storage staff access rules.
 
 ## Cloudflare resources
 
@@ -29,7 +29,7 @@ Open Cloudflare Dashboard → Workers & Pages → `sipandu-registration` → Set
 
 The Firebase project ID and named Firestore database ID are non-secret Worker variables in `wrangler.jsonc`. The KV binding is already included there. The app's Firebase client API key remains visible in `firebase-applet-config.json` by design; it must be restricted in Google Cloud Console to the Firebase APIs and application origins actually used by SIPANDU.
 
-New members self-register with their name, email, and password. Firebase sends an email-verification link; after the link is opened, the member signs in and `/activate` verifies the Firebase ID token, the verified email, and the account status before assigning the least-privilege `pendamping` custom claim. Activation does not require a team code, invitation, pending KV record, or administrator-created account. Existing `owner` and `supervisor` claims are never overwritten. Disabled Firebase accounts are rejected.
+New members self-register with their name, email, and password. The web app creates the Firebase Authentication identity and its UID-owned basic profile, then calls `/register`. The Worker stores a `pending_email` record in `PENDING_REGISTRATIONS`; no team code, invitation, Owner approval, or Supervisor approval is required. Firebase sends the email-verification link. After the link is opened, the member signs in and `/activate` verifies the Firebase ID token, exact UID/email match, verified email, pending self-registration record, and non-disabled account before assigning only the `anggota` custom claim. Existing `owner`, `supervisor`, and `pendamping` claims are never overwritten. Disabled Firebase accounts are rejected.
 
 ## Deploy the Worker
 
@@ -53,10 +53,11 @@ The `/health` endpoint returns `ready: true` when the Firebase Auth API key, pro
 1. The member enters their name, email, and password on the public registration page.
 2. SIPANDU creates the Firebase Authentication account, stores the basic profile in `userProfiles/{uid}`, sends the verification email, and signs out.
 3. The member opens the verification link and returns to SIPANDU to sign in.
-4. The Worker validates the Firebase ID token, verified email, and disabled-account status, then assigns the `pendamping` custom claim. No team code, invitation, or KV registration record is checked.
-5. SIPANDU refreshes the Firebase ID token and opens the dashboard. The member can complete optional profile details and upload a photo later.
+4. `/register` records `pending_email` against the verified Firebase UID and normalized email. The app sends the email-verification link and signs out.
+5. After verifying the email, the member signs in. `/activate` checks the UID/email-bound KV record, Firebase `emailVerified`, and disabled status, then assigns `role: anggota` server-side.
+6. SIPANDU refreshes the ID token and shows an isolated basic-member screen. This role cannot read/write PPKS, integrated assessments, stage-one intake, staff documents, service records, field visits, Direct Messages, or staff Storage paths. It can manage only its UID-owned profile. An administrator must separately assign an existing staff role to grant operational access.
 
-The Worker never accepts a role from the browser. Profile documents cannot contain a role field, and Firestore Rules restrict each profile to its matching Firebase UID.
+The Worker never accepts a role from the browser. Only the server can assign the `anggota` claim after email verification; the browser cannot self-select `pendamping`, `supervisor`, or `owner`. Profile documents cannot contain a role field, and Firestore Rules restrict each profile to its matching Firebase UID. Legacy Owner-approval endpoints remain only for historical pending requests and are not part of the new self-registration path.
 
 ## Deploy the profile Firestore Rules
 
