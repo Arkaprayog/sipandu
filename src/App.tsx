@@ -406,9 +406,8 @@ function StaffApp() {
         return;
       }
       try {
-        // A verified member who registered with the shared team code is activated
-        // on the server. The Worker assigns only the pendamping claim after it
-        // confirms the pending invitation and the verified Firebase identity.
+        // A self-registered user is activated only after Firebase confirms the email.
+        // The Worker assigns the isolated anggota claim; it never grants staff data access.
         // Refresh Firebase's cached user profile and ID token before making
         // an authorization decision. Email verification may have happened in
         // another browser/app after this session was first created.
@@ -416,7 +415,7 @@ function StaffApp() {
         // cached, signed role claim. Reuse it during normal reloads; refreshing
         // the user/token on every startup made temporary network failures look
         // like a logout. Re-check with the server only when the cached role is
-        // missing or invalid (e.g. a newly activated invitation).
+        // missing or invalid (e.g. a newly verified self-registration).
         let token = await getIdTokenResult(user);
         let role = token.claims.role;
         if (role !== 'owner' && role !== 'supervisor' && role !== 'pendamping' && role !== 'anggota') {
@@ -964,7 +963,7 @@ function StaffApp() {
       await user.reload();
       let token = await getIdTokenResult(user, true);
       let role = token.claims.role;
-      if (role !== 'owner' && role !== 'supervisor' && role !== 'pendamping' && role !== 'anggota' && !user.emailVerified) {
+      if (role !== 'owner' && role !== 'supervisor' && role !== 'pendamping' && !user.emailVerified) {
         setIsAuthenticated(false);
         setAuthError('Email akun belum diverifikasi. Verifikasi email terlebih dahulu, lalu coba lagi.');
         return;
