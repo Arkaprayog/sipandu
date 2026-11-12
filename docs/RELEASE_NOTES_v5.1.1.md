@@ -2,7 +2,9 @@
 
 Tanggal: 12 November 2026
 
-## Pemeliharaan rilis
+## Perbaikan dan pemeliharaan
+- Memperbaiki validasi tanggal kunjungan dan tanggal layanan: format ISO diperiksa dengan benar, tanggal kalender yang mustahil ditolak, dan tanggal kabisat yang sah diterima.
+- Menambahkan pengujian unit untuk tanggal dan pengujian Firebase Rules untuk format tanggal layanan/kunjungan.
 - Menyinkronkan versi aplikasi pada package.json, HTML shell, dan PWA manifest.
 - Menjaga metadata versi Android tetap diturunkan dari package.json oleh workflow build native, termasuk versionName dan versionCode.
 - Memastikan pemeriksaan build menolak artefak dengan metadata versi yang tidak konsisten.
