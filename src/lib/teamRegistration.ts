@@ -31,8 +31,8 @@ async function requestJson(path: string, user: User): Promise<ApiResponse> {
 
 /**
  * Activates any Firebase account only after Firebase confirms its email.
- * The Worker assigns the least-privilege pendamping role; no invitation,
- * team code, or client-supplied role is accepted.
+ * The Worker assigns the least-privilege anggota role; no invitation,
+ * team code, approval, or client-supplied role is accepted.
  */
 export async function activateVerifiedTeamMember(user: User): Promise<void> {
   await requestJson('/activate', user);
