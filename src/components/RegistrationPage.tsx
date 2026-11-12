@@ -111,7 +111,7 @@ export const RegistrationPage: React.FC<RegistrationPageProps> = ({ onBack }) =>
           <div className="mb-4 text-center">
             <img src={publicAssetUrl('uploads/Logo Kemensos Hadir.png')} alt="Logo resmi Kemensos Hadir" className="mx-auto mb-2 h-auto w-[135px] max-w-full object-contain" />
             <h1 className="text-xl font-extrabold text-black">Pendaftaran Akun SIPANDU</h1>
-            <p className="mt-1 text-xs text-black">Cukup nama, email aktif, dan kata sandi. Persetujuan administrator diperlukan sebelum verifikasi email.</p>
+            <p className="mt-1 text-xs text-black">Buat akun menggunakan nama, email aktif, dan kata sandi. Verifikasi email untuk mengaktifkan keanggotaan dasar SIPANDU.</p>
           </div>
 
           {completed ? (
