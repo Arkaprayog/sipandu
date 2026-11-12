@@ -8,6 +8,7 @@ interface FirebaseLookupUser {
   localId?: string;
   email?: string;
   customAttributes?: string;
+  disabled?: boolean;
 }
 
 interface DriveFile {
@@ -70,6 +71,9 @@ async function lookupFirebaseUser(env: Env, idToken: string): Promise<FirebaseLo
   const result = await response.json() as { users?: FirebaseLookupUser[] };
   const user = result.users?.[0];
   if (!response.ok || !user?.localId) throw new Error('Sesi Firebase tidak valid atau kedaluwarsa.');
+  if (user.disabled === true) {
+    throw new Error('Akun SIPANDU dinonaktifkan. Hubungi administrator untuk pemulihan akses.');
+  }
   let claims: Record<string, unknown> = {};
   if (user.customAttributes) {
     try {
@@ -97,7 +101,7 @@ async function verifyGoogleIdentity(accessToken: string, expectedEmail: string):
   const profile = await response.json() as { email?: string; email_verified?: boolean };
   if (
     String(profile.email || '').trim().toLowerCase() !== expectedEmail.trim().toLowerCase() ||
-    profile.email_verified === false
+    profile.email_verified !== true
   ) {
     throw new Error('Token Google bukan berasal dari akun Workspace SIPANDU yang ditetapkan.');
   }
@@ -521,7 +525,7 @@ async function handleStaffDocumentRoute(
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Operasi arsip dokumen gagal.';
     const status = /sesi firebase|token oauth google|sesi google workspace/i.test(message) ? 401
-      : /peran sipandu|peran akun|tidak memiliki izin/i.test(message) ? 403
+      : /akun sipandu dinonaktifkan|peran sipandu|peran akun|tidak memiliki izin|token google bukan berasal/i.test(message) ? 403
       : /format dokumen|kategori dokumen|ukuran permintaan|dokumen harus|id dokumen/i.test(message) ? 400
       : 502;
     return json({ ok: false, message }, status, origin);
@@ -593,7 +597,7 @@ async function handleAssessmentArchiveDownload(
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unduhan arsip asesmen gagal.';
     const status = /sesi firebase|token oauth google|sesi google workspace/i.test(message) ? 401
-      : /peran sipandu|peran akun/i.test(message) ? 403
+      : /akun sipandu dinonaktifkan|peran sipandu|peran akun|token google bukan berasal/i.test(message) ? 403
       : /id responden/i.test(message) ? 400
       : 502;
     return json({ ok: false, message }, status, origin);
@@ -671,7 +675,7 @@ export default {
       const message = error instanceof Error ? error.message : 'Arsip PDF belum dapat disimpan.';
       const status = /sesi firebase/i.test(message) ? 401
         : /token oauth google|sesi google workspace/i.test(message) ? 401
-        : /peran sipandu|peran akun/i.test(message) ? 403
+        : /akun sipandu dinonaktifkan|peran sipandu|peran akun|token google bukan berasal/i.test(message) ? 403
         : 502;
       return json({ ok: false, verified: false, message }, status, origin);
     }

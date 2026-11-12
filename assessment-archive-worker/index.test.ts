@@ -350,3 +350,134 @@ test('does not expose assessment archive bytes without a Firebase session', asyn
   assert.equal(mediaReads, 0);
 });
 
+test('rejects disabled Firebase staff accounts before Google or Drive access', async () => {
+  let googleCalls = 0;
+  let driveCalls = 0;
+  globalThis.fetch = async (input) => {
+    const url = new URL(String(input));
+    if (url.hostname === 'identitytoolkit.googleapis.com') {
+      return jsonResponse({
+        users: [{
+          localId: 'disabled-staff-uid',
+          disabled: true,
+          customAttributes: JSON.stringify({ role: 'owner' }),
+        }],
+      });
+    }
+    if (url.hostname === 'www.googleapis.com' && url.pathname === '/oauth2/v3/userinfo') googleCalls += 1;
+    if (url.hostname === 'www.googleapis.com' && url.pathname.startsWith('/drive/v3/')) driveCalls += 1;
+    throw new Error('Unexpected external request: ' + url);
+  };
+
+  const form = new FormData();
+  form.set('ppksId', 'ppks-disabled-user-test');
+  form.set('file', new File(['%PDF-1.7\\nsynthetic'], 'assessment.pdf', { type: 'application/pdf' }));
+  const response = await worker.fetch(new Request(
+    'https://sipandu-assessment-archive.aryprayoga139.workers.dev/archive',
+    {
+      method: 'POST',
+      headers: {
+        Authorization: 'Bearer disabled-firebase-id-token',
+        'X-Google-Access-Token': 'google-access-token',
+      },
+      body: form,
+    },
+  ), {
+    FIREBASE_PROJECT_ID: 'gen-lang-client-0197631978',
+    FIREBASE_AUTH_API_KEY: 'public-firebase-api-key',
+    GOOGLE_WORKSPACE_EMAIL: 'aryprayoga139@gmail.com',
+  });
+
+  assert.equal(response.status, 403);
+  assert.match((await response.json() as { message: string }).message, /dinonaktifkan/i);
+  assert.equal(googleCalls, 0, 'a disabled account must be rejected before Google identity verification');
+  assert.equal(driveCalls, 0, 'a disabled account must never reach Google Drive');
+});
+
+test('requires Google Workspace userinfo to explicitly confirm email_verified true', async () => {
+  let driveCalls = 0;
+  globalThis.fetch = async (input) => {
+    const url = new URL(String(input));
+    if (url.hostname === 'identitytoolkit.googleapis.com') {
+      return jsonResponse({
+        users: [{
+          localId: 'staff-uid',
+          customAttributes: JSON.stringify({ role: 'owner' }),
+        }],
+      });
+    }
+    if (url.hostname === 'www.googleapis.com' && url.pathname === '/oauth2/v3/userinfo') {
+      // Deliberately omit email_verified: the Worker must fail closed.
+      return jsonResponse({ email: 'aryprayoga139@gmail.com' });
+    }
+    if (url.hostname === 'www.googleapis.com' && url.pathname.startsWith('/drive/v3/')) driveCalls += 1;
+    throw new Error('Unexpected external request: ' + url);
+  };
+
+  const form = new FormData();
+  form.set('ppksId', 'ppks-unverified-google-test');
+  form.set('file', new File(['%PDF-1.7\\nsynthetic'], 'assessment.pdf', { type: 'application/pdf' }));
+  const response = await worker.fetch(new Request(
+    'https://sipandu-assessment-archive.aryprayoga139.workers.dev/archive',
+    {
+      method: 'POST',
+      headers: {
+        Authorization: 'Bearer firebase-id-token',
+        'X-Google-Access-Token': 'google-access-token',
+      },
+      body: form,
+    },
+  ), {
+    FIREBASE_PROJECT_ID: 'gen-lang-client-0197631978',
+    FIREBASE_AUTH_API_KEY: 'public-firebase-api-key',
+    GOOGLE_WORKSPACE_EMAIL: 'aryprayoga139@gmail.com',
+  });
+
+  assert.equal(response.status, 403);
+  assert.match((await response.json() as { message: string }).message, /workspace/i);
+  assert.equal(driveCalls, 0, 'Google Drive must not be reached without verified Workspace email');
+});
+
+test('rejects Google Workspace identities explicitly marked as unverified', async () => {
+  let driveCalls = 0;
+  globalThis.fetch = async (input) => {
+    const url = new URL(String(input));
+    if (url.hostname === 'identitytoolkit.googleapis.com') {
+      return jsonResponse({
+        users: [{
+          localId: 'staff-uid',
+          customAttributes: JSON.stringify({ role: 'owner' }),
+        }],
+      });
+    }
+    if (url.hostname === 'www.googleapis.com' && url.pathname === '/oauth2/v3/userinfo') {
+      return jsonResponse({ email: 'aryprayoga139@gmail.com', email_verified: false });
+    }
+    if (url.hostname === 'www.googleapis.com' && url.pathname.startsWith('/drive/v3/')) driveCalls += 1;
+    throw new Error('Unexpected external request: ' + url);
+  };
+
+  const form = new FormData();
+  form.set('ppksId', 'ppks-unverified-google-test');
+  form.set('file', new File(['%PDF-1.7\\nsynthetic'], 'assessment.pdf', { type: 'application/pdf' }));
+  const response = await worker.fetch(new Request(
+    'https://sipandu-assessment-archive.aryprayoga139.workers.dev/archive',
+    {
+      method: 'POST',
+      headers: {
+        Authorization: 'Bearer firebase-id-token',
+        'X-Google-Access-Token': 'google-access-token',
+      },
+      body: form,
+    },
+  ), {
+    FIREBASE_PROJECT_ID: 'gen-lang-client-0197631978',
+    FIREBASE_AUTH_API_KEY: 'public-firebase-api-key',
+    GOOGLE_WORKSPACE_EMAIL: 'aryprayoga139@gmail.com',
+  });
+
+  assert.equal(response.status, 403);
+  assert.match((await response.json() as { message: string }).message, /workspace/i);
+  assert.equal(driveCalls, 0, 'unverified Google identities must not reach Google Drive');
+});
+
