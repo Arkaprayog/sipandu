@@ -464,7 +464,7 @@ async function assignBasicMemberRole(env: Env, user: FirebaseUserLookup): Promis
         'Service account Firebase pada Worker sipandu-registration belum memiliki izin IAM firebaseauth.users.update pada proyek gen-lang-client-0197631978. Berikan izin tersebut kepada email client_email di secret FIREBASE_SERVICE_ACCOUNT_JSON, lalu tekan Coba verifikasi akses lagi. Pengguna tidak perlu membuat akun baru.',
       );
     }
-    throw new Error(body.error?.message || 'Firebase gagal menerapkan peran pendamping pada akun.');
+    throw new Error(body.error?.message || 'Firebase gagal menerapkan peran anggota pada akun.');
   }
 }
 
@@ -482,7 +482,7 @@ export default {
     const path = url.pathname.length > 1 && url.pathname.endsWith('/') ? url.pathname.slice(0, -1) : url.pathname;
 
     if (path === '/health' && request.method === 'GET') {
-      const missing = missingActivationConfiguration(env);
+      const missing = missingConfiguration(env);
       return jsonResponse({ ok: true, ready: missing.length === 0, missing }, 200, origin);
     }
 
