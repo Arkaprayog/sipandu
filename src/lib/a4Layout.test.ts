@@ -1,8 +1,23 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { PDFDocument } from 'pdf-lib';
-import { A4_HEIGHT_PT, A4_WIDTH_PT, PAGE_MARGIN_PT, fitImageToA4 } from './a4Layout';
+import { A4_HEIGHT_PT, A4_WIDTH_PT, PAGE_MARGIN_PT, fitImageToA4, getAssessmentPageRenderDimensions } from './a4Layout';
 
+
+test('assessment capture width remains fixed when long text overflows a table cell', () => {
+  const pageWidth = (194 / 25.4) * 96;
+  const pageHeight = (281 / 25.4) * 96;
+  const dimensions = getAssessmentPageRenderDimensions({
+    width: pageWidth,
+    height: pageHeight,
+    scrollHeight: pageHeight + 48,
+    scrollWidth: pageWidth + 180,
+  });
+
+  assert.equal(dimensions.width, Math.ceil(pageWidth));
+  assert.equal(dimensions.height, Math.ceil(pageHeight + 48));
+});
+ 
 test('A4 dimensions match ISO 216 210 x 297 mm in PDF points', () => {
   assert.ok(Math.abs(A4_WIDTH_PT - (210 / 25.4) * 72) < 0.001);
   assert.ok(Math.abs(A4_HEIGHT_PT - (297 / 25.4) * 72) < 0.001);
