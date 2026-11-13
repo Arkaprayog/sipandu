@@ -107,7 +107,7 @@ async function renderAssessmentPage(
         width,
         height,
         windowWidth: Math.max(window.innerWidth, width),
-        windowHeight: Math.max(window.innerHeight, Math.ceil(bounds.bottom + 32)),
+        windowHeight: Math.max(window.innerHeight, Math.ceil(bounds.top + height + 32)),
         scrollX: 0,
         scrollY: 0,
         onclone: (clonedDocument) => {
@@ -187,7 +187,7 @@ async function renderAssessmentPage(
 }
 
 /**
- * Renders the six original assessment sheets and four photo appendices as A4 pages.
+ * Renders the eight-page assessment template and four photo appendices as A4 pages.
  * Over-height answer sheets are split at measured table-row boundaries so long answers
  * wrap inside their columns without shrinking the entire page or cutting a row in half.
  * Rendering retries at lower resolution on memory-constrained mobile devices.
@@ -196,13 +196,17 @@ export async function createOfficialAssessmentPdf(
   pages: HTMLElement[],
   renderRootId: string,
 ): Promise<Blob> {
-  if (!Array.isArray(pages) || pages.length < 10) {
+  if (!Array.isArray(pages) || pages.length !== 12) {
     throw new Error('Halaman Form Asesmen Terintegrasi tidak lengkap untuk dibuat menjadi PDF.');
   }
 
   const pdf = await PDFDocument.create();
-  for (let index = 0; index < pages.length; index += 1) {
-    const encodedPages = await renderAssessmentPage(pages[index], renderRootId, index + 1);
+  const formPages = pages.slice(0, 8);
+  const photoPages = pages.slice(8, 12);
+  let nextPdfPageNumber = 1;
+
+  const appendRenderedPages = async (element: HTMLElement, pageNumber: number): Promise<number> => {
+    const encodedPages = await renderAssessmentPage(element, renderRootId, pageNumber);
     for (const encoded of encodedPages) {
       const embeddedImage = encoded.format === 'jpg'
         ? await pdf.embedJpg(encoded.bytes)
@@ -210,6 +214,27 @@ export async function createOfficialAssessmentPdf(
       const pdfPage = pdf.addPage([A4_WIDTH_PT, A4_HEIGHT_PT]);
       pdfPage.drawImage(embeddedImage, fitImageToA4(embeddedImage.width, embeddedImage.height));
     }
+    return encodedPages.length;
+  };
+
+  // Render the eight template sheets first. A long answer may add continuation
+  // sheets; the photo appendix page labels are updated with the actual count.
+  for (const page of formPages) {
+    nextPdfPageNumber += await appendRenderedPages(page, nextPdfPageNumber);
+  }
+
+  const formPageCount = nextPdfPageNumber - 1;
+  const totalPageCount = formPageCount + photoPages.length;
+  for (let index = 0; index < photoPages.length; index += 1) {
+    const heading = photoPages[index].querySelector('.official-photo-appendix-heading p');
+    if (heading) {
+      heading.textContent = 'Form Asesmen Terintegrasi · Halaman '
+        + (formPageCount + index + 1) + ' dari ' + totalPageCount;
+    }
+  }
+
+  for (let index = 0; index < photoPages.length; index += 1) {
+    nextPdfPageNumber += await appendRenderedPages(photoPages[index], nextPdfPageNumber);
   }
 
   const bytes = await pdf.save({ useObjectStreams: true });

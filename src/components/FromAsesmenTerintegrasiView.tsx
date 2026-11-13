@@ -12,12 +12,12 @@ import { createPhotoPreviewBlob } from '../lib/photoFilePreview';
 import '../officialAssessment.css';
 
 type AnswerValue = string | string[];
-type FieldKind = 'text' | 'date' | 'number' | 'textarea' | 'single' | 'multi';
+type FieldKind = 'text' | 'date' | 'number' | 'textarea' | 'single' | 'multi' | 'static';
 interface OfficialField {
   key: string; number?: number; label: string; kind?: FieldKind;
-  options?: string[]; optional?: boolean; placeholder?: string;
+  options?: string[]; optional?: boolean; placeholder?: string; detailKey?: string;
 }
-interface OfficialGroup { title?: string; tone?: 'gray' | 'beige' | 'white'; fields: OfficialField[]; }
+interface OfficialGroup { title?: string; tone?: 'gray' | 'beige' | 'white' | 'blue'; fields: OfficialField[]; }
 interface OfficialPage { groups: OfficialGroup[]; hasLetterhead?: boolean; }
 interface FromAsesmenTerintegrasiViewProps { ppksList: PPKSRecord[]; onSaveAssessment: (updated: PPKSRecord) => Promise<void>; initialSelectedPPKSId?: string; onBeforePrint?: (updated: PPKSRecord) => Promise<void>; }
 
@@ -97,22 +97,31 @@ const sourcePages: OfficialPage[] = [
       ]},
       { title: 'KONDISI PPKS', tone: 'gray', fields: [
         oneField(47, 'Kategori PPKS', ['Anak', 'Lansia', 'Disabilitas', 'Korban Bencana dan Kedaruratan']),
-        manyField(48, 'Ragam Penyandang Disabilitas', [
-          'Fisik – amputasi/lumpuh layuh/kaku', 'Paraplegi, cerebral palsy (CP)', 'Akibat stroke', 'Akibat kusta',
-          'Dwarfisme (kerdil)', 'Intelektual – lambat belajar', 'Disabilitas grahita', 'Down syndrome',
-          'Mental – skizofrenia', 'Bipolar', 'Depresi', 'Ansietas', 'Gangguan kepribadian', 'Autis',
-          'Hiperaktif', 'Sensorik – netra', 'Sensorik – rungu', 'Sensorik – wicara', 'Ganda/Multi',
-        ]),
+        { ...manyField(48, 'Ragam Penyandang Disabilitas', [
+          '1. Fisik (terganggunya fungsi gerak): amputasi, lumpuh layuh atau kaku; paraplegi, cerebral palsy (CP); akibat stroke; akibat kusta; dwarfisme (kerdil).',
+          '2. Intelektual (terganggunya fungsi pikir karena tingkat kecerdasan di bawah rata-rata): lambat belajar; disabilitas grahita; down syndrome.',
+          '3. Mental (terganggunya fungsi pikir, emosi, dan perilaku): skizofrenia; bipolar; depresi; anxietas; gangguan kepribadian; autis; hiperaktif.',
+          '4. Sensorik (terganggunya salah satu fungsi dari panca indera): disabilitas netra; disabilitas rungu; disabilitas wicara.',
+          '5. Ganda/Multi (dua atau lebih ragam disabilitas, antara lain disabilitas rungu-wicara dan disabilitas netra-tuli).',
+        ]), detailKey: 'q48Detail' },
         oneField(49, 'Tingkatan Disabilitas', ['Ringan', 'Sedang', 'Berat']),
         oneField(50, 'Apakah sudah memiliki kartu penyandang Disabilitas?', ['Ya', 'Tidak']),
         manyField(51, 'Ragam Anak', [
-          'Anak dalam situasi darurat/pengungsi/kerusuhan/bencana/konflik', 'Anak berhadapan dengan hukum',
-          'Anak kelompok minoritas dan terisolasi', 'Anak dieksploitasi secara ekonomi dan/atau seksual',
-          'Korban penyalahgunaan narkotika, alkohol, psikotropika, dan zat adiktif', 'Korban pornografi',
-          'Anak dengan HIV/AIDS', 'Korban penculikan, penjualan, dan/atau perdagangan',
-          'Korban kekerasan fisik dan/atau psikis', 'Korban kejahatan seksual', 'Korban jaringan terorisme',
-          'Anak penyandang disabilitas', 'Korban perlakuan salah dan penelantaran',
-          'Anak dengan perilaku sosial menyimpang', 'Korban stigmatisasi terkait kondisi orang tua',
+          '1. Anak dalam situasi darurat, meliputi: anak yang menjadi pengungsi; anak korban kerusuhan; anak korban bencana alam; anak dalam situasi konflik bersenjata.',
+          '2. Anak yang berhadapan dengan hukum.',
+          '3. Anak dari kelompok minoritas dan terisolasi.',
+          '4. Anak yang dieksploitasi secara ekonomi dan/atau seksual.',
+          '5. Anak yang menjadi korban penyalahgunaan narkotika, alkohol, psikotropika, dan zat adiktif lainnya.',
+          '6. Anak yang menjadi korban pornografi.',
+          '7. Anak dengan HIV/AIDS.',
+          '8. Anak korban penculikan, penjualan, dan/atau perdagangan.',
+          '9. Anak korban kekerasan fisik dan/atau psikis.',
+          '10. Anak korban kejahatan seksual.',
+          '11. Anak korban jaringan terorisme.',
+          '12. Anak penyandang disabilitas.',
+          '13. Anak korban perlakuan salah dan penelantaran.',
+          '14. Anak dengan perilaku sosial menyimpang.',
+          '15. Anak yang menjadi korban stigmatisasi dari pelabelan terkait dengan kondisi orang tuanya.',
         ]),
       ]},
     ],
@@ -121,26 +130,30 @@ const sourcePages: OfficialPage[] = [
     groups: [
       { tone: 'white', fields: [
         manyField(52, 'Ragam Korban Bencana dan Kedaruratan', [
-          'Tuna Susila', 'Gelandangan', 'Pengemis', 'Pemulung', 'Kelompok Minoritas',
-          'Bekas Warga Binaan Lembaga Pemasyarakatan (BWBLP)', 'Orang dengan HIV/AIDS (ODHA)',
-          'Korban Penyalahgunaan NAPZA', 'Korban trafficking', 'Korban tindak kekerasan',
-          'Pekerja Migran Indonesia Bermasalah (PMIB)', 'Perempuan rawan sosial ekonomi',
-          'Korban bencana alam', 'Korban bencana sosial',
+          '1. Tuna Susila', '2. Gelandangan', '3. Pengemis', '4. Pemulung',
+          '5. Kelompok Minoritas',
+          '6. Bekas Warga Binaan Lembaga Pemasyarakatan (BWBLP)',
+          '7. Orang dengan HIV/AIDS (ODHA)',
+          '8. Korban Penyalahgunaan NAPZA', '9. Korban trafficking',
+          '10. Korban tindak kekerasan',
+          '11. Pekerja Migran Indonesia Bermasalah Sosial (PMBS) (PMIB)',
+          '12. Perempuan rawan sosial ekonomi', '13. Korban bencana alam',
+          '14. Korban bencana sosial',
         ]),
-        oneField(53, 'Jika kategori Lansia atau Disabilitas, membutuhkan bantuan dalam aktivitas sehari-hari (Activity Daily Living)?', ['Ya', 'Tidak']),
+        oneField(53, 'Jika termasuk dalam kategori Lansia atau Disabilitas, apakah membutuhkan bantuan dalam aktifitas sehari – hari (Activity Daily Living)?', ['1. Ya', '2. Tidak']),
         oneField(54, 'Kondisi Fisik PPKS', ['Sehat', 'Sakit']),
-        areaField(55, 'Jelaskan Kondisi Fisik (kesehatan, mobilitas, dll)'),
-        areaField(56, 'Kondisi Psikologis PPKS'), areaField(57, 'Kondisi sosial PPKS'),
-        areaField(58, 'Kondisi Mental Spiritual'), areaField(59, 'Kondisi Keluarga'),
+        { ...areaField(55, 'Jelaskan Kondisi Fisik (Penjelasan terkait kondisi kesehatan, kemampuan mobilitas, dst)'), placeholder: 'Contoh: tidak bisa berjalan, sehat, sakit' },
+        { ...areaField(56, 'Kondisi Psikologis PPKS'), placeholder: 'Contoh: tidak ada gangguan jiwa' }, { ...areaField(57, 'Kondisi sosial PPKS'), placeholder: 'Contoh: bisa bersosialisasi, mengurung diri, diam dikasur' },
+        { ...areaField(58, 'Kondisi Mental Spiritual'), placeholder: 'Contoh: rajin beribadah' }, { ...areaField(59, 'Kondisi Keluarga'), placeholder: 'Contoh: harmonis, broken home, tinggal dengan cucu, dll' },
       ]},
       { title: 'KONDISI SOSIAL EKONOMI', tone: 'gray', fields: [
-        oneField(60, 'Apakah Kepala Keluarga Bekerja?', ['Tidak', 'Iya']),
+        oneField(60, 'Apakah Kepala Keluarga Bekerja?', ['0. Tidak', '1. Iya']),
         textField(61, 'Pekerjaan'), oneField(62, 'Penghasilan Keluarga per Bulan', penghasilan),
         field(63, 'Jumlah Tanggungan', 'number'),
-        oneField(64, 'Apakah pernah tidak makan dalam sehari?', ['Tidak', 'Pernah khawatir tidak makan', 'Pernah tidak makan']),
+        oneField(64, 'Apakah pernah tidak makan dalam sehari?', ['1. Tidak', '2. Pernah khawatir tidak makan', '3. Pernah tidak makan']),
         field(65, 'Pengeluaran Pangan per Bulan (Rp)', 'number'),
         field(66, 'Pengeluaran Total per Bulan (Rp)', 'number'),
-        oneField(67, 'Apakah ada pengeluaran pakaian dalam setahun?', ['Tidak', 'Ya']),
+        oneField(67, 'Apakah ada pengeluaran pakaian, dalam setahun.', ['0. Tidak', '1. Ya']),
       ]},
       { title: 'KONDISI TEMPAT TINGGAL', tone: 'gray', fields: [
         oneField(68, 'Tempat Tinggal saat ini', ['Milik Sendiri', 'Sewa', 'Menumpang', 'Lembaga', 'Telantar/Menggelandang']),
@@ -163,15 +176,15 @@ const sourcePages: OfficialPage[] = [
       ]},
       { title: 'B. PERMASALAHAN, POTENSI & RENCANA INTERVENSI PPKS', tone: 'gray', fields: [
         areaField(79, 'Permasalahan (Gambaran Kasus)'), areaField(80, 'Pelayanan yang pernah diterima'),
-        areaField(81, 'Potensi Diri (Minat Bakat, Keterampilan, Motivasi, Hasil Test IQ)'),
+        { key: 'q81', number: 81, label: 'Potensi Diri (Minat Bakat, Keterampilan, Motivasi, Hasil Test IQ)', kind: 'static', placeholder: 'SKIP' },
         areaField(82, 'Potensi Sumber (Organisasi, Lingkungan, Pendidikan, Ekonomi, Keagamaan, Alam)'),
         manyField(83, 'Komponen Layanan Yang Dibutuhkan', komponenLayanan),
-        areaField(84, 'Uraian Komponen Layanan'), areaField(85, 'Pihak yang terlibat dalam rencana intervensi'),
+        areaField(84, 'Uraian Komponen Layanan :'), areaField(85, 'Pihak yang terlibat dalam rencana intervensi'),
       ]},
       { title: 'C. INTERVENSI PPKS [SKIP]', tone: 'gray', fields: [
         manyField(86, 'Komponen Layanan yang diberikan', komponenLayanan),
-        areaField(87, 'Uraian Komponen Layanan'), field(88, 'Estimasi Jumlah Total Bantuan (Rp)', 'number'),
-        textField(89, 'Waktu Pemberian Layanan (Bulan/Tahun)'), textField(90, 'Pihak yang terlibat dalam intervensi'),
+        areaField(87, 'Uraian Komponen Layanan :'), field(88, 'Estimasi Jumlah Total Bantuan (Rp)', 'number'),
+        { ...textField(89, 'Waktu Pemberian Layanan'), placeholder: '(Bulan/ 2024)' }, textField(90, 'Pihak yang terlibat dalam intervensi'),
       ]},
     ],
   },
@@ -192,21 +205,97 @@ const sourcePages: OfficialPage[] = [
   },
 ];
 
-// Keep the six original A4 assessment sheets in their source order.
-// The four respondent photo appendices are appended as pages 7–10.
+const fieldsBetween = (
+  group: OfficialGroup,
+  first: number,
+  last: number,
+  includeTitle = false,
+): OfficialGroup => ({
+  ...(group.tone ? { tone: group.tone } : {}),
+  ...(includeTitle && group.title ? { title: group.title } : {}),
+  fields: group.fields.filter((item) =>
+    item.number !== undefined && item.number >= first && item.number <= last
+  ),
+});
+
+// Page breaks follow the latest eight-page uploaded source template. Rows are
+// kept intact; any additional overflow pages are inserted by the PDF renderer.
 const pages: OfficialPage[] = [
-  { hasLetterhead: true, groups: sourcePages[0].groups }, // Page 1: rapid assessment, addresses, identity (1–24)
-  { groups: sourcePages[1].groups }, // Page 2: basic status and caregiver profile (25–43)
-  { groups: sourcePages[2].groups }, // Page 3: PPKS condition categories (44–51)
-  { groups: sourcePages[3].groups }, // Page 4: physical/social/economic/housing profile (52–71)
-  { groups: sourcePages[4].groups }, // Page 5: housing, case plan and intervention (72–90)
-  { groups: sourcePages[5].groups }, // Page 6: follow-up plan and case summary (91)
+  {
+    hasLetterhead: true,
+    groups: [
+      ...sourcePages[0].groups.slice(0, 4),
+      fieldsBetween(sourcePages[0].groups[4], 16, 21, true),
+    ],
+  }, // Page 1: questions 1–21
+  {
+    groups: [
+      fieldsBetween(sourcePages[0].groups[4], 22, 24),
+      {
+        title: '** Perlu melampirkan foto/dokumen.\n** Foto PPKS dapat dilakukan dengan Closeup',
+        tone: 'white',
+        fields: [],
+      },
+      sourcePages[1].groups[0],
+      fieldsBetween(sourcePages[1].groups[1], 30, 38, true),
+    ],
+  }, // Page 2: questions 22–38
+  {
+    groups: [
+      fieldsBetween(sourcePages[1].groups[1], 39, 43),
+      sourcePages[2].groups[0],
+      fieldsBetween(sourcePages[2].groups[1], 47, 47, true),
+      { title: 'JIKA KATEGORI DISABILITAS', tone: 'blue', fields: [] },
+      fieldsBetween(sourcePages[2].groups[1], 48, 48),
+    ],
+  }, // Page 3: questions 39–48
+  {
+    groups: [
+      fieldsBetween(sourcePages[2].groups[1], 49, 50),
+      { title: 'JIKA KATEGORI ANAK', tone: 'blue', fields: [] },
+      fieldsBetween(sourcePages[2].groups[1], 51, 51),
+      { title: 'JIKA KATEGORI KORBAN BENCANA DAN KEDARURATAN', tone: 'blue', fields: [] },
+      fieldsBetween(sourcePages[3].groups[0], 52, 52),
+    ],
+  }, // Page 4: questions 49–52
+  {
+    groups: [
+      fieldsBetween(sourcePages[3].groups[0], 53, 59),
+      sourcePages[3].groups[1],
+      fieldsBetween(sourcePages[3].groups[2], 68, 69, true),
+    ],
+  }, // Page 5: questions 53–69
+  {
+    groups: [
+      fieldsBetween(sourcePages[3].groups[2], 70, 71),
+      sourcePages[4].groups[0],
+      {
+        title: '*) CATATAN TAMBAHAN: Peralatan Rumah, Kendaraan yang dimiliki, Gambaran Demografi',
+        tone: 'white',
+        fields: [],
+      },
+      { title: 'BUKTI DUKUNG DENGAN MELAMPIRKAN FOTO', tone: 'blue', fields: [] },
+      fieldsBetween(sourcePages[4].groups[1], 79, 84, true),
+    ],
+  }, // Page 6: questions 70–84
+  {
+    groups: [
+      fieldsBetween(sourcePages[4].groups[1], 85, 85),
+      fieldsBetween(sourcePages[4].groups[2], 86, 89, true),
+    ],
+  }, // Page 7: questions 85–89
+  {
+    groups: [
+      fieldsBetween(sourcePages[4].groups[2], 90, 90),
+      ...sourcePages[5].groups,
+    ],
+  }, // Page 8: questions 90–91 and case summary
 ];
 
 const emptyAnswers = (): Record<string, AnswerValue> => {
   const values: Record<string, AnswerValue> = { metaSatker: '', metaYear: '', metaSequence: '', q25: '-' };
   for (let n = 1; n <= 91; n++) values['q' + n] = '';
-  values.q48 = []; values.q51 = []; values.q52 = []; values.q83 = []; values.q86 = []; values.q91 = [];
+  values.q48 = []; values.q48Detail = ''; values.q51 = []; values.q52 = []; values.q83 = []; values.q86 = []; values.q91 = [];
   values.kesimpulanResumeKasus = ''; values.rekomendasiCatatanPetugas = '';
   return values;
 };
@@ -490,10 +579,12 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
         grid-template-columns:24mm 1fr 24mm !important;
       }
       #${rootId} .official-letterhead-lock { display:none !important; }
+      #${rootId} .official-numbering { width:78% !important; margin:0 auto 6mm !important; }
       #${rootId} .official-kemensos-logo img { width:18mm !important; height:18mm !important; }
       #${rootId} .official-atensi-logo img { width:22mm !important; height:22mm !important; }
       #${rootId} .official-letterhead-title { font-size:10pt !important; line-height:1.25 !important; }
       #${rootId} .official-letterhead-title span { font-size:9pt !important; }
+      #${rootId} .official-group-title.blue td { background:#dceaf7 !important; text-align:center !important; }
       #${rootId} .official-table { font-size:7pt !important; }
       #${rootId} .official-table td { padding:1.5px 2px !important; }
       #${rootId} .official-page:not(.official-photo-appendix) { overflow:visible !important; }
@@ -501,9 +592,9 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
         display:table !important; width:100% !important; min-width:0 !important;
         max-width:100% !important; table-layout:fixed !important; border-spacing:0 !important;
       }
-      #${rootId} .official-table col.col-number { width:5.3% !important; }
-      #${rootId} .official-table col.col-label { width:43.2% !important; }
-      #${rootId} .official-table col.col-answer { width:51.5% !important; }
+      #${rootId} .official-table col.col-number { width:7.3% !important; }
+      #${rootId} .official-table col.col-label { width:40.5% !important; }
+      #${rootId} .official-table col.col-answer { width:52.2% !important; }
       #${rootId} .official-table td {
         box-sizing:border-box !important; min-width:0 !important; max-width:100% !important;
         white-space:normal !important; overflow-wrap:anywhere !important; word-break:normal !important;
@@ -592,9 +683,9 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
     if (document.fonts?.ready) await document.fonts.ready;
 
     const pages = Array.from(root.querySelectorAll<HTMLElement>('.official-page'));
-    if (pages.length < 10) {
+    if (pages.length !== 12) {
       root.remove();
-      throw new Error('Enam halaman asesmen dan empat halaman lampiran foto harus tersedia. Ditemukan ' + pages.length + ' bagian.');
+      throw new Error('Delapan halaman asesmen dan empat halaman lampiran foto harus tersedia. Ditemukan ' + pages.length + ' bagian.');
     }
     return { root, pages };
   };
@@ -1092,15 +1183,43 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
                     else updateAnswer(item.key, checked ? '' : option);
                   }}
                 />
-                <span className="official-option-number">{index + 1}.</span><span>{option}</span>
+                {!/^\d+[.)]\s/.test(option) && <span className="official-option-number">{index + 1}.</span>}<span>{option}</span>
               </label>
             );
           })}
         </div>
       );
     }
+    if (item.kind === 'static') {
+      return <span className="official-static-answer">{item.placeholder || '—'}</span>;
+    }
     if (item.kind === 'textarea') {
-      return <textarea data-answer-key={item.key} className="official-input official-textarea" rows={3} value={typeof value === 'string' ? value : value.join(', ')} onChange={(event) => updateAnswer(item.key, event.target.value)} aria-label={item.label} />;
+      return (
+        <div className="official-textarea-group">
+          <textarea
+            data-answer-key={item.key}
+            className="official-input official-textarea"
+            rows={3}
+            value={typeof value === 'string' ? value : value.join(', ')}
+            placeholder={item.placeholder || ''}
+            onChange={(event) => updateAnswer(item.key, event.target.value)}
+            aria-label={item.label}
+          />
+          {item.detailKey && (
+            <label className="official-detail-field">
+              Sebutkan:
+              <textarea
+                data-answer-key={item.detailKey}
+                className="official-input official-textarea"
+                rows={2}
+                value={String(answers[item.detailKey] ?? '')}
+                onChange={(event) => updateAnswer(item.detailKey!, event.target.value)}
+                aria-label={item.label + ' — Sebutkan'}
+              />
+            </label>
+          )}
+        </div>
+      );
     }
     return (
       <input
@@ -1186,7 +1305,7 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
         <section className="official-photo-gallery" aria-label="Foto PPKS dari data responden">
           <div className="official-photo-gallery-heading">
             <h3>Foto PPKS</h3>
-            <p>Foto diambil dari data PPKS yang dipilih dan ikut disertakan pada halaman 7–10 saat dicetak atau disimpan sebagai PDF.</p>
+            <p>Foto diambil dari data PPKS yang dipilih dan ikut disertakan pada halaman 9–12 saat dicetak atau disimpan sebagai PDF.</p>
           </div>
           <div className="official-photo-gallery-grid">
             {printablePhotos.map((photo) => (
@@ -1274,9 +1393,8 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
             </tbody>
           </table>
 
-          {pageIndex === 5 && (
+          {pageIndex === 7 && (
             <>
-              <p className="official-footer-note">** Perlu melampirkan foto/dokumen. Foto PPKS dapat dilakukan dengan closeup.</p>
               <div className="official-signature"><div>Petugas</div><div className="official-signature-line">( ........................................ )</div></div>
             </>
           )}
@@ -1287,7 +1405,7 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
         <section className="official-page official-photo-appendix" key={photo.key} aria-label={photo.title}>
           <div className="official-photo-appendix-heading">
             <h2>{photo.title}</h2>
-            <p>Form Asesmen Terintegrasi · Halaman {index + 7} dari 10</p>
+            <p>Lampiran foto Form Asesmen Terintegrasi</p>
             <div className="official-photo-respondent">
               <span>Nama PPKS: <strong>{currentPPKS.namaLengkap || '-'}</strong></span>
               <span>NIK: <strong>{currentPPKS.nik || 'Belum terpetakan'}</strong></span>
