@@ -275,7 +275,7 @@ const pages: OfficialPage[] = [
         fields: [],
       },
       { title: 'BUKTI DUKUNG DENGAN MELAMPIRKAN FOTO', tone: 'blue', fields: [] },
-      sourcePages[4].groups[1] && fieldsBetween(sourcePages[4].groups[1], 79, 84, true),
+      fieldsBetween(sourcePages[4].groups[1], 79, 84, true),
     ],
   }, // Page 6: questions 70–84
   {
