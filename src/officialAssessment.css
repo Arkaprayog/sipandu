@@ -40,8 +40,7 @@
   box-shadow:0 2px 18px rgba(0,0,0,.25);
 }
 
-/* Four print-only photo appendices. Kept off-screen in the editor, but rendered
-   in print so the PDF contains pages 9–12 without adding a duplicate profile card. */
+/* Four print-only photo appendices are appended after the six original A4 sheets (pages 7–10). */
 .official-photo-appendix {
   position:absolute; left:-100000px; top:0; width:190mm; max-width:190mm;
   min-height:280mm; margin:0; padding:10mm; box-sizing:border-box;
