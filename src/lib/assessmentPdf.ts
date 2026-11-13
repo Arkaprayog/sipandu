@@ -107,7 +107,7 @@ async function renderAssessmentPage(
         width,
         height,
         windowWidth: Math.max(window.innerWidth, width),
-        windowHeight: Math.max(window.innerHeight, Math.ceil(bounds.bottom + 32)),
+        windowHeight: Math.max(window.innerHeight, Math.ceil(bounds.top + height + 32)),
         scrollX: 0,
         scrollY: 0,
         onclone: (clonedDocument) => {
@@ -196,13 +196,17 @@ export async function createOfficialAssessmentPdf(
   pages: HTMLElement[],
   renderRootId: string,
 ): Promise<Blob> {
-  if (!Array.isArray(pages) || pages.length < 10) {
+  if (!Array.isArray(pages) || pages.length !== 10) {
     throw new Error('Halaman Form Asesmen Terintegrasi tidak lengkap untuk dibuat menjadi PDF.');
   }
 
   const pdf = await PDFDocument.create();
-  for (let index = 0; index < pages.length; index += 1) {
-    const encodedPages = await renderAssessmentPage(pages[index], renderRootId, index + 1);
+  const formPages = pages.slice(0, 6);
+  const photoPages = pages.slice(6, 10);
+  let nextPdfPageNumber = 1;
+
+  const appendRenderedPages = async (element: HTMLElement, pageNumber: number): Promise<number> => {
+    const encodedPages = await renderAssessmentPage(element, renderRootId, pageNumber);
     for (const encoded of encodedPages) {
       const embeddedImage = encoded.format === 'jpg'
         ? await pdf.embedJpg(encoded.bytes)
@@ -210,6 +214,27 @@ export async function createOfficialAssessmentPdf(
       const pdfPage = pdf.addPage([A4_WIDTH_PT, A4_HEIGHT_PT]);
       pdfPage.drawImage(embeddedImage, fitImageToA4(embeddedImage.width, embeddedImage.height));
     }
+    return encodedPages.length;
+  };
+
+  // Render the six source sheets first. A long answer may add continuation
+  // sheets; the photo appendix page labels are updated with the actual count.
+  for (const page of formPages) {
+    nextPdfPageNumber += await appendRenderedPages(page, nextPdfPageNumber);
+  }
+
+  const formPageCount = nextPdfPageNumber - 1;
+  const totalPageCount = formPageCount + photoPages.length;
+  for (let index = 0; index < photoPages.length; index += 1) {
+    const heading = photoPages[index].querySelector('.official-photo-appendix-heading p');
+    if (heading) {
+      heading.textContent = 'Form Asesmen Terintegrasi · Halaman '
+        + (formPageCount + index + 1) + ' dari ' + totalPageCount;
+    }
+  }
+
+  for (let index = 0; index < photoPages.length; index += 1) {
+    nextPdfPageNumber += await appendRenderedPages(photoPages[index], nextPdfPageNumber);
   }
 
   const bytes = await pdf.save({ useObjectStreams: true });
