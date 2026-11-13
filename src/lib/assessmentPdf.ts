@@ -1,6 +1,6 @@
 import html2canvas from 'html2canvas';
 import { PDFDocument } from 'pdf-lib';
-import { A4_HEIGHT_PT, A4_WIDTH_PT, fitImageToA4, getAssessmentPageRenderDimensions } from './a4Layout';
+import { A4_HEIGHT_PT, A4_WIDTH_PT, fitImageToA4, getAssessmentPageRenderDimensions, splitAssessmentPageAtRows } from './a4Layout';
 export const PDF_RENDER_SCALES = [2.5, 2, 1.5, 1] as const;
 const JPEG_QUALITY = 0.94;
 
@@ -80,7 +80,7 @@ async function renderAssessmentPage(
   element: HTMLElement,
   renderRootId: string,
   pageNumber: number,
-): Promise<EncodedAssessmentPage> {
+): Promise<EncodedAssessmentPage[]> {
   let lastError: unknown = null;
   const bounds = element.getBoundingClientRect();
   // Keep the canvas at the fixed A4 content width. A child with a long
@@ -123,16 +123,52 @@ async function renderAssessmentPage(
         throw new Error('Kanvas halaman kosong.');
       }
 
-      try {
-        const jpeg = await canvasToBlob(canvas, 'image/jpeg');
-        return { bytes: new Uint8Array(await jpeg.arrayBuffer()), format: 'jpg' };
-      } catch (jpegError) {
-        // JPEG encoding can fail on particular mobile browsers. Keep a lossless
-        // PNG fallback for that page before retrying the whole render at lower DPI.
-        if (jpegError instanceof DOMException && jpegError.name === 'SecurityError') throw jpegError;
-        const png = await canvasToBlob(canvas, 'image/png');
-        return { bytes: new Uint8Array(await png.arrayBuffer()), format: 'png' };
+      const renderScale = canvas.width / width;
+      const targetPageHeight = Math.ceil(width * (281 / 194) * renderScale);
+      const pageBounds = element.getBoundingClientRect();
+      const rowBottoms = [
+        ...Array.from(element.querySelectorAll('tr')).map((row) =>
+          (row.getBoundingClientRect().bottom - pageBounds.top) * renderScale
+        ),
+        ...Array.from(element.querySelectorAll('.official-footer-note, .official-signature')).map((block) =>
+          (block.getBoundingClientRect().bottom - pageBounds.top) * renderScale
+        ),
+      ].filter((value) => Number.isFinite(value) && value > 0);
+      const slices = splitAssessmentPageAtRows(canvas.height, targetPageHeight, rowBottoms);
+      const encodedPages: EncodedAssessmentPage[] = [];
+
+      for (const slice of slices) {
+        const pageCanvas = document.createElement('canvas');
+        pageCanvas.width = canvas.width;
+        pageCanvas.height = targetPageHeight;
+        try {
+          const pageContext = pageCanvas.getContext('2d');
+          if (!pageContext) throw new Error('Kanvas halaman PDF tidak dapat dibuat.');
+          pageContext.fillStyle = '#ffffff';
+          pageContext.fillRect(0, 0, pageCanvas.width, pageCanvas.height);
+          pageContext.drawImage(
+            canvas,
+            0, slice.top, canvas.width, slice.bottom - slice.top,
+            0, 0, canvas.width, slice.bottom - slice.top,
+          );
+
+          try {
+            const jpeg = await canvasToBlob(pageCanvas, 'image/jpeg');
+            encodedPages.push({ bytes: new Uint8Array(await jpeg.arrayBuffer()), format: 'jpg' });
+          } catch (jpegError) {
+            // JPEG encoding can fail on particular mobile browsers. Keep a lossless
+            // PNG fallback for that page before retrying the whole render at lower DPI.
+            if (jpegError instanceof DOMException && jpegError.name === 'SecurityError') throw jpegError;
+            const png = await canvasToBlob(pageCanvas, 'image/png');
+            encodedPages.push({ bytes: new Uint8Array(await png.arrayBuffer()), format: 'png' });
+          }
+        } finally {
+          pageCanvas.width = 0;
+          pageCanvas.height = 0;
+        }
       }
+
+      return encodedPages;
     } catch (error) {
       lastError = error;
     } finally {
@@ -151,27 +187,29 @@ async function renderAssessmentPage(
 }
 
 /**
- * Renders each official assessment sheet separately and assembles a true A4 PDF.
- * Rendering retries at lower resolution on memory-constrained mobile devices;
- * JPEG is used to keep large photo appendices practical while PNG remains a fallback.
- * There is no application-level page-count or output-byte cap.
+ * Renders the six original assessment sheets and four photo appendices as A4 pages.
+ * Over-height answer sheets are split at measured table-row boundaries so long answers
+ * wrap inside their columns without shrinking the entire page or cutting a row in half.
+ * Rendering retries at lower resolution on memory-constrained mobile devices.
  */
 export async function createOfficialAssessmentPdf(
   pages: HTMLElement[],
   renderRootId: string,
 ): Promise<Blob> {
-  if (!Array.isArray(pages) || pages.length < 8) {
+  if (!Array.isArray(pages) || pages.length < 10) {
     throw new Error('Halaman Form Asesmen Terintegrasi tidak lengkap untuk dibuat menjadi PDF.');
   }
 
   const pdf = await PDFDocument.create();
   for (let index = 0; index < pages.length; index += 1) {
-    const encoded = await renderAssessmentPage(pages[index], renderRootId, index + 1);
-    const embeddedImage = encoded.format === 'jpg'
-      ? await pdf.embedJpg(encoded.bytes)
-      : await pdf.embedPng(encoded.bytes);
-    const pdfPage = pdf.addPage([A4_WIDTH_PT, A4_HEIGHT_PT]);
-    pdfPage.drawImage(embeddedImage, fitImageToA4(embeddedImage.width, embeddedImage.height));
+    const encodedPages = await renderAssessmentPage(pages[index], renderRootId, index + 1);
+    for (const encoded of encodedPages) {
+      const embeddedImage = encoded.format === 'jpg'
+        ? await pdf.embedJpg(encoded.bytes)
+        : await pdf.embedPng(encoded.bytes);
+      const pdfPage = pdf.addPage([A4_WIDTH_PT, A4_HEIGHT_PT]);
+      pdfPage.drawImage(embeddedImage, fitImageToA4(embeddedImage.width, embeddedImage.height));
+    }
   }
 
   const bytes = await pdf.save({ useObjectStreams: true });
