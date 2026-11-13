@@ -97,22 +97,31 @@ const sourcePages: OfficialPage[] = [
       ]},
       { title: 'KONDISI PPKS', tone: 'gray', fields: [
         oneField(47, 'Kategori PPKS', ['Anak', 'Lansia', 'Disabilitas', 'Korban Bencana dan Kedaruratan']),
-        manyField(48, 'Ragam Penyandang Disabilitas', [
-          'Fisik – amputasi/lumpuh layuh/kaku', 'Paraplegi, cerebral palsy (CP)', 'Akibat stroke', 'Akibat kusta',
-          'Dwarfisme (kerdil)', 'Intelektual – lambat belajar', 'Disabilitas grahita', 'Down syndrome',
-          'Mental – skizofrenia', 'Bipolar', 'Depresi', 'Ansietas', 'Gangguan kepribadian', 'Autis',
-          'Hiperaktif', 'Sensorik – netra', 'Sensorik – rungu', 'Sensorik – wicara', 'Ganda/Multi',
-        ]),
+        { ...manyField(48, 'Ragam Penyandang Disabilitas', [
+          '1. Fisik (terganggunya fungsi gerak): amputasi, lumpuh layuh atau kaku; paraplegi, cerebral palsy (CP); akibat stroke; akibat kusta; dwarfisme (kerdil).',
+          '2. Intelektual (terganggunya fungsi pikir karena tingkat kecerdasan di bawah rata-rata): lambat belajar; disabilitas grahita; down syndrome.',
+          '3. Mental (terganggunya fungsi pikir, emosi, dan perilaku): skizofrenia; bipolar; depresi; anxietas; gangguan kepribadian; autis; hiperaktif.',
+          '4. Sensorik (terganggunya salah satu fungsi dari panca indera): disabilitas netra; disabilitas rungu; disabilitas wicara.',
+          '5. Ganda/Multi (dua atau lebih ragam disabilitas, antara lain disabilitas rungu-wicara dan disabilitas netra-tuli).',
+        ]), detailKey: 'q48Detail' },
         oneField(49, 'Tingkatan Disabilitas', ['Ringan', 'Sedang', 'Berat']),
         oneField(50, 'Apakah sudah memiliki kartu penyandang Disabilitas?', ['Ya', 'Tidak']),
         manyField(51, 'Ragam Anak', [
-          'Anak dalam situasi darurat/pengungsi/kerusuhan/bencana/konflik', 'Anak berhadapan dengan hukum',
-          'Anak kelompok minoritas dan terisolasi', 'Anak dieksploitasi secara ekonomi dan/atau seksual',
-          'Korban penyalahgunaan narkotika, alkohol, psikotropika, dan zat adiktif', 'Korban pornografi',
-          'Anak dengan HIV/AIDS', 'Korban penculikan, penjualan, dan/atau perdagangan',
-          'Korban kekerasan fisik dan/atau psikis', 'Korban kejahatan seksual', 'Korban jaringan terorisme',
-          'Anak penyandang disabilitas', 'Korban perlakuan salah dan penelantaran',
-          'Anak dengan perilaku sosial menyimpang', 'Korban stigmatisasi terkait kondisi orang tua',
+          '1. Anak dalam situasi darurat, meliputi: anak yang menjadi pengungsi; anak korban kerusuhan; anak korban bencana alam; anak dalam situasi konflik bersenjata.',
+          '2. Anak yang berhadapan dengan hukum.',
+          '3. Anak dari kelompok minoritas dan terisolasi.',
+          '4. Anak yang dieksploitasi secara ekonomi dan/atau seksual.',
+          '5. Anak yang menjadi korban penyalahgunaan narkotika, alkohol, psikotropika, dan zat adiktif lainnya.',
+          '6. Anak yang menjadi korban pornografi.',
+          '7. Anak dengan HIV/AIDS.',
+          '8. Anak korban penculikan, penjualan, dan/atau perdagangan.',
+          '9. Anak korban kekerasan fisik dan/atau psikis.',
+          '10. Anak korban kejahatan seksual.',
+          '11. Anak korban jaringan terorisme.',
+          '12. Anak penyandang disabilitas.',
+          '13. Anak korban perlakuan salah dan penelantaran.',
+          '14. Anak dengan perilaku sosial menyimpang.',
+          '15. Anak yang menjadi korban stigmatisasi dari pelabelan terkait dengan kondisi orang tuanya.',
         ]),
       ]},
     ],
@@ -121,26 +130,30 @@ const sourcePages: OfficialPage[] = [
     groups: [
       { tone: 'white', fields: [
         manyField(52, 'Ragam Korban Bencana dan Kedaruratan', [
-          'Tuna Susila', 'Gelandangan', 'Pengemis', 'Pemulung', 'Kelompok Minoritas',
-          'Bekas Warga Binaan Lembaga Pemasyarakatan (BWBLP)', 'Orang dengan HIV/AIDS (ODHA)',
-          'Korban Penyalahgunaan NAPZA', 'Korban trafficking', 'Korban tindak kekerasan',
-          'Pekerja Migran Indonesia Bermasalah (PMIB)', 'Perempuan rawan sosial ekonomi',
-          'Korban bencana alam', 'Korban bencana sosial',
+          '1. Tuna Susila', '2. Gelandangan', '3. Pengemis', '4. Pemulung',
+          '5. Kelompok Minoritas',
+          '6. Bekas Warga Binaan Lembaga Pemasyarakatan (BWBLP)',
+          '7. Orang dengan HIV/AIDS (ODHA)',
+          '8. Korban Penyalahgunaan NAPZA', '9. Korban trafficking',
+          '10. Korban tindak kekerasan',
+          '11. Pekerja Migran Indonesia Bermasalah Sosial (PMBS) (PMIB)',
+          '12. Perempuan rawan sosial ekonomi', '13. Korban bencana alam',
+          '14. Korban bencana sosial',
         ]),
-        oneField(53, 'Jika kategori Lansia atau Disabilitas, membutuhkan bantuan dalam aktivitas sehari-hari (Activity Daily Living)?', ['Ya', 'Tidak']),
+        oneField(53, 'Jika termasuk dalam kategori Lansia atau Disabilitas, apakah membutuhkan bantuan dalam aktifitas sehari – hari (Activity Daily Living)?', ['1. Ya', '2. Tidak']),
         oneField(54, 'Kondisi Fisik PPKS', ['Sehat', 'Sakit']),
-        areaField(55, 'Jelaskan Kondisi Fisik (kesehatan, mobilitas, dll)'),
-        areaField(56, 'Kondisi Psikologis PPKS'), areaField(57, 'Kondisi sosial PPKS'),
-        areaField(58, 'Kondisi Mental Spiritual'), areaField(59, 'Kondisi Keluarga'),
+        { ...areaField(55, 'Jelaskan Kondisi Fisik (Penjelasan terkait kondisi kesehatan, kemampuan mobilitas, dst)'), placeholder: 'Contoh: tidak bisa berjalan, sehat, sakit' },
+        { ...areaField(56, 'Kondisi Psikologis PPKS'), placeholder: 'Contoh: tidak ada gangguan jiwa' }, { ...areaField(57, 'Kondisi sosial PPKS'), placeholder: 'Contoh: bisa bersosialisasi, mengurung diri, diam dikasur' },
+        { ...areaField(58, 'Kondisi Mental Spiritual'), placeholder: 'Contoh: rajin beribadah' }, { ...areaField(59, 'Kondisi Keluarga'), placeholder: 'Contoh: harmonis, broken home, tinggal dengan cucu, dll' },
       ]},
       { title: 'KONDISI SOSIAL EKONOMI', tone: 'gray', fields: [
-        oneField(60, 'Apakah Kepala Keluarga Bekerja?', ['Tidak', 'Iya']),
+        oneField(60, 'Apakah Kepala Keluarga Bekerja?', ['0. Tidak', '1. Iya']),
         textField(61, 'Pekerjaan'), oneField(62, 'Penghasilan Keluarga per Bulan', penghasilan),
         field(63, 'Jumlah Tanggungan', 'number'),
-        oneField(64, 'Apakah pernah tidak makan dalam sehari?', ['Tidak', 'Pernah khawatir tidak makan', 'Pernah tidak makan']),
+        oneField(64, 'Apakah pernah tidak makan dalam sehari?', ['1. Tidak', '2. Pernah khawatir tidak makan', '3. Pernah tidak makan']),
         field(65, 'Pengeluaran Pangan per Bulan (Rp)', 'number'),
         field(66, 'Pengeluaran Total per Bulan (Rp)', 'number'),
-        oneField(67, 'Apakah ada pengeluaran pakaian dalam setahun?', ['Tidak', 'Ya']),
+        oneField(67, 'Apakah ada pengeluaran pakaian, dalam setahun.', ['0. Tidak', '1. Ya']),
       ]},
       { title: 'KONDISI TEMPAT TINGGAL', tone: 'gray', fields: [
         oneField(68, 'Tempat Tinggal saat ini', ['Milik Sendiri', 'Sewa', 'Menumpang', 'Lembaga', 'Telantar/Menggelandang']),
@@ -163,15 +176,15 @@ const sourcePages: OfficialPage[] = [
       ]},
       { title: 'B. PERMASALAHAN, POTENSI & RENCANA INTERVENSI PPKS', tone: 'gray', fields: [
         areaField(79, 'Permasalahan (Gambaran Kasus)'), areaField(80, 'Pelayanan yang pernah diterima'),
-        areaField(81, 'Potensi Diri (Minat Bakat, Keterampilan, Motivasi, Hasil Test IQ)'),
+        { key: 'q81', number: 81, label: 'Potensi Diri (Minat Bakat, Keterampilan, Motivasi, Hasil Test IQ)', kind: 'static', placeholder: 'SKIP' },
         areaField(82, 'Potensi Sumber (Organisasi, Lingkungan, Pendidikan, Ekonomi, Keagamaan, Alam)'),
         manyField(83, 'Komponen Layanan Yang Dibutuhkan', komponenLayanan),
-        areaField(84, 'Uraian Komponen Layanan'), areaField(85, 'Pihak yang terlibat dalam rencana intervensi'),
+        areaField(84, 'Uraian Komponen Layanan :'), areaField(85, 'Pihak yang terlibat dalam rencana intervensi'),
       ]},
       { title: 'C. INTERVENSI PPKS [SKIP]', tone: 'gray', fields: [
         manyField(86, 'Komponen Layanan yang diberikan', komponenLayanan),
-        areaField(87, 'Uraian Komponen Layanan'), field(88, 'Estimasi Jumlah Total Bantuan (Rp)', 'number'),
-        textField(89, 'Waktu Pemberian Layanan (Bulan/Tahun)'), textField(90, 'Pihak yang terlibat dalam intervensi'),
+        areaField(87, 'Uraian Komponen Layanan :'), field(88, 'Estimasi Jumlah Total Bantuan (Rp)', 'number'),
+        { ...textField(89, 'Waktu Pemberian Layanan'), placeholder: '(Bulan/ 2024)' }, textField(90, 'Pihak yang terlibat dalam intervensi'),
       ]},
     ],
   },
@@ -282,7 +295,7 @@ const pages: OfficialPage[] = [
 const emptyAnswers = (): Record<string, AnswerValue> => {
   const values: Record<string, AnswerValue> = { metaSatker: '', metaYear: '', metaSequence: '', q25: '-' };
   for (let n = 1; n <= 91; n++) values['q' + n] = '';
-  values.q48 = []; values.q51 = []; values.q52 = []; values.q83 = []; values.q86 = []; values.q91 = [];
+  values.q48 = []; values.q48Detail = ''; values.q51 = []; values.q52 = []; values.q83 = []; values.q86 = []; values.q91 = [];
   values.kesimpulanResumeKasus = ''; values.rekomendasiCatatanPetugas = '';
   return values;
 };
