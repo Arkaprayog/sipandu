@@ -162,7 +162,7 @@ const sourcePages: OfficialPage[] = [
         oneField(60, 'Apakah Kepala Keluarga Bekerja?', ['Tidak', 'Iya']),
         textField(61, 'Pekerjaan'), oneField(62, 'Penghasilan Keluarga per Bulan', penghasilan),
         field(63, 'Jumlah Tanggungan', 'number'),
-        oneField(64, 'Apakah pernah tidak makan dalam sehari?', ['1. Tidak', '2. Pernah khawatir tidak makan', '3. Pernah tidak makan']),
+        oneField(64, 'Apakah pernah tidak makan dalam sehari?', ['Tidak', 'Pernah khawatir tidak makan', 'Pernah tidak makan']),
         field(65, 'Pengeluaran Pangan per Bulan (Rp)', 'number'),
         field(66, 'Pengeluaran Total per Bulan (Rp)', 'number'),
         oneField(67, 'Apakah ada pengeluaran pakaian dalam setahun?', ['Tidak', 'Ya']),
