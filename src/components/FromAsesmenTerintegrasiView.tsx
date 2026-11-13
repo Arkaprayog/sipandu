@@ -485,7 +485,15 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
         display:block !important; max-width:100% !important; max-height:100% !important;
         width:auto !important; height:auto !important; object-fit:contain !important;
       }
-      #${rootId} .official-letterhead { margin-bottom:6mm !important; }
+      #${rootId} .official-letterhead {
+        margin:0 auto 6mm !important; border:0 !important; padding:0 !important;
+        grid-template-columns:24mm 1fr 24mm !important;
+      }
+      #${rootId} .official-letterhead-lock { display:none !important; }
+      #${rootId} .official-kemensos-logo img { width:18mm !important; height:18mm !important; }
+      #${rootId} .official-atensi-logo img { width:22mm !important; height:22mm !important; }
+      #${rootId} .official-letterhead-title { font-size:10pt !important; line-height:1.25 !important; }
+      #${rootId} .official-letterhead-title span { font-size:9pt !important; }
       #${rootId} .official-table { font-size:7pt !important; }
       #${rootId} .official-table td { padding:1.5px 2px !important; }
       #${rootId} .official-page:not(.official-photo-appendix) { overflow:visible !important; }
@@ -493,9 +501,9 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
         display:table !important; width:100% !important; min-width:0 !important;
         max-width:100% !important; table-layout:fixed !important; border-spacing:0 !important;
       }
-      #${rootId} .official-table col.col-number { width:5% !important; }
-      #${rootId} .official-table col.col-label { width:41% !important; }
-      #${rootId} .official-table col.col-answer { width:54% !important; }
+      #${rootId} .official-table col.col-number { width:5.3% !important; }
+      #${rootId} .official-table col.col-label { width:43.2% !important; }
+      #${rootId} .official-table col.col-answer { width:51.5% !important; }
       #${rootId} .official-table td {
         box-sizing:border-box !important; min-width:0 !important; max-width:100% !important;
         white-space:normal !important; overflow-wrap:anywhere !important; word-break:normal !important;
@@ -586,7 +594,7 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
     const pages = Array.from(root.querySelectorAll<HTMLElement>('.official-page'));
     if (pages.length < 10) {
       root.remove();
-      throw new Error('Halaman resmi asesmen tidak lengkap. Ditemukan ' + pages.length + ' halaman.');
+      throw new Error('Enam halaman asesmen dan empat halaman lampiran foto harus tersedia. Ditemukan ' + pages.length + ' bagian.');
     }
     return { root, pages };
   };
