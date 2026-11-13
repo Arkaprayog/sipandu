@@ -38,6 +38,37 @@ export function getAssessmentPageRenderDimensions(
   };
 }
 
+/**
+ * Stable identity for a form control while the assessment DOM is cloned for PDF.
+ * Comparing these identities prevents answers from silently shifting to a
+ * neighbouring question when the live form and print clone diverge.
+ */
+export interface AssessmentControlIdentity {
+  tagName: string;
+  type: string;
+  answerKey: string;
+  name: string;
+}
+
+/** Return the first mismatched control index, or null when both lists align. */
+export function getAssessmentControlMismatchIndex(
+  source: readonly AssessmentControlIdentity[],
+  target: readonly AssessmentControlIdentity[],
+): number | null {
+  if (source.length !== target.length) return Math.min(source.length, target.length);
+  for (let index = 0; index < source.length; index += 1) {
+    const a = source[index];
+    const b = target[index];
+    if (
+      a.tagName !== b.tagName ||
+      a.type !== b.type ||
+      a.answerKey !== b.answerKey ||
+      a.name !== b.name
+    ) return index;
+  }
+  return null;
+}
+
 export interface A4Placement {
   x: number;
   y: number;
