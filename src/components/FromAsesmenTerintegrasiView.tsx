@@ -1341,6 +1341,9 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
 
           {pageIndex === 5 && (
             <>
+              <p className="official-footer-note">
+                ** Perlu melampirkan foto/dokumen. Foto PPKS dapat dilakukan dengan closeup.
+              </p>
               <div className="official-signature"><div>Petugas</div><div className="official-signature-line">( ........................................ )</div></div>
             </>
           )}
