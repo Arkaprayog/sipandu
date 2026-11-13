@@ -604,6 +604,7 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
       type: control.getAttribute('type') || '',
       answerKey: control.getAttribute('data-answer-key') || '',
       name: control.getAttribute('name') || '',
+      value: control.getAttribute('value') || '',
     });
     const mismatchIndex = getAssessmentControlMismatchIndex(
       sourceControls.map(getControlIdentity),
@@ -1161,6 +1162,7 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
                   type="checkbox"
                   name={item.key}
                   data-answer-key={item.key}
+                  value={option}
                   checked={checked}
                   disabled={isSaving || preparingPrint}
                   onChange={() => {
