@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { PDFDocument } from 'pdf-lib';
-import { A4_HEIGHT_PT, A4_WIDTH_PT, PAGE_MARGIN_PT, fitImageToA4, getAssessmentPageRenderDimensions } from './a4Layout';
+import { A4_HEIGHT_PT, A4_WIDTH_PT, PAGE_MARGIN_PT, fitImageToA4, getAssessmentPageRenderDimensions, splitAssessmentPageAtRows } from './a4Layout';
 
 
 test('assessment capture width remains fixed when long text overflows a table cell', () => {
@@ -49,4 +49,30 @@ test('PDFDocument preserves all twelve pages at exact A4 size', async () => {
     assert.ok(Math.abs(size.width - A4_WIDTH_PT) < 0.001);
     assert.ok(Math.abs(size.height - A4_HEIGHT_PT) < 0.001);
   }
+});
+
+
+test('assessment pages split at row boundaries without cutting rows', () => {
+  assert.deepEqual(
+    splitAssessmentPageAtRows(2300, 1000, [450, 950, 1250, 1900]),
+    [
+      { top: 0, bottom: 950 },
+      { top: 950, bottom: 1900 },
+      { top: 1900, bottom: 2300 },
+    ],
+  );
+});
+
+test('assessment page remains one page when its content fits', () => {
+  assert.deepEqual(
+    splitAssessmentPageAtRows(800, 1000, []),
+    [{ top: 0, bottom: 800 }],
+  );
+});
+
+test('assessment pagination refuses to cut through an oversized question row', () => {
+  assert.throws(
+    () => splitAssessmentPageAtRows(2200, 1000, [1500]),
+    /Satu baris jawaban lebih tinggi/,
+  );
 });
