@@ -2,6 +2,12 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { PDFDocument } from 'pdf-lib';
 import { A4_HEIGHT_PT, A4_WIDTH_PT, PAGE_MARGIN_PT, fitImageToA4, getAssessmentPageRenderDimensions, splitAssessmentPageAtRows } from './a4Layout';
+import {
+  ASSESSMENT_PHOTO_APPENDIX_PAGE_COUNT,
+  OFFICIAL_ASSESSMENT_PDF_SECTION_COUNT,
+  ORIGINAL_ASSESSMENT_FORM_PAGE_COUNT,
+  splitOfficialAssessmentPageSections,
+} from './assessmentPagePlan';
 
 
 test('assessment capture width remains fixed when long text overflows a table cell', () => {
@@ -33,6 +39,21 @@ test('A4 placement respects margins and keeps each page image ratio', () => {
     assert.ok(Math.abs(position.width / position.height - width / height) < 1e-9);
   }
   assert.throws(() => fitImageToA4(0, 10), /Ukuran gambar/);
+});
+
+
+test('official PDF keeps six original form pages before four photo appendices', () => {
+  const sections = Array.from({ length: OFFICIAL_ASSESSMENT_PDF_SECTION_COUNT }, (_, index) => index + 1);
+  const { formPages, photoPages } = splitOfficialAssessmentPageSections(sections);
+
+  assert.equal(ORIGINAL_ASSESSMENT_FORM_PAGE_COUNT, 6);
+  assert.equal(ASSESSMENT_PHOTO_APPENDIX_PAGE_COUNT, 4);
+  assert.deepEqual(formPages, [1, 2, 3, 4, 5, 6]);
+  assert.deepEqual(photoPages, [7, 8, 9, 10]);
+  assert.throws(
+    () => splitOfficialAssessmentPageSections(sections.slice(0, 9)),
+    /enam halaman formulir asli dan empat lampiran foto/i,
+  );
 });
 
 test('PDFDocument preserves ten pages at exact A4 size', async () => {
