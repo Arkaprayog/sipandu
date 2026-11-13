@@ -105,9 +105,10 @@ Lihat [Audit kesiapan produksi v1.0.0](docs/PRODUCTION_READINESS_AUDIT.md). Nomo
 
 ## Pendaftaran mandiri anggota SIPANDU
 
-- Halaman login menyediakan tautan teks **Sudah memiliki akun? Buat akun** yang membuka formulir pendaftaran.
-- Pendaftaran memerlukan nama, NIP, jabatan, unit kerja, email, password, dan konfirmasi password. Aktivasi akun dilakukan hanya setelah email diverifikasi; tidak ada kode pendaftaran tim.
-- Email harus diverifikasi sebelum akun baru diaktifkan. Setelah verifikasi, anggota masuk kembali dengan email dan password.
-- Profil anggota disimpan pada dokumen Firestore pribadi `userProfiles/{uid}`, sehingga nama, NIP, jabatan, dan unit kerja otomatis muncul ketika akun dipakai pada perangkat lain. Foto profil dapat diunggah kemudian; menu Edit Profil tetap tersedia.
-- Role `pendamping` diberikan hanya oleh Worker Cloudflare terpisah setelah memvalidasi undangan dan status email Firebase. Browser tidak dapat mengatur custom claim.
-- Ikuti [panduan konfigurasi Worker pendaftaran](registration-worker/README.md) sebelum mengaktifkan tautan pendaftaran untuk anggota. Worker statis `sipandu` tidak diganti.
+- Halaman login menyediakan tautan **Sudah memiliki akun? Buat akun** untuk membuka formulir pendaftaran.
+- Formulir pendaftaran meminta nama, email, password, dan ulangi password. NIP, jabatan, unit kerja, nomor telepon, serta foto profil dapat dilengkapi kemudian melalui menu Edit Profil.
+- Setelah akun Firebase dibuat, Worker pendaftaran mencatat UID dan email yang cocok sebagai permohonan mandiri berstatus menunggu verifikasi email. Tautan verifikasi dikirim ke email; pengguna harus memverifikasi email lalu masuk kembali.
+- Worker hanya mengaktifkan akun setelah Firebase mengonfirmasi email terverifikasi dan catatan pendaftaran cocok dengan UID serta alamat email akun.
+- Aktivasi mandiri memberikan custom claim `anggota` dengan hak paling dasar. Pendaftar tidak dapat memilih atau menaikkan perannya sendiri menjadi `pendamping`, `supervisor`, atau `owner`.
+- Akun `anggota` hanya dapat mengelola profil miliknya sendiri. Aturan Firestore dan Storage menolak aksesnya ke data PPKS/responden, asesmen, arsip, dokumen petugas, kunjungan, layanan, dan percakapan operasional.
+- Profil disimpan secara privat pada `userProfiles/{uid}`. Browser tidak dapat menulis custom claim atau memberikan akses staf. Konfigurasi dan prosedur Worker dijelaskan dalam [panduan Worker pendaftaran](registration-worker/README.md).
