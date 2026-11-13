@@ -99,7 +99,8 @@ export function splitAssessmentPageAtRows(
 
   while (top < totalHeightPx) {
     const remaining = totalHeightPx - top;
-    if (remaining <= maxSliceHeightPx) {
+    // Allow one/two raster pixels for CSS-to-canvas rounding on mobile browsers.
+    if (remaining <= maxSliceHeightPx + 2) {
       slices.push({ top, bottom: totalHeightPx });
       break;
     }
