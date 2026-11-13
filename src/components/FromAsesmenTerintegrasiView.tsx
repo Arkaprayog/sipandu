@@ -522,16 +522,16 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
       #${rootId} .official-atensi-logo img { width:22mm !important; height:22mm !important; }
       #${rootId} .official-letterhead-title { font-size:10pt !important; line-height:1.25 !important; }
       #${rootId} .official-letterhead-title span { font-size:9pt !important; }
-      #${rootId} .official-table { font-size:7pt !important; }
+      #${rootId} .official-table { width:170mm !important; max-width:100% !important; margin-left:auto !important; margin-right:auto !important; font-size:8pt !important; }
       #${rootId} .official-table td { padding:1.5px 2px !important; }
       #${rootId} .official-page:not(.official-photo-appendix) { overflow:visible !important; }
       #${rootId} .official-table {
         display:table !important; width:100% !important; min-width:0 !important;
         max-width:100% !important; table-layout:fixed !important; border-spacing:0 !important;
       }
-      #${rootId} .official-table col.col-number { width:5.3% !important; }
-      #${rootId} .official-table col.col-label { width:43.2% !important; }
-      #${rootId} .official-table col.col-answer { width:51.5% !important; }
+      #${rootId} .official-table col.col-number { width:7.3% !important; }
+      #${rootId} .official-table col.col-label { width:40.3% !important; }
+      #${rootId} .official-table col.col-answer { width:52.4% !important; }
       #${rootId} .official-table td {
         box-sizing:border-box !important; min-width:0 !important; max-width:100% !important;
         height:auto !important; line-height:1.2 !important;
@@ -543,7 +543,7 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
       }
       #${rootId} .official-table td.question-label,
       #${rootId} .official-table td.question-answer {
-        text-align:left !important; vertical-align:top !important; padding:3px 5px !important;
+        text-align:left !important; vertical-align:middle !important; padding:3px 5px !important;
         white-space:normal !important; overflow-wrap:anywhere !important;
       }
       #${rootId} .official-options {
