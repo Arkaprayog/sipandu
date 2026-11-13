@@ -1,6 +1,7 @@
 import html2canvas from 'html2canvas';
 import { PDFDocument } from 'pdf-lib';
 import { A4_HEIGHT_PT, A4_WIDTH_PT, fitImageToA4, getAssessmentPageRenderDimensions, splitAssessmentPageAtRows } from './a4Layout';
+import { splitOfficialAssessmentPageSections } from './assessmentPagePlan';
 export const PDF_RENDER_SCALES = [2.5, 2, 1.5, 1] as const;
 const JPEG_QUALITY = 0.94;
 
@@ -196,13 +197,9 @@ export async function createOfficialAssessmentPdf(
   pages: HTMLElement[],
   renderRootId: string,
 ): Promise<Blob> {
-  if (!Array.isArray(pages) || pages.length !== 10) {
-    throw new Error('PDF harus berisi enam halaman formulir asli dan empat lampiran foto.');
-  }
+  const { formPages, photoPages } = splitOfficialAssessmentPageSections(pages);
 
   const pdf = await PDFDocument.create();
-  const formPages = pages.slice(0, 6);
-  const photoPages = pages.slice(6, 10);
   let nextPdfPageNumber = 1;
 
   const appendRenderedPages = async (element: HTMLElement, pageNumber: number): Promise<number> => {
@@ -217,8 +214,8 @@ export async function createOfficialAssessmentPdf(
     return encodedPages.length;
   };
 
-  // Render the eight template sheets first. A long answer may add continuation
-  // sheets; the photo appendix page labels are updated with the actual count.
+  // Render the six original form sheets first. Long answers can add continuation
+  // sheets; the four photo appendices are placed after all form content.
   for (const page of formPages) {
     nextPdfPageNumber += await appendRenderedPages(page, nextPdfPageNumber);
   }
