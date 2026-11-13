@@ -92,20 +92,81 @@
 .official-option input { flex:0 0 auto; width:10px; height:10px; margin:1px 1px 0 0; accent-color:#111; }
 .official-option-number { flex:0 0 9px; }
 
-/* Keep every printed value inside the three fixed columns of the source form. */
-.official-table { width:100%; min-width:0; table-layout:fixed; }
+/* Keep question labels and answers inside their own fixed table cells. */
+.official-table {
+  display:table;
+  width:100%;
+  min-width:0;
+  max-width:100%;
+  table-layout:fixed;
+  border-collapse:collapse;
+  border-spacing:0;
+}
 .official-table col.col-number { width:5.3%; }
 .official-table col.col-label { width:43.2%; }
 .official-table col.col-answer { width:51.5%; }
+.official-table tr { height:auto; }
 .official-table td {
   box-sizing:border-box;
   min-width:0;
+  max-width:100%;
+  height:auto;
+  white-space:normal;
+  overflow-wrap:anywhere;
+  word-break:normal;
+  line-height:1.2;
+  vertical-align:top;
+}
+.official-table td.question-number {
+  text-align:center;
+  vertical-align:middle;
+  padding:3px 2px;
+}
+.official-table td.question-label {
+  text-align:left;
+  vertical-align:top;
+  padding:3px 5px;
   white-space:normal;
   overflow-wrap:anywhere;
 }
-.official-input,.official-textarea { box-sizing:border-box; min-width:0; max-width:100%; }
-.official-options { width:100%; min-width:0; }
-.official-option { width:100%; min-width:0; box-sizing:border-box; }
+.official-table td.question-answer {
+  text-align:left;
+  vertical-align:top;
+  padding:3px 5px;
+  white-space:normal;
+  overflow-wrap:anywhere;
+}
+.official-input,.official-textarea,.official-print-value {
+  box-sizing:border-box;
+  min-width:0;
+  width:100%;
+  max-width:100%;
+}
+.official-print-value {
+  display:block;
+  min-height:1.2em;
+  margin:0;
+  padding:0 1px;
+  color:#111;
+  font:inherit;
+  line-height:1.2;
+  text-align:left;
+  white-space:pre-wrap;
+  overflow-wrap:anywhere;
+  word-break:break-word;
+}
+.official-options { width:100%; min-width:0; max-width:100%; }
+.official-option {
+  display:flex;
+  align-items:flex-start;
+  gap:3px;
+  width:100%;
+  min-width:0;
+  max-width:100%;
+  box-sizing:border-box;
+  line-height:1.2;
+}
+.official-option input { flex:0 0 auto; }
 .official-option > span:last-child {
   display:block;
   flex:1 1 0%;
@@ -113,6 +174,7 @@
   max-width:100%;
   white-space:normal;
   overflow-wrap:anywhere;
+  word-break:normal;
 }
 .official-numbering-grid > label { min-width:0; }
 .official-numbering input { box-sizing:border-box; max-width:100%; }
