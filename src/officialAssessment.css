@@ -86,7 +86,7 @@
 .official-textarea::placeholder { color:#6b7280; opacity:1; }
 .official-input { display:block; width:100%; min-height:18px; padding:1px 2px; color:#111; background:transparent; border:0; border-bottom:1px solid #bbb; border-radius:0; outline:none; font:inherit; }
 .official-input:focus,.official-textarea:focus { border-bottom:1px solid #111; }
-.official-textarea { display:block; width:100%; min-height:36px; resize:vertical; padding:2px; color:#111; background:transparent; border:0; border-bottom:1px solid #bbb; border-radius:0; outline:none; font:inherit; }
+.official-textarea { display:block; width:100%; min-height:36px; resize:vertical; overflow-y:hidden; padding:2px; color:#111; background:transparent; border:0; border-bottom:1px solid #bbb; border-radius:0; outline:none; font:inherit; }
 .official-options { display:flex; flex-direction:column; gap:1px; }
 .official-option { display:flex; align-items:flex-start; gap:3px; line-height:1.1; cursor:pointer; }
 .official-option input { flex:0 0 auto; width:10px; height:10px; margin:1px 1px 0 0; accent-color:#111; }
