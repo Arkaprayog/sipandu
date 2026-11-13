@@ -9,6 +9,7 @@ import { getIntegratedAssessmentBackupMetadata, saveIntegratedAssessmentBackupMe
 import { printPreparedAssessmentWebView, printPdfFromDevice, savePdfToDevice } from '../lib/printing';
 import { createOfficialAssessmentPdf } from '../lib/assessmentPdf';
 import { OFFICIAL_ASSESSMENT_PDF_SECTION_COUNT } from '../lib/assessmentPagePlan';
+import { getAssessmentControlMismatchIndex } from '../lib/a4Layout';
 import { createPhotoPreviewBlob } from '../lib/photoFilePreview';
 import '../officialAssessment.css';
 
@@ -533,7 +534,17 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
       #${rootId} .official-table col.col-answer { width:51.5% !important; }
       #${rootId} .official-table td {
         box-sizing:border-box !important; min-width:0 !important; max-width:100% !important;
+        height:auto !important; line-height:1.2 !important;
         white-space:normal !important; overflow-wrap:anywhere !important; word-break:normal !important;
+        vertical-align:top !important;
+      }
+      #${rootId} .official-table td.question-number {
+        text-align:center !important; vertical-align:middle !important; padding:3px 2px !important;
+      }
+      #${rootId} .official-table td.question-label,
+      #${rootId} .official-table td.question-answer {
+        text-align:left !important; vertical-align:top !important; padding:3px 5px !important;
+        white-space:normal !important; overflow-wrap:anywhere !important;
       }
       #${rootId} .official-options {
         display:flex !important; flex-direction:column !important;
@@ -557,7 +568,9 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
         max-width:100% !important; min-width:0 !important;
       }
       #${rootId} .official-print-value {
-        min-height:12px !important; margin:0 !important; padding:0 1px !important;
+        display:block !important; box-sizing:border-box !important; width:100% !important;
+        min-width:0 !important; max-width:100% !important; min-height:1.2em !important;
+        margin:0 !important; padding:0 1px !important;
         color:#111 !important; font:inherit !important; line-height:1.2 !important; text-align:left !important;
         white-space:pre-wrap !important; overflow-wrap:anywhere !important; word-break:break-word !important;
         overflow:visible !important;
@@ -586,9 +599,25 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
     }
     const sourceControls = Array.from(shell.querySelectorAll<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>('input, textarea, select'));
     const targetControls = Array.from(printClone.querySelectorAll<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>('input, textarea, select'));
+    const getControlIdentity = (control: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement) => ({
+      tagName: control.tagName.toLowerCase(),
+      type: control.getAttribute('type') || '',
+      answerKey: control.getAttribute('data-answer-key') || '',
+      name: control.getAttribute('name') || '',
+    });
+    const mismatchIndex = getAssessmentControlMismatchIndex(
+      sourceControls.map(getControlIdentity),
+      targetControls.map(getControlIdentity),
+    );
+    if (mismatchIndex !== null) {
+      root.remove();
+      throw new Error(
+        'Struktur kolom pertanyaan dan jawaban berubah saat menyiapkan PDF (kontrol ke-'
+        + (mismatchIndex + 1) + '). PDF dibatalkan agar jawaban tidak bergeser ke pertanyaan lain.',
+      );
+    }
     sourceControls.forEach((sourceControl, index) => {
       const targetControl = targetControls[index];
-      if (!targetControl) return;
 
       // Checkbox/radio controls remain native so selected options keep their
       // official tick marks. Text fields are replaced with wrapping text blocks:
@@ -1131,6 +1160,7 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
                 <input
                   type="checkbox"
                   name={item.key}
+                  data-answer-key={item.key}
                   checked={checked}
                   disabled={isSaving || preparingPrint}
                   onChange={() => {
