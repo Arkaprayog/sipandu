@@ -12,12 +12,12 @@ import { createPhotoPreviewBlob } from '../lib/photoFilePreview';
 import '../officialAssessment.css';
 
 type AnswerValue = string | string[];
-type FieldKind = 'text' | 'date' | 'number' | 'textarea' | 'single' | 'multi';
+type FieldKind = 'text' | 'date' | 'number' | 'textarea' | 'single' | 'multi' | 'static';
 interface OfficialField {
   key: string; number?: number; label: string; kind?: FieldKind;
-  options?: string[]; optional?: boolean; placeholder?: string;
+  options?: string[]; optional?: boolean; placeholder?: string; detailKey?: string;
 }
-interface OfficialGroup { title?: string; tone?: 'gray' | 'beige' | 'white'; fields: OfficialField[]; }
+interface OfficialGroup { title?: string; tone?: 'gray' | 'beige' | 'white' | 'blue'; fields: OfficialField[]; }
 interface OfficialPage { groups: OfficialGroup[]; hasLetterhead?: boolean; }
 interface FromAsesmenTerintegrasiViewProps { ppksList: PPKSRecord[]; onSaveAssessment: (updated: PPKSRecord) => Promise<void>; initialSelectedPPKSId?: string; onBeforePrint?: (updated: PPKSRecord) => Promise<void>; }
 
@@ -192,15 +192,91 @@ const sourcePages: OfficialPage[] = [
   },
 ];
 
-// Keep the six original A4 assessment sheets in their source order.
-// The four respondent photo appendices are appended as pages 7–10.
+const fieldsBetween = (
+  group: OfficialGroup,
+  first: number,
+  last: number,
+  includeTitle = false,
+): OfficialGroup => ({
+  ...(group.tone ? { tone: group.tone } : {}),
+  ...(includeTitle && group.title ? { title: group.title } : {}),
+  fields: group.fields.filter((item) =>
+    item.number !== undefined && item.number >= first && item.number <= last
+  ),
+});
+
+// Page breaks follow the latest eight-page uploaded source template. Rows are
+// kept intact; any additional overflow pages are inserted by the PDF renderer.
 const pages: OfficialPage[] = [
-  { hasLetterhead: true, groups: sourcePages[0].groups }, // Page 1: rapid assessment, addresses, identity (1–24)
-  { groups: sourcePages[1].groups }, // Page 2: basic status and caregiver profile (25–43)
-  { groups: sourcePages[2].groups }, // Page 3: PPKS condition categories (44–51)
-  { groups: sourcePages[3].groups }, // Page 4: physical/social/economic/housing profile (52–71)
-  { groups: sourcePages[4].groups }, // Page 5: housing, case plan and intervention (72–90)
-  { groups: sourcePages[5].groups }, // Page 6: follow-up plan and case summary (91)
+  {
+    hasLetterhead: true,
+    groups: [
+      ...sourcePages[0].groups.slice(0, 4),
+      fieldsBetween(sourcePages[0].groups[4], 16, 21, true),
+    ],
+  }, // Page 1: questions 1–21
+  {
+    groups: [
+      fieldsBetween(sourcePages[0].groups[4], 22, 24),
+      {
+        title: '** Perlu melampirkan foto/dokumen.\n** Foto PPKS dapat dilakukan dengan Closeup',
+        tone: 'white',
+        fields: [],
+      },
+      sourcePages[1].groups[0],
+      fieldsBetween(sourcePages[1].groups[1], 30, 38, true),
+    ],
+  }, // Page 2: questions 22–38
+  {
+    groups: [
+      fieldsBetween(sourcePages[1].groups[1], 39, 43),
+      sourcePages[2].groups[0],
+      fieldsBetween(sourcePages[2].groups[1], 47, 47, true),
+      { title: 'JIKA KATEGORI DISABILITAS', tone: 'blue', fields: [] },
+      fieldsBetween(sourcePages[2].groups[1], 48, 48),
+    ],
+  }, // Page 3: questions 39–48
+  {
+    groups: [
+      fieldsBetween(sourcePages[2].groups[1], 49, 50),
+      { title: 'JIKA KATEGORI ANAK', tone: 'blue', fields: [] },
+      fieldsBetween(sourcePages[2].groups[1], 51, 51),
+      { title: 'JIKA KATEGORI KORBAN BENCANA DAN KEDARURATAN', tone: 'blue', fields: [] },
+      fieldsBetween(sourcePages[3].groups[0], 52, 52),
+    ],
+  }, // Page 4: questions 49–52
+  {
+    groups: [
+      fieldsBetween(sourcePages[3].groups[0], 53, 59),
+      sourcePages[3].groups[1],
+      fieldsBetween(sourcePages[3].groups[2], 68, 69, true),
+    ],
+  }, // Page 5: questions 53–69
+  {
+    groups: [
+      fieldsBetween(sourcePages[3].groups[2], 70, 71),
+      sourcePages[4].groups[0],
+      {
+        title: '*) CATATAN TAMBAHAN: Peralatan Rumah, Kendaraan yang dimiliki, Gambaran Demografi',
+        tone: 'white',
+        fields: [],
+      },
+      { title: 'BUKTI DUKUNG DENGAN MELAMPIRKAN FOTO', tone: 'blue', fields: [] },
+      sourcePages[4].groups[1] && fieldsBetween(sourcePages[4].groups[1], 79, 84, true),
+    ],
+  }, // Page 6: questions 70–84
+  {
+    groups: [
+      fieldsBetween(sourcePages[4].groups[1], 85, 85),
+      fieldsBetween(sourcePages[4].groups[2], 86, 89, true),
+    ],
+  }, // Page 7: questions 85–89
+  {
+    groups: [
+      fieldsBetween(sourcePages[4].groups[2], 90, 90),
+      ...sourcePages[5].groups,
+    ],
+  }, // Page 8: questions 90–91 and case summary
 ];
 
 const emptyAnswers = (): Record<string, AnswerValue> => {
@@ -592,9 +668,9 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
     if (document.fonts?.ready) await document.fonts.ready;
 
     const pages = Array.from(root.querySelectorAll<HTMLElement>('.official-page'));
-    if (pages.length < 10) {
+    if (pages.length !== 12) {
       root.remove();
-      throw new Error('Enam halaman asesmen dan empat halaman lampiran foto harus tersedia. Ditemukan ' + pages.length + ' bagian.');
+      throw new Error('Delapan halaman asesmen dan empat halaman lampiran foto harus tersedia. Ditemukan ' + pages.length + ' bagian.');
     }
     return { root, pages };
   };
@@ -1186,7 +1262,7 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
         <section className="official-photo-gallery" aria-label="Foto PPKS dari data responden">
           <div className="official-photo-gallery-heading">
             <h3>Foto PPKS</h3>
-            <p>Foto diambil dari data PPKS yang dipilih dan ikut disertakan pada halaman 7–10 saat dicetak atau disimpan sebagai PDF.</p>
+            <p>Foto diambil dari data PPKS yang dipilih dan ikut disertakan pada halaman 9–12 saat dicetak atau disimpan sebagai PDF.</p>
           </div>
           <div className="official-photo-gallery-grid">
             {printablePhotos.map((photo) => (
@@ -1274,7 +1350,7 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
             </tbody>
           </table>
 
-          {pageIndex === 5 && (
+          {pageIndex === 7 && (
             <>
               <p className="official-footer-note">** Perlu melampirkan foto/dokumen. Foto PPKS dapat dilakukan dengan closeup.</p>
               <div className="official-signature"><div>Petugas</div><div className="official-signature-line">( ........................................ )</div></div>
