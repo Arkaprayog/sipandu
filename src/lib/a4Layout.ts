@@ -64,3 +64,60 @@ export function fitImageToA4(imageWidth: number, imageHeight: number): A4Placeme
     height,
   };
 }
+
+
+export interface AssessmentPageSlice {
+  top: number;
+  bottom: number;
+}
+
+/**
+ * Split an over-height assessment sheet only at measured row/block boundaries.
+ * This prevents the PDF renderer from shrinking a long form to fit one A4 page
+ * or cutting a question row in half.
+ */
+export function splitAssessmentPageAtRows(
+  totalHeightPx: number,
+  maxSliceHeightPx: number,
+  rowBottomsPx: number[],
+): AssessmentPageSlice[] {
+  if (
+    !Number.isFinite(totalHeightPx) || !Number.isFinite(maxSliceHeightPx) ||
+    totalHeightPx <= 0 || maxSliceHeightPx <= 0 ||
+    !Array.isArray(rowBottomsPx) ||
+    rowBottomsPx.some((value) => !Number.isFinite(value))
+  ) {
+    throw new Error('Ukuran pemisahan halaman asesmen tidak valid.');
+  }
+
+  const boundaries = [...new Set(rowBottomsPx
+    .filter((value) => value > 0 && value < totalHeightPx)
+    .map((value) => Math.round(value)))]
+    .sort((a, b) => a - b);
+  const slices: AssessmentPageSlice[] = [];
+  let top = 0;
+
+  while (top < totalHeightPx) {
+    const remaining = totalHeightPx - top;
+    if (remaining <= maxSliceHeightPx) {
+      slices.push({ top, bottom: totalHeightPx });
+      break;
+    }
+
+    const limit = top + maxSliceHeightPx;
+    const safeBottom = boundaries.reduce<number | null>(
+      (best, value) => value > top && value <= limit ? value : best,
+      null,
+    );
+    if (safeBottom === null) {
+      throw new Error(
+        'Satu baris jawaban lebih tinggi daripada area satu halaman A4. Ringkas jawaban pada kolom tersebut sebelum mencetak.',
+      );
+    }
+
+    slices.push({ top, bottom: safeBottom });
+    top = safeBottom;
+  }
+
+  return slices;
+}
