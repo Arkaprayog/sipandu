@@ -1183,7 +1183,7 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
                     else updateAnswer(item.key, checked ? '' : option);
                   }}
                 />
-                {!/^\\d+[.)]\\s/.test(option) && <span className="official-option-number">{index + 1}.</span>}<span>{option}</span>
+                {!/^\d+[.)]\s/.test(option) && <span className="official-option-number">{index + 1}.</span>}<span>{option}</span>
               </label>
             );
           })}
