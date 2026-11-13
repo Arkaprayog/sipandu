@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { PDFDocument } from 'pdf-lib';
-import { A4_HEIGHT_PT, A4_WIDTH_PT, PAGE_MARGIN_PT, fitImageToA4, getAssessmentPageRenderDimensions, splitAssessmentPageAtRows } from './a4Layout';
+import { A4_HEIGHT_PT, A4_WIDTH_PT, PAGE_MARGIN_PT, fitImageToA4, getAssessmentControlMismatchIndex, getAssessmentPageRenderDimensions, splitAssessmentPageAtRows } from './a4Layout';
 import {
   ASSESSMENT_PHOTO_APPENDIX_PAGE_COUNT,
   OFFICIAL_ASSESSMENT_PDF_SECTION_COUNT,
@@ -24,6 +24,19 @@ test('assessment capture width remains fixed when long text overflows a table ce
   assert.equal(dimensions.height, Math.ceil(pageHeight + 48));
 });
  
+test('assessment PDF controls are matched to the same question before values are stamped', () => {
+  const source = [
+    { tagName: 'input', type: 'text', answerKey: 'q4', name: '' },
+    { tagName: 'input', type: 'checkbox', answerKey: 'q5', name: 'q5' },
+  ];
+  const identical = source.map((item) => ({ ...item }));
+  assert.equal(getAssessmentControlMismatchIndex(source, identical), null);
+
+  const shifted = [identical[1], identical[0]];
+  assert.equal(getAssessmentControlMismatchIndex(source, shifted), 0);
+  assert.equal(getAssessmentControlMismatchIndex(source, identical.slice(0, 1)), 1);
+});
+
 test('A4 dimensions match ISO 216 210 x 297 mm in PDF points', () => {
   assert.ok(Math.abs(A4_WIDTH_PT - (210 / 25.4) * 72) < 0.001);
   assert.ok(Math.abs(A4_HEIGHT_PT - (297 / 25.4) * 72) < 0.001);
