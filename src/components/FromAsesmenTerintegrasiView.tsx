@@ -192,17 +192,15 @@ const sourcePages: OfficialPage[] = [
   },
 ];
 
-// Keep the assessment itself on eight intentional pages before four photo appendices.
-// Reuse the official question groups so no question, answer option, or official wording is lost.
+// Keep the six original A4 assessment sheets in their source order.
+// The four respondent photo appendices are appended as pages 7–10.
 const pages: OfficialPage[] = [
-  { hasLetterhead: true, groups: sourcePages[0].groups.slice(0, 4) }, // Page 1: assessment header and addresses (1–15)
-  { groups: [sourcePages[0].groups[4], sourcePages[1].groups[0]] }, // Page 2: identity and basic status (16–29)
-  { groups: [sourcePages[1].groups[1]] }, // Page 3: PPKS caregiver (30–43)
-  { groups: sourcePages[2].groups }, // Page 4: rapid PPKS conditions (44–51)
-  { groups: [sourcePages[3].groups[0]] }, // Page 5: condition categories and physical profile (52–59)
-  { groups: sourcePages[3].groups.slice(1) }, // Page 6: social economy and housing (60–71)
-  { groups: sourcePages[4].groups.slice(0, 2) }, // Page 7: housing conditions and case plan (72–85)
-  { groups: [...sourcePages[4].groups.slice(2), ...sourcePages[5].groups] }, // Page 8: interventions and recommendations (86–91)
+  { hasLetterhead: true, groups: sourcePages[0].groups }, // Page 1: rapid assessment, addresses, identity (1–24)
+  { groups: sourcePages[1].groups }, // Page 2: basic status and caregiver profile (25–43)
+  { groups: sourcePages[2].groups }, // Page 3: PPKS condition categories (44–51)
+  { groups: sourcePages[3].groups }, // Page 4: physical/social/economic/housing profile (52–71)
+  { groups: sourcePages[4].groups }, // Page 5: housing, case plan and intervention (72–90)
+  { groups: sourcePages[5].groups }, // Page 6: follow-up plan and case summary (91)
 ];
 
 const emptyAnswers = (): Record<string, AnswerValue> => {
@@ -487,7 +485,15 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
         display:block !important; max-width:100% !important; max-height:100% !important;
         width:auto !important; height:auto !important; object-fit:contain !important;
       }
-      #${rootId} .official-letterhead { margin-bottom:6mm !important; }
+      #${rootId} .official-letterhead {
+        margin:0 auto 6mm !important; border:0 !important; padding:0 !important;
+        grid-template-columns:24mm 1fr 24mm !important;
+      }
+      #${rootId} .official-letterhead-lock { display:none !important; }
+      #${rootId} .official-kemensos-logo img { width:18mm !important; height:18mm !important; }
+      #${rootId} .official-atensi-logo img { width:22mm !important; height:22mm !important; }
+      #${rootId} .official-letterhead-title { font-size:10pt !important; line-height:1.25 !important; }
+      #${rootId} .official-letterhead-title span { font-size:9pt !important; }
       #${rootId} .official-table { font-size:7pt !important; }
       #${rootId} .official-table td { padding:1.5px 2px !important; }
       #${rootId} .official-page:not(.official-photo-appendix) { overflow:visible !important; }
@@ -495,9 +501,9 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
         display:table !important; width:100% !important; min-width:0 !important;
         max-width:100% !important; table-layout:fixed !important; border-spacing:0 !important;
       }
-      #${rootId} .official-table col.col-number { width:5% !important; }
-      #${rootId} .official-table col.col-label { width:41% !important; }
-      #${rootId} .official-table col.col-answer { width:54% !important; }
+      #${rootId} .official-table col.col-number { width:5.3% !important; }
+      #${rootId} .official-table col.col-label { width:43.2% !important; }
+      #${rootId} .official-table col.col-answer { width:51.5% !important; }
       #${rootId} .official-table td {
         box-sizing:border-box !important; min-width:0 !important; max-width:100% !important;
         white-space:normal !important; overflow-wrap:anywhere !important; word-break:normal !important;
@@ -586,9 +592,9 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
     if (document.fonts?.ready) await document.fonts.ready;
 
     const pages = Array.from(root.querySelectorAll<HTMLElement>('.official-page'));
-    if (pages.length < 8) {
+    if (pages.length < 10) {
       root.remove();
-      throw new Error('Halaman resmi asesmen tidak lengkap. Ditemukan ' + pages.length + ' halaman.');
+      throw new Error('Enam halaman asesmen dan empat halaman lampiran foto harus tersedia. Ditemukan ' + pages.length + ' bagian.');
     }
     return { root, pages };
   };
@@ -1156,7 +1162,7 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
             <Save className="h-4 w-4" /> {isSaving ? 'Menyimpan…' : 'Simpan Form'}
           </button>
           <button type="button" onClick={() => { void handlePrint(); }} disabled={preparingPrint || isSaving || !currentPPKS} className="inline-flex items-center gap-2 rounded-lg border border-sky-400/40 bg-sky-950/50 px-4 py-2 text-xs font-bold text-white disabled:opacity-60">
-            <Printer className="h-4 w-4" /> {preparingPrint ? 'Menyiapkan 12 halaman…' : 'Cetak / Simpan PDF'}
+            <Printer className="h-4 w-4" /> {preparingPrint ? 'Menyusun PDF A4…' : 'Cetak / Simpan PDF'}
           </button>
           {driveArchive?.status === 'complete' && currentPPKS && (
             <button type="button" onClick={() => { void handleDownloadArchive(); }} disabled={isDownloadingArchive || isSaving} className="inline-flex items-center gap-2 rounded-lg border border-emerald-400/40 bg-emerald-950/50 px-4 py-2 text-xs font-bold text-white disabled:opacity-60">
@@ -1180,7 +1186,7 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
         <section className="official-photo-gallery" aria-label="Foto PPKS dari data responden">
           <div className="official-photo-gallery-heading">
             <h3>Foto PPKS</h3>
-            <p>Foto diambil dari data PPKS yang dipilih dan ikut disertakan pada halaman 9–12 saat dicetak atau disimpan sebagai PDF.</p>
+            <p>Foto diambil dari data PPKS yang dipilih dan ikut disertakan pada halaman 7–10 saat dicetak atau disimpan sebagai PDF.</p>
           </div>
           <div className="official-photo-gallery-grid">
             {printablePhotos.map((photo) => (
@@ -1268,7 +1274,7 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
             </tbody>
           </table>
 
-          {pageIndex === 7 && (
+          {pageIndex === 5 && (
             <>
               <p className="official-footer-note">** Perlu melampirkan foto/dokumen. Foto PPKS dapat dilakukan dengan closeup.</p>
               <div className="official-signature"><div>Petugas</div><div className="official-signature-line">( ........................................ )</div></div>
@@ -1281,7 +1287,7 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
         <section className="official-page official-photo-appendix" key={photo.key} aria-label={photo.title}>
           <div className="official-photo-appendix-heading">
             <h2>{photo.title}</h2>
-            <p>Form Asesmen Terintegrasi · Halaman {index + 9} dari 12</p>
+            <p>Form Asesmen Terintegrasi · Halaman {index + 7} dari 10</p>
             <div className="official-photo-respondent">
               <span>Nama PPKS: <strong>{currentPPKS.namaLengkap || '-'}</strong></span>
               <span>NIK: <strong>{currentPPKS.nik || 'Belum terpetakan'}</strong></span>

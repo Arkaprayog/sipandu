@@ -40,8 +40,7 @@
   box-shadow:0 2px 18px rgba(0,0,0,.25);
 }
 
-/* Four print-only photo appendices. Kept off-screen in the editor, but rendered
-   in print so the PDF contains pages 9–12 without adding a duplicate profile card. */
+/* Four print-only photo appendices are appended after the six original A4 sheets (pages 7–10). */
 .official-photo-appendix {
   position:absolute; left:-100000px; top:0; width:190mm; max-width:190mm;
   min-height:280mm; margin:0; padding:10mm; box-sizing:border-box;
@@ -72,9 +71,9 @@
 .official-numbering label { font-size:7.5pt; text-align:center; font-style:italic; }
 .official-numbering input { display:block; width:100%; min-width:0; border:0; border-bottom:1px solid #555; color:#111; background:transparent; text-align:center; padding:3px 2px; outline:none; }
 .official-table { width:100%; border-collapse:collapse; table-layout:fixed; font-size:7.2pt; line-height:1.13; }
-.official-table col.col-number { width:5%; }
-.official-table col.col-label { width:41%; }
-.official-table col.col-answer { width:54%; }
+.official-table col.col-number { width:5.3%; }
+.official-table col.col-label { width:43.2%; }
+.official-table col.col-answer { width:51.5%; }
 .official-table td { border:1px solid #555; padding:2px 3px; vertical-align:top; }
 .official-table td.question-number { text-align:center; vertical-align:middle; }
 .official-table td.question-label { text-align:center; vertical-align:middle; }
@@ -93,9 +92,9 @@
 
 /* Keep every printed value inside the three fixed columns of the source form. */
 .official-table { width:100%; min-width:0; table-layout:fixed; }
-.official-table col.col-number { width:5%; }
-.official-table col.col-label { width:41%; }
-.official-table col.col-answer { width:54%; }
+.official-table col.col-number { width:5.3%; }
+.official-table col.col-label { width:43.2%; }
+.official-table col.col-answer { width:51.5%; }
 .official-table td {
   box-sizing:border-box;
   min-width:0;
@@ -231,7 +230,7 @@
   }
   .official-page:last-child { page-break-after:auto !important; break-after:auto !important; }
 
-  /* Four appendices are four separate A4 pages (9–12), not off-screen nodes. */
+  /* Four appendices are four separate A4 pages (7–10), not off-screen nodes. */
   .official-photo-appendix {
     position:relative !important;
     left:auto !important;
