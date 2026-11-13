@@ -71,9 +71,9 @@
 .official-numbering label { font-size:7.5pt; text-align:center; font-style:italic; }
 .official-numbering input { display:block; width:100%; min-width:0; border:0; border-bottom:1px solid #555; color:#111; background:transparent; text-align:center; padding:3px 2px; outline:none; }
 .official-table { width:100%; border-collapse:collapse; table-layout:fixed; font-size:7.2pt; line-height:1.13; }
-.official-table col.col-number { width:7.3%; }
-.official-table col.col-label { width:40.5%; }
-.official-table col.col-answer { width:52.2%; }
+.official-table col.col-number { width:5.3%; }
+.official-table col.col-label { width:43.2%; }
+.official-table col.col-answer { width:51.5%; }
 .official-table td { border:1px solid #555; padding:2px 3px; vertical-align:top; }
 .official-table td.question-number { text-align:center; vertical-align:middle; }
 .official-table td.question-label { text-align:center; vertical-align:middle; }
@@ -82,10 +82,7 @@
 .official-group-title.gray td { background:#d8d8d8; }
 .official-group-title.beige td { background:#e9e5cb; text-align:center; }
 .official-group-title.white td { background:#fff; }
-.official-group-title.blue td { background:#dceaf7; text-align:center; font-weight:700; }
 .official-textarea-group { display:block; width:100%; min-width:0; }
-.official-detail-field { display:block; margin-top:3px; font-size:7pt; font-weight:600; }
-.official-static-answer { display:block; min-height:18px; color:#111; font-style:italic; }
 .official-textarea::placeholder { color:#6b7280; opacity:1; }
 .official-input { display:block; width:100%; min-height:18px; padding:1px 2px; color:#111; background:transparent; border:0; border-bottom:1px solid #bbb; border-radius:0; outline:none; font:inherit; }
 .official-input:focus,.official-textarea:focus { border-bottom:1px solid #111; }
@@ -97,9 +94,9 @@
 
 /* Keep every printed value inside the three fixed columns of the source form. */
 .official-table { width:100%; min-width:0; table-layout:fixed; }
-.official-table col.col-number { width:7.3%; }
-.official-table col.col-label { width:40.5%; }
-.official-table col.col-answer { width:52.2%; }
+.official-table col.col-number { width:5.3%; }
+.official-table col.col-label { width:43.2%; }
+.official-table col.col-answer { width:51.5%; }
 .official-table td {
   box-sizing:border-box;
   min-width:0;
