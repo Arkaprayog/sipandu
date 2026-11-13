@@ -48,6 +48,7 @@ export interface AssessmentControlIdentity {
   type: string;
   answerKey: string;
   name: string;
+  value: string;
 }
 
 /** Return the first mismatched control index, or null when both lists align. */
@@ -63,7 +64,8 @@ export function getAssessmentControlMismatchIndex(
       a.tagName !== b.tagName ||
       a.type !== b.type ||
       a.answerKey !== b.answerKey ||
-      a.name !== b.name
+      a.name !== b.name ||
+      a.value !== b.value
     ) return index;
   }
   return null;
