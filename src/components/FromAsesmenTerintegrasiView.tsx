@@ -8,16 +8,17 @@ import { backupAssessmentViaArchiveWorker, deleteCentralDriveFile, downloadAsses
 import { getIntegratedAssessmentBackupMetadata, saveIntegratedAssessmentBackupMetadata } from '../lib/firebase';
 import { printPreparedAssessmentWebView, printPdfFromDevice, savePdfToDevice } from '../lib/printing';
 import { createOfficialAssessmentPdf } from '../lib/assessmentPdf';
+import { OFFICIAL_ASSESSMENT_PDF_SECTION_COUNT } from '../lib/assessmentPagePlan';
 import { createPhotoPreviewBlob } from '../lib/photoFilePreview';
 import '../officialAssessment.css';
 
 type AnswerValue = string | string[];
-type FieldKind = 'text' | 'date' | 'number' | 'textarea' | 'single' | 'multi' | 'static';
+type FieldKind = 'text' | 'date' | 'number' | 'textarea' | 'single' | 'multi';
 interface OfficialField {
   key: string; number?: number; label: string; kind?: FieldKind;
   options?: string[]; optional?: boolean; placeholder?: string;
 }
-interface OfficialGroup { title?: string; tone?: 'gray' | 'beige' | 'white' | 'blue'; fields: OfficialField[]; }
+interface OfficialGroup { title?: string; tone?: 'gray' | 'beige' | 'white'; fields: OfficialField[]; }
 interface OfficialPage { groups: OfficialGroup[]; hasLetterhead?: boolean; }
 interface FromAsesmenTerintegrasiViewProps { ppksList: PPKSRecord[]; onSaveAssessment: (updated: PPKSRecord) => Promise<void>; initialSelectedPPKSId?: string; onBeforePrint?: (updated: PPKSRecord) => Promise<void>; }
 
@@ -520,9 +521,9 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
         display:table !important; width:100% !important; min-width:0 !important;
         max-width:100% !important; table-layout:fixed !important; border-spacing:0 !important;
       }
-      #${rootId} .official-table col.col-number { width:7.3% !important; }
-      #${rootId} .official-table col.col-label { width:40.5% !important; }
-      #${rootId} .official-table col.col-answer { width:52.2% !important; }
+      #${rootId} .official-table col.col-number { width:5.3% !important; }
+      #${rootId} .official-table col.col-label { width:43.2% !important; }
+      #${rootId} .official-table col.col-answer { width:51.5% !important; }
       #${rootId} .official-table td {
         box-sizing:border-box !important; min-width:0 !important; max-width:100% !important;
         white-space:normal !important; overflow-wrap:anywhere !important; word-break:normal !important;
@@ -611,7 +612,7 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
     if (document.fonts?.ready) await document.fonts.ready;
 
     const pages = Array.from(root.querySelectorAll<HTMLElement>('.official-page'));
-    if (pages.length !== 10) {
+    if (pages.length !== OFFICIAL_ASSESSMENT_PDF_SECTION_COUNT) {
       root.remove();
       throw new Error('Enam halaman formulir asli dan empat halaman lampiran foto harus tersedia. Ditemukan ' + pages.length + ' bagian.');
     }
@@ -1117,9 +1118,6 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
           })}
         </div>
       );
-    }
-    if (item.kind === 'static') {
-      return <span className="official-static-answer">{item.placeholder || '—'}</span>;
     }
     if (item.kind === 'textarea') {
       return (
