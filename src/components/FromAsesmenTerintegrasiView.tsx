@@ -1183,15 +1183,43 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
                     else updateAnswer(item.key, checked ? '' : option);
                   }}
                 />
-                <span className="official-option-number">{index + 1}.</span><span>{option}</span>
+                {!/^\\d+[.)]\\s/.test(option) && <span className="official-option-number">{index + 1}.</span>}<span>{option}</span>
               </label>
             );
           })}
         </div>
       );
     }
+    if (item.kind === 'static') {
+      return <span className="official-static-answer">{item.placeholder || '—'}</span>;
+    }
     if (item.kind === 'textarea') {
-      return <textarea data-answer-key={item.key} className="official-input official-textarea" rows={3} value={typeof value === 'string' ? value : value.join(', ')} onChange={(event) => updateAnswer(item.key, event.target.value)} aria-label={item.label} />;
+      return (
+        <div className="official-textarea-group">
+          <textarea
+            data-answer-key={item.key}
+            className="official-input official-textarea"
+            rows={3}
+            value={typeof value === 'string' ? value : value.join(', ')}
+            placeholder={item.placeholder || ''}
+            onChange={(event) => updateAnswer(item.key, event.target.value)}
+            aria-label={item.label}
+          />
+          {item.detailKey && (
+            <label className="official-detail-field">
+              Sebutkan:
+              <textarea
+                data-answer-key={item.detailKey}
+                className="official-input official-textarea"
+                rows={2}
+                value={String(answers[item.detailKey] ?? '')}
+                onChange={(event) => updateAnswer(item.detailKey!, event.target.value)}
+                aria-label={item.label + ' — Sebutkan'}
+              />
+            </label>
+          )}
+        </div>
+      );
     }
     return (
       <input
