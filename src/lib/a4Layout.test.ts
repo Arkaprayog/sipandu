@@ -35,15 +35,15 @@ test('A4 placement respects margins and keeps each page image ratio', () => {
   assert.throws(() => fitImageToA4(0, 10), /Ukuran gambar/);
 });
 
-test('PDFDocument preserves ten pages at exact A4 size', async () => {
+test('PDFDocument preserves twelve pages at exact A4 size', async () => {
   const pdf = await PDFDocument.create();
-  for (let index = 0; index < 10; index += 1) {
+  for (let index = 0; index < 12; index += 1) {
     const page = pdf.addPage([A4_WIDTH_PT, A4_HEIGHT_PT]);
     page.drawRectangle({ x: PAGE_MARGIN_PT, y: PAGE_MARGIN_PT, width: 10, height: 10 });
   }
   const bytes = await pdf.save({ useObjectStreams: true });
   const reopened = await PDFDocument.load(bytes);
-  assert.equal(reopened.getPageCount(), 10);
+  assert.equal(reopened.getPageCount(), 12);
   for (const page of reopened.getPages()) {
     const size = page.getSize();
     assert.ok(Math.abs(size.width - A4_WIDTH_PT) < 0.001);
