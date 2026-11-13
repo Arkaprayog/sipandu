@@ -26,14 +26,17 @@ test('assessment capture width remains fixed when long text overflows a table ce
  
 test('assessment PDF controls are matched to the same question before values are stamped', () => {
   const source = [
-    { tagName: 'input', type: 'text', answerKey: 'q4', name: '' },
-    { tagName: 'input', type: 'checkbox', answerKey: 'q5', name: 'q5' },
+    { tagName: 'input', type: 'text', answerKey: 'q4', name: '', value: '' },
+    { tagName: 'input', type: 'checkbox', answerKey: 'q5', name: 'q5', value: 'Ya' },
   ];
   const identical = source.map((item) => ({ ...item }));
   assert.equal(getAssessmentControlMismatchIndex(source, identical), null);
 
   const shifted = [identical[1], identical[0]];
   assert.equal(getAssessmentControlMismatchIndex(source, shifted), 0);
+  const wrongOption = identical.map((item) => ({ ...item }));
+  wrongOption[1].value = 'Tidak';
+  assert.equal(getAssessmentControlMismatchIndex(source, wrongOption), 1);
   assert.equal(getAssessmentControlMismatchIndex(source, identical.slice(0, 1)), 1);
 });
 
