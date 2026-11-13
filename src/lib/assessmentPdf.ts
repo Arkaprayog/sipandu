@@ -187,7 +187,7 @@ async function renderAssessmentPage(
 }
 
 /**
- * Renders the six original assessment sheets and four photo appendices as A4 pages.
+ * Renders the eight-page latest assessment template and four photo appendices as A4 pages.
  * Over-height answer sheets are split at measured table-row boundaries so long answers
  * wrap inside their columns without shrinking the entire page or cutting a row in half.
  * Rendering retries at lower resolution on memory-constrained mobile devices.
@@ -201,8 +201,8 @@ export async function createOfficialAssessmentPdf(
   }
 
   const pdf = await PDFDocument.create();
-  const formPages = pages.slice(0, 6);
-  const photoPages = pages.slice(6, 10);
+  const formPages = pages.slice(0, 8);
+  const photoPages = pages.slice(8, 12);
   let nextPdfPageNumber = 1;
 
   const appendRenderedPages = async (element: HTMLElement, pageNumber: number): Promise<number> => {
