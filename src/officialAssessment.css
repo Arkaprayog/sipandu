@@ -83,6 +83,10 @@
 .official-group-title.beige td { background:#e9e5cb; text-align:center; }
 .official-group-title.white td { background:#fff; }
 .official-group-title.blue td { background:#dceaf7; text-align:center; font-weight:700; }
+.official-textarea-group { display:block; width:100%; min-width:0; }
+.official-detail-field { display:block; margin-top:3px; font-size:7pt; font-weight:600; }
+.official-static-answer { display:block; min-height:18px; color:#111; font-style:italic; }
+.official-textarea::placeholder { color:#6b7280; opacity:1; }
 .official-input { display:block; width:100%; min-height:18px; padding:1px 2px; color:#111; background:transparent; border:0; border-bottom:1px solid #bbb; border-radius:0; outline:none; font:inherit; }
 .official-input:focus,.official-textarea:focus { border-bottom:1px solid #111; }
 .official-textarea { display:block; width:100%; min-height:36px; resize:vertical; padding:2px; color:#111; background:transparent; border:0; border-bottom:1px solid #bbb; border-radius:0; outline:none; font:inherit; }
