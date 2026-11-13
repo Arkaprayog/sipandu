@@ -579,10 +579,12 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
         grid-template-columns:24mm 1fr 24mm !important;
       }
       #${rootId} .official-letterhead-lock { display:none !important; }
+      #${rootId} .official-numbering { width:78% !important; margin:0 auto 6mm !important; }
       #${rootId} .official-kemensos-logo img { width:18mm !important; height:18mm !important; }
       #${rootId} .official-atensi-logo img { width:22mm !important; height:22mm !important; }
       #${rootId} .official-letterhead-title { font-size:10pt !important; line-height:1.25 !important; }
       #${rootId} .official-letterhead-title span { font-size:9pt !important; }
+      #${rootId} .official-group-title.blue td { background:#dceaf7 !important; text-align:center !important; }
       #${rootId} .official-table { font-size:7pt !important; }
       #${rootId} .official-table td { padding:1.5px 2px !important; }
       #${rootId} .official-page:not(.official-photo-appendix) { overflow:visible !important; }
@@ -590,9 +592,9 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
         display:table !important; width:100% !important; min-width:0 !important;
         max-width:100% !important; table-layout:fixed !important; border-spacing:0 !important;
       }
-      #${rootId} .official-table col.col-number { width:5.3% !important; }
-      #${rootId} .official-table col.col-label { width:43.2% !important; }
-      #${rootId} .official-table col.col-answer { width:51.5% !important; }
+      #${rootId} .official-table col.col-number { width:7.3% !important; }
+      #${rootId} .official-table col.col-label { width:40.5% !important; }
+      #${rootId} .official-table col.col-answer { width:52.2% !important; }
       #${rootId} .official-table td {
         box-sizing:border-box !important; min-width:0 !important; max-width:100% !important;
         white-space:normal !important; overflow-wrap:anywhere !important; word-break:normal !important;
@@ -1365,7 +1367,6 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
 
           {pageIndex === 7 && (
             <>
-              <p className="official-footer-note">** Perlu melampirkan foto/dokumen. Foto PPKS dapat dilakukan dengan closeup.</p>
               <div className="official-signature"><div>Petugas</div><div className="official-signature-line">( ........................................ )</div></div>
             </>
           )}
