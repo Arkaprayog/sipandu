@@ -1287,7 +1287,7 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
         <section className="official-page official-photo-appendix" key={photo.key} aria-label={photo.title}>
           <div className="official-photo-appendix-heading">
             <h2>{photo.title}</h2>
-            <p>Form Asesmen Terintegrasi · Halaman {index + 7} dari 10</p>
+            <p>Lampiran foto Form Asesmen Terintegrasi</p>
             <div className="official-photo-respondent">
               <span>Nama PPKS: <strong>{currentPPKS.namaLengkap || '-'}</strong></span>
               <span>NIK: <strong>{currentPPKS.nik || 'Belum terpetakan'}</strong></span>
