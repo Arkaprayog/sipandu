@@ -221,6 +221,12 @@ const sourcePages: OfficialPage[] = [
 // Four photo appendices are appended after these six pages during rendering.
 const pages: OfficialPage[] = sourcePages;
 
+const resizeAssessmentTextarea = (element: HTMLTextAreaElement | null): void => {
+  if (!element) return;
+  element.style.height = 'auto';
+  element.style.height = Math.max(element.scrollHeight, 36) + 'px';
+};
+
 const emptyAnswers = (): Record<string, AnswerValue> => {
   const values: Record<string, AnswerValue> = { metaSatker: '', metaYear: '', metaSequence: '', q25: '-' };
   for (let n = 1; n <= 91; n++) values['q' + n] = '';
@@ -513,7 +519,6 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
       #${rootId} .official-atensi-logo img { width:22mm !important; height:22mm !important; }
       #${rootId} .official-letterhead-title { font-size:10pt !important; line-height:1.25 !important; }
       #${rootId} .official-letterhead-title span { font-size:9pt !important; }
-      #${rootId} .official-group-title.blue td { background:#dceaf7 !important; text-align:center !important; }
       #${rootId} .official-table { font-size:7pt !important; }
       #${rootId} .official-table td { padding:1.5px 2px !important; }
       #${rootId} .official-page:not(.official-photo-appendix) { overflow:visible !important; }
@@ -1123,12 +1128,17 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
       return (
         <div className="official-textarea-group">
           <textarea
+            key={selectedPPKSId + ':' + item.key}
+            ref={resizeAssessmentTextarea}
             data-answer-key={item.key}
             className="official-input official-textarea"
             rows={3}
             value={typeof value === 'string' ? value : value.join(', ')}
             placeholder={item.placeholder || ''}
-            onChange={(event) => updateAnswer(item.key, event.target.value)}
+            onChange={(event) => {
+              resizeAssessmentTextarea(event.currentTarget);
+              updateAnswer(item.key, event.target.value);
+            }}
             aria-label={item.label}
           />
         </div>
