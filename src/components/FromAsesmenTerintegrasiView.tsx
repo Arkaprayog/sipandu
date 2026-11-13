@@ -526,8 +526,9 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
       #${rootId} .official-table td { padding:1.5px 2px !important; }
       #${rootId} .official-page:not(.official-photo-appendix) { overflow:visible !important; }
       #${rootId} .official-table {
-        display:table !important; width:100% !important; min-width:0 !important;
-        max-width:100% !important; table-layout:fixed !important; border-spacing:0 !important;
+        display:table !important; width:170mm !important; min-width:0 !important;
+        max-width:100% !important; margin-left:auto !important; margin-right:auto !important;
+        table-layout:fixed !important; border-spacing:0 !important;
       }
       #${rootId} .official-table col.col-number { width:7.3% !important; }
       #${rootId} .official-table col.col-label { width:40.3% !important; }
