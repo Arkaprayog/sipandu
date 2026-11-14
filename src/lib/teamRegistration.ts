@@ -7,6 +7,8 @@ type ApiResponse = {
   ready?: boolean;
   message?: string;
   missing?: string[];
+  status?: string;
+  role?: string;
 };
 
 async function requestJson(path: string, user: User): Promise<ApiResponse> {
@@ -35,6 +37,10 @@ async function requestJson(path: string, user: User): Promise<ApiResponse> {
  * team code, approval, or client-supplied role is accepted.
  */
 export async function activateVerifiedTeamMember(user: User): Promise<void> {
-  await requestJson('/activate', user);
+  const result = await requestJson('/activate', user);
+  if (result.status !== 'active' || result.role !== 'anggota') {
+    throw new Error(result.message || 'Worker belum mengaktifkan akun sebagai anggota SIPANDU.');
+  }
+  // Force a new token so Firebase custom claims include the server-issued role.
   await user.getIdToken(true);
 }
