@@ -1,6 +1,7 @@
 import React, { useRef, useState } from 'react';
 import { onAuthStateChanged, signInWithEmailAndPassword, sendEmailVerification, signOut, type User as FirebaseUser } from 'firebase/auth';
-import { auth, staffAuthPersistenceReady } from '../lib/firebase';
+import { auth, staffAuthPersistenceReady, createSIPANDUUserProfile, getSIPANDUUserProfile } from '../lib/firebase';
+import { activateVerifiedTeamMember } from '../lib/teamRegistration';
 import { authenticateBiometricLock, isBiometricLockEnabled } from '../lib/biometricLock';
 import { Lock, User, Eye, EyeOff, Fingerprint, ArrowRight } from 'lucide-react';
 import { publicAssetUrl } from '../lib/publicAssets';
@@ -156,6 +157,34 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
         }
         return;
       }
+      // A verified account without a server-issued role is not yet an active SIPANDU member.
+      // Complete activation here; email verification alone must never skip role issuance.
+      if (credential.user.emailVerified && !existingStaffRole) {
+        try {
+          // Recover a profile if the original registration was interrupted after
+          // Firebase Auth created the account but before Firestore profile creation.
+          const existingProfile = await getSIPANDUUserProfile(credential.user.uid);
+          if (!existingProfile) {
+            await createSIPANDUUserProfile(
+              credential.user.uid,
+              credential.user.email || email.trim(),
+              { nama: credential.user.displayName || 'Pengguna SIPANDU', nip: '', jabatan: '', unitKerja: '', noHp: '', photoUrl: '' },
+            );
+          }
+          await activateVerifiedTeamMember(credential.user);
+          const activatedClaims = await credential.user.getIdTokenResult(true);
+          if (activatedClaims.claims.role !== 'anggota') {
+            throw new Error('Aktivasi belum menerbitkan peran anggota. Silakan coba lagi atau hubungi administrator SIPANDU.');
+          }
+        } catch (activationError) {
+          try { await signOut(auth); } catch { /* keep the account recoverable on the next login */ }
+          setErrorMsg(activationError instanceof Error
+            ? activationError.message
+            : 'Aktivasi akun SIPANDU belum berhasil. Silakan coba kembali.');
+          return;
+        }
+      }
+
       onLogin(credential.user.displayName || credential.user.email || 'Pengguna SIPANDU');
     } catch (error) {
       const code = (error as { code?: string })?.code;
