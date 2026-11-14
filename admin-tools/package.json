@@ -3,7 +3,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "set-role": "node set-user-role.mjs"
+    "set-role": "node set-user-role.mjs",
+    "cleanup-accounts": "node cleanup-accounts.mjs"
   },
   "dependencies": {
     "firebase-admin": "^13.0.0"
