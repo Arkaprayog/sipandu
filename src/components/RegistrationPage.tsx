@@ -4,6 +4,7 @@ import { ArrowLeft, Eye, EyeOff, UserPlus, MailCheck } from 'lucide-react';
 import { auth, staffAuthPersistenceReady, createSIPANDUUserProfile } from '../lib/firebase';
 import { publicAssetUrl } from '../lib/publicAssets';
 import { TEAM_REGISTRATION_API } from '../lib/teamRegistration';
+import { REGISTRATION_RECOVERY_NOTICE, shouldOfferRegistrationRecovery } from '../lib/registrationRecovery';
 
 interface RegistrationPageProps {
   onBack: (email?: string, notice?: string) => void;
@@ -19,10 +20,12 @@ export const RegistrationPage: React.FC<RegistrationPageProps> = ({ onBack }) =>
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [completed, setCompleted] = useState(false);
+  const [canResumeRegistration, setCanResumeRegistration] = useState(false);
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     setError('');
+    setCanResumeRegistration(false);
     if (password.length < 8) {
       setError('Password minimal 8 karakter.');
       return;
@@ -32,10 +35,12 @@ export const RegistrationPage: React.FC<RegistrationPageProps> = ({ onBack }) =>
       return;
     }
     setIsSubmitting(true);
+    let firebaseAccountCreated = false;
+    const normalizedEmail = email.trim().toLowerCase();
     try {
       await staffAuthPersistenceReady;
-      const normalizedEmail = email.trim().toLowerCase();
       const credential = await createUserWithEmailAndPassword(auth, normalizedEmail, password);
+      firebaseAccountCreated = true;
       await updateProfile(credential.user, { displayName: nama.trim() });
       await createSIPANDUUserProfile(credential.user.uid, normalizedEmail, {
         nama: nama.trim(),
@@ -73,8 +78,15 @@ export const RegistrationPage: React.FC<RegistrationPageProps> = ({ onBack }) =>
       else if (code === 'auth/invalid-email') message = 'Format email belum benar.';
       else if (code === 'auth/weak-password') message = 'Password terlalu lemah. Gunakan minimal 8 karakter.';
       else if (code === 'auth/operation-not-allowed') message = 'Pendaftaran email dan password belum diaktifkan di Firebase Authentication.';
-      // If a network failure happened after Firebase created the account,
-      // keep the session closed and explain the failure instead of claiming success.
+      const offerRecovery = shouldOfferRegistrationRecovery(firebaseAccountCreated, code);
+      if (offerRecovery) {
+        message = code === 'auth/email-already-in-use'
+          ? `Email ini sudah terdaftar. ${REGISTRATION_RECOVERY_NOTICE}`
+          : `${message} ${REGISTRATION_RECOVERY_NOTICE}`;
+        setCanResumeRegistration(true);
+      }
+      // A failure after Firebase creates the account must never encourage a
+      // second registration. Route the user through the idempotent login recovery flow.
       if (auth.currentUser) {
         try { await signOut(auth); } catch { /* the user can retry from the login screen */ }
       }
@@ -124,6 +136,15 @@ export const RegistrationPage: React.FC<RegistrationPageProps> = ({ onBack }) =>
           ) : (
             <>
               {error && <div role="alert" className="mb-3 rounded-lg border border-red-400 bg-red-100/95 p-3 text-center text-xs font-medium text-black">{error}</div>}
+              {canResumeRegistration && (
+                <button
+                  type="button"
+                  onClick={() => onBack(normalizedEmail, REGISTRATION_RECOVERY_NOTICE)}
+                  className="mb-3 w-full rounded-xl border border-teal-800 bg-white/90 px-4 py-3 text-sm font-bold text-teal-900 underline-offset-4 hover:bg-teal-50"
+                >
+                  Lanjutkan pendaftaran lewat login
+                </button>
+              )}
               <form onSubmit={(event) => void handleSubmit(event)} className="space-y-2.5">
                 <label className="block text-xs font-semibold text-black">Nama
                   <input value={nama} onChange={(event) => setNama(event.target.value)} autoComplete="name" maxLength={120} required placeholder="Nama lengkap" className="mt-1 w-full rounded-lg border border-white bg-white/75 px-3 py-2.5 text-sm text-black placeholder-slate-500 outline-none focus:border-teal-700 focus:ring-2 focus:ring-teal-700/20" />
