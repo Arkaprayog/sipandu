@@ -139,7 +139,7 @@ export const RegistrationPage: React.FC<RegistrationPageProps> = ({ onBack }) =>
               {canResumeRegistration && (
                 <button
                   type="button"
-                  onClick={() => onBack(normalizedEmail, REGISTRATION_RECOVERY_NOTICE)}
+                  onClick={() => onBack(email.trim().toLowerCase(), REGISTRATION_RECOVERY_NOTICE)}
                   className="mb-3 w-full rounded-xl border border-teal-800 bg-white/90 px-4 py-3 text-sm font-bold text-teal-900 underline-offset-4 hover:bg-teal-50"
                 >
                   Lanjutkan pendaftaran lewat login
