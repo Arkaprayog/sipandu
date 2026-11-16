@@ -877,13 +877,14 @@ export default {
           return jsonResponse({ ok: true, status: 'in_progress', message: 'Analisis liveness masih diproses.' }, 202, origin);
         }
         if (result.Status !== 'SUCCEEDED' || typeof result.Confidence !== 'number') {
-          await callLivenessStore(env, challengeId, 'verify-complete', { passed: false });
+          await callLivenessStore(env, challengeId, 'verify-complete', { uid: applicant.localId, passed: false });
           return jsonResponse({ ok: false, status: 'failed', message: 'Pemeriksaan wajah tidak berhasil. Silakan ulangi dengan sesi baru.' }, 403, origin);
         }
         const threshold = livenessConfidenceThreshold(env);
         const passed = result.Confidence >= threshold;
         const proofToken = passed ? crypto.randomUUID() : '';
         await callLivenessStore(env, challengeId, 'verify-complete', {
+          uid: applicant.localId,
           passed,
           confidence: result.Confidence,
           proofToken,
