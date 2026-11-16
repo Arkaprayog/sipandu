@@ -570,7 +570,7 @@ export default {
           message: permission.status === 'checked'
             ? permission.granted
               ? 'Konfigurasi tersedia dan izin firebaseauth.users.update terdeteksi.'
-              : 'Service account Worker belum memiliki izin firebaseauth.users.update pada proyek Firebase.'
+              : 'Service account Worker belum memiliki izin IAM firebaseauth.users.update pada proyek Firebase.'
             : 'Konfigurasi tersedia, tetapi pemeriksaan izin IAM Google belum dapat diselesaikan.',
         }, 200, origin);
       } catch {
