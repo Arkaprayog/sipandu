@@ -99,6 +99,7 @@ interface LivenessDurableObjectStorage {
   put<T = unknown>(key: string, value: T): Promise<void>;
   delete(key: string): Promise<boolean>;
   setAlarm?(scheduledTime: number): Promise<void>;
+  deleteAlarm?(): Promise<void>;
 }
 interface LivenessDurableObjectState {
   storage: LivenessDurableObjectStorage;
@@ -160,7 +161,11 @@ async function sha256Hex(value: string): Promise<string> {
 }
 
 async function hmacSha256(key: Uint8Array, value: string): Promise<Uint8Array> {
-  const imported = await crypto.subtle.importKey('raw', key, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  // WebCrypto TypeScript definitions require an ArrayBuffer-backed view;
+  // normalize keys that may be backed by SharedArrayBuffer before import.
+  const keyBuffer = new ArrayBuffer(key.byteLength);
+  new Uint8Array(keyBuffer).set(key);
+  const imported = await crypto.subtle.importKey('raw', keyBuffer, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
   const signature = await crypto.subtle.sign('HMAC', imported, new TextEncoder().encode(value));
   return new Uint8Array(signature);
 }
