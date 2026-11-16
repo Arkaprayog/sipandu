@@ -113,6 +113,7 @@ interface LivenessDurableObjectNamespace {
 interface LivenessChallengeRecord {
   challengeId: string;
   sessionId: string;
+  emailHash: string;
   consentVersion: string;
   consentAcceptedAt: number;
   createdAt: number;
@@ -121,6 +122,7 @@ interface LivenessChallengeRecord {
   status: 'created' | 'verifying' | 'passed' | 'failed';
   proofToken?: string;
   confidence?: number;
+  verifiedAt?: number;
   proofExpiresAt?: number;
   consumedAt?: number;
 }
@@ -746,6 +748,10 @@ export default {
         return jsonResponse({ ok: false, code: 'LIVENESS_NOT_CONFIGURED', missing, message: 'Verifikasi wajah belum dapat digunakan karena layanan AWS belum dikonfigurasi administrator.' }, 503, origin);
       }
       const body = await parseJson(request);
+      const normalizedEmail = typeof body?.email === 'string' ? body.email.trim().toLowerCase() : '';
+      if (!normalizedEmail || normalizedEmail.length > 254 || !/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(normalizedEmail)) {
+        return jsonResponse({ ok: false, message: 'Masukkan email pendaftaran yang valid sebelum memulai pemeriksaan wajah.' }, 400, origin);
+      }
       const consentVersion = env.LIVENESS_CONSENT_VERSION || '2026-11-16-v1';
       if (body?.consentVersion !== consentVersion) {
         return jsonResponse({ ok: false, code: 'LIVENESS_CONSENT_REQUIRED', message: 'Persetujuan pemrosesan video wajah belum diberikan atau sudah berubah.' }, 400, origin);
@@ -760,6 +766,7 @@ export default {
         const now = Date.now();
         await callLivenessStore(env, challengeId, 'create', {
           sessionId: created.SessionId,
+          emailHash: await sha256Hex(normalizedEmail),
           consentVersion,
           consentAcceptedAt: now,
           createdAt: now,
@@ -1113,7 +1120,7 @@ export default {
               region: livenessRegion(env),
               status: 'passed',
               confidence: evidence.confidence,
-              verifiedAt: evidence.proofExpiresAt ? evidence.proofExpiresAt - 10 * 60 * 1000 : Date.now(),
+              verifiedAt: evidence.verifiedAt || Date.now(),
               consentVersion: evidence.consentVersion,
               consentAcceptedAt: evidence.consentAcceptedAt,
             };
@@ -1382,14 +1389,16 @@ export class LivenessChallengeStore {
       if (record) return respond({ ok: false, message: 'Challenge sudah pernah dibuat.' }, 409);
       const sessionId = typeof body.sessionId === 'string' ? body.sessionId : '';
       const challengeId = typeof body.challengeId === 'string' ? body.challengeId : '';
+      const emailHash = typeof body.emailHash === 'string' ? body.emailHash : '';
       const consentVersion = typeof body.consentVersion === 'string' ? body.consentVersion : '';
       const createdAt = Number(body.createdAt || now);
       const expiresAt = Number(body.expiresAt || 0);
-      if (!sessionId || !challengeId || !consentVersion || expiresAt <= now || expiresAt > now + 11 * 60 * 1000) {
+      if (!sessionId || !challengeId || !emailHash || !/^[0-9a-f]{64}$/i.test(emailHash)
+        || !consentVersion || expiresAt <= now || expiresAt > now + 11 * 60 * 1000) {
         return respond({ ok: false, message: 'Data challenge liveness tidak valid.' }, 400);
       }
       record = {
-        challengeId, sessionId, consentVersion,
+        challengeId, sessionId, emailHash, consentVersion,
         consentAcceptedAt: Number(body.consentAcceptedAt || now),
         createdAt, expiresAt, status: 'created',
       };
@@ -1427,6 +1436,7 @@ export class LivenessChallengeStore {
       record.status = passed ? 'passed' : 'failed';
       if (passed) {
         record.proofToken = typeof body.proofToken === 'string' ? body.proofToken : '';
+        record.verifiedAt = now;
         record.proofExpiresAt = Number(body.proofExpiresAt || 0);
         if (!record.proofToken || record.proofExpiresAt <= now || record.proofExpiresAt > now + 11 * 60 * 1000) {
           return respond({ ok: false, message: 'Token bukti liveness tidak valid.' }, 400);
@@ -1439,7 +1449,8 @@ export class LivenessChallengeStore {
 
     if (action === 'consume-proof') {
       if (record.status !== 'passed' || record.consumedAt || record.proofExpiresAt === undefined
-        || record.proofExpiresAt < now || body.proofToken !== record.proofToken) {
+        || record.proofExpiresAt < now || body.proofToken !== record.proofToken
+        || body.emailHash !== record.emailHash) {
         return respond({ ok: false, message: 'Bukti liveness tidak valid, kedaluwarsa, atau telah digunakan.' }, 409);
       }
       record.consumedAt = now;
