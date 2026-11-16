@@ -1370,7 +1370,7 @@ export class LivenessChallengeStore {
   constructor(private readonly state: LivenessDurableObjectState) {}
 
   async fetch(request: Request): Promise<Response> {
-    const action = new URL(request.url).pathname.replace(/^\\//, '');
+    const action = new URL(request.url).pathname.replace(/^\//, '');
     const body = await request.json().catch(() => ({})) as Record<string, unknown>;
     const now = Date.now();
     let record = await this.state.storage.get<LivenessChallengeRecord>('record');
