@@ -13,16 +13,17 @@ function fakeUser() {
 test('verified member activation requires Worker to issue anggota role and refreshes token', async () => {
   const originalFetch = globalThis.fetch;
   const fake = fakeUser();
-  let requestUrl = '';
+  const requests: string[] = [];
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-    requestUrl = String(input);
+    requests.push(String(input));
     assert.equal(init?.method, 'POST');
     assert.match(String((init?.headers as Record<string, string>)?.Authorization), /^Bearer firebase-id-token$/);
     return new Response(JSON.stringify({ ok: true, status: 'active', role: 'anggota' }), { status: 200 });
   }) as typeof fetch;
   try {
     await activateVerifiedTeamMember(fake.user);
-    assert.match(requestUrl, /\/activate$/);
+    assert.match(requests[0], /\/activate$/);
+    assert.deepEqual(requests.length, 1);
     assert.deepEqual(fake.calls, [true, true]);
   } finally { globalThis.fetch = originalFetch; }
 });
@@ -37,12 +38,50 @@ test('activation rejects a successful HTTP response that did not issue anggota r
   } finally { globalThis.fetch = originalFetch; }
 });
 
-test('activation surfaces Worker error and does not refresh claims on failure', async () => {
+test('activation failure automatically checks IAM and explains a missing role-update permission', async () => {
   const originalFetch = globalThis.fetch;
   const fake = fakeUser();
-  globalThis.fetch = (async () => new Response(JSON.stringify({ ok: false, message: 'Izin IAM belum tersedia.' }), { status: 503 })) as typeof fetch;
+  const requests: string[] = [];
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    const url = String(input);
+    requests.push(url);
+    if (url.endsWith('/activate')) {
+      return new Response(JSON.stringify({ ok: false, message: 'Firebase menolak pemberian peran anggota.' }), { status: 503 });
+    }
+    return new Response(JSON.stringify({
+      ok: true,
+      configurationReady: true,
+      permissionCheckStatus: 'checked',
+      roleUpdatePermission: false,
+    }), { status: 200 });
+  }) as typeof fetch;
   try {
-    await assert.rejects(() => activateVerifiedTeamMember(fake.user), /Izin IAM belum tersedia/);
-    assert.deepEqual(fake.calls, [true]);
+    await assert.rejects(
+      () => activateVerifiedTeamMember(fake.user),
+      /belum memiliki izin IAM firebaseauth\.users\.update/,
+    );
+    assert.match(requests[0], /\/activate$/);
+    assert.match(requests[1], /\/activation-diagnostics$/);
+    assert.deepEqual(fake.calls, [true, true]);
+  } finally { globalThis.fetch = originalFetch; }
+});
+
+test('activation diagnostics never convert an unavailable IAM check into successful activation', async () => {
+  const originalFetch = globalThis.fetch;
+  const fake = fakeUser();
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    if (String(input).endsWith('/activate')) {
+      return new Response(JSON.stringify({ ok: false, message: 'Aktivasi gagal.' }), { status: 503 });
+    }
+    return new Response(JSON.stringify({
+      ok: true,
+      configurationReady: true,
+      permissionCheckStatus: 'unavailable',
+      roleUpdatePermission: null,
+    }), { status: 200 });
+  }) as typeof fetch;
+  try {
+    await assert.rejects(() => activateVerifiedTeamMember(fake.user), /belum dapat dipastikan/);
+    assert.deepEqual(fake.calls, [true, true]);
   } finally { globalThis.fetch = originalFetch; }
 });
