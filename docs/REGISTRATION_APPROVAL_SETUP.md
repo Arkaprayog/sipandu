@@ -35,7 +35,7 @@ Worker `sipandu-registration` memerlukan:
 - Secret `FIREBASE_SERVICE_ACCOUNT_JSON` dengan izin minimum untuk memperbarui custom claims Firebase Authentication
 - KV binding `PENDING_REGISTRATIONS`
 
-Periksa `GET /health` untuk konfigurasi yang hilang. Endpoint health hanya mengonfirmasi binding/secret tersedia, bukan membuktikan bahwa nilai service account benar atau izin IAM efektif. Uji aktivasi nyata tetap diperlukan.
+Periksa `GET /health` untuk konfigurasi yang hilang. Endpoint health hanya mengonfirmasi binding/secret tersedia, bukan membuktikan bahwa nilai service account benar atau izin IAM efektif. Setelah login dengan akun yang gagal diaktifkan, Worker juga menyediakan `POST /activation-diagnostics` (Bearer Firebase ID token). Endpoint ini memeriksa status email/akun dan memanggil `projects.testIamPermissions` sebagai service account untuk memeriksa `firebaseauth.users.update` tanpa mengubah klaim pengguna. Hasil `permissionCheckStatus=checked` dan `roleUpdatePermission=false` berarti izin IAM memang belum tersedia; `unavailable` berarti pemeriksaan Google belum berhasil dan bukan bukti izin ada atau tidak ada. Uji aktivasi nyata tetap diperlukan.
 
 ## Fitur undangan lama
 

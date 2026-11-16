@@ -79,3 +79,10 @@ The Turnstile widget is registered for `sipanduodhiv.my.id` and `sipandu.arypray
 ## Origins
 
 The Worker currently allows the production app origin and the Capacitor localhost origins used by the Android app. Add any future production hostname deliberately to `ALLOWED_ORIGINS` before using it.
+
+
+## Firebase activation diagnostics
+
+The authenticated `POST /activation-diagnostics` endpoint checks the current Firebase account state and tests whether the service account configured in `FIREBASE_SERVICE_ACCOUNT_JSON` has `firebaseauth.users.update` on the configured project. It uses the Google Cloud Resource Manager `projects.testIamPermissions` method with a cloud-platform OAuth scope. This diagnostic does not modify user claims or account data. A checked result with the permission absent is actionable; an unavailable result is inconclusive and must not be treated as success.
+
+The endpoint reports only booleans and configuration names. It never returns the service-account email, key, access token, or upstream error body.
