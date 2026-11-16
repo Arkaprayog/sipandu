@@ -84,6 +84,10 @@ export const RegistrationPage: React.FC<RegistrationPageProps> = ({ onBack, resu
   };
 
   const retryLiveness = async () => {
+    if (!livenessConsent) {
+      setError('Persetujuan pemeriksaan video wajah perlu diberikan sebelum melanjutkan.');
+      return;
+    }
     const user = auth.currentUser;
     if (!user) {
       setError('Sesi akun tidak ditemukan. Masuk kembali untuk melanjutkan pendaftaran.');
@@ -274,6 +278,17 @@ export const RegistrationPage: React.FC<RegistrationPageProps> = ({ onBack, resu
                 </p>
               </div>
               {error && <div role="alert" className="rounded-lg border border-red-400 bg-red-100/95 p-3 text-center text-xs font-medium text-black">{error}</div>}
+              <label className="flex items-start gap-2 rounded-lg border border-slate-300 bg-white p-3 text-[11px] leading-relaxed text-slate-800">
+                <input
+                  type="checkbox"
+                  checked={livenessConsent}
+                  onChange={(event) => setLivenessConsent(event.target.checked)}
+                  className="mt-0.5 h-4 w-4 shrink-0 accent-teal-700"
+                />
+                <span>
+                  Saya menyetujui pemeriksaan video wajah langsung oleh Amazon Rekognition untuk memeriksa keaslian pendaftar. Video digunakan untuk proses verifikasi sesuai layanan AWS.
+                </span>
+              </label>
               {isFinishingRegistration ? (
                 <div className="rounded-lg bg-slate-100 p-4 text-center text-sm font-semibold">Menyimpan pendaftaran dan mengirim tautan verifikasi email…</div>
               ) : livenessSession && livenessIdToken ? (
