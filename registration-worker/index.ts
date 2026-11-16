@@ -1,3 +1,5 @@
+import { LIVENESS_UI_HTML, LIVENESS_UI_JS } from './liveness-ui.ts';
+
 interface KVBinding {
   get(key: string): Promise<string | null>;
   put(key: string, value: string, options?: { expirationTtl?: number }): Promise<void>;
@@ -113,6 +115,7 @@ interface LivenessDurableObjectNamespace {
 }
 interface LivenessChallengeRecord {
   challengeId: string;
+  uid: string;
   sessionId: string;
   consentVersion: string;
   consentAcceptedAt: number;
@@ -362,6 +365,28 @@ async function allowAttempt(env: Env, request: Request, limit = 12): Promise<boo
   if (existing >= limit) return false;
   await env.PENDING_REGISTRATIONS.put(storageKey, String(existing + 1), { expirationTtl: 60 });
   return true;
+}
+
+async function lookupLivenessApplicant(env: Env, request: Request): Promise<FirebaseUserLookup> {
+  const authorization = request.headers.get('Authorization') || '';
+  const idToken = authorization.startsWith('Bearer ') ? authorization.slice(7).trim() : '';
+  if (!idToken) throw new Error('Sesi Firebase belum tersedia. Masuk kembali ke SIPANDU.');
+  const user = await lookupFirebaseUser(env, idToken);
+  if (!user.localId || !user.email || user.disabled) {
+    throw new Error('Akun Firebase tidak valid atau sudah dinonaktifkan.');
+  }
+  if (user.emailVerified) {
+    throw new Error('Pemeriksaan ini hanya tersedia untuk proses pendaftaran akun baru yang belum memverifikasi email.');
+  }
+  let claims: Record<string, unknown> = {};
+  try {
+    claims = user.customAttributes ? JSON.parse(user.customAttributes) as Record<string, unknown> : {};
+    if (!claims || typeof claims !== 'object' || Array.isArray(claims)) throw new Error('Invalid claims');
+  } catch {
+    throw new Error('Klaim akun tidak dapat diverifikasi.');
+  }
+  if (claims.role) throw new Error('Akun yang sudah memiliki peran SIPANDU tidak dapat menggunakan jalur pendaftaran baru.');
+  return user;
 }
 
 async function lookupFirebaseUser(env: Env, idToken: string): Promise<FirebaseUserLookup> {
@@ -729,6 +754,25 @@ export default {
     const url = new URL(request.url);
     const path = url.pathname.length > 1 && url.pathname.endsWith('/') ? url.pathname.slice(0, -1) : url.pathname;
 
+    const livenessUiHeaders = {
+      'Cache-Control': 'no-store',
+      'X-Content-Type-Options': 'nosniff',
+      'Referrer-Policy': 'no-referrer',
+      'Permissions-Policy': 'camera=(self)',
+      'Content-Security-Policy': "default-src 'none'; base-uri 'none'; object-src 'none'; script-src 'self' https://esm.sh https://cdn.liveness.rekognition.amazonaws.com; style-src 'self' 'unsafe-inline' https://esm.sh; img-src 'self' data: blob: https://cdn.liveness.rekognition.amazonaws.com; connect-src 'self' https://esm.sh https://cdn.liveness.rekognition.amazonaws.com https://*.amazonaws.com wss://*.amazonaws.com; worker-src 'self' blob: https://cdn.liveness.rekognition.amazonaws.com; media-src 'self' data: blob:; frame-ancestors https://sipandu.aryprayoga139.workers.dev https://sipanduodhiv.my.id https://localhost http://localhost http://localhost:3000 capacitor://localhost",
+    };
+    if (path === '/liveness/ui' && request.method === 'GET') {
+      return new Response(LIVENESS_UI_HTML, {
+        status: 200,
+        headers: { ...livenessUiHeaders, 'Content-Type': 'text/html; charset=utf-8' },
+      });
+    }
+    if (path === '/liveness/ui.js' && request.method === 'GET') {
+      return new Response(LIVENESS_UI_JS, {
+        status: 200,
+        headers: { ...livenessUiHeaders, 'Content-Type': 'text/javascript; charset=utf-8' },
+      });
+    }
 
     if (path === '/liveness/health' && request.method === 'GET') {
       const missing = missingLivenessConfiguration(env);
@@ -745,6 +789,11 @@ export default {
     if (path === '/liveness/session' && request.method === 'POST') {
       if (!(await allowAttempt(env, request, 5))) {
         return jsonResponse({ ok: false, message: 'Terlalu banyak percobaan verifikasi wajah. Coba kembali satu menit lagi.' }, 429, origin);
+      }
+      let applicant: FirebaseUserLookup;
+      try { applicant = await lookupLivenessApplicant(env, request); }
+      catch (error) {
+        return jsonResponse({ ok: false, message: error instanceof Error ? error.message : 'Identitas pendaftar belum dapat diverifikasi.' }, 401, origin);
       }
       const missing = missingLivenessConfiguration(env);
       if (missing.length) {
@@ -765,6 +814,7 @@ export default {
         const now = Date.now();
         await callLivenessStore(env, challengeId, 'create', {
           challengeId,
+          uid: applicant.localId,
           sessionId: created.SessionId,
           consentVersion,
           consentAcceptedAt: now,
@@ -784,11 +834,19 @@ export default {
     }
 
     if (path === '/liveness/credentials' && request.method === 'POST') {
+      if (!(await allowAttempt(env, request, 10)) ) {
+        return jsonResponse({ ok: false, message: 'Terlalu banyak permintaan kredensial verifikasi. Coba kembali sebentar lagi.' }, 429, origin);
+      }
+      let applicant: FirebaseUserLookup;
+      try { applicant = await lookupLivenessApplicant(env, request); }
+      catch (error) {
+        return jsonResponse({ ok: false, message: error instanceof Error ? error.message : 'Identitas pendaftar belum dapat diverifikasi.' }, 401, origin);
+      }
       const body = await parseJson(request);
       const challengeId = typeof body?.challengeId === 'string' ? body.challengeId : '';
       if (!/^[0-9a-f-]{36}$/i.test(challengeId)) return jsonResponse({ ok: false, message: 'ID sesi liveness tidak valid.' }, 400, origin);
       try {
-        await callLivenessStore(env, challengeId, 'credentials');
+        await callLivenessStore(env, challengeId, 'credentials', { uid: applicant.localId });
         const credentials = await assumeLivenessStreamingRole(env);
         return jsonResponse({ ok: true, credentials }, 200, origin);
       } catch (error) {
@@ -797,11 +855,19 @@ export default {
     }
 
     if (path === '/liveness/verify' && request.method === 'POST') {
+      if (!(await allowAttempt(env, request, 30))) {
+        return jsonResponse({ ok: false, message: 'Terlalu banyak permintaan pemeriksaan hasil. Coba kembali sebentar lagi.' }, 429, origin);
+      }
+      let applicant: FirebaseUserLookup;
+      try { applicant = await lookupLivenessApplicant(env, request); }
+      catch (error) {
+        return jsonResponse({ ok: false, message: error instanceof Error ? error.message : 'Identitas pendaftar belum dapat diverifikasi.' }, 401, origin);
+      }
       const body = await parseJson(request);
       const challengeId = typeof body?.challengeId === 'string' ? body.challengeId : '';
       if (!/^[0-9a-f-]{36}$/i.test(challengeId)) return jsonResponse({ ok: false, message: 'ID sesi liveness tidak valid.' }, 400, origin);
       try {
-        const state = await callLivenessStore(env, challengeId, 'verify-start');
+        const state = await callLivenessStore(env, challengeId, 'verify-start', { uid: applicant.localId });
         const result = await rekognitionRequest<{ Status?: string; Confidence?: number }>(
           env,
           'GetFaceLivenessSessionResults',
@@ -1111,7 +1177,7 @@ export default {
             return jsonResponse({ ok: false, code: 'LIVENESS_PROOF_INVALID', message: 'Bukti liveness tidak valid. Ulangi pemeriksaan wajah.' }, 403, origin);
           }
           try {
-            const consumed = await callLivenessStore(env, proofParts[0], 'consume-proof', { proofToken: proofParts[1] });
+            const consumed = await callLivenessStore(env, proofParts[0], 'consume-proof', { uid: firebaseUser.localId, proofToken: proofParts[1] });
             const evidence = consumed.record;
             if (!evidence || evidence.status !== 'passed') throw new Error('Bukti liveness belum lulus.');
             livenessEvidence = {
@@ -1388,14 +1454,16 @@ export class LivenessChallengeStore {
       if (record) return respond({ ok: false, message: 'Challenge sudah pernah dibuat.' }, 409);
       const sessionId = typeof body.sessionId === 'string' ? body.sessionId : '';
       const challengeId = typeof body.challengeId === 'string' ? body.challengeId : '';
+      const uid = typeof body.uid === 'string' ? body.uid : '';
       const consentVersion = typeof body.consentVersion === 'string' ? body.consentVersion : '';
       const createdAt = Number(body.createdAt || now);
       const expiresAt = Number(body.expiresAt || 0);
-      if (!sessionId || !challengeId || !consentVersion || expiresAt <= now || expiresAt > now + 11 * 60 * 1000) {
+      if (!sessionId || !challengeId || !uid || uid.length > 128 || !consentVersion
+        || expiresAt <= now || expiresAt > now + 11 * 60 * 1000) {
         return respond({ ok: false, message: 'Data challenge liveness tidak valid.' }, 400);
       }
       record = {
-        challengeId, sessionId, consentVersion,
+        challengeId, uid, sessionId, consentVersion,
         consentAcceptedAt: Number(body.consentAcceptedAt || now),
         createdAt, expiresAt, status: 'created',
       };
@@ -1407,6 +1475,10 @@ export class LivenessChallengeStore {
     if (!record || record.challengeId === '' || record.expiresAt < now) {
       if (record) await this.state.storage.delete('record');
       return respond({ ok: false, message: 'Sesi liveness tidak ditemukan atau sudah kedaluwarsa.' }, 404);
+    }
+    const requesterUid = typeof body.uid === 'string' ? body.uid : '';
+    if (!requesterUid || requesterUid !== record.uid) {
+      return respond({ ok: false, message: 'Sesi liveness tidak dimiliki akun Firebase ini.' }, 403);
     }
 
     if (action === 'credentials') {
