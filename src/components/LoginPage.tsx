@@ -23,6 +23,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [forcePasswordLogin, setForcePasswordLogin] = useState(false);
   const [showRegistration, setShowRegistration] = useState(false);
+  const [resumeExistingRegistration, setResumeExistingRegistration] = useState(false);
   const [registrationNotice, setRegistrationNotice] = useState('');
   const formRef = useRef<HTMLFormElement>(null);
   const quickUnlockUser = restoredUser || auth.currentUser;
@@ -128,8 +129,17 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
             },
             body: JSON.stringify({}),
           });
-          const retry = await retryResponse.json().catch(() => ({})) as { ok?: boolean; status?: string; message?: string };
+          const retry = await retryResponse.json().catch(() => ({})) as { ok?: boolean; status?: string; code?: string; message?: string };
           if (!retryResponse.ok || !retry.ok) {
+            if (retry.code === 'LIVENESS_REQUIRED' || retry.code === 'LIVENESS_NOT_CONFIGURED') {
+              // Keep the existing Firebase identity signed in and resume face verification
+              // instead of trapping the user in a login/retry loop or creating another account.
+              setResumeExistingRegistration(true);
+              setShowRegistration(true);
+              setRegistrationNotice('Akun ini sudah dibuat, tetapi verifikasi wajah belum selesai. Lanjutkan dengan akun yang sama.');
+              setErrorMsg('');
+              return;
+            }
             await signOut(auth);
             setErrorMsg(retry.message || 'Pendaftaran mandiri belum berhasil dipulihkan. Coba kembali.');
             return;
@@ -210,13 +220,18 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
   };
 
   if (showRegistration) {
-    return <RegistrationPage onBack={(registeredEmail, notice) => {
-      if (registeredEmail) setEmail(registeredEmail);
-      setPassword('');
-      setShowRegistration(false);
-      setErrorMsg('');
-      setRegistrationNotice(notice || '');
-    }} />;
+    return <RegistrationPage
+      resumeExistingUser={resumeExistingRegistration}
+      onBack={(registeredEmail, notice) => {
+        if (auth.currentUser) void signOut(auth).catch(() => undefined);
+        if (registeredEmail) setEmail(registeredEmail);
+        setPassword('');
+        setShowRegistration(false);
+        setResumeExistingRegistration(false);
+        setErrorMsg('');
+        setRegistrationNotice(notice || '');
+      }}
+    />;
   }
 
   return (
