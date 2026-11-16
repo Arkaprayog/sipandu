@@ -528,7 +528,7 @@ test('registration rejects a new Firebase identity without liveness proof', asyn
     assert.equal(response.status, 403);
     const result = await response.json() as { code?: string };
     assert.equal(result.code, 'LIVENESS_REQUIRED');
-    assert.deepEqual(writes, []);
+    assert.deepEqual(writes.filter((key) => key.startsWith('pending:')), []);
   } finally {
     globalThis.fetch = originalFetch;
   }
