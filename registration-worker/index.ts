@@ -20,6 +20,14 @@ interface Env {
   RESEND_API_KEY?: string;
   SIPANDU_EMAIL_FROM?: string;
   OWNER_NOTIFICATION_EMAIL?: string;
+  AWS_ACCESS_KEY_ID?: string;
+  AWS_SECRET_ACCESS_KEY?: string;
+  AWS_FACE_LIVENESS_ROLE_ARN?: string;
+  AWS_FACE_LIVENESS_REGION?: string;
+  LIVENESS_MIN_CONFIDENCE?: string;
+  LIVENESS_CONSENT_VERSION?: string;
+  LIVENESS_ENFORCEMENT_START?: string;
+  LIVENESS_CHALLENGES?: LivenessDurableObjectNamespace;
   PENDING_REGISTRATIONS?: KVBinding;
 }
 
@@ -30,6 +38,7 @@ interface FirebaseUserLookup {
   emailVerified?: boolean;
   disabled?: boolean;
   customAttributes?: string;
+  createdAt?: string;
 }
 
 const ALLOWED_ORIGINS = new Set([
@@ -74,6 +83,215 @@ function missingConfiguration(env: Env): string[] {
   if (!env.FIREBASE_SERVICE_ACCOUNT_JSON) missing.push('FIREBASE_SERVICE_ACCOUNT_JSON');
   if (!env.PENDING_REGISTRATIONS) missing.push('PENDING_REGISTRATIONS KV');
   return missing;
+}
+
+export function missingLivenessConfiguration(env: Env): string[] {
+  const missing: string[] = [];
+  if (!env.AWS_ACCESS_KEY_ID) missing.push('AWS_ACCESS_KEY_ID');
+  if (!env.AWS_SECRET_ACCESS_KEY) missing.push('AWS_SECRET_ACCESS_KEY');
+  if (!env.AWS_FACE_LIVENESS_ROLE_ARN) missing.push('AWS_FACE_LIVENESS_ROLE_ARN');
+  if (!env.LIVENESS_CHALLENGES) missing.push('LIVENESS_CHALLENGES Durable Object');
+  return missing;
+}
+
+interface LivenessDurableObjectStorage {
+  get<T = unknown>(key: string): Promise<T | undefined>;
+  put<T = unknown>(key: string, value: T): Promise<void>;
+  delete(key: string): Promise<boolean>;
+  setAlarm?(scheduledTime: number): Promise<void>;
+}
+interface LivenessDurableObjectState {
+  storage: LivenessDurableObjectStorage;
+}
+interface LivenessDurableObjectStub {
+  fetch(input: Request): Promise<Response>;
+}
+interface LivenessDurableObjectNamespace {
+  idFromName(name: string): unknown;
+  get(id: unknown): LivenessDurableObjectStub;
+}
+interface LivenessChallengeRecord {
+  challengeId: string;
+  sessionId: string;
+  consentVersion: string;
+  consentAcceptedAt: number;
+  createdAt: number;
+  expiresAt: number;
+  credentialsIssuedAt?: number;
+  status: 'created' | 'verifying' | 'passed' | 'failed';
+  proofToken?: string;
+  confidence?: number;
+  proofExpiresAt?: number;
+  consumedAt?: number;
+}
+
+function livenessStore(env: Env, challengeId: string): LivenessDurableObjectStub {
+  if (!env.LIVENESS_CHALLENGES) throw new Error('Pemeriksaan liveness belum dikonfigurasi.');
+  return env.LIVENESS_CHALLENGES.get(env.LIVENESS_CHALLENGES.idFromName(challengeId));
+}
+
+async function callLivenessStore(
+  env: Env,
+  challengeId: string,
+  action: string,
+  payload: Record<string, unknown> = {},
+): Promise<{ ok?: boolean; message?: string; record?: LivenessChallengeRecord }> {
+  const response = await livenessStore(env, challengeId).fetch(new Request(
+    `https://liveness-challenge.internal/${action}`,
+    { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) },
+  ));
+  const result = await response.json().catch(() => ({})) as { ok?: boolean; message?: string; record?: LivenessChallengeRecord };
+  if (!response.ok || !result.ok) throw new Error(result.message || 'Sesi liveness tidak valid atau sudah kedaluwarsa.');
+  return result;
+}
+
+function livenessRegion(env: Env): string {
+  return env.AWS_FACE_LIVENESS_REGION || 'ap-southeast-5';
+}
+
+function livenessConfidenceThreshold(env: Env): number {
+  const value = Number(env.LIVENESS_MIN_CONFIDENCE || '90');
+  return Number.isFinite(value) && value >= 0 && value <= 100 ? value : 90;
+}
+
+async function sha256Hex(value: string): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value));
+  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('');
+}
+
+async function hmacSha256(key: Uint8Array, value: string): Promise<Uint8Array> {
+  const imported = await crypto.subtle.importKey('raw', key, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  const signature = await crypto.subtle.sign('HMAC', imported, new TextEncoder().encode(value));
+  return new Uint8Array(signature);
+}
+
+function hexBytes(bytes: Uint8Array): string {
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
+}
+
+async function signAwsRequest(
+  env: Env,
+  service: 'rekognition' | 'sts',
+  region: string,
+  url: URL,
+  payload: string,
+  contentType: string,
+  extraHeaders: Record<string, string> = {},
+): Promise<Response> {
+  if (!env.AWS_ACCESS_KEY_ID || !env.AWS_SECRET_ACCESS_KEY) {
+    throw new Error('Kredensial AWS Face Liveness belum dipasang pada Worker sipandu-registration.');
+  }
+  const now = new Date();
+  const amzDate = now.toISOString().replace(/[:-]|\.\d{3}/g, '');
+  const dateStamp = amzDate.slice(0, 8);
+  const headers: Record<string, string> = {
+    'content-type': contentType,
+    host: url.host,
+    'x-amz-date': amzDate,
+    ...extraHeaders,
+  };
+  const canonicalHeaderNames = Object.keys(headers).map((name) => name.toLowerCase()).sort();
+  const canonicalHeaders = canonicalHeaderNames
+    .map((name) => `${name}:${headers[name] ?? headers[Object.keys(headers).find((key) => key.toLowerCase() === name) || '']}`.trim() + '\n')
+    .join('');
+  const signedHeaders = canonicalHeaderNames.join(';');
+  const payloadHash = await sha256Hex(payload);
+  const canonicalRequest = [
+    'POST',
+    url.pathname || '/',
+    url.searchParams.toString(),
+    canonicalHeaders,
+    signedHeaders,
+    payloadHash,
+  ].join('\n');
+  const credentialScope = `${dateStamp}/${region}/${service}/aws4_request`;
+  const stringToSign = [
+    'AWS4-HMAC-SHA256',
+    amzDate,
+    credentialScope,
+    await sha256Hex(canonicalRequest),
+  ].join('\n');
+  const encoder = new TextEncoder();
+  const kDate = await hmacSha256(encoder.encode('AWS4' + env.AWS_SECRET_ACCESS_KEY), dateStamp);
+  const kRegion = await hmacSha256(kDate, region);
+  const kService = await hmacSha256(kRegion, service);
+  const kSigning = await hmacSha256(kService, 'aws4_request');
+  const signature = hexBytes(await hmacSha256(kSigning, stringToSign));
+  const authorization = `AWS4-HMAC-SHA256 Credential=${env.AWS_ACCESS_KEY_ID}/${credentialScope}, SignedHeaders=${signedHeaders}, Signature=${signature}`;
+  const requestHeaders = new Headers(headers);
+  requestHeaders.set('Authorization', authorization);
+  requestHeaders.delete('host');
+  return fetch(url, { method: 'POST', headers: requestHeaders, body: payload });
+}
+
+async function rekognitionRequest<T>(
+  env: Env,
+  operation: 'CreateFaceLivenessSession' | 'GetFaceLivenessSessionResults',
+  payload: Record<string, unknown>,
+): Promise<T> {
+  const region = livenessRegion(env);
+  const url = new URL(`https://rekognition.${region}.amazonaws.com/`);
+  const body = JSON.stringify(payload);
+  const response = await signAwsRequest(
+    env,
+    'rekognition',
+    region,
+    url,
+    body,
+    'application/x-amz-json-1.1',
+    { 'x-amz-target': `Rekognition_20220330.${operation}` },
+  );
+  const result = await response.json().catch(() => ({})) as Record<string, unknown>;
+  if (!response.ok) {
+    const code = String(result.__type || result.code || 'AWS_REKOGNITION_ERROR').split('#').pop();
+    throw new Error(`Layanan pemeriksaan wajah AWS menolak permintaan (${code}).`);
+  }
+  return result as T;
+}
+
+function xmlValue(xml: string, tag: string): string {
+  const match = new RegExp(`<${tag}>([\\s\\S]*?)</${tag}>`).exec(xml);
+  return (match?.[1] || '').replaceAll('&amp;', '&').replaceAll('&lt;', '<').replaceAll('&gt;', '>')
+    .replaceAll('&quot;', '"').replaceAll('&apos;', "'");
+}
+
+async function assumeLivenessStreamingRole(env: Env): Promise<{
+  accessKeyId: string; secretAccessKey: string; sessionToken: string; expiration: string;
+}> {
+  if (!env.AWS_FACE_LIVENESS_ROLE_ARN) throw new Error('AWS_FACE_LIVENESS_ROLE_ARN belum dikonfigurasi.');
+  const region = livenessRegion(env);
+  const url = new URL(`https://sts.${region}.amazonaws.com/`);
+  const sessionPolicy = JSON.stringify({
+    Version: '2012-10-17',
+    Statement: [{ Effect: 'Allow', Action: ['rekognition:StartFaceLivenessSession'], Resource: '*' }],
+  });
+  const body = new URLSearchParams({
+    Action: 'AssumeRole',
+    Version: '2011-06-15',
+    RoleArn: env.AWS_FACE_LIVENESS_ROLE_ARN,
+    RoleSessionName: `sipandu-liveness-${crypto.randomUUID().slice(0, 8)}`,
+    DurationSeconds: '900',
+    Policy: sessionPolicy,
+  }).toString();
+  const response = await signAwsRequest(
+    env, 'sts', region, url, body, 'application/x-www-form-urlencoded; charset=utf-8',
+  );
+  const xml = await response.text();
+  if (!response.ok) throw new Error('AWS STS tidak dapat menerbitkan kredensial streaming Face Liveness.');
+  const accessKeyId = xmlValue(xml, 'AccessKeyId');
+  const secretAccessKey = xmlValue(xml, 'SecretAccessKey');
+  const sessionToken = xmlValue(xml, 'SessionToken');
+  const expiration = xmlValue(xml, 'Expiration');
+  if (!accessKeyId || !secretAccessKey || !sessionToken || !expiration) {
+    throw new Error('AWS STS mengembalikan kredensial sementara yang tidak lengkap.');
+  }
+  return { accessKeyId, secretAccessKey, sessionToken, expiration };
+}
+
+async function isLegacyRegistrationAccount(env: Env, firebaseUser: FirebaseUserLookup): Promise<boolean> {
+  const cutoff = Date.parse(env.LIVENESS_ENFORCEMENT_START || '');
+  const createdAt = Number(firebaseUser.createdAt || 0);
+  return Number.isFinite(cutoff) && cutoff > 0 && Number.isFinite(createdAt) && createdAt > 0 && createdAt < cutoff;
 }
 
  // Activation requires a valid Firebase identity and verified email; no team invitation is required.
@@ -506,9 +724,129 @@ export default {
     const url = new URL(request.url);
     const path = url.pathname.length > 1 && url.pathname.endsWith('/') ? url.pathname.slice(0, -1) : url.pathname;
 
+
+    if (path === '/liveness/health' && request.method === 'GET') {
+      const missing = missingLivenessConfiguration(env);
+      return jsonResponse({
+        ok: true,
+        ready: missing.length === 0,
+        region: livenessRegion(env),
+        minimumConfidence: livenessConfidenceThreshold(env),
+        consentVersion: env.LIVENESS_CONSENT_VERSION || '2026-11-16-v1',
+        missing,
+      }, 200, origin);
+    }
+
+    if (path === '/liveness/session' && request.method === 'POST') {
+      if (!(await allowAttempt(env, request, 5))) {
+        return jsonResponse({ ok: false, message: 'Terlalu banyak percobaan verifikasi wajah. Coba kembali satu menit lagi.' }, 429, origin);
+      }
+      const missing = missingLivenessConfiguration(env);
+      if (missing.length) {
+        return jsonResponse({ ok: false, code: 'LIVENESS_NOT_CONFIGURED', missing, message: 'Verifikasi wajah belum dapat digunakan karena layanan AWS belum dikonfigurasi administrator.' }, 503, origin);
+      }
+      const body = await parseJson(request);
+      const consentVersion = env.LIVENESS_CONSENT_VERSION || '2026-11-16-v1';
+      if (body?.consentVersion !== consentVersion) {
+        return jsonResponse({ ok: false, code: 'LIVENESS_CONSENT_REQUIRED', message: 'Persetujuan pemrosesan video wajah belum diberikan atau sudah berubah.' }, 400, origin);
+      }
+      try {
+        const challengeId = crypto.randomUUID();
+        const created = await rekognitionRequest<{ SessionId?: string }>(env, 'CreateFaceLivenessSession', {
+          ClientRequestToken: challengeId,
+          Settings: { AuditImagesLimit: 0 },
+        });
+        if (!created.SessionId) throw new Error('AWS tidak mengembalikan ID sesi pemeriksaan wajah.');
+        const now = Date.now();
+        await callLivenessStore(env, challengeId, 'create', {
+          sessionId: created.SessionId,
+          consentVersion,
+          consentAcceptedAt: now,
+          createdAt: now,
+          expiresAt: now + 10 * 60 * 1000,
+        });
+        return jsonResponse({
+          ok: true,
+          challengeId,
+          sessionId: created.SessionId,
+          region: livenessRegion(env),
+          expiresInSeconds: 600,
+        }, 201, origin);
+      } catch (error) {
+        return jsonResponse({ ok: false, message: error instanceof Error ? error.message : 'Sesi liveness belum dapat dibuat.' }, 502, origin);
+      }
+    }
+
+    if (path === '/liveness/credentials' && request.method === 'POST') {
+      const body = await parseJson(request);
+      const challengeId = typeof body?.challengeId === 'string' ? body.challengeId : '';
+      if (!/^[0-9a-f-]{36}$/i.test(challengeId)) return jsonResponse({ ok: false, message: 'ID sesi liveness tidak valid.' }, 400, origin);
+      try {
+        await callLivenessStore(env, challengeId, 'credentials');
+        const credentials = await assumeLivenessStreamingRole(env);
+        return jsonResponse({ ok: true, credentials }, 200, origin);
+      } catch (error) {
+        return jsonResponse({ ok: false, message: error instanceof Error ? error.message : 'Kredensial streaming sementara belum dapat diterbitkan.' }, 403, origin);
+      }
+    }
+
+    if (path === '/liveness/verify' && request.method === 'POST') {
+      const body = await parseJson(request);
+      const challengeId = typeof body?.challengeId === 'string' ? body.challengeId : '';
+      if (!/^[0-9a-f-]{36}$/i.test(challengeId)) return jsonResponse({ ok: false, message: 'ID sesi liveness tidak valid.' }, 400, origin);
+      try {
+        const state = await callLivenessStore(env, challengeId, 'verify-start');
+        const result = await rekognitionRequest<{ Status?: string; Confidence?: number }>(
+          env,
+          'GetFaceLivenessSessionResults',
+          { SessionId: state.record?.sessionId },
+        );
+        if (result.Status === 'IN_PROGRESS') {
+          return jsonResponse({ ok: true, status: 'in_progress', message: 'Analisis liveness masih diproses.' }, 202, origin);
+        }
+        if (result.Status !== 'SUCCEEDED' || typeof result.Confidence !== 'number') {
+          await callLivenessStore(env, challengeId, 'verify-complete', { passed: false });
+          return jsonResponse({ ok: false, status: 'failed', message: 'Pemeriksaan wajah tidak berhasil. Silakan ulangi dengan sesi baru.' }, 403, origin);
+        }
+        const threshold = livenessConfidenceThreshold(env);
+        const passed = result.Confidence >= threshold;
+        const proofToken = passed ? crypto.randomUUID() : '';
+        await callLivenessStore(env, challengeId, 'verify-complete', {
+          passed,
+          confidence: result.Confidence,
+          proofToken,
+          proofExpiresAt: Date.now() + 10 * 60 * 1000,
+        });
+        if (!passed) {
+          return jsonResponse({
+            ok: false,
+            status: 'failed',
+            confidence: Math.round(result.Confidence * 100) / 100,
+            minimumConfidence: threshold,
+            message: 'Pemeriksaan liveness belum memenuhi ambang keamanan. Silakan ulangi dengan pencahayaan dan posisi wajah yang baik.',
+          }, 403, origin);
+        }
+        return jsonResponse({
+          ok: true,
+          status: 'passed',
+          proofToken: `${challengeId}.${proofToken}`,
+          confidence: Math.round(result.Confidence * 100) / 100,
+          message: 'Pemeriksaan wajah hidup berhasil. Anda dapat melanjutkan pendaftaran.',
+        }, 200, origin);
+      } catch (error) {
+        return jsonResponse({ ok: false, message: error instanceof Error ? error.message : 'Hasil liveness belum dapat diverifikasi.' }, 409, origin);
+      }
+    }
+
     if (path === '/health' && request.method === 'GET') {
       const missing = missingConfiguration(env);
-      return jsonResponse({ ok: true, ready: missing.length === 0, missing }, 200, origin);
+      const livenessMissing = missingLivenessConfiguration(env);
+      return jsonResponse({
+        ok: true,
+        ready: missing.length === 0,
+        missing,
+        liveness: { ready: livenessMissing.length === 0, missing: livenessMissing, region: livenessRegion(env) },
+      }, 200, origin);
     }
 
 
@@ -728,6 +1066,10 @@ export default {
           return jsonResponse({ ok: false, message: 'Akun memiliki peran yang tidak dapat ditimpa melalui pendaftaran mandiri.' }, 403, origin);
         }
 
+        const registrationBody = await parseJson(request);
+        const livenessProofToken = typeof registrationBody?.livenessProofToken === 'string'
+          ? registrationBody.livenessProofToken.trim()
+          : '';
         const key = `pending:${firebaseUser.localId}`;
         const existing = await env.PENDING_REGISTRATIONS!.get(key);
         let prior: Record<string, unknown> = {};
@@ -746,9 +1088,44 @@ export default {
           }
         }
 
+        const legacyAccount = await isLegacyRegistrationAccount(env, firebaseUser);
+        const hasPriorRegistration = Boolean(existing && prior.registrationMode === 'self-service'
+          && (prior.status === 'pending_email' || prior.status === 'approved'));
+        let livenessEvidence: Record<string, unknown> | null = null;
+        if (!hasPriorRegistration && !legacyAccount) {
+          if (!livenessProofToken) {
+            return jsonResponse({
+              ok: false,
+              code: 'LIVENESS_REQUIRED',
+              message: 'Pemeriksaan wajah hidup wajib diselesaikan sebelum pendaftaran mandiri dapat dicatat.',
+            }, 403, origin);
+          }
+          const proofParts = livenessProofToken.split('.');
+          if (proofParts.length !== 2 || !proofParts.every((part) => /^[0-9a-f-]{36}$/i.test(part))) {
+            return jsonResponse({ ok: false, code: 'LIVENESS_PROOF_INVALID', message: 'Bukti liveness tidak valid. Ulangi pemeriksaan wajah.' }, 403, origin);
+          }
+          try {
+            const consumed = await callLivenessStore(env, proofParts[0], 'consume-proof', { proofToken: proofParts[1] });
+            const evidence = consumed.record;
+            if (!evidence || evidence.status !== 'passed') throw new Error('Bukti liveness belum lulus.');
+            livenessEvidence = {
+              provider: 'amazon-rekognition-face-liveness',
+              region: livenessRegion(env),
+              status: 'passed',
+              confidence: evidence.confidence,
+              verifiedAt: evidence.proofExpiresAt ? evidence.proofExpiresAt - 10 * 60 * 1000 : Date.now(),
+              consentVersion: evidence.consentVersion,
+              consentAcceptedAt: evidence.consentAcceptedAt,
+            };
+          } catch {
+            return jsonResponse({ ok: false, code: 'LIVENESS_PROOF_INVALID', message: 'Bukti liveness telah digunakan, kedaluwarsa, atau tidak cocok. Ulangi pemeriksaan wajah.' }, 403, origin);
+          }
+        }
+
         const now = Date.now();
         await env.PENDING_REGISTRATIONS!.put(key, JSON.stringify({
           ...prior,
+          ...(livenessEvidence ? { liveness: livenessEvidence } : legacyAccount ? { liveness: { status: 'legacy_exempt', reason: 'account_created_before_liveness_enforcement' } } : {}),
           uid: firebaseUser.localId,
           email: firebaseUser.email.trim().toLowerCase(),
           name: String(firebaseUser.displayName || prior.name || ''),
@@ -982,3 +1359,100 @@ export default {
     return jsonResponse({ ok: false, message: 'Rute layanan pendaftaran tidak ditemukan.' }, 404, origin);
   },
 };
+
+
+/**
+ * Durable Object provides serialized, one-time state transitions for liveness
+ * challenges and proof tokens. KV alone is eventually consistent and cannot
+ * safely enforce replay prevention for this security decision.
+ */
+export class LivenessChallengeStore {
+  constructor(private readonly state: LivenessDurableObjectState) {}
+
+  async fetch(request: Request): Promise<Response> {
+    const action = new URL(request.url).pathname.replace(/^\\//, '');
+    const body = await request.json().catch(() => ({})) as Record<string, unknown>;
+    const now = Date.now();
+    let record = await this.state.storage.get<LivenessChallengeRecord>('record');
+
+    const respond = (payload: Record<string, unknown>, status = 200) =>
+      new Response(JSON.stringify(payload), { status, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } });
+
+    if (action === 'create') {
+      if (record) return respond({ ok: false, message: 'Challenge sudah pernah dibuat.' }, 409);
+      const sessionId = typeof body.sessionId === 'string' ? body.sessionId : '';
+      const challengeId = typeof body.challengeId === 'string' ? body.challengeId : '';
+      const consentVersion = typeof body.consentVersion === 'string' ? body.consentVersion : '';
+      const createdAt = Number(body.createdAt || now);
+      const expiresAt = Number(body.expiresAt || 0);
+      if (!sessionId || !challengeId || !consentVersion || expiresAt <= now || expiresAt > now + 11 * 60 * 1000) {
+        return respond({ ok: false, message: 'Data challenge liveness tidak valid.' }, 400);
+      }
+      record = {
+        challengeId, sessionId, consentVersion,
+        consentAcceptedAt: Number(body.consentAcceptedAt || now),
+        createdAt, expiresAt, status: 'created',
+      };
+      await this.state.storage.put('record', record);
+      await this.state.storage.setAlarm?.(expiresAt);
+      return respond({ ok: true });
+    }
+
+    if (!record || record.challengeId === '' || record.expiresAt < now) {
+      if (record) await this.state.storage.delete('record');
+      return respond({ ok: false, message: 'Sesi liveness tidak ditemukan atau sudah kedaluwarsa.' }, 404);
+    }
+
+    if (action === 'credentials') {
+      if (record.status !== 'created' || record.credentialsIssuedAt) {
+        return respond({ ok: false, message: 'Kredensial streaming sesi ini sudah diterbitkan atau sesi tidak aktif.' }, 409);
+      }
+      record.credentialsIssuedAt = now;
+      await this.state.storage.put('record', record);
+      return respond({ ok: true });
+    }
+
+    if (action === 'verify-start') {
+      if (!record.credentialsIssuedAt || (record.status !== 'created' && record.status !== 'verifying')) {
+        return respond({ ok: false, message: 'Sesi liveness belum siap diverifikasi atau sudah digunakan.' }, 409);
+      }
+      record.status = 'verifying';
+      await this.state.storage.put('record', record);
+      return respond({ ok: true, record });
+    }
+
+    if (action === 'verify-complete') {
+      if (record.status !== 'verifying') return respond({ ok: false, message: 'Status challenge tidak mengizinkan penyelesaian.' }, 409);
+      const passed = body.passed === true;
+      record.status = passed ? 'passed' : 'failed';
+      if (passed) {
+        record.proofToken = typeof body.proofToken === 'string' ? body.proofToken : '';
+        record.proofExpiresAt = Number(body.proofExpiresAt || 0);
+        if (!record.proofToken || record.proofExpiresAt <= now || record.proofExpiresAt > now + 11 * 60 * 1000) {
+          return respond({ ok: false, message: 'Token bukti liveness tidak valid.' }, 400);
+        }
+      }
+      if (typeof body.confidence === 'number' && Number.isFinite(body.confidence)) record.confidence = body.confidence;
+      await this.state.storage.put('record', record);
+      return respond({ ok: true });
+    }
+
+    if (action === 'consume-proof') {
+      if (record.status !== 'passed' || record.consumedAt || record.proofExpiresAt === undefined
+        || record.proofExpiresAt < now || body.proofToken !== record.proofToken) {
+        return respond({ ok: false, message: 'Bukti liveness tidak valid, kedaluwarsa, atau telah digunakan.' }, 409);
+      }
+      record.consumedAt = now;
+      await this.state.storage.delete('record');
+      await this.state.storage.deleteAlarm?.();
+      return respond({ ok: true, record });
+    }
+
+    return respond({ ok: false, message: 'Aksi challenge tidak dikenal.' }, 404);
+  }
+
+  async alarm(): Promise<void> {
+    await this.state.storage.delete('record');
+  }
+}
+
