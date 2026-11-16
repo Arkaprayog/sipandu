@@ -31,6 +31,52 @@ The Firebase project ID and named Firestore database ID are non-secret Worker va
 
 New members self-register with their name, email, and password. The web app creates the Firebase Authentication identity and its UID-owned basic profile, then calls `/register`. The Worker stores a `pending_email` record in `PENDING_REGISTRATIONS`; no team code, invitation, Owner approval, or Supervisor approval is required. Firebase sends the email-verification link. After the link is opened, the member signs in and `/activate` verifies the Firebase ID token, exact UID/email match, verified email, pending self-registration record, and non-disabled account before assigning only the `anggota` custom claim. Existing `owner`, `supervisor`, and `pendamping` claims are never overwritten. Disabled Firebase accounts are rejected.
 
+## AWS Face Liveness (new-account onboarding)
+
+The registration Worker implements the AWS Rekognition Face Liveness backend and serves an isolated camera UI at `/liveness/ui`. The UI runs in a cross-origin iframe on the registration Worker origin so its AWS Amplify React runtime cannot conflict with SIPANDU's own React instance. The iframe accepts messages only from the configured SIPANDU app origins and never places Firebase ID tokens in its URL.
+
+### Required Cloudflare configuration
+
+The Worker configuration declares the `LIVENESS_CHALLENGES` SQLite-backed Durable Object binding and the `v1-liveness-challenge-store` migration. After deploying the Worker, confirm that the binding and migration are visible in Cloudflare. Add these as **Secret** values to `sipandu-registration`:
+
+- `AWS_ACCESS_KEY_ID`
+- `AWS_SECRET_ACCESS_KEY`
+- `AWS_FACE_LIVENESS_ROLE_ARN`
+
+Set `AWS_FACE_LIVENESS_REGION` as a non-secret variable if a different supported region is selected. The default is `ap-southeast-5` (Asia Pacific Malaysia), where Rekognition Face Liveness streaming is documented as available. The credentials must belong to a dedicated AWS principal used only by this Worker; do not place them in the browser or repository.
+
+### AWS IAM setup
+
+1. Create a dedicated IAM principal for the Worker and generate an access key for it. Restrict access to the account and use it only from the Cloudflare Worker.
+2. Give that principal `sts:AssumeRole` permission for one dedicated Face Liveness role ARN.
+3. Create the dedicated role with a trust policy that permits only the Worker principal to assume it.
+4. Attach a permissions policy to the role allowing `rekognition:StartFaceLivenessSession` on `*`. The Worker supplies a narrower session policy when it calls STS.
+5. The Worker principal also needs permission to call `sts:AssumeRole` on that exact role. Never use AWS root credentials.
+6. Configure the region consistently for the Worker and the streaming UI. Create no S3 bucket unless a separate retention/matching use case is approved; current session creation sets `AuditImagesLimit: 0`.
+
+### Security and registration sequence
+
+- A Firebase ID token is required for session creation, credential issuance, and result verification. The email must still be unverified and the account must not have a SIPANDU role.
+- The Durable Object stores the challenge UID, AWS SessionId, consent metadata, expiry, and single-use proof state. Every state transition checks the same UID.
+- AWS STS returns short-lived streaming credentials only after the matching user/challenge is checked. The browser never receives long-lived AWS credentials.
+- The server verifies the AWS result and confidence threshold, then issues a one-time proof token. `/register` consumes it once and records the evidence before creating the pending-email registration.
+- If the user leaves before completion, the account remains recoverable: sign in again and continue the pending face-verification step. Do not create a second Firebase account.
+
+### Test and deploy
+
+```sh
+bun install --frozen-lockfile
+bun run lint
+bunx esbuild registration-worker/index.ts --bundle --format=esm --platform=browser --target=es2022 --outfile=registration-worker/index.runtime.js
+node --check registration-worker/index.runtime.js
+bunx tsx --test registration-worker/index.test.ts
+cd registration-worker
+bunx wrangler deploy --config wrangler.jsonc
+```
+
+The deploy workflow validates the binding, migration, and declared secret names. GitHub Actions cannot confirm that AWS secret values, IAM trust, or policies are valid. Confirm `GET /liveness/health` returns `ready: true`, then complete a real camera test on HTTPS desktop and Android before requiring liveness in production.
+
+
 ## Deploy the Worker
 
 The reviewed source of truth is `index.ts`. The production workflow installs locked dependencies, bundles the TypeScript source to a temporary `index.runtime.js` using esbuild, validates the generated JavaScript, runs the Worker security tests, then deploys the bundle with Wrangler. The generated runtime bundle is not committed to the repository.
