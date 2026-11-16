@@ -432,7 +432,7 @@ test('does not restore an invitation before Firebase email verification', async 
 });
 
 
-test('registration accepts a Firebase identity token without any team code', async () => {
+test('registration accepts a Firebase identity token without a team code when one-time liveness proof is valid', async () => {
   const originalFetch = globalThis.fetch;
   const writes: Array<{ key: string; value: string; expirationTtl?: number }> = [];
   const kv = {
@@ -441,6 +441,28 @@ test('registration accepts a Firebase identity token without any team code', asy
       writes.push({ key, value, expirationTtl: options?.expirationTtl });
     },
     delete: async (_key: string) => undefined,
+  };
+  const challengeId = '11111111-1111-4111-8111-111111111111';
+  const proofToken = '22222222-2222-4222-8222-222222222222';
+  const livenessRecord = {
+    status: 'passed',
+    confidence: 98.5,
+    proofExpiresAt: Date.now() + 5 * 60 * 1000,
+    consentVersion: '2026-11-16-v1',
+    consentAcceptedAt: Date.now() - 60_000,
+  };
+  const livenessNamespace = {
+    idFromName: (name: string) => name,
+    get: (_id: unknown) => ({
+      fetch: async (request: Request) => {
+        const body = await request.json() as { proofToken?: string };
+        const valid = new URL(request.url).pathname === '/consume-proof' && body.proofToken === proofToken;
+        return new Response(JSON.stringify(valid ? { ok: true, record: livenessRecord } : { ok: false }), {
+          status: valid ? 200 : 409,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      },
+    }),
   };
   globalThis.fetch = (async () => new Response(JSON.stringify({
     users: [{ localId: 'firebase-uid-new-member', email: 'member@example.test', emailVerified: false }],
@@ -453,6 +475,49 @@ test('registration accepts a Firebase identity token without any team code', asy
         Authorization: 'Bearer firebase-id-token',
         'CF-Connecting-IP': '192.0.2.82',
       },
+      body: JSON.stringify({ livenessProofToken: `${challengeId}.${proofToken}` }),
+    }), {
+      FIREBASE_AUTH_API_KEY: 'test-worker-secret-api-key',
+      FIREBASE_PROJECT_ID: 'gen-lang-client-0197631978',
+      FIREBASE_SERVICE_ACCOUNT_JSON: '{"project_id":"gen-lang-client-0197631978","client_email":"test@example.iam.gserviceaccount.com","private_key":"test"}',
+      PENDING_REGISTRATIONS: kv,
+      LIVENESS_CHALLENGES: livenessNamespace,
+    });
+    assert.equal(response.status, 202);
+    const result = await response.json() as { ok?: boolean; status?: string };
+    assert.equal(result.status, 'pending_email');
+    const invitation = writes.find((entry) => entry.key === 'pending:firebase-uid-new-member');
+    assert.ok(invitation);
+    const saved = JSON.parse(invitation.value);
+    assert.equal(saved.status, 'pending_email');
+    assert.equal(saved.registrationMode, 'self-service');
+    assert.equal(saved.liveness.provider, 'amazon-rekognition-face-liveness');
+    assert.equal(saved.liveness.status, 'passed');
+    assert.equal(invitation.expirationTtl, 30 * 24 * 60 * 60);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('registration rejects a new Firebase identity without liveness proof', async () => {
+  const originalFetch = globalThis.fetch;
+  const writes: string[] = [];
+  const kv = {
+    get: async (_key: string) => null,
+    put: async (key: string) => { writes.push(key); },
+    delete: async (_key: string) => undefined,
+  };
+  globalThis.fetch = (async () => new Response(JSON.stringify({
+    users: [{ localId: 'firebase-uid-no-liveness', email: 'no-liveness@example.test', emailVerified: false }],
+  }), { status: 200, headers: { 'Content-Type': 'application/json' } })) as typeof fetch;
+  try {
+    const response = await worker.fetch(new Request('https://sipandu-registration.test/register', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: 'Bearer firebase-id-token',
+        'CF-Connecting-IP': '192.0.2.83',
+      },
       body: JSON.stringify({}),
     }), {
       FIREBASE_AUTH_API_KEY: 'test-worker-secret-api-key',
@@ -460,14 +525,10 @@ test('registration accepts a Firebase identity token without any team code', asy
       FIREBASE_SERVICE_ACCOUNT_JSON: '{"project_id":"gen-lang-client-0197631978","client_email":"test@example.iam.gserviceaccount.com","private_key":"test"}',
       PENDING_REGISTRATIONS: kv,
     });
-    assert.equal(response.status, 202);
-    const result = await response.json() as { ok?: boolean; status?: string };
-    assert.equal(result.status, 'pending_email');
-    const invitation = writes.find((entry) => entry.key === 'pending:firebase-uid-new-member');
-    assert.ok(invitation);
-    assert.equal(JSON.parse(invitation.value).status, 'pending_email');
-    assert.equal(JSON.parse(invitation.value).registrationMode, 'self-service');
-    assert.equal(invitation.expirationTtl, 30 * 24 * 60 * 60);
+    assert.equal(response.status, 403);
+    const result = await response.json() as { code?: string };
+    assert.equal(result.code, 'LIVENESS_REQUIRED');
+    assert.deepEqual(writes.filter((key) => key.startsWith('pending:')), []);
   } finally {
     globalThis.fetch = originalFetch;
   }
