@@ -759,6 +759,7 @@ export default {
         if (!created.SessionId) throw new Error('AWS tidak mengembalikan ID sesi pemeriksaan wajah.');
         const now = Date.now();
         await callLivenessStore(env, challengeId, 'create', {
+          challengeId,
           sessionId: created.SessionId,
           consentVersion,
           consentAcceptedAt: now,
