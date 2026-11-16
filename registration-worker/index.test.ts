@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import worker, { missingActivationConfiguration, parseJson } from './index.ts';
+import worker, { LivenessChallengeStore, missingActivationConfiguration, parseJson } from './index.ts';
 
 function streamedJsonRequest(value: string): Request {
   const bytes = new TextEncoder().encode(value);
@@ -431,6 +431,93 @@ test('does not restore an invitation before Firebase email verification', async 
   }
 });
 
+
+test('liveness challenge state is bound to the Firebase UID and proof can be consumed only once', async () => {
+  const values = new Map<string, unknown>();
+  let alarmAt = 0;
+  const store = new LivenessChallengeStore({
+    storage: {
+      get: async <T>(key: string) => values.get(key) as T | undefined,
+      put: async <T>(key: string, value: T) => { values.set(key, value); },
+      delete: async (key: string) => values.delete(key),
+      setAlarm: async (scheduledTime: number) => { alarmAt = scheduledTime; },
+      deleteAlarm: async () => { alarmAt = 0; },
+    },
+  });
+  const challengeId = '11111111-1111-4111-8111-111111111111';
+  const proofToken = '22222222-2222-4222-8222-222222222222';
+  const uid = 'firebase-owner-uid';
+  const otherUid = 'firebase-other-uid';
+  const request = (action: string, body: Record<string, unknown>) => store.fetch(new Request(
+    'https://liveness-challenge.internal/' + action,
+    { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) },
+  ));
+
+  const created = await request('create', {
+    challengeId,
+    uid,
+    sessionId: 'aws-face-liveness-session',
+    consentVersion: '2026-11-16-v1',
+    consentAcceptedAt: Date.now(),
+    createdAt: Date.now(),
+    expiresAt: Date.now() + 5 * 60 * 1000,
+  });
+  assert.equal(created.status, 200);
+  assert.ok(alarmAt > Date.now());
+
+  const otherCredentials = await request('credentials', { uid: otherUid });
+  assert.equal(otherCredentials.status, 403);
+  const credentials = await request('credentials', { uid });
+  assert.equal(credentials.status, 200);
+  const duplicateCredentials = await request('credentials', { uid });
+  assert.equal(duplicateCredentials.status, 409);
+
+  const otherVerify = await request('verify-start', { uid: otherUid });
+  assert.equal(otherVerify.status, 403);
+  const verify = await request('verify-start', { uid });
+  assert.equal(verify.status, 200);
+  const complete = await request('verify-complete', {
+    uid,
+    passed: true,
+    confidence: 98.5,
+    proofToken,
+    proofExpiresAt: Date.now() + 5 * 60 * 1000,
+  });
+  assert.equal(complete.status, 200);
+
+  const otherConsume = await request('consume-proof', { uid: otherUid, proofToken });
+  assert.equal(otherConsume.status, 403);
+  const consume = await request('consume-proof', { uid, proofToken });
+  assert.equal(consume.status, 200);
+  const consumed = await consume.json() as { record?: { uid?: string; status?: string; consumedAt?: number } };
+  assert.equal(consumed.record?.uid, uid);
+  assert.equal(consumed.record?.status, 'passed');
+  assert.ok(consumed.record?.consumedAt);
+  assert.equal(alarmAt, 0);
+  const replay = await request('consume-proof', { uid, proofToken });
+  assert.equal(replay.status, 404);
+});
+
+test('liveness session endpoint refuses anonymous requests before calling AWS', async () => {
+  const writes: string[] = [];
+  const kv = {
+    get: async (_key: string) => null,
+    put: async (key: string) => { writes.push(key); },
+    delete: async (_key: string) => undefined,
+  };
+  const response = await worker.fetch(new Request('https://sipandu-registration.test/liveness/session', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'CF-Connecting-IP': '192.0.2.91' },
+    body: JSON.stringify({ consentVersion: '2026-11-16-v1' }),
+  }), {
+    FIREBASE_AUTH_API_KEY: 'test-worker-secret-api-key',
+    FIREBASE_PROJECT_ID: 'gen-lang-client-0197631978',
+    PENDING_REGISTRATIONS: kv,
+  });
+  assert.equal(response.status, 401);
+  assert.match((await response.json() as { message: string }).message, /Sesi Firebase/);
+  assert.deepEqual(writes.filter((key) => key.startsWith('pending:')), []);
+});
 
 test('registration accepts a Firebase identity token without a team code when one-time liveness proof is valid', async () => {
   const originalFetch = globalThis.fetch;
