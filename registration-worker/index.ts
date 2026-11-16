@@ -98,6 +98,7 @@ interface LivenessDurableObjectStorage {
   get<T = unknown>(key: string): Promise<T | undefined>;
   put<T = unknown>(key: string, value: T): Promise<void>;
   delete(key: string): Promise<boolean>;
+  setAlarm?(scheduledTime: number): Promise<void>;
 }
 interface LivenessDurableObjectState {
   storage: LivenessDurableObjectStorage;
@@ -828,7 +829,7 @@ export default {
         return jsonResponse({
           ok: true,
           status: 'passed',
-          proofToken,
+          proofToken: `${challengeId}.${proofToken}`,
           confidence: Math.round(result.Confidence * 100) / 100,
           message: 'Pemeriksaan wajah hidup berhasil. Anda dapat melanjutkan pendaftaran.',
         }, 200, origin);
@@ -1090,6 +1091,7 @@ export default {
         const legacyAccount = await isLegacyRegistrationAccount(env, firebaseUser);
         const hasPriorRegistration = Boolean(existing && prior.registrationMode === 'self-service'
           && (prior.status === 'pending_email' || prior.status === 'approved'));
+        let livenessEvidence: Record<string, unknown> | null = null;
         if (!hasPriorRegistration && !legacyAccount) {
           if (!livenessProofToken) {
             return jsonResponse({
@@ -1098,11 +1100,23 @@ export default {
               message: 'Pemeriksaan wajah hidup wajib diselesaikan sebelum pendaftaran mandiri dapat dicatat.',
             }, 403, origin);
           }
-          if (!/^[0-9a-f-]{36}$/i.test(livenessProofToken)) {
+          const proofParts = livenessProofToken.split('.');
+          if (proofParts.length !== 2 || !proofParts.every((part) => /^[0-9a-f-]{36}$/i.test(part))) {
             return jsonResponse({ ok: false, code: 'LIVENESS_PROOF_INVALID', message: 'Bukti liveness tidak valid. Ulangi pemeriksaan wajah.' }, 403, origin);
           }
           try {
-            await callLivenessStore(env, livenessProofToken, 'consume-proof', { proofToken: livenessProofToken });
+            const consumed = await callLivenessStore(env, proofParts[0], 'consume-proof', { proofToken: proofParts[1] });
+            const evidence = consumed.record;
+            if (!evidence || evidence.status !== 'passed') throw new Error('Bukti liveness belum lulus.');
+            livenessEvidence = {
+              provider: 'amazon-rekognition-face-liveness',
+              region: livenessRegion(env),
+              status: 'passed',
+              confidence: evidence.confidence,
+              verifiedAt: evidence.proofExpiresAt ? evidence.proofExpiresAt - 10 * 60 * 1000 : Date.now(),
+              consentVersion: evidence.consentVersion,
+              consentAcceptedAt: evidence.consentAcceptedAt,
+            };
           } catch {
             return jsonResponse({ ok: false, code: 'LIVENESS_PROOF_INVALID', message: 'Bukti liveness telah digunakan, kedaluwarsa, atau tidak cocok. Ulangi pemeriksaan wajah.' }, 403, origin);
           }
@@ -1111,6 +1125,7 @@ export default {
         const now = Date.now();
         await env.PENDING_REGISTRATIONS!.put(key, JSON.stringify({
           ...prior,
+          ...(livenessEvidence ? { liveness: livenessEvidence } : legacyAccount ? { liveness: { status: 'legacy_exempt', reason: 'account_created_before_liveness_enforcement' } } : {}),
           uid: firebaseUser.localId,
           email: firebaseUser.email.trim().toLowerCase(),
           name: String(firebaseUser.displayName || prior.name || ''),
@@ -1379,10 +1394,12 @@ export class LivenessChallengeStore {
         createdAt, expiresAt, status: 'created',
       };
       await this.state.storage.put('record', record);
+      await this.state.storage.setAlarm?.(expiresAt);
       return respond({ ok: true });
     }
 
     if (!record || record.challengeId === '' || record.expiresAt < now) {
+      if (record) await this.state.storage.delete('record');
       return respond({ ok: false, message: 'Sesi liveness tidak ditemukan atau sudah kedaluwarsa.' }, 404);
     }
 
@@ -1426,11 +1443,16 @@ export class LivenessChallengeStore {
         return respond({ ok: false, message: 'Bukti liveness tidak valid, kedaluwarsa, atau telah digunakan.' }, 409);
       }
       record.consumedAt = now;
-      await this.state.storage.put('record', record);
-      return respond({ ok: true });
+      await this.state.storage.delete('record');
+      await this.state.storage.deleteAlarm?.();
+      return respond({ ok: true, record });
     }
 
     return respond({ ok: false, message: 'Aksi challenge tidak dikenal.' }, 404);
+  }
+
+  async alarm(): Promise<void> {
+    await this.state.storage.delete('record');
   }
 }
 
