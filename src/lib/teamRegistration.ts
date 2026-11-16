@@ -9,6 +9,11 @@ type ApiResponse = {
   missing?: string[];
   status?: string;
   role?: string;
+  configurationReady?: boolean;
+  permissionCheckStatus?: 'checked' | 'unavailable' | 'skipped';
+  roleUpdatePermission?: boolean | null;
+  accountEmailVerified?: boolean;
+  accountEnabled?: boolean;
 };
 
 async function requestJson(path: string, user: User): Promise<ApiResponse> {
@@ -31,13 +36,43 @@ async function requestJson(path: string, user: User): Promise<ApiResponse> {
   return body;
 }
 
+function explainActivationFailure(original: unknown, diagnostics: ApiResponse | null): Error {
+  const originalMessage = original instanceof Error ? original.message : 'Aktivasi akun SIPANDU belum berhasil.';
+  if (!diagnostics) {
+    return new Error(`${originalMessage} Pemeriksaan IAM otomatis belum dapat dijalankan. Jangan membuat akun baru; coba masuk kembali setelah administrator memeriksa Worker dan Firebase.`);
+  }
+  if (diagnostics.configurationReady === false) {
+    const missing = diagnostics.missing?.length ? diagnostics.missing.join(', ') : 'konfigurasi Worker';
+    return new Error(`Aktivasi belum dapat dilakukan. Konfigurasi Worker sipandu-registration belum lengkap: ${missing}. Sesi akun tetap dapat dipulihkan; jangan mendaftar ulang.`);
+  }
+  if (diagnostics.permissionCheckStatus === 'checked' && diagnostics.roleUpdatePermission === false) {
+    return new Error('Email sudah diverifikasi, tetapi Firebase belum dapat menerbitkan peran anggota. Hasil pemeriksaan otomatis memastikan service account pada secret FIREBASE_SERVICE_ACCOUNT_JSON Worker sipandu-registration belum memiliki izin IAM firebaseauth.users.update. Administrator harus memberikan izin tersebut pada proyek gen-lang-client-0197631978. Jangan membuat akun baru; masuk kembali setelah izin diperbaiki.');
+  }
+  if (diagnostics.permissionCheckStatus === 'checked' && diagnostics.roleUpdatePermission === true) {
+    return new Error(`${originalMessage} Pemeriksaan IAM otomatis memastikan izin firebaseauth.users.update tersedia. Administrator perlu memeriksa log Worker sipandu-registration dan status Firebase Authentication; jangan membuat akun baru.`);
+  }
+  return new Error(`${originalMessage} Konfigurasi dasar Worker tersedia, tetapi pemeriksaan izin IAM Google belum dapat dipastikan. Administrator perlu memeriksa akses service account tanpa memberikan hak Project Owner.`);
+}
+
 /**
- * Activates any Firebase account only after Firebase confirms its email.
- * The Worker assigns the least-privilege anggota role; no invitation,
- * team code, approval, or client-supplied role is accepted.
+ * Activates a Firebase account only after Firebase confirms its email and
+ * the Worker verifies the matching self-registration record. The Worker
+ * issues the least-privilege anggota role; clients cannot select a role.
  */
 export async function activateVerifiedTeamMember(user: User): Promise<void> {
-  const result = await requestJson('/activate', user);
+  let result: ApiResponse;
+  try {
+    result = await requestJson('/activate', user);
+  } catch (activationError) {
+    let diagnostics: ApiResponse | null = null;
+    try {
+      diagnostics = await requestJson('/activation-diagnostics', user);
+    } catch {
+      // Keep the original activation failure and explain that diagnostics
+      // could not complete. Never treat an unavailable diagnostic as success.
+    }
+    throw explainActivationFailure(activationError, diagnostics);
+  }
   if (result.status !== 'active' || result.role !== 'anggota') {
     throw new Error(result.message || 'Worker belum mengaktifkan akun sebagai anggota SIPANDU.');
   }

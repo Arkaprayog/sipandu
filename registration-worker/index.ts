@@ -231,6 +231,31 @@ async function getGoogleAccessToken(env: Env, scope = 'https://www.googleapis.co
 }
 
 
+async function checkFirebaseRoleAssignmentPermission(env: Env): Promise<{ status: 'checked'; granted: boolean } | { status: 'unavailable'; granted: null }> {
+  try {
+    if (!env.FIREBASE_PROJECT_ID) return { status: 'unavailable', granted: null };
+    // Resource Manager testIamPermissions checks the service account behind this
+    // secret without modifying a Firebase user or changing any custom claims.
+    const accessToken = await getGoogleAccessToken(env, 'https://www.googleapis.com/auth/cloud-platform');
+    const response = await fetch(
+      `https://cloudresourcemanager.googleapis.com/v1/projects/${encodeURIComponent(env.FIREBASE_PROJECT_ID)}:testIamPermissions`,
+      {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ permissions: ['firebaseauth.users.update'] }),
+      },
+    );
+    if (!response.ok) return { status: 'unavailable', granted: null };
+    const result = await response.json() as { permissions?: unknown };
+    const granted = Array.isArray(result.permissions)
+      && result.permissions.includes('firebaseauth.users.update');
+    return { status: 'checked', granted };
+  } catch {
+    // Do not leak service-account details, access tokens, or upstream responses.
+    return { status: 'unavailable', granted: null };
+  }
+}
+
 function escapeHtml(value: string): string {
   return value.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;')
     .replaceAll('"', '&quot;').replaceAll("'", '&#39;');
@@ -509,6 +534,47 @@ export default {
         }, 200, origin);
       } catch {
         return jsonResponse({ ok: false, message: 'Sesi Firebase tidak valid.' }, 401, origin);
+      }
+    }
+
+    if (path === '/activation-diagnostics' && request.method === 'POST') {
+      if (env.PENDING_REGISTRATIONS && !(await allowAttempt(env, request, 8))) {
+        return jsonResponse({ ok: false, message: 'Terlalu banyak pemeriksaan aktivasi. Coba kembali setelah satu menit.' }, 429, origin);
+      }
+      const authorization = request.headers.get('Authorization') || '';
+      const idToken = authorization.startsWith('Bearer ') ? authorization.slice(7).trim() : '';
+      if (!idToken) return jsonResponse({ ok: false, message: 'Sesi Firebase tidak ditemukan.' }, 401, origin);
+      try {
+        const user = await lookupFirebaseUser(env, idToken);
+        const missing = missingActivationConfiguration(env);
+        if (missing.length) {
+          return jsonResponse({
+            ok: true,
+            accountEmailVerified: user.emailVerified === true,
+            accountEnabled: user.disabled !== true,
+            configurationReady: false,
+            missing,
+            permissionCheckStatus: 'skipped',
+            roleUpdatePermission: null,
+          }, 200, origin);
+        }
+        const permission = await checkFirebaseRoleAssignmentPermission(env);
+        return jsonResponse({
+          ok: true,
+          accountEmailVerified: user.emailVerified === true,
+          accountEnabled: user.disabled !== true,
+          configurationReady: true,
+          missing: [],
+          permissionCheckStatus: permission.status,
+          roleUpdatePermission: permission.granted,
+          message: permission.status === 'checked'
+            ? permission.granted
+              ? 'Konfigurasi tersedia dan izin firebaseauth.users.update terdeteksi.'
+              : 'Service account Worker belum memiliki izin firebaseauth.users.update pada proyek Firebase.'
+            : 'Konfigurasi tersedia, tetapi pemeriksaan izin IAM Google belum dapat diselesaikan.',
+        }, 200, origin);
+      } catch {
+        return jsonResponse({ ok: false, message: 'Sesi Firebase tidak valid atau sudah kedaluwarsa.' }, 401, origin);
       }
     }
 

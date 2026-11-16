@@ -788,3 +788,146 @@ test('disabled Firebase accounts cannot receive an anggota claim', async () => {
     globalThis.fetch = originalFetch;
   }
 });
+
+
+test('activation diagnostics reports the Firebase role permission without changing any account claims', async () => {
+  const { generateKeyPairSync } = await import('node:crypto');
+  const { privateKey } = generateKeyPairSync('rsa', {
+    modulusLength: 2048,
+    privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
+    publicKeyEncoding: { type: 'spki', format: 'pem' },
+  });
+  const originalFetch = globalThis.fetch;
+  const calls: string[] = [];
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input);
+    calls.push(url);
+    if (url.includes('/accounts:lookup?key=')) {
+      return new Response(JSON.stringify({
+        users: [{ localId: 'diagnostic-user-1', email: 'member@example.test', emailVerified: true, disabled: false }],
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }
+    if (url === 'https://oauth2.googleapis.com/token') {
+      return new Response(JSON.stringify({ access_token: 'diagnostic-service-token', expires_in: 3600 }), {
+        status: 200, headers: { 'Content-Type': 'application/json' },
+      });
+    }
+    if (url.includes('cloudresourcemanager.googleapis.com/v1/projects/')) {
+      assert.equal(init?.method, 'POST');
+      assert.equal(new Headers(init?.headers).get('Authorization'), 'Bearer diagnostic-service-token');
+      assert.deepEqual(JSON.parse(String(init?.body)), { permissions: ['firebaseauth.users.update'] });
+      return new Response(JSON.stringify({ permissions: ['firebaseauth.users.update'] }), {
+        status: 200, headers: { 'Content-Type': 'application/json' },
+      });
+    }
+    throw new Error('Unexpected outbound request: ' + url);
+  }) as typeof fetch;
+
+  try {
+    const response = await worker.fetch(new Request('https://sipandu-registration.test/activation-diagnostics', {
+      method: 'POST',
+      headers: {
+        Origin: 'https://sipanduodhiv.my.id',
+        'Content-Type': 'application/json',
+        Authorization: 'Bearer verified-member-id-token',
+        'CF-Connecting-IP': '192.0.2.110',
+      },
+      body: JSON.stringify({}),
+    }), {
+      FIREBASE_AUTH_API_KEY: 'test-worker-secret-api-key',
+      FIREBASE_PROJECT_ID: 'gen-lang-client-0197631978',
+      FIREBASE_SERVICE_ACCOUNT_JSON: JSON.stringify({
+        project_id: 'gen-lang-client-0197631978',
+        client_email: 'test@example.iam.gserviceaccount.com',
+        private_key: privateKey,
+      }),
+      PENDING_REGISTRATIONS: {
+        get: async () => null,
+        put: async () => undefined,
+        delete: async () => undefined,
+      },
+    });
+
+    assert.equal(response.status, 200);
+    const result = await response.json() as {
+      ok?: boolean; configurationReady?: boolean; permissionCheckStatus?: string;
+      roleUpdatePermission?: boolean; accountEmailVerified?: boolean; accountEnabled?: boolean;
+    };
+    assert.equal(result.ok, true);
+    assert.equal(result.configurationReady, true);
+    assert.equal(result.permissionCheckStatus, 'checked');
+    assert.equal(result.roleUpdatePermission, true);
+    assert.equal(result.accountEmailVerified, true);
+    assert.equal(result.accountEnabled, true);
+    assert.equal(calls.length, 3);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('activation diagnostics clearly reports when Firebase role permission is absent', async () => {
+  const { generateKeyPairSync } = await import('node:crypto');
+  const { privateKey } = generateKeyPairSync('rsa', {
+    modulusLength: 2048,
+    privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
+    publicKeyEncoding: { type: 'spki', format: 'pem' },
+  });
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    const url = String(input);
+    if (url.includes('/accounts:lookup?key=')) {
+      return new Response(JSON.stringify({
+        users: [{ localId: 'diagnostic-user-2', email: 'member@example.test', emailVerified: true, disabled: false }],
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }
+    if (url === 'https://oauth2.googleapis.com/token') {
+      return new Response(JSON.stringify({ access_token: 'diagnostic-service-token', expires_in: 3600 }), {
+        status: 200, headers: { 'Content-Type': 'application/json' },
+      });
+    }
+    if (url.includes('cloudresourcemanager.googleapis.com/v1/projects/')) {
+      return new Response(JSON.stringify({ permissions: [] }), {
+        status: 200, headers: { 'Content-Type': 'application/json' },
+      });
+    }
+    throw new Error('Unexpected outbound request: ' + url);
+  }) as typeof fetch;
+
+  try {
+    const response = await worker.fetch(new Request('https://sipandu-registration.test/activation-diagnostics', {
+      method: 'POST',
+      headers: {
+        Origin: 'https://sipanduodhiv.my.id',
+        'Content-Type': 'application/json',
+        Authorization: 'Bearer verified-member-id-token',
+        'CF-Connecting-IP': '192.0.2.111',
+      },
+      body: JSON.stringify({}),
+    }), {
+      FIREBASE_AUTH_API_KEY: 'test-worker-secret-api-key',
+      FIREBASE_PROJECT_ID: 'gen-lang-client-0197631978',
+      FIREBASE_SERVICE_ACCOUNT_JSON: JSON.stringify({
+        project_id: 'gen-lang-client-0197631978',
+        client_email: 'test@example.iam.gserviceaccount.com',
+        private_key: privateKey,
+      }),
+      PENDING_REGISTRATIONS: {
+        get: async () => null,
+        put: async () => undefined,
+        delete: async () => undefined,
+      },
+    });
+
+    assert.equal(response.status, 200);
+    const result = await response.json() as {
+      ok?: boolean; permissionCheckStatus?: string; roleUpdatePermission?: boolean | null;
+      message?: string;
+    };
+    assert.equal(result.ok, true);
+    assert.equal(result.permissionCheckStatus, 'checked');
+    assert.equal(result.roleUpdatePermission, false);
+    assert.match(result.message || '', /belum memiliki izin IAM firebaseauth\.users\.update/);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
