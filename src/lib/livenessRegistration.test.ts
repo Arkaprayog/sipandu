@@ -38,7 +38,7 @@ test('accepts a proof only when its nonce matches the current iframe session', (
     type: 'sipandu:liveness:passed',
     nonce: 'old-session-nonce',
     proofToken,
-  }, 'current-session-nonce'), null);
+  }, 'current-session-nonce', challengeId), null);
   assert.equal(parseLivenessFrameMessage({
     type: 'sipandu:liveness:passed',
     nonce: 'current-session-nonce',
