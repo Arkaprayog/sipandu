@@ -86,7 +86,7 @@ export const LivenessRegistrationStep: React.FC<LivenessRegistrationStepProps> =
       }
 
       if (!nonce || proofHandledRef.current) return;
-      const message = parseLivenessFrameMessage(event.data, nonce);
+      const message = parseLivenessFrameMessage(event.data, nonce, session?.challengeId || '');
       if (!message) return;
 
       if (message.type === 'error') {
