@@ -21,7 +21,7 @@
         },
         {
           "key": "Permissions-Policy",
-          "value": "camera=(self "https://sipandu-registration.aryprayoga139.workers.dev"), geolocation=(self), microphone=()"
+          "value": "camera=(self \"https://sipandu-registration.aryprayoga139.workers.dev\"), geolocation=(self), microphone=()"
         },
         {
           "key": "Strict-Transport-Security",
