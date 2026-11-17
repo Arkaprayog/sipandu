@@ -39,11 +39,13 @@ export function isLivenessFrameReadyMessage(value: unknown): boolean {
   );
 }
 
-export function parseLivenessFrameMessage(value: unknown, nonce: string): LivenessFrameMessage | null {
+export function parseLivenessFrameMessage(value: unknown, nonce: string, challengeId: string): LivenessFrameMessage | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   const message = value as Record<string, unknown>;
   if (message.nonce !== nonce) return null;
-  if (message.type === 'sipandu:liveness:passed' && isValidLivenessProofToken(message.proofToken)) {
+  if (message.type === 'sipandu:liveness:passed'
+    && isValidLivenessProofToken(message.proofToken)
+    && message.proofToken.split('.')[0] === challengeId) {
     return { type: 'passed', proofToken: message.proofToken };
   }
   if (message.type === 'sipandu:liveness:error'
