@@ -3,7 +3,6 @@ import { createUserWithEmailAndPassword, sendEmailVerification, signOut, updateP
 import { ArrowLeft, Eye, EyeOff, UserPlus, MailCheck } from 'lucide-react';
 import { auth, staffAuthPersistenceReady, createSIPANDUUserProfile } from '../lib/firebase';
 import { publicAssetUrl } from '../lib/publicAssets';
-import { TEAM_REGISTRATION_API } from '../lib/teamRegistration';
 import { REGISTRATION_RECOVERY_NOTICE, shouldOfferRegistrationRecovery } from '../lib/registrationRecovery';
 import { registerSelfServiceMemberWithLiveness } from '../lib/livenessRegistration';
 import { LivenessRegistrationStep } from './LivenessRegistrationStep';
