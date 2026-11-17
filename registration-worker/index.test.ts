@@ -1049,6 +1049,14 @@ test('liveness Durable Object binds challenges to one UID and rejects proof repl
     proofExpiresAt: Date.now() + 5 * 60 * 1000,
     confidence: 98.5,
   });
+  assert.equal(response.status, 403);
+  response = await request('verify-complete', {
+    uid,
+    passed: true,
+    proofToken,
+    proofExpiresAt: Date.now() + 5 * 60 * 1000,
+    confidence: 98.5,
+  });
   assert.equal(response.status, 200);
 
   response = await request('consume-proof', { uid, proofToken: 'wrong-proof-token' });
