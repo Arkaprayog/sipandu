@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
-import { createUserWithEmailAndPassword, sendEmailVerification, signOut, updateProfile } from 'firebase/auth';
+import { createUserWithEmailAndPassword, sendEmailVerification, signOut, updateProfile, type User } from 'firebase/auth';
 import { ArrowLeft, Eye, EyeOff, UserPlus, MailCheck } from 'lucide-react';
 import { auth, staffAuthPersistenceReady, createSIPANDUUserProfile } from '../lib/firebase';
 import { publicAssetUrl } from '../lib/publicAssets';
 import { TEAM_REGISTRATION_API } from '../lib/teamRegistration';
 import { REGISTRATION_RECOVERY_NOTICE, shouldOfferRegistrationRecovery } from '../lib/registrationRecovery';
+import { registerSelfServiceMemberWithLiveness } from '../lib/livenessRegistration';
+import { LivenessRegistrationStep } from './LivenessRegistrationStep';
 
 interface RegistrationPageProps {
   onBack: (email?: string, notice?: string) => void;
@@ -21,6 +23,7 @@ export const RegistrationPage: React.FC<RegistrationPageProps> = ({ onBack }) =>
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [completed, setCompleted] = useState(false);
   const [canResumeRegistration, setCanResumeRegistration] = useState(false);
+  const [livenessUser, setLivenessUser] = useState<User | null>(null);
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -50,27 +53,10 @@ export const RegistrationPage: React.FC<RegistrationPageProps> = ({ onBack }) =>
         noHp: '',
         photoUrl: '',
       });
-      const idToken = await credential.user.getIdToken(true);
-      const registrationResponse = await fetch(`${TEAM_REGISTRATION_API}/register`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${idToken}`,
-        },
-        body: JSON.stringify({}),
-      });
-      const registrationResult = await registrationResponse.json().catch(() => ({})) as {
-        ok?: boolean;
-        status?: string;
-        message?: string;
-      };
-      if (!registrationResponse.ok || registrationResult.status !== 'pending_email') {
-        throw new Error(registrationResult.message || 'Pendaftaran mandiri belum berhasil dicatat.');
-      }
-      await sendEmailVerification(credential.user);
-      await signOut(auth);
-      setEmail(normalizedEmail);
-      setCompleted(true);
+      // The Firebase identity must exist before the Worker can bind a challenge to its UID.
+      // Registration is recorded only after the user completes the server-verified liveness step.
+      setLivenessUser(credential.user);
+      return;
     } catch (caught) {
       const code = (caught as { code?: string })?.code;
       let message = caught instanceof Error ? caught.message : 'Pendaftaran akun SIPANDU belum berhasil.';
@@ -95,6 +81,33 @@ export const RegistrationPage: React.FC<RegistrationPageProps> = ({ onBack }) =>
       setIsSubmitting(false);
     }
   };
+
+  const handleLivenessProof = async (proofToken: string) => {
+    if (!livenessUser) throw new Error('Sesi pendaftaran tidak ditemukan. Masuk kembali untuk melanjutkan.');
+    await registerSelfServiceMemberWithLiveness(livenessUser, proofToken);
+    await sendEmailVerification(livenessUser);
+    await signOut(auth);
+    setEmail(livenessUser.email || email.trim().toLowerCase());
+    setLivenessUser(null);
+    setCompleted(true);
+  };
+
+  const handleLivenessCancel = async () => {
+    const registeredEmail = livenessUser?.email || email.trim().toLowerCase();
+    try { await signOut(auth); } catch { /* account remains recoverable through login */ }
+    setLivenessUser(null);
+    onBack(registeredEmail, 'Pendaftaran belum selesai. Masuk kembali menggunakan email dan kata sandi yang sama untuk melanjutkan verifikasi wajah.');
+  };
+
+  if (livenessUser) {
+    return (
+      <LivenessRegistrationStep
+        user={livenessUser}
+        onProof={handleLivenessProof}
+        onCancel={() => void handleLivenessCancel()}
+      />
+    );
+  }
 
   return (
     <div className="relative flex min-h-screen w-full items-center justify-center overflow-x-hidden px-3 py-5 text-slate-800">
