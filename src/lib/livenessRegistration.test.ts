@@ -33,7 +33,7 @@ test('accepts a proof only when its nonce matches the current iframe session', (
     type: 'sipandu:liveness:passed',
     nonce: 'current-session-nonce',
     proofToken,
-  }, 'current-session-nonce'), { type: 'passed', proofToken });
+  }, 'current-session-nonce', challengeId), { type: 'passed', proofToken });
   assert.equal(parseLivenessFrameMessage({
     type: 'sipandu:liveness:passed',
     nonce: 'old-session-nonce',
@@ -43,7 +43,12 @@ test('accepts a proof only when its nonce matches the current iframe session', (
     type: 'sipandu:liveness:passed',
     nonce: 'current-session-nonce',
     proofToken: 'invalid',
-  }, 'current-session-nonce'), null);
+  }, 'current-session-nonce', challengeId), null);
+  assert.equal(parseLivenessFrameMessage({
+    type: 'sipandu:liveness:passed',
+    nonce: 'current-session-nonce',
+    proofToken: `33333333-3333-4333-8333-333333333333.${proofId}`,
+  }, 'current-session-nonce', challengeId), null);
 });
 
 test('creates a Firebase-UID challenge with the server consent version', async () => {
