@@ -6,6 +6,8 @@ import { authenticateBiometricLock, isBiometricLockEnabled } from '../lib/biomet
 import { Lock, User, Eye, EyeOff, Fingerprint, ArrowRight } from 'lucide-react';
 import { publicAssetUrl } from '../lib/publicAssets';
 import { RegistrationPage } from './RegistrationPage';
+import { LivenessRegistrationStep } from './LivenessRegistrationStep';
+import { registerSelfServiceMemberWithLiveness } from '../lib/livenessRegistration';
 
 const LOGIN_TIMEOUT_MS = 18_000;
 
@@ -24,6 +26,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
   const [forcePasswordLogin, setForcePasswordLogin] = useState(false);
   const [showRegistration, setShowRegistration] = useState(false);
   const [registrationNotice, setRegistrationNotice] = useState('');
+  const [livenessRecoveryUser, setLivenessRecoveryUser] = useState<FirebaseUser | null>(null);
   const formRef = useRef<HTMLFormElement>(null);
   const quickUnlockUser = restoredUser || auth.currentUser;
   const quickUnlockActive = Boolean(quickUnlockUser && isBiometricLockEnabled(quickUnlockUser.uid) && !forcePasswordLogin);
@@ -118,23 +121,12 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
         // Retry the idempotent self-registration endpoint when the account was
         // created but the original Worker request did not finish, or when it
         // still carries a legacy pending_owner state.
-        let registrationStatus = registration.status;
+        const registrationStatus = registration.status;
         if (registrationStatus === 'not_registered' || registrationStatus === 'pending_owner') {
-          const retryResponse = await fetch('https://sipandu-registration.aryprayoga139.workers.dev/register', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              Authorization: 'Bearer ' + idToken,
-            },
-            body: JSON.stringify({}),
-          });
-          const retry = await retryResponse.json().catch(() => ({})) as { ok?: boolean; status?: string; message?: string };
-          if (!retryResponse.ok || !retry.ok) {
-            await signOut(auth);
-            setErrorMsg(retry.message || 'Pendaftaran mandiri belum berhasil dipulihkan. Coba kembali.');
-            return;
-          }
-          registrationStatus = retry.status;
+          // Never retry /register with an empty body: the Worker requires a fresh,
+          // UID-bound liveness proof before creating a new pending registration.
+          setLivenessRecoveryUser(credential.user);
+          return;
         }
 
         if (registrationStatus === 'rejected') {
@@ -208,6 +200,33 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
       setIsSubmitting(false);
     }
   };
+
+  if (livenessRecoveryUser) {
+    const recoveryUser = livenessRecoveryUser;
+    return (
+      <LivenessRegistrationStep
+        user={recoveryUser}
+        onProof={async (proofToken) => {
+          await registerSelfServiceMemberWithLiveness(recoveryUser, proofToken);
+          await sendEmailVerification(recoveryUser);
+          await signOut(auth);
+          setLivenessRecoveryUser(null);
+          setEmail(recoveryUser.email || email.trim());
+          setPassword('');
+          setRegistrationNotice('Tautan verifikasi email SIPANDU telah dikirim. Buka email tersebut, lalu masuk kembali setelah verifikasi.');
+          setErrorMsg('');
+        }}
+        onCancel={async () => {
+          const recoveryEmail = recoveryUser.email || email.trim();
+          try { await signOut(auth); } catch { /* keep the account recoverable */ }
+          setLivenessRecoveryUser(null);
+          setEmail(recoveryEmail);
+          setPassword('');
+          setErrorMsg('Pendaftaran belum selesai. Masuk kembali untuk melanjutkan verifikasi wajah.');
+        }}
+      />
+    );
+  }
 
   if (showRegistration) {
     return <RegistrationPage onBack={(registeredEmail, notice) => {
