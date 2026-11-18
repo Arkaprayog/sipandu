@@ -56,7 +56,8 @@ function App() {
         || typeof data.nonce !== "string" || data.nonce.length < 20
         || typeof data.challengeId !== "string" || typeof data.sessionId !== "string"
         || typeof data.idToken !== "string" || data.idToken.length < 100
-        || typeof data.region !== "string" || data.region.length > 40) return;
+        || typeof data.region !== "string" || data.region.length > 40
+        || (data.purpose !== undefined && data.purpose !== "registration" && data.purpose !== "login")) return;
       errorSent.current = false;
       setError("");
       setConfig({
@@ -65,6 +66,7 @@ function App() {
         sessionId: data.sessionId,
         idToken: data.idToken,
         region: data.region,
+        purpose: data.purpose === "login" ? "login" : "registration",
         parentOrigin: event.origin
       });
     };
@@ -95,7 +97,7 @@ function App() {
         "Content-Type": "application/json",
         "Authorization": "Bearer " + config.idToken
       },
-      body: JSON.stringify({ challengeId: config.challengeId })
+      body: JSON.stringify({ challengeId: config.challengeId, purpose: config.purpose })
     });
     const result = await response.json().catch(() => ({}));
     if (!response.ok || !result.credentials) {
@@ -119,7 +121,7 @@ function App() {
           "Content-Type": "application/json",
           "Authorization": "Bearer " + config.idToken
         },
-        body: JSON.stringify({ challengeId: config.challengeId })
+        body: JSON.stringify({ challengeId: config.challengeId, purpose: config.purpose })
       });
       const result = await response.json().catch(() => ({}));
       if (response.status === 202 && result.status === "in_progress") {
