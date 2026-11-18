@@ -4,6 +4,7 @@
 - Menyamakan masa berlaku challenge dengan batas sesi Amazon Rekognition Face Liveness, yaitu tiga menit sejak SessionId dibuat.
 - Menolak challenge yang melebihi masa berlaku sesi AWS.
 - Menampilkan hitung mundur dengan margin keselamatan 15 detik pada layar kamera dan menutup sesi yang habis agar pengguna dapat memulai ulang.
+- Memvalidasi masa berlaku dari respons Worker di aplikasi; nilai yang hilang, nol, tidak valid, atau melebihi 180 detik ditolak sebelum kamera dijalankan.
 - Memperpanjang masa simpan bukti sekali pakai setelah pemeriksaan berhasil hingga masa berlaku bukti (10 menit), tanpa memperpanjang masa berlaku SessionId AWS.
 - Menambahkan tes regresi untuk batas TTL challenge dan retensi bukti.
 
