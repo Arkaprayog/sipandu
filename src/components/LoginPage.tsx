@@ -3,11 +3,11 @@ import { onAuthStateChanged, signInWithEmailAndPassword, sendEmailVerification, 
 import { auth, staffAuthPersistenceReady, createSIPANDUUserProfile, getSIPANDUUserProfile } from '../lib/firebase';
 import { activateVerifiedTeamMember } from '../lib/teamRegistration';
 import { authenticateBiometricLock, isBiometricLockEnabled } from '../lib/biometricLock';
-import { Lock, User, Eye, EyeOff, Fingerprint, ArrowRight } from 'lucide-react';
+import { Lock, User, Eye, EyeOff, Fingerprint, ArrowRight, Camera, ShieldCheck } from 'lucide-react';
 import { publicAssetUrl } from '../lib/publicAssets';
 import { RegistrationPage } from './RegistrationPage';
 import { LivenessRegistrationStep } from './LivenessRegistrationStep';
-import { registerSelfServiceMemberWithLiveness } from '../lib/livenessRegistration';
+import { consumeLoginLivenessProof, registerSelfServiceMemberWithLiveness } from '../lib/livenessRegistration';
 
 const LOGIN_TIMEOUT_MS = 18_000;
 
@@ -27,6 +27,8 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
   const [showRegistration, setShowRegistration] = useState(false);
   const [registrationNotice, setRegistrationNotice] = useState('');
   const [livenessRecoveryUser, setLivenessRecoveryUser] = useState<FirebaseUser | null>(null);
+  const [livenessLoginOptionUser, setLivenessLoginOptionUser] = useState<FirebaseUser | null>(null);
+  const [livenessLoginUser, setLivenessLoginUser] = useState<FirebaseUser | null>(null);
   const formRef = useRef<HTMLFormElement>(null);
   const quickUnlockUser = restoredUser || auth.currentUser;
   const quickUnlockActive = Boolean(quickUnlockUser && isBiometricLockEnabled(quickUnlockUser.uid) && !forcePasswordLogin);
@@ -54,7 +56,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
       setIsSubmitting(true);
       try {
         await authenticateBiometricLock(currentUser.uid);
-        onLogin(currentUser.displayName || currentUser.email || 'Pengguna SIPANDU');
+        setLivenessLoginOptionUser(currentUser);
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Verifikasi biometrik gagal.';
         setErrorMsg(`Biometrik belum berhasil. ${message} Pilih “Gunakan email dan kata sandi” untuk pemulihan akun.`);
@@ -177,7 +179,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
         }
       }
 
-      onLogin(credential.user.displayName || credential.user.email || 'Pengguna SIPANDU');
+      setLivenessLoginOptionUser(credential.user);
     } catch (error) {
       const code = (error as { code?: string })?.code;
       if (code === 'sipandu/login-timeout') {
@@ -225,6 +227,63 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
           setErrorMsg('Pendaftaran belum selesai. Masuk kembali untuk melanjutkan verifikasi wajah.');
         }}
       />
+    );
+  }
+
+  if (livenessLoginUser) {
+    const loginUser = livenessLoginUser;
+    return (
+      <LivenessRegistrationStep
+        user={loginUser}
+        purpose="login"
+        onProof={async (proofToken) => {
+          await consumeLoginLivenessProof(loginUser, proofToken);
+          setLivenessLoginUser(null);
+          setLivenessLoginOptionUser(null);
+          onLogin(loginUser.displayName || loginUser.email || 'Pengguna SIPANDU');
+        }}
+        onCancel={() => setLivenessLoginUser(null)}
+      />
+    );
+  }
+
+  if (livenessLoginOptionUser) {
+    const loginUser = livenessLoginOptionUser;
+    return (
+      <div className="relative flex min-h-[100dvh] w-full items-center justify-center overflow-x-hidden bg-slate-950/90 px-3 py-5 text-slate-900">
+        <main className="w-full max-w-md rounded-2xl border border-white/70 bg-white p-5 shadow-2xl sm:p-7">
+          <div className="mb-4 text-center">
+            <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-teal-50 text-teal-800">
+              <ShieldCheck className="h-7 w-7" />
+            </div>
+            <h1 className="text-xl font-extrabold text-slate-900">Login berhasil</h1>
+            <p className="mt-2 text-sm leading-relaxed text-slate-600">
+              Sebagai lapisan keamanan tambahan, Anda dapat melakukan Face Liveness sebelum melanjutkan ke SIPANDU. Pemeriksaan ini opsional dan dapat dilewati.
+            </p>
+            <p className="mt-2 break-all text-xs font-semibold text-slate-700">{loginUser.email || 'Akun SIPANDU'}</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setLivenessLoginUser(loginUser)}
+            className="flex w-full items-center justify-center gap-2 rounded-xl bg-teal-700 px-4 py-3 text-sm font-bold text-white shadow-md transition hover:bg-teal-800"
+          >
+            <Camera className="h-4 w-4" /> Verifikasi wajah (opsional)
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setLivenessLoginOptionUser(null);
+              onLogin(loginUser.displayName || loginUser.email || 'Pengguna SIPANDU');
+            }}
+            className="mt-2 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+          >
+            Lewati untuk sekarang
+          </button>
+          <p className="mt-3 text-center text-[11px] leading-relaxed text-slate-500">
+            Jika layanan Face Liveness belum tersedia, Anda tetap dapat masuk melalui pilihan lewati.
+          </p>
+        </main>
+      </div>
     );
   }
 
