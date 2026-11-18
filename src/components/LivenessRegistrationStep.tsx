@@ -36,6 +36,7 @@ export const LivenessRegistrationStep: React.FC<LivenessRegistrationStepProps> =
   const [starting, setStarting] = useState(false);
   const [processing, setProcessing] = useState(false);
   const [error, setError] = useState('');
+  const [secondsLeft, setSecondsLeft] = useState<number | null>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const initializedChallengeRef = useRef<string | null>(null);
   const proofHandledRef = useRef(false);
@@ -62,6 +63,30 @@ export const LivenessRegistrationStep: React.FC<LivenessRegistrationStepProps> =
   useEffect(() => {
     void refreshHealth();
   }, [refreshHealth]);
+
+  useEffect(() => {
+    if (!session) {
+      setSecondsLeft(null);
+      return;
+    }
+    // AWS SessionIds expire after three minutes. Keep a 15-second margin for
+    // camera permission prompts, stream setup, and the result callback.
+    const deadline = Date.now() + Math.max(1, session.expiresInSeconds - 15) * 1000;
+    const updateCountdown = () => {
+      const remaining = Math.max(0, Math.ceil((deadline - Date.now()) / 1000));
+      setSecondsLeft(remaining);
+      if (remaining === 0) {
+        setError('Sesi verifikasi wajah telah kedaluwarsa. Mulai sesi baru untuk mencoba kembali.');
+        setSession(null);
+        setNonce('');
+        initializedChallengeRef.current = null;
+        proofHandledRef.current = false;
+      }
+    };
+    updateCountdown();
+    const timer = window.setInterval(updateCountdown, 1000);
+    return () => window.clearInterval(timer);
+  }, [session]);
 
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
@@ -206,6 +231,11 @@ export const LivenessRegistrationStep: React.FC<LivenessRegistrationStepProps> =
         {session ? (
           <div className="space-y-3">
             <p className="text-center text-xs font-semibold text-slate-700">Ikuti instruksi gerakan wajah pada panel kamera di bawah ini.</p>
+            {secondsLeft !== null && (
+              <p role="timer" aria-live="polite" className="text-center text-xs font-bold text-amber-800">
+                Sisa waktu sesi: {Math.floor(secondsLeft / 60)}:{String(secondsLeft % 60).padStart(2, '0')}. Selesaikan sekarang.
+              </p>
+            )}
             <iframe
               ref={iframeRef}
               key={session.challengeId}
