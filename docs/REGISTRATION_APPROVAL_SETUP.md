@@ -1,58 +1,78 @@
-# SIPANDU — Alur Pendaftaran Mandiri dan Aktivasi Anggota
+# SIPANDU — Pendaftaran Mandiri, Face Liveness, dan Aktivasi Anggota
 
-Dokumen ini mencerminkan alur pendaftaran SIPANDU yang berlaku: pendaftaran mandiri terbuka tanpa kode tim dan tanpa undangan.
+Dokumen ini menjelaskan alur yang diterapkan pada main saat ini. Pendaftaran terbuka tidak memerlukan kode tim atau undangan Owner. Face Liveness diwajibkan untuk pendaftaran baru; pemeriksaan tambahan saat login bersifat opsional.
 
-## Alur pengguna baru
+## Alur pendaftaran pengguna baru
 
-1. Pengguna mengisi nama, email aktif, dan kata sandi pada halaman Pendaftaran Akun.
-2. Firebase Authentication membuat identitas akun. SIPANDU membuat profil dasar pada `userProfiles/{uid}` dan Worker mencatat permohonan pada KV dengan status `pending_email`.
-3. SIPANDU mengirim tautan verifikasi melalui Firebase Authentication. Pengguna keluar dari sesi pendaftaran sampai verifikasi selesai.
-4. Pengguna membuka tautan verifikasi, lalu masuk kembali menggunakan email dan kata sandi.
-5. Halaman login memuat ulang status email dan klaim token. Jika email sudah terverifikasi tetapi klaim peran belum ada, login memanggil Worker `POST /activate`.
-6. Worker memvalidasi ID token, email terverifikasi, status akun tidak dinonaktifkan, kecocokan UID/email dengan catatan pendaftaran, serta tidak adanya peran lain yang harus dipertahankan. Worker menerbitkan custom claim `role=anggota` melalui Firebase Admin API.
-7. Aplikasi memaksa refresh ID token dan memastikan klaim `anggota` sudah tersedia sebelum membuka sesi SIPANDU.
+1. Pengguna mengisi nama, email aktif, dan kata sandi. Firebase Authentication membuat identitas akun dan SIPANDU membuat profil dasar pada userProfiles/{uid}.
+2. Setelah identitas Firebase tersedia, pengguna menyetujui pemrosesan kamera dan menyelesaikan Face Liveness. Worker membuat challenge yang terikat pada Firebase UID dan tujuan registration; bukti hasilnya bersifat sekali pakai.
+3. Setelah bukti liveness berhasil, aplikasi mengirim POST /register. Worker memverifikasi Firebase ID token, akun belum terverifikasi/tidak dinonaktifkan, ketiadaan role yang telah ada, serta bukti liveness yang terikat pada UID. Worker baru kemudian mencatat status pending_email pada KV.
+4. Aplikasi mengirim tautan verifikasi melalui Firebase Authentication dan mengakhiri sesi pendaftaran. Jika jaringan terputus setelah akun Firebase dibuat, pengguna harus melanjutkan dengan email dan kata sandi yang sama, bukan membuat akun kedua.
+5. Pengguna membuka tautan verifikasi email lalu masuk kembali. Halaman login memuat ulang status akun dan token Firebase.
+6. Jika email sudah terverifikasi tetapi role belum diterbitkan, aplikasi memanggil Worker POST /activate. Worker mencocokkan UID/email dengan catatan KV, memeriksa status akun, lalu menetapkan custom claim role=anggota melalui Firebase Admin API.
+7. Aplikasi menyegarkan ID token dan memastikan klaim anggota tersedia. Anggota mendapat layar dasar yang terisolasi; akses operasional/staf tetap memerlukan pemberian role oleh administrator.
+
+## Pemulihan akun dan login
+
+- Jika identitas Firebase sudah dibuat tetapi catatan pendaftaran belum selesai, login menampilkan alur pemulihan liveness. Endpoint /register tetap memerlukan bukti baru yang terikat pada UID, kecuali catatan pending_email self-service yang sudah ada dapat dipulihkan secara idempoten.
+- Jika profil Firestore belum dibuat karena proses sebelumnya terputus, login memeriksa profil dan membuat profil dasar hanya bila dokumen belum ada.
+- Anggota yang emailnya belum terverifikasi tidak memperoleh akses aplikasi; sistem mengirim ulang tautan verifikasi dan mengakhiri sesi.
+- Setelah login berhasil, Face Liveness tambahan dapat dipilih sebagai lapisan keamanan opsional. Pengguna dapat melewatinya. Pilihan ini bukan pengganti autentikasi Firebase atau pembatasan role di server.
+- Biometrik perangkat (sidik jari/Face ID yang membuka kunci lokal) berbeda dari Face Liveness server-side. Biometrik perangkat tidak membuktikan bahwa wajah pengguna hidup dan tidak menggantikan challenge Rekognition.
 
 ## Batas hak akses
 
-- Akun baru hanya mendapat peran `anggota` dengan hak dasar.
-- Peran `owner`, `supervisor`, dan `pendamping` tidak pernah dapat dipilih atau dinaikkan oleh pendaftar melalui request frontend.
-- Hak administratif dan akses data responden sensitif tetap dibatasi oleh Firebase custom claims dan Firestore Rules.
-- Akun Firebase yang dinonaktifkan ditolak oleh Worker.
-- Email belum terverifikasi tidak boleh masuk sebagai anggota. Login akan mengirim ulang tautan verifikasi dan mengakhiri sesi.
+- Pendaftar baru hanya memperoleh role anggota; role tidak pernah dipilih dari browser.
+- owner, supervisor, dan pendamping yang sudah ada tidak ditimpa oleh jalur pendaftaran anggota.
+- Firebase Firestore/Storage Rules tidak memasukkan anggota ke fungsi isStaff(). Tes emulator memastikan anggota ditolak pada koleksi PPKS, jawaban/arsip asesmen, intake responden, dokumen/surat staf, status/riwayat layanan, kunjungan, Direct Message, dan file Storage staf.
+- Anggota hanya dapat membaca/mengelola profil userProfiles/{uid} miliknya sendiri; anggota tidak dapat menetapkan field role pada profil.
+- Worker arsip Google Drive hanya mengizinkan role staf owner, supervisor, dan pendamping. Worker menolak anggota.
+
+## Konfigurasi Worker pendaftaran
+
+Worker sipandu-registration memerlukan konfigurasi inti berikut:
+- Secret FIREBASE_AUTH_API_KEY
+- Secret FIREBASE_SERVICE_ACCOUNT_JSON dengan izin minimum untuk memperbarui custom claims Firebase Authentication (firebaseauth.users.update)
+- Secret TURNSTILE_SECRET_KEY untuk formulir publik
+- Variabel proyek Firebase, KV PENDING_REGISTRATIONS, dan Durable Object LIVENESS_CHALLENGES (kelas LivenessChallengeStore)
+
+Face Liveness memerlukan tambahan tiga secret AWS:
+- AWS_ACCESS_KEY_ID
+- AWS_SECRET_ACCESS_KEY
+- AWS_FACE_LIVENESS_ROLE_ARN
+
+Ketiga secret AWS tersebut belum terpasang pada Worker produksi pada pemeriksaan 18 November 2026. Karena itu, kode/endpoint Face Liveness sudah ada, tetapi Face Liveness produksi belum siap sampai kredensial AWS yang sah dipasang. Jangan mengisi nilai dummy dan jangan menaruh nilai secret di repo, issue, log, atau percakapan.
+
+Periksa GET /health dan GET /liveness/health. Health check liveness yang ready=true hanya menunjukkan konfigurasi tersedia; itu belum membuktikan AWS IAM, Rekognition API, kamera, ataupun streaming benar-benar berhasil. Uji kamera pada browser dan perangkat Android nyata tetap diperlukan.
+
+## Alur Face Liveness dan masa berlaku
+
+- Rekognition Face Liveness SessionId mempunyai batas masa berlaku tiga menit; Worker membatasi challenge hingga 180 detik dengan toleransi jam kecil.
+- Antarmuka menampilkan hitung mundur dan menghentikan sesi sebelum batas waktu AWS, sehingga pengguna dapat memulai sesi baru bila sesi habis.
+- Setelah hasil liveness berhasil, bukti sekali pakai mempunyai masa berlaku tersendiri hingga sepuluh menit. Masa berlaku bukti ini tidak memperpanjang masa berlaku SessionId AWS.
+- Proof harus dikonsumsi oleh UID dan tujuan yang cocok; bukti yang telah digunakan tidak dapat diputar ulang.
 
 ## Pemulihan kegagalan
 
-- Jika catatan pendaftaran belum tercatat, login dapat mencoba kembali endpoint `/register` secara idempoten untuk akun yang belum memiliki peran.
-- Jika pembuatan profil Firestore terputus, setelah email diverifikasi login memeriksa profil dan membuat profil dasar hanya jika belum ada.
-- Jika penerbitan peran gagal karena IAM, Worker mengembalikan error dan akun tidak diberi akses aplikasi. Pengguna tidak perlu membuat akun baru; administrator harus memperbaiki izin service account `FIREBASE_SERVICE_ACCOUNT_JSON` untuk `firebaseauth.users.update`, lalu pengguna mencoba masuk kembali.
-- Jika Worker atau jaringan tidak tersedia, login gagal tertutup (fail closed), bukan memberi akses tanpa peran.
+- Jika catatan pendaftaran belum tercatat, login dapat mengarahkan pengguna ke pemulihan liveness. Jangan mengulang pendaftaran dengan membuat akun Firebase baru.
+- Jika /activate gagal karena IAM, Worker mengembalikan error dan tidak memberi akses. Administrator memperbaiki izin service account FIREBASE_SERVICE_ACCOUNT_JSON untuk firebaseauth.users.update, lalu pengguna masuk kembali.
+- Endpoint POST /activation-diagnostics dapat memeriksa apakah service account Worker memiliki izin tersebut tanpa mengubah role pengguna. permissionCheckStatus=unavailable bukan bukti izin tersedia ataupun tidak tersedia.
+- Jika secret AWS belum tersedia, /liveness/health melaporkan konfigurasi belum siap dan pengguna tidak dapat memulai challenge. Aktivasi AWS harus dilakukan melalui akun AWS yang berwenang; rahasia tidak boleh dikirim melalui chat.
+- Jika Worker/jaringan tidak tersedia, alur gagal tertutup (fail closed), bukan memberi akses tanpa verifikasi role.
 
-## Konfigurasi Worker
+## Fitur persetujuan lama
 
-Worker `sipandu-registration` memerlukan:
-- `FIREBASE_AUTH_API_KEY`
-- `FIREBASE_PROJECT_ID`
-- Secret `FIREBASE_SERVICE_ACCOUNT_JSON` dengan izin minimum untuk memperbarui custom claims Firebase Authentication
-- KV binding `PENDING_REGISTRATIONS`
+Endpoint /owner/pending, /owner/approve, /owner/reject, dan /restore-invitation tetap dipertahankan untuk menangani catatan legacy. Endpoint tersebut bukan prasyarat pendaftaran mandiri baru.
 
-Periksa `GET /health` untuk konfigurasi yang hilang. Endpoint health hanya mengonfirmasi binding/secret tersedia, bukan membuktikan bahwa nilai service account benar atau izin IAM efektif. Setelah login dengan akun yang gagal diaktifkan, Worker juga menyediakan `POST /activation-diagnostics` (Bearer Firebase ID token). Endpoint ini memeriksa status email/akun dan memanggil `projects.testIamPermissions` sebagai service account untuk memeriksa `firebaseauth.users.update` tanpa mengubah klaim pengguna. Hasil `permissionCheckStatus=checked` dan `roleUpdatePermission=false` berarti izin IAM memang belum tersedia; `unavailable` berarti pemeriksaan Google belum berhasil dan bukan bukti izin ada atau tidak ada. Uji aktivasi nyata tetap diperlukan.
+## Checklist verifikasi sebelum menyatakan seluruh alur siap produksi
 
-## Fitur undangan lama
+1. Daftar akun sintetis baru dan pastikan akun Firebase dibuat tanpa duplikasi.
+2. Pastikan Face Liveness menolak sesi tanpa persetujuan, akun yang tidak cocok, sesi kedaluwarsa, dan bukti yang diputar ulang.
+3. Pastikan Worker mencatat pending_email hanya setelah bukti liveness sah.
+4. Verifikasi email, masuk kembali, dan pastikan Worker mengeluarkan role=anggota.
+5. Uji akun nonaktif, email belum terverifikasi, token invalid, catatan KV hilang, IAM Firebase tidak cukup, dan jaringan terputus; semua harus ditolak tanpa akses.
+6. Pastikan anggota tidak dapat membaca data responden/staf melalui Firestore, Storage, Worker arsip, atau Direct Message.
+7. Setelah secret AWS tersedia, uji /liveness/health, pembuatan sesi AWS, STS AssumeRole, kamera/stream, hasil Rekognition, konsumsi bukti, serta alur pendaftaran dan login pada browser dan Android fisik.
+8. Uji pemulihan akun setelah aplikasi ditutup di tengah pendaftaran dan login berulang dengan akun lama.
 
-Endpoint `/owner/pending`, `/owner/approve`, `/owner/reject`, dan `/restore-invitation` masih dipertahankan untuk menangani catatan pendaftaran legacy. Endpoint tersebut bukan bagian dari alur pendaftaran mandiri baru dan tidak boleh dijadikan prasyarat aktivasi akun baru.
-
-## Verifikasi sebelum menyatakan siap produksi
-
-- Daftar akun baru dengan email yang belum pernah digunakan.
-- Pastikan status KV menjadi `pending_email` dan email verifikasi benar-benar diterima.
-- Coba login sebelum verifikasi: harus ditolak dan tautan verifikasi dikirim ulang.
-- Verifikasi email, login kembali, pastikan `/activate` berhasil dan token memuat `role=anggota`.
-- Uji akun tanpa catatan KV, akun dinonaktifkan, token invalid, service account tanpa IAM, dan kegagalan jaringan: semuanya harus ditolak tanpa akses.
-- Pastikan Owner, Supervisor, dan Pendamping yang sudah ada tetap mempertahankan perannya.
-- Pastikan anggota tidak dapat membaca/menulis koleksi PPKS atau asesmen yang dibatasi staf.
-
-**Catatan:** KV Cloudflare bukan penyimpanan transaksi dengan compare-and-swap. Rate limiting berbasis KV juga merupakan pembatasan praktis, bukan mekanisme atomik sempurna terhadap request serentak. Jika pendaftaran berkembang besar, pindahkan state pendaftaran dan rate limit ke Durable Object atau penyimpanan transaksional.
-
-## Biometrik dan liveness
-
-Biometrik perangkat (sidik jari/Face ID untuk membuka sesi lokal) berbeda dari pemeriksaan facial liveness. Integrasi liveness wajah belum menjadi bagian dari alur pendaftaran ini dan tidak boleh diklaim aktif sebelum provider/backend verifikasi diintegrasikan dan diuji.
+Batas bukti: tes unit/emulator dan deployment metadata tidak menggantikan pengujian end-to-end dengan akun Firebase/Google Workspace sintetis dan kamera fisik. Jangan gunakan data responden ODHIV nyata untuk tes.
