@@ -238,7 +238,7 @@ export const LivenessRegistrationStep: React.FC<LivenessRegistrationStepProps> =
             className="flex w-full items-center justify-center gap-2 rounded-xl bg-teal-700 px-4 py-3 text-sm font-bold text-white shadow-md transition hover:bg-teal-800 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {starting ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Camera className="h-4 w-4" />}
-            {starting ? 'Membuat sesi aman…' : 'Mulai verifikasi wajah'}
+            {starting ? 'Membuat sesi aman…' : (purpose === 'login' ? 'Mulai verifikasi wajah tambahan' : 'Mulai verifikasi wajah')}
           </button>
         )}
       </main>
