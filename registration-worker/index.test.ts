@@ -1098,7 +1098,7 @@ test('login liveness proof can only be consumed by an active SIPANDU account', a
     }),
   };
   globalThis.fetch = (async (input: RequestInfo | URL) => {
-    assert.match(String(input), /accounts:lookup\\?key=/);
+    assert.match(String(input), /accounts:lookup\?key=/);
     return new Response(JSON.stringify({ users: [{
       localId: uid,
       email: 'member@example.test',
