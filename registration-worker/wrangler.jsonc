@@ -18,10 +18,7 @@
     "required": [
       "FIREBASE_SERVICE_ACCOUNT_JSON",
       "TURNSTILE_SECRET_KEY",
-      "FIREBASE_AUTH_API_KEY",
-      "AWS_ACCESS_KEY_ID",
-      "AWS_SECRET_ACCESS_KEY",
-      "AWS_FACE_LIVENESS_ROLE_ARN"
+      "FIREBASE_AUTH_API_KEY"
     ]
   },
   "durable_objects": {
