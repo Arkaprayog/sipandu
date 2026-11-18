@@ -63,7 +63,7 @@ test('creates a Firebase-UID challenge with the server consent version', async (
       challengeId,
       sessionId: 'aws-session-id',
       region: 'us-east-1',
-      expiresInSeconds: 600,
+      expiresInSeconds: 180,
     }), { status: 201, headers: { 'Content-Type': 'application/json' } });
   });
   assert.equal(requestUrl, `${TEAM_REGISTRATION_API}/liveness/session`);
@@ -95,7 +95,7 @@ test('creates a login-purpose challenge for an existing account', async () => {
   let requestBody: Record<string, unknown> | undefined;
   const session = await createLivenessSession(user, 'consent-v2', 'login', async (_input, init) => {
     requestBody = JSON.parse(String(init?.body)) as Record<string, unknown>;
-    return new Response(JSON.stringify({ ok: true, challengeId, sessionId: 'login-session', region: 'ap-southeast-5', expiresInSeconds: 600 }), {
+    return new Response(JSON.stringify({ ok: true, challengeId, sessionId: 'login-session', region: 'ap-southeast-5', expiresInSeconds: 180 }), {
       status: 201, headers: { 'Content-Type': 'application/json' },
     });
   });
