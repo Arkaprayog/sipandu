@@ -1176,7 +1176,7 @@ test('liveness challenge purpose cannot be changed between registration and logi
 
   let response = await request('create', {
     challengeId, uid, purpose: 'login', sessionId: 'login-session', consentVersion: 'consent-v2',
-    createdAt: Date.now(), expiresAt: Date.now() + 5 * 60 * 1000,
+    createdAt: Date.now(), expiresAt: Date.now() + 2 * 60 * 1000,
   });
   assert.equal(response.status, 200);
   response = await request('credentials', { uid, purpose: 'registration' });
