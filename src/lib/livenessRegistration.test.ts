@@ -73,6 +73,29 @@ test('creates a Firebase-UID challenge with the server consent version', async (
   assert.equal(session.challengeId, challengeId);
 });
 
+test('rejects malformed or overlong AWS Face Liveness session expiry values', async () => {
+  await assert.rejects(
+    createLivenessSession(user, 'consent-v2', 'registration', async () => new Response(JSON.stringify({
+      ok: true,
+      challengeId,
+      sessionId: 'aws-session-id',
+      region: 'ap-southeast-5',
+      expiresInSeconds: 600,
+    }), { status: 201, headers: { 'Content-Type': 'application/json' } })),
+    /Sesi verifikasi wajah belum dapat dibuat/,
+  );
+  await assert.rejects(
+    createLivenessSession(user, 'consent-v2', 'registration', async () => new Response(JSON.stringify({
+      ok: true,
+      challengeId,
+      sessionId: 'aws-session-id',
+      region: 'ap-southeast-5',
+      expiresInSeconds: 0,
+    }), { status: 201, headers: { 'Content-Type': 'application/json' } })),
+    /Sesi verifikasi wajah belum dapat dibuat/,
+  );
+});
+
 test('submits the one-time proof to the registration Worker', async () => {
   let requestUrl = '';
   let requestInit: RequestInit | undefined;
