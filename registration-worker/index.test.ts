@@ -1000,7 +1000,7 @@ test('liveness Durable Object binds challenges to one UID and rejects proof repl
     get: async <T = unknown>(key: string) => values.get(key) as T | undefined,
     put: async <T = unknown>(key: string, value: T) => { values.set(key, structuredClone(value)); },
     delete: async (key: string) => values.delete(key),
-    setAlarm: async (_scheduledTime: number) => undefined,
+    setAlarm: async (scheduledTime: number) => { scheduledAlarm = scheduledTime; },
     deleteAlarm: async () => undefined,
   };
   const store = new LivenessChallengeStore({ storage } as never);
@@ -1008,6 +1008,7 @@ test('liveness Durable Object binds challenges to one UID and rejects proof repl
   const proofToken = '22222222-2222-4222-8222-222222222222';
   const uid = 'firebase-uid-liveness-test';
   const now = Date.now();
+  let scheduledAlarm = 0;
 
   const request = (action: string, body: Record<string, unknown>) => store.fetch(new Request(
     `https://liveness-challenge.internal/${action}`,
@@ -1017,11 +1018,22 @@ test('liveness Durable Object binds challenges to one UID and rejects proof repl
   let response = await request('create', {
     challengeId,
     uid,
+    sessionId: 'aws-liveness-session-too-long',
+    consentVersion: '2026-11-16-v1',
+    consentAcceptedAt: now,
+    createdAt: now,
+    expiresAt: now + 4 * 60 * 1000,
+  });
+  assert.equal(response.status, 400, 'challenge must not outlive the AWS three-minute SessionId');
+
+  response = await request('create', {
+    challengeId,
+    uid,
     sessionId: 'aws-liveness-session',
     consentVersion: '2026-11-16-v1',
     consentAcceptedAt: now,
     createdAt: now,
-    expiresAt: now + 10 * 60 * 1000,
+    expiresAt: now + 2 * 60 * 1000,
   });
   assert.equal(response.status, 200);
   response = await request('create', {
@@ -1030,7 +1042,7 @@ test('liveness Durable Object binds challenges to one UID and rejects proof repl
     sessionId: 'second-session',
     consentVersion: '2026-11-16-v1',
     createdAt: now,
-    expiresAt: now + 10 * 60 * 1000,
+    expiresAt: now + 2 * 60 * 1000,
   });
   assert.equal(response.status, 409);
 
@@ -1050,14 +1062,18 @@ test('liveness Durable Object binds challenges to one UID and rejects proof repl
     confidence: 98.5,
   });
   assert.equal(response.status, 403);
+  const proofExpiresAt = Date.now() + 5 * 60 * 1000;
   response = await request('verify-complete', {
     uid,
     passed: true,
     proofToken,
-    proofExpiresAt: Date.now() + 5 * 60 * 1000,
+    proofExpiresAt,
     confidence: 98.5,
   });
   assert.equal(response.status, 200);
+  const passedRecord = values.get('record') as { expiresAt: number; proofExpiresAt: number };
+  assert.equal(passedRecord.expiresAt, proofExpiresAt, 'proof record must outlive the AWS SessionId');
+  assert.equal(scheduledAlarm, proofExpiresAt, 'cleanup alarm must follow proof expiry');
 
   response = await request('consume-proof', { uid, proofToken: 'wrong-proof-token' });
   assert.equal(response.status, 409);
