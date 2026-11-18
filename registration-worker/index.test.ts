@@ -1067,3 +1067,104 @@ test('liveness Durable Object binds challenges to one UID and rejects proof repl
   assert.equal(response.status, 404);
   assert.equal(values.has('record'), false);
 });
+
+
+test('login liveness proof can only be consumed by an active SIPANDU account', async () => {
+  const originalFetch = globalThis.fetch;
+  let role: string | undefined = 'anggota';
+  let consumeCalls = 0;
+  const uid = 'firebase-uid-active-liveness';
+  const kvValues = new Map<string, string>();
+  const kv = {
+    get: async (key: string) => kvValues.get(key) || null,
+    put: async (key: string, value: string) => { kvValues.set(key, value); },
+    delete: async (key: string) => { kvValues.delete(key); },
+  };
+  const namespace = {
+    idFromName: (name: string) => name,
+    get: (_id: unknown) => ({
+      fetch: async (request: Request) => {
+        assert.equal(new URL(request.url).pathname, '/consume-proof');
+        const body = await request.json() as { uid?: string; proofToken?: string; purpose?: string };
+        assert.equal(body.uid, uid);
+        assert.equal(body.purpose, 'login');
+        assert.equal(body.proofToken, '22222222-2222-4222-8222-222222222222');
+        consumeCalls += 1;
+        return new Response(JSON.stringify({
+          ok: true,
+          record: { status: 'passed', purpose: 'login', uid },
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      },
+    }),
+  };
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    assert.match(String(input), /accounts:lookup\?key=/);
+    return new Response(JSON.stringify({ users: [{
+      localId: uid,
+      email: 'member@example.test',
+      emailVerified: true,
+      disabled: false,
+      customAttributes: JSON.stringify(role ? { role } : {}),
+    }] }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+  }) as typeof fetch;
+
+  const makeRequest = () => new Request('https://sipandu-registration.test/liveness/login/consume', {
+    method: 'POST',
+    headers: {
+      Origin: 'https://sipanduodhiv.my.id',
+      'Content-Type': 'application/json',
+      Authorization: 'Bearer active-user-id-token',
+      'CF-Connecting-IP': '192.0.2.122',
+    },
+    body: JSON.stringify({
+      proofToken: '11111111-1111-4111-8111-111111111111.22222222-2222-4222-8222-222222222222',
+    }),
+  });
+
+  try {
+    const env = {
+      FIREBASE_AUTH_API_KEY: 'test-worker-secret-api-key',
+      PENDING_REGISTRATIONS: kv,
+      LIVENESS_CHALLENGES: namespace,
+    };
+    let response = await worker.fetch(makeRequest(), env);
+    assert.equal(response.status, 200);
+    assert.equal((await response.json() as { status?: string }).status, 'verified');
+    assert.equal(consumeCalls, 1);
+
+    role = undefined;
+    response = await worker.fetch(makeRequest(), env);
+    assert.equal(response.status, 401);
+    assert.equal(consumeCalls, 1, 'an account without an active SIPANDU role must not consume a proof');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('liveness challenge purpose cannot be changed between registration and login', async () => {
+  const values = new Map<string, unknown>();
+  const storage = {
+    get: async <T = unknown>(key: string) => values.get(key) as T | undefined,
+    put: async <T = unknown>(key: string, value: T) => { values.set(key, structuredClone(value)); },
+    delete: async (key: string) => values.delete(key),
+    setAlarm: async (_scheduledTime: number) => undefined,
+    deleteAlarm: async () => undefined,
+  };
+  const store = new LivenessChallengeStore({ storage } as never);
+  const challengeId = '33333333-3333-4333-8333-333333333333';
+  const uid = 'firebase-uid-purpose-test';
+  const request = (action: string, body: Record<string, unknown>) => store.fetch(new Request(
+    `https://liveness-challenge.internal/${action}`,
+    { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) },
+  ));
+
+  let response = await request('create', {
+    challengeId, uid, purpose: 'login', sessionId: 'login-session', consentVersion: 'consent-v2',
+    createdAt: Date.now(), expiresAt: Date.now() + 5 * 60 * 1000,
+  });
+  assert.equal(response.status, 200);
+  response = await request('credentials', { uid, purpose: 'registration' });
+  assert.equal(response.status, 403);
+  response = await request('credentials', { uid, purpose: 'login' });
+  assert.equal(response.status, 200);
+});

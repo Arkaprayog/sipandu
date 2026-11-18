@@ -3,6 +3,7 @@ import test from 'node:test';
 import type { User } from 'firebase/auth';
 import {
   createLivenessSession,
+  consumeLoginLivenessProof,
   isLivenessFrameReadyMessage,
   isValidLivenessProofToken,
   parseLivenessFrameMessage,
@@ -54,7 +55,7 @@ test('accepts a proof only when its nonce matches the current iframe session', (
 test('creates a Firebase-UID challenge with the server consent version', async () => {
   let requestUrl = '';
   let requestInit: RequestInit | undefined;
-  const session = await createLivenessSession(user, '2026-11-16-v1', async (input, init) => {
+  const session = await createLivenessSession(user, '2026-11-16-v1', 'registration', async (input, init) => {
     requestUrl = String(input);
     requestInit = init;
     return new Response(JSON.stringify({
@@ -68,7 +69,7 @@ test('creates a Firebase-UID challenge with the server consent version', async (
   assert.equal(requestUrl, `${TEAM_REGISTRATION_API}/liveness/session`);
   assert.equal(requestInit?.method, 'POST');
   assert.equal(new Headers(requestInit?.headers).get('Authorization'), 'Bearer firebase-id-token');
-  assert.deepEqual(JSON.parse(String(requestInit?.body)), { consentVersion: '2026-11-16-v1' });
+  assert.deepEqual(JSON.parse(String(requestInit?.body)), { consentVersion: '2026-11-16-v1', purpose: 'registration' });
   assert.equal(session.challengeId, challengeId);
 });
 
@@ -87,4 +88,32 @@ test('submits the one-time proof to the registration Worker', async () => {
   assert.equal(requestInit?.method, 'POST');
   assert.equal(new Headers(requestInit?.headers).get('Authorization'), 'Bearer firebase-id-token');
   assert.deepEqual(JSON.parse(String(requestInit?.body)), { livenessProofToken: proofToken });
+});
+
+
+test('creates a login-purpose challenge for an existing account', async () => {
+  let requestBody: Record<string, unknown> | undefined;
+  const session = await createLivenessSession(user, 'consent-v2', 'login', async (_input, init) => {
+    requestBody = JSON.parse(String(init?.body)) as Record<string, unknown>;
+    return new Response(JSON.stringify({ ok: true, challengeId, sessionId: 'login-session', region: 'ap-southeast-5', expiresInSeconds: 600 }), {
+      status: 201, headers: { 'Content-Type': 'application/json' },
+    });
+  });
+  assert.equal(session.sessionId, 'login-session');
+  assert.deepEqual(requestBody, { consentVersion: 'consent-v2', purpose: 'login' });
+});
+
+test('consumes a login liveness proof through the dedicated Worker endpoint', async () => {
+  let requestUrl = '';
+  let requestInit: RequestInit | undefined;
+  await consumeLoginLivenessProof(user, proofToken, async (input, init) => {
+    requestUrl = String(input);
+    requestInit = init;
+    return new Response(JSON.stringify({ ok: true, status: 'verified' }), {
+      status: 200, headers: { 'Content-Type': 'application/json' },
+    });
+  });
+  assert.equal(requestUrl, `${TEAM_REGISTRATION_API}/liveness/login/consume`);
+  assert.equal(new Headers(requestInit?.headers).get('Authorization'), 'Bearer firebase-id-token');
+  assert.deepEqual(JSON.parse(String(requestInit?.body)), { proofToken });
 });
