@@ -123,6 +123,7 @@ interface LivenessChallengeRecord {
   expiresAt: number;
   credentialsIssuedAt?: number;
   status: 'created' | 'verifying' | 'passed' | 'failed';
+  purpose: 'registration' | 'login';
   proofToken?: string;
   confidence?: number;
   proofExpiresAt?: number;
@@ -365,6 +366,36 @@ async function allowAttempt(env: Env, request: Request, limit = 12): Promise<boo
   if (existing >= limit) return false;
   await env.PENDING_REGISTRATIONS.put(storageKey, String(existing + 1), { expirationTtl: 60 });
   return true;
+}
+
+async function lookupLivenessMember(env: Env, request: Request): Promise<FirebaseUserLookup> {
+  const authorization = request.headers.get('Authorization') || '';
+  const idToken = authorization.startsWith('Bearer ') ? authorization.slice(7).trim() : '';
+  if (!idToken) throw new Error('Sesi Firebase belum tersedia. Masuk kembali ke SIPANDU.');
+  const user = await lookupFirebaseUser(env, idToken);
+  if (!user.localId || !user.email || user.disabled) {
+    throw new Error('Akun Firebase tidak valid atau sudah dinonaktifkan.');
+  }
+  let claims: Record<string, unknown> = {};
+  try {
+    claims = user.customAttributes ? JSON.parse(user.customAttributes) as Record<string, unknown> : {};
+    if (!claims || typeof claims !== 'object' || Array.isArray(claims)) throw new Error('Invalid claims');
+  } catch {
+    throw new Error('Klaim akun tidak dapat diverifikasi.');
+  }
+  const role = claims.role;
+  if (role !== 'owner' && role !== 'supervisor' && role !== 'pendamping' && role !== 'anggota') {
+    throw new Error('Face Liveness saat login hanya tersedia untuk akun SIPANDU yang sudah aktif.');
+  }
+  if (role === 'anggota' && user.emailVerified !== true) {
+    throw new Error('Email akun anggota belum terverifikasi.');
+  }
+  return user;
+}
+
+function parseLivenessPurpose(body: Record<string, unknown> | null): 'registration' | 'login' | null {
+  const purpose = body?.purpose ?? 'registration';
+  return purpose === 'registration' || purpose === 'login' ? purpose : null;
 }
 
 async function lookupLivenessApplicant(env: Env, request: Request): Promise<FirebaseUserLookup> {
@@ -790,16 +821,21 @@ export default {
       if (!(await allowAttempt(env, request, 5))) {
         return jsonResponse({ ok: false, message: 'Terlalu banyak percobaan verifikasi wajah. Coba kembali satu menit lagi.' }, 429, origin);
       }
+      const body = await parseJson(request);
+      const purpose = parseLivenessPurpose(body);
+      if (!body || !purpose) return jsonResponse({ ok: false, message: 'Tujuan sesi verifikasi wajah tidak valid.' }, 400, origin);
       let applicant: FirebaseUserLookup;
-      try { applicant = await lookupLivenessApplicant(env, request); }
-      catch (error) {
-        return jsonResponse({ ok: false, message: error instanceof Error ? error.message : 'Identitas pendaftar belum dapat diverifikasi.' }, 401, origin);
+      try {
+        applicant = purpose === 'login'
+          ? await lookupLivenessMember(env, request)
+          : await lookupLivenessApplicant(env, request);
+      } catch (error) {
+        return jsonResponse({ ok: false, message: error instanceof Error ? error.message : 'Identitas akun belum dapat diverifikasi.' }, 401, origin);
       }
       const missing = missingLivenessConfiguration(env);
       if (missing.length) {
         return jsonResponse({ ok: false, code: 'LIVENESS_NOT_CONFIGURED', missing, message: 'Verifikasi wajah belum dapat digunakan karena layanan AWS belum dikonfigurasi administrator.' }, 503, origin);
       }
-      const body = await parseJson(request);
       const consentVersion = env.LIVENESS_CONSENT_VERSION || '2026-11-16-v1';
       if (body?.consentVersion !== consentVersion) {
         return jsonResponse({ ok: false, code: 'LIVENESS_CONSENT_REQUIRED', message: 'Persetujuan pemrosesan video wajah belum diberikan atau sudah berubah.' }, 400, origin);
@@ -815,6 +851,7 @@ export default {
         await callLivenessStore(env, challengeId, 'create', {
           challengeId,
           uid: applicant.localId,
+          purpose,
           sessionId: created.SessionId,
           consentVersion,
           consentAcceptedAt: now,
@@ -837,16 +874,21 @@ export default {
       if (!(await allowAttempt(env, request, 10)) ) {
         return jsonResponse({ ok: false, message: 'Terlalu banyak permintaan kredensial verifikasi. Coba kembali sebentar lagi.' }, 429, origin);
       }
-      let applicant: FirebaseUserLookup;
-      try { applicant = await lookupLivenessApplicant(env, request); }
-      catch (error) {
-        return jsonResponse({ ok: false, message: error instanceof Error ? error.message : 'Identitas pendaftar belum dapat diverifikasi.' }, 401, origin);
-      }
       const body = await parseJson(request);
-      const challengeId = typeof body?.challengeId === 'string' ? body.challengeId : '';
+      const purpose = parseLivenessPurpose(body);
+      if (!body || !purpose) return jsonResponse({ ok: false, message: 'Tujuan sesi verifikasi wajah tidak valid.' }, 400, origin);
+      let applicant: FirebaseUserLookup;
+      try {
+        applicant = purpose === 'login'
+          ? await lookupLivenessMember(env, request)
+          : await lookupLivenessApplicant(env, request);
+      } catch (error) {
+        return jsonResponse({ ok: false, message: error instanceof Error ? error.message : 'Identitas akun belum dapat diverifikasi.' }, 401, origin);
+      }
+      const challengeId = typeof body.challengeId === 'string' ? body.challengeId : '';
       if (!/^[0-9a-f-]{36}$/i.test(challengeId)) return jsonResponse({ ok: false, message: 'ID sesi liveness tidak valid.' }, 400, origin);
       try {
-        await callLivenessStore(env, challengeId, 'credentials', { uid: applicant.localId });
+        await callLivenessStore(env, challengeId, 'credentials', { uid: applicant.localId, purpose });
         const credentials = await assumeLivenessStreamingRole(env);
         return jsonResponse({ ok: true, credentials }, 200, origin);
       } catch (error) {
@@ -858,16 +900,21 @@ export default {
       if (!(await allowAttempt(env, request, 30))) {
         return jsonResponse({ ok: false, message: 'Terlalu banyak permintaan pemeriksaan hasil. Coba kembali sebentar lagi.' }, 429, origin);
       }
-      let applicant: FirebaseUserLookup;
-      try { applicant = await lookupLivenessApplicant(env, request); }
-      catch (error) {
-        return jsonResponse({ ok: false, message: error instanceof Error ? error.message : 'Identitas pendaftar belum dapat diverifikasi.' }, 401, origin);
-      }
       const body = await parseJson(request);
-      const challengeId = typeof body?.challengeId === 'string' ? body.challengeId : '';
+      const purpose = parseLivenessPurpose(body);
+      if (!body || !purpose) return jsonResponse({ ok: false, message: 'Tujuan sesi verifikasi wajah tidak valid.' }, 400, origin);
+      let applicant: FirebaseUserLookup;
+      try {
+        applicant = purpose === 'login'
+          ? await lookupLivenessMember(env, request)
+          : await lookupLivenessApplicant(env, request);
+      } catch (error) {
+        return jsonResponse({ ok: false, message: error instanceof Error ? error.message : 'Identitas akun belum dapat diverifikasi.' }, 401, origin);
+      }
+      const challengeId = typeof body.challengeId === 'string' ? body.challengeId : '';
       if (!/^[0-9a-f-]{36}$/i.test(challengeId)) return jsonResponse({ ok: false, message: 'ID sesi liveness tidak valid.' }, 400, origin);
       try {
-        const state = await callLivenessStore(env, challengeId, 'verify-start', { uid: applicant.localId });
+        const state = await callLivenessStore(env, challengeId, 'verify-start', { uid: applicant.localId, purpose });
         const result = await rekognitionRequest<{ Status?: string; Confidence?: number }>(
           env,
           'GetFaceLivenessSessionResults',
@@ -877,7 +924,7 @@ export default {
           return jsonResponse({ ok: true, status: 'in_progress', message: 'Analisis liveness masih diproses.' }, 202, origin);
         }
         if (result.Status !== 'SUCCEEDED' || typeof result.Confidence !== 'number') {
-          await callLivenessStore(env, challengeId, 'verify-complete', { uid: applicant.localId, passed: false });
+          await callLivenessStore(env, challengeId, 'verify-complete', { uid: applicant.localId, purpose, passed: false });
           return jsonResponse({ ok: false, status: 'failed', message: 'Pemeriksaan wajah tidak berhasil. Silakan ulangi dengan sesi baru.' }, 403, origin);
         }
         const threshold = livenessConfidenceThreshold(env);
@@ -885,6 +932,7 @@ export default {
         const proofToken = passed ? crypto.randomUUID() : '';
         await callLivenessStore(env, challengeId, 'verify-complete', {
           uid: applicant.localId,
+          purpose,
           passed,
           confidence: result.Confidence,
           proofToken,
@@ -904,10 +952,40 @@ export default {
           status: 'passed',
           proofToken: `${challengeId}.${proofToken}`,
           confidence: Math.round(result.Confidence * 100) / 100,
-          message: 'Pemeriksaan wajah hidup berhasil. Anda dapat melanjutkan pendaftaran.',
+          message: purpose === 'login' ? 'Verifikasi wajah tambahan saat login berhasil.' : 'Pemeriksaan wajah hidup berhasil. Anda dapat melanjutkan pendaftaran.',
         }, 200, origin);
       } catch (error) {
         return jsonResponse({ ok: false, message: error instanceof Error ? error.message : 'Hasil liveness belum dapat diverifikasi.' }, 409, origin);
+      }
+    }
+
+    if (path === '/liveness/login/consume' && request.method === 'POST') {
+      if (!(await allowAttempt(env, request, 10))) {
+        return jsonResponse({ ok: false, message: 'Terlalu banyak percobaan verifikasi login. Coba kembali satu menit lagi.' }, 429, origin);
+      }
+      const body = await parseJson(request);
+      const proofToken = typeof body?.proofToken === 'string' ? body.proofToken.trim() : '';
+      const proofParts = proofToken.split('.');
+      if (proofParts.length !== 2 || !proofParts.every((part) => /^[0-9a-f-]{36}$/i.test(part))) {
+        return jsonResponse({ ok: false, code: 'LIVENESS_PROOF_INVALID', message: 'Bukti liveness tidak valid. Ulangi pemeriksaan wajah.' }, 400, origin);
+      }
+      let member: FirebaseUserLookup;
+      try { member = await lookupLivenessMember(env, request); }
+      catch (error) {
+        return jsonResponse({ ok: false, message: error instanceof Error ? error.message : 'Identitas akun belum dapat diverifikasi.' }, 401, origin);
+      }
+      try {
+        const consumed = await callLivenessStore(env, proofParts[0], 'consume-proof', {
+          uid: member.localId,
+          proofToken: proofParts[1],
+          purpose: 'login',
+        });
+        if (!consumed.record || consumed.record.status !== 'passed' || consumed.record.purpose !== 'login') {
+          throw new Error('Bukti liveness tidak ditujukan untuk login.');
+        }
+        return jsonResponse({ ok: true, status: 'verified', message: 'Verifikasi wajah untuk login berhasil.' }, 200, origin);
+      } catch {
+        return jsonResponse({ ok: false, code: 'LIVENESS_PROOF_INVALID', message: 'Bukti liveness telah digunakan, kedaluwarsa, atau tidak cocok dengan akun ini. Ulangi pemeriksaan wajah.' }, 403, origin);
       }
     }
 
@@ -1178,7 +1256,7 @@ export default {
             return jsonResponse({ ok: false, code: 'LIVENESS_PROOF_INVALID', message: 'Bukti liveness tidak valid. Ulangi pemeriksaan wajah.' }, 403, origin);
           }
           try {
-            const consumed = await callLivenessStore(env, proofParts[0], 'consume-proof', { uid: firebaseUser.localId, proofToken: proofParts[1] });
+            const consumed = await callLivenessStore(env, proofParts[0], 'consume-proof', { uid: firebaseUser.localId, proofToken: proofParts[1], purpose: 'registration' });
             const evidence = consumed.record;
             if (!evidence || evidence.status !== 'passed') throw new Error('Bukti liveness belum lulus.');
             livenessEvidence = {
@@ -1459,12 +1537,13 @@ export class LivenessChallengeStore {
       const consentVersion = typeof body.consentVersion === 'string' ? body.consentVersion : '';
       const createdAt = Number(body.createdAt || now);
       const expiresAt = Number(body.expiresAt || 0);
-      if (!sessionId || !challengeId || !uid || uid.length > 128 || !consentVersion
+      const purpose = body.purpose === 'login' ? 'login' : body.purpose === undefined ? 'registration' : null;
+      if (!sessionId || !challengeId || !uid || uid.length > 128 || !consentVersion || !purpose
         || expiresAt <= now || expiresAt > now + 11 * 60 * 1000) {
         return respond({ ok: false, message: 'Data challenge liveness tidak valid.' }, 400);
       }
       record = {
-        challengeId, uid, sessionId, consentVersion,
+        challengeId, uid, sessionId, consentVersion, purpose,
         consentAcceptedAt: Number(body.consentAcceptedAt || now),
         createdAt, expiresAt, status: 'created',
       };
@@ -1480,6 +1559,11 @@ export class LivenessChallengeStore {
     const requesterUid = typeof body.uid === 'string' ? body.uid : '';
     if (!requesterUid || requesterUid !== record.uid) {
       return respond({ ok: false, message: 'Sesi liveness tidak dimiliki akun Firebase ini.' }, 403);
+    }
+
+    const requestedPurpose = body.purpose === 'login' ? 'login' : body.purpose === undefined ? 'registration' : null;
+    if (!requestedPurpose || requestedPurpose !== record.purpose) {
+      return respond({ ok: false, message: 'Tujuan sesi liveness tidak cocok.' }, 403);
     }
 
     if (action === 'credentials') {
@@ -1517,7 +1601,7 @@ export class LivenessChallengeStore {
     }
 
     if (action === 'consume-proof') {
-      if (record.status !== 'passed' || record.consumedAt || record.proofExpiresAt === undefined
+      if (record.purpose !== requestedPurpose || record.status !== 'passed' || record.consumedAt || record.proofExpiresAt === undefined
         || record.proofExpiresAt < now || body.proofToken !== record.proofToken) {
         return respond({ ok: false, message: 'Bukti liveness tidak valid, kedaluwarsa, atau telah digunakan.' }, 409);
       }
