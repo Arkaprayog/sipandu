@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import worker, { missingActivationConfiguration, parseJson } from './index.ts';
+import worker, { LivenessChallengeStore, missingActivationConfiguration, parseJson } from './index.ts';
 
 function streamedJsonRequest(value: string): Request {
   const bytes = new TextEncoder().encode(value);
@@ -991,4 +991,79 @@ test('activation diagnostics clearly reports when Firebase role permission is ab
   } finally {
     globalThis.fetch = originalFetch;
   }
+});
+
+
+test('liveness Durable Object binds challenges to one UID and rejects proof replay', async () => {
+  const values = new Map<string, unknown>();
+  const storage = {
+    get: async <T = unknown>(key: string) => values.get(key) as T | undefined,
+    put: async <T = unknown>(key: string, value: T) => { values.set(key, structuredClone(value)); },
+    delete: async (key: string) => values.delete(key),
+    setAlarm: async (_scheduledTime: number) => undefined,
+    deleteAlarm: async () => undefined,
+  };
+  const store = new LivenessChallengeStore({ storage } as never);
+  const challengeId = '11111111-1111-4111-8111-111111111111';
+  const proofToken = '22222222-2222-4222-8222-222222222222';
+  const uid = 'firebase-uid-liveness-test';
+  const now = Date.now();
+
+  const request = (action: string, body: Record<string, unknown>) => store.fetch(new Request(
+    `https://liveness-challenge.internal/${action}`,
+    { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) },
+  ));
+
+  let response = await request('create', {
+    challengeId,
+    uid,
+    sessionId: 'aws-liveness-session',
+    consentVersion: '2026-11-16-v1',
+    consentAcceptedAt: now,
+    createdAt: now,
+    expiresAt: now + 10 * 60 * 1000,
+  });
+  assert.equal(response.status, 200);
+  response = await request('create', {
+    challengeId,
+    uid,
+    sessionId: 'second-session',
+    consentVersion: '2026-11-16-v1',
+    createdAt: now,
+    expiresAt: now + 10 * 60 * 1000,
+  });
+  assert.equal(response.status, 409);
+
+  response = await request('credentials', { uid: 'different-firebase-uid' });
+  assert.equal(response.status, 403);
+  response = await request('credentials', { uid });
+  assert.equal(response.status, 200);
+  response = await request('credentials', { uid });
+  assert.equal(response.status, 409);
+
+  response = await request('verify-start', { uid });
+  assert.equal(response.status, 200);
+  response = await request('verify-complete', {
+    passed: true,
+    proofToken,
+    proofExpiresAt: Date.now() + 5 * 60 * 1000,
+    confidence: 98.5,
+  });
+  assert.equal(response.status, 403);
+  response = await request('verify-complete', {
+    uid,
+    passed: true,
+    proofToken,
+    proofExpiresAt: Date.now() + 5 * 60 * 1000,
+    confidence: 98.5,
+  });
+  assert.equal(response.status, 200);
+
+  response = await request('consume-proof', { uid, proofToken: 'wrong-proof-token' });
+  assert.equal(response.status, 409);
+  response = await request('consume-proof', { uid, proofToken });
+  assert.equal(response.status, 200);
+  response = await request('consume-proof', { uid, proofToken });
+  assert.equal(response.status, 404);
+  assert.equal(values.has('record'), false);
 });
