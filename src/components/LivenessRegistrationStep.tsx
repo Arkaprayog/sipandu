@@ -79,6 +79,7 @@ export const LivenessRegistrationStep: React.FC<LivenessRegistrationStepProps> =
             sessionId: session.sessionId,
             idToken,
             region: session.region,
+            purpose,
           }, LIVENESS_FRAME_ORIGIN);
         }).catch((caught) => {
           setError(caught instanceof Error ? caught.message : 'Sesi Firebase tidak dapat diperbarui.');
