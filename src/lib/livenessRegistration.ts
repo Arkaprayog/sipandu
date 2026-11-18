@@ -1,6 +1,8 @@
 import type { User } from 'firebase/auth';
 import { TEAM_REGISTRATION_API } from './teamRegistration';
 
+export type LivenessPurpose = 'registration' | 'login';
+
 export interface LivenessHealth {
   ok: boolean;
   ready: boolean;
@@ -81,6 +83,7 @@ export async function getLivenessHealth(fetcher: typeof fetch = fetch): Promise<
 export async function createLivenessSession(
   user: User,
   consentVersion: string,
+  purpose: LivenessPurpose = 'registration',
   fetcher: typeof fetch = fetch,
 ): Promise<LivenessSession> {
   if (!consentVersion) throw new Error('Versi persetujuan verifikasi wajah belum tersedia.');
@@ -91,7 +94,7 @@ export async function createLivenessSession(
       'Content-Type': 'application/json',
       Authorization: `Bearer ${idToken}`,
     },
-    body: JSON.stringify({ consentVersion }),
+    body: JSON.stringify({ consentVersion, purpose }),
   });
   const body = await responseBody(response);
   if (!response.ok
@@ -127,5 +130,31 @@ export async function registerSelfServiceMemberWithLiveness(
     throw new Error(typeof body.message === 'string'
       ? body.message
       : 'Pendaftaran mandiri belum berhasil dicatat.');
+  }
+}
+
+
+export async function consumeLoginLivenessProof(
+  user: User,
+  proofToken: string,
+  fetcher: typeof fetch = fetch,
+): Promise<void> {
+  if (!isValidLivenessProofToken(proofToken)) {
+    throw new Error('Bukti verifikasi wajah tidak valid. Ulangi pemeriksaan.');
+  }
+  const idToken = await user.getIdToken(true);
+  const response = await fetcher(`${TEAM_REGISTRATION_API}/liveness/login/consume`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${idToken}`,
+    },
+    body: JSON.stringify({ proofToken }),
+  });
+  const body = await responseBody(response);
+  if (!response.ok || body.status !== 'verified') {
+    throw new Error(typeof body.message === 'string'
+      ? body.message
+      : 'Verifikasi wajah saat login belum berhasil diselesaikan.');
   }
 }

@@ -9,12 +9,14 @@ import {
   parseLivenessFrameMessage,
   type LivenessHealth,
   type LivenessSession,
+  type LivenessPurpose,
 } from '../lib/livenessRegistration';
 
 interface LivenessRegistrationStepProps {
   user: User;
   onProof: (proofToken: string) => Promise<void>;
   onCancel: () => void | Promise<void>;
+  purpose?: LivenessPurpose;
 }
 
 const LIVENESS_FRAME_ORIGIN = new URL(TEAM_REGISTRATION_API).origin;
@@ -23,6 +25,7 @@ export const LivenessRegistrationStep: React.FC<LivenessRegistrationStepProps> =
   user,
   onProof,
   onCancel,
+  purpose = 'registration',
 }) => {
   const [health, setHealth] = useState<LivenessHealth | null>(null);
   const [healthLoading, setHealthLoading] = useState(true);
@@ -126,7 +129,7 @@ export const LivenessRegistrationStep: React.FC<LivenessRegistrationStepProps> =
     initializedChallengeRef.current = null;
     proofHandledRef.current = false;
     try {
-      const nextSession = await createLivenessSession(user, health.consentVersion);
+      const nextSession = await createLivenessSession(user, health.consentVersion, purpose);
       setNonce(crypto.randomUUID());
       setSession(nextSession);
     } catch (caught) {
@@ -145,15 +148,17 @@ export const LivenessRegistrationStep: React.FC<LivenessRegistrationStepProps> =
           disabled={processing || starting}
           className="mb-4 inline-flex items-center gap-2 text-xs font-semibold text-slate-700 underline underline-offset-4 disabled:opacity-50"
         >
-          <ArrowLeft className="h-4 w-4" /> Kembali
+          <ArrowLeft className="h-4 w-4" /> {purpose === 'login' ? 'Kembali ke pilihan login' : 'Kembali'}
         </button>
         <div className="mb-4 text-center">
           <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-teal-50 text-teal-800">
             <Camera className="h-6 w-6" />
           </div>
-          <h1 className="text-xl font-extrabold text-slate-900">Verifikasi Wajah Hidup</h1>
+          <h1 className="text-xl font-extrabold text-slate-900">{purpose === 'login' ? 'Verifikasi Wajah Tambahan' : 'Verifikasi Wajah Hidup'}</h1>
           <p className="mt-2 text-sm leading-relaxed text-slate-600">
-            Langkah ini diperlukan untuk mencatat pendaftaran akun SIPANDU. Pastikan kamera perangkat dapat digunakan.
+            {purpose === 'login'
+              ? 'Verifikasi ini bersifat opsional sebagai lapisan keamanan tambahan saat masuk kembali ke akun SIPANDU. Anda dapat kembali dan melewatinya kapan saja.'
+              : 'Langkah ini diperlukan untuk mencatat pendaftaran akun SIPANDU. Pastikan kamera perangkat dapat digunakan.'}
           </p>
         </div>
 
@@ -212,7 +217,7 @@ export const LivenessRegistrationStep: React.FC<LivenessRegistrationStepProps> =
             />
             {processing && (
               <p role="status" className="text-center text-sm font-semibold text-teal-800">
-                <LoaderCircle className="mr-2 inline h-4 w-4 animate-spin" /> Memeriksa bukti dan menyimpan pendaftaran…
+                <LoaderCircle className="mr-2 inline h-4 w-4 animate-spin" /> {purpose === 'login' ? 'Memeriksa bukti verifikasi login…' : 'Memeriksa bukti dan menyimpan pendaftaran…'}
               </p>
             )}
             <button
