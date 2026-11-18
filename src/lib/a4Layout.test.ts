@@ -1,4 +1,6 @@
 import test from 'node:test';
+import { createAssessmentPrintFailureStatus } from './assessmentPrintStatus';
+
 import assert from 'node:assert/strict';
 import { PDFDocument } from 'pdf-lib';
 import { A4_HEIGHT_PT, A4_WIDTH_PT, PAGE_MARGIN_PT, fitImageToA4, getAssessmentControlMismatchIndex, getAssessmentPageRenderDimensions, splitAssessmentPageAtRows } from './a4Layout';
@@ -109,4 +111,20 @@ test('assessment pagination refuses to cut through an oversized question row', (
     () => splitAssessmentPageAtRows(2200, 1000, [1500]),
     /Satu baris jawaban lebih tinggi/,
   );
+});
+
+test('assessment print reports an error when both print methods fail', () => {
+  const status = createAssessmentPrintFailureStatus({
+    localCopyText: 'PDF A4 tersimpan di penyimpanan privat aplikasi SIPANDU.',
+    primaryPrintError: new Error('Printer native tidak tersedia'),
+    fallbackPrintError: new Error('Dialog cetak tidak dapat dibuka'),
+    localSaveError: '',
+    backupError: 'Google Drive tidak dapat dijangkau',
+  });
+
+  assert.equal(status.type, 'error');
+  assert.match(status.text, /Pencetakan tidak berhasil melalui kedua metode/);
+  assert.match(status.text, /Printer native tidak tersedia/);
+  assert.match(status.text, /Dialog cetak tidak dapat dibuka/);
+  assert.match(status.text, /Google Drive tidak dapat dijangkau/);
 });

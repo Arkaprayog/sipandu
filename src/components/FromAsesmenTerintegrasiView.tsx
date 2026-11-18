@@ -10,6 +10,7 @@ import { printPreparedAssessmentWebView, printPdfFromDevice, savePdfToDevice } f
 import { createOfficialAssessmentPdf } from '../lib/assessmentPdf';
 import { OFFICIAL_ASSESSMENT_PDF_SECTION_COUNT } from '../lib/assessmentPagePlan';
 import { getAssessmentControlMismatchIndex } from '../lib/a4Layout';
+import { createAssessmentPrintFailureStatus } from '../lib/assessmentPrintStatus';
 import { createPhotoPreviewBlob } from '../lib/photoFilePreview';
 import '../officialAssessment.css';
 
@@ -1101,12 +1102,15 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
             ...(archive.driveUrl ? { driveUrl: archive.driveUrl } : {}),
           });
         } catch (fallbackError) {
-          const detail = fallbackError instanceof Error ? fallbackError.message : String(fallbackError);
+          const failureStatus = createAssessmentPrintFailureStatus({
+            localCopyText,
+            primaryPrintError: printError,
+            fallbackPrintError: fallbackError,
+            localSaveError,
+            backupError: archive.backupError,
+          });
           setStatusMessage({
-            type: 'success',
-            text: localCopyText + ' Dialog cetak tidak dapat dibuka: ' + detail +
-              (localSaveError ? ' Penyimpanan lokal: ' + localSaveError : '') +
-              (archive.backupError ? ' Backup Google Drive belum berhasil: ' + archive.backupError : ''),
+            ...failureStatus,
             ...(archive.driveUrl ? { driveUrl: archive.driveUrl } : {}),
           });
         }
