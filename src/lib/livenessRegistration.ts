@@ -100,7 +100,11 @@ export async function createLivenessSession(
   if (!response.ok
     || typeof body.challengeId !== 'string'
     || typeof body.sessionId !== 'string'
-    || typeof body.region !== 'string') {
+    || typeof body.region !== 'string'
+    || typeof body.expiresInSeconds !== 'number'
+    || !Number.isFinite(body.expiresInSeconds)
+    || body.expiresInSeconds <= 0
+    || body.expiresInSeconds > 180) {
     throw new Error(typeof body.message === 'string'
       ? body.message
       : `Sesi verifikasi wajah belum dapat dibuat (HTTP ${response.status}).`);
