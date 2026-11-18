@@ -47,9 +47,19 @@ jobs:
             throw new Error('The existing PENDING_REGISTRATIONS namespace binding is missing or mismatched.');
           }
           const required = new Set(config.secrets?.required || []);
-          for (const secret of ['FIREBASE_SERVICE_ACCOUNT_JSON', 'TURNSTILE_SECRET_KEY', 'FIREBASE_AUTH_API_KEY',
-            'AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY', 'AWS_FACE_LIVENESS_ROLE_ARN']) {
+          for (const secret of ['FIREBASE_SERVICE_ACCOUNT_JSON', 'TURNSTILE_SECRET_KEY', 'FIREBASE_AUTH_API_KEY']) {
             if (!required.has(secret)) throw new Error('Required Worker secret is missing from wrangler.jsonc: ' + secret);
+          }
+          // AWS credentials activate Face Liveness but are not prerequisites for
+          // deploying the core registration Worker. The runtime health endpoint
+          // reports liveness as not ready until all AWS settings are configured.
+          const optionalLivenessSecrets = [
+            'AWS_ACCESS_KEY_ID',
+            'AWS_SECRET_ACCESS_KEY',
+            'AWS_FACE_LIVENESS_ROLE_ARN'
+          ];
+          if (optionalLivenessSecrets.some((secret) => required.has(secret))) {
+            throw new Error('AWS Face Liveness secrets must remain optional for Worker deployment.');
           }
           const livenessBinding = config.durable_objects?.bindings?.find((item) => item.name === 'LIVENESS_CHALLENGES'
             && item.class_name === 'LivenessChallengeStore');
