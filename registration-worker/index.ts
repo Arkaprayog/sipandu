@@ -96,6 +96,10 @@ export function missingLivenessConfiguration(env: Env): string[] {
   return missing;
 }
 
+// Rekognition Face Liveness SessionIds expire three minutes after creation.
+const FACE_LIVENESS_SESSION_TTL_MS = 3 * 60 * 1000;
+const FACE_LIVENESS_SESSION_CLOCK_SKEW_MS = 5 * 1000;
+
 interface LivenessDurableObjectStorage {
   get<T = unknown>(key: string): Promise<T | undefined>;
   put<T = unknown>(key: string, value: T): Promise<void>;
@@ -856,14 +860,14 @@ export default {
           consentVersion,
           consentAcceptedAt: now,
           createdAt: now,
-          expiresAt: now + 10 * 60 * 1000,
+          expiresAt: now + FACE_LIVENESS_SESSION_TTL_MS,
         });
         return jsonResponse({
           ok: true,
           challengeId,
           sessionId: created.SessionId,
           region: livenessRegion(env),
-          expiresInSeconds: 600,
+          expiresInSeconds: Math.floor(FACE_LIVENESS_SESSION_TTL_MS / 1000),
         }, 201, origin);
       } catch (error) {
         return jsonResponse({ ok: false, message: error instanceof Error ? error.message : 'Sesi liveness belum dapat dibuat.' }, 502, origin);
@@ -1539,7 +1543,7 @@ export class LivenessChallengeStore {
       const expiresAt = Number(body.expiresAt || 0);
       const purpose = body.purpose === 'login' ? 'login' : body.purpose === undefined ? 'registration' : null;
       if (!sessionId || !challengeId || !uid || uid.length > 128 || !consentVersion || !purpose
-        || expiresAt <= now || expiresAt > now + 11 * 60 * 1000) {
+        || expiresAt <= now || expiresAt > now + FACE_LIVENESS_SESSION_TTL_MS + FACE_LIVENESS_SESSION_CLOCK_SKEW_MS) {
         return respond({ ok: false, message: 'Data challenge liveness tidak valid.' }, 400);
       }
       record = {
@@ -1594,9 +1598,13 @@ export class LivenessChallengeStore {
         if (!record.proofToken || record.proofExpiresAt <= now || record.proofExpiresAt > now + 11 * 60 * 1000) {
           return respond({ ok: false, message: 'Token bukti liveness tidak valid.' }, 400);
         }
+        record.expiresAt = record.proofExpiresAt;
       }
       if (typeof body.confidence === 'number' && Number.isFinite(body.confidence)) record.confidence = body.confidence;
       await this.state.storage.put('record', record);
+      // The AWS SessionId expires after three minutes, but a passed one-time
+      // proof remains consumable for its own ten-minute validity window.
+      if (passed) await this.state.storage.setAlarm?.(record.expiresAt);
       return respond({ ok: true });
     }
 
