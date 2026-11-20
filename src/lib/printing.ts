@@ -81,6 +81,13 @@ export async function printPdfFromDevice(uri: string, name: string): Promise<voi
 }
 
 export async function printPdfBlob(blob: Blob, name: string): Promise<void> {
+  // Capgo's Base64 bridge warns that PDFs larger than about 5 MB can exhaust
+  // memory on mobile devices. Leave room for Base64 overhead and use the A4
+  // WebView fallback for larger PDFs instead of risking an app crash.
+  const maxSafeBase64PdfBytes = 4 * 1024 * 1024;
+  if (blob.size > maxSafeBase64PdfBytes) {
+    throw new Error('PDF terlalu besar untuk jembatan cetak Base64 yang aman. Gunakan jalur cetak A4 alternatif.');
+  }
   return printSupportedBlob(blob, name, 'application/pdf');
 }
 
