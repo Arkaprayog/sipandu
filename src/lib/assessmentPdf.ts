@@ -59,6 +59,49 @@ function sanitizeOklchColorsForHtml2Canvas(
   });
 }
 
+/**
+ * Measure rendered text line ends inside an assessment sheet. Table-row bottoms
+ * alone are insufficient when one answer cell is taller than a printable A4 page.
+ * Text ranges expose wrapped line fragments, allowing the raster to continue at
+ * a point below a complete line instead of clipping or rejecting a long answer.
+ */
+function getAssessmentTextLineBottoms(
+  element: HTMLElement,
+  pageBounds: DOMRect,
+  renderScale: number,
+): number[] {
+  const ownerDocument = element.ownerDocument;
+  const showText = ownerDocument.defaultView?.NodeFilter.SHOW_TEXT ?? 4;
+  const walker = ownerDocument.createTreeWalker(element, showText);
+  const lineRects: Array<{ top: number; bottom: number }> = [];
+
+  while (walker.nextNode()) {
+    const textNode = walker.currentNode as Text;
+    if (!textNode.data.trim()) continue;
+    const parent = textNode.parentElement;
+    if (parent?.closest('script, style, noscript, [aria-hidden="true"]')) continue;
+
+    const range = ownerDocument.createRange();
+    range.selectNodeContents(textNode);
+    for (const rect of Array.from(range.getClientRects())) {
+      if (rect.width <= 0 || rect.height <= 0) continue;
+      const top = (rect.top - pageBounds.top) * renderScale;
+      const bottom = (rect.bottom - pageBounds.top) * renderScale;
+      if (Number.isFinite(top) && Number.isFinite(bottom) && bottom > top) {
+        lineRects.push({ top, bottom });
+      }
+    }
+    range.detach();
+  }
+
+  // A candidate is safe only when no other visible text fragment crosses it.
+  // The 1px tolerance absorbs fractional CSS-pixel differences between columns.
+  return [...new Set(lineRects.map((line) => Math.ceil(line.bottom + 1)))]
+    .filter((candidate) => lineRects.every((line) =>
+      !(line.top < candidate - 1 && line.bottom > candidate + 1)
+    ));
+}
+
 function canvasToBlob(
   canvas: HTMLCanvasElement,
   mimeType: 'image/jpeg' | 'image/png',
@@ -135,7 +178,9 @@ async function renderAssessmentPage(
           (block.getBoundingClientRect().bottom - pageBounds.top) * renderScale
         ),
       ].filter((value) => Number.isFinite(value) && value > 0);
-      const slices = splitAssessmentPageAtRows(canvas.height, targetPageHeight, rowBottoms);
+      const textLineBottoms = getAssessmentTextLineBottoms(element, pageBounds, renderScale);
+      const safeSplitBoundaries = [...rowBottoms, ...textLineBottoms];
+      const slices = splitAssessmentPageAtRows(canvas.height, targetPageHeight, safeSplitBoundaries);
       const encodedPages: EncodedAssessmentPage[] = [];
 
       for (const slice of slices) {

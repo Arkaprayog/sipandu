@@ -103,25 +103,25 @@ export interface AssessmentPageSlice {
 }
 
 /**
- * Split an over-height assessment sheet only at measured row/block boundaries.
- * This prevents the PDF renderer from shrinking a long form to fit one A4 page
- * or cutting a question row in half.
+ * Split an over-height assessment sheet at measured row/block or text-line boundaries.
+ * Text-line boundaries let a single long answer continue onto another A4 page
+ * without asking the respondent to shorten the answer or clipping its text.
  */
 export function splitAssessmentPageAtRows(
   totalHeightPx: number,
   maxSliceHeightPx: number,
-  rowBottomsPx: number[],
+  safeBoundariesPx: number[],
 ): AssessmentPageSlice[] {
   if (
     !Number.isFinite(totalHeightPx) || !Number.isFinite(maxSliceHeightPx) ||
     totalHeightPx <= 0 || maxSliceHeightPx <= 0 ||
-    !Array.isArray(rowBottomsPx) ||
-    rowBottomsPx.some((value) => !Number.isFinite(value))
+    !Array.isArray(safeBoundariesPx) ||
+    safeBoundariesPx.some((value) => !Number.isFinite(value))
   ) {
     throw new Error('Ukuran pemisahan halaman asesmen tidak valid.');
   }
 
-  const boundaries = [...new Set(rowBottomsPx
+  const boundaries = [...new Set(safeBoundariesPx
     .filter((value) => value > 0 && value < totalHeightPx)
     .map((value) => Math.round(value)))]
     .sort((a, b) => a - b);
@@ -143,7 +143,7 @@ export function splitAssessmentPageAtRows(
     );
     if (safeBottom === null) {
       throw new Error(
-        'Satu baris jawaban lebih tinggi daripada area satu halaman A4. Ringkas jawaban pada kolom tersebut sebelum mencetak.',
+        'Konten halaman asesmen melebihi satu halaman A4 dan tidak memiliki batas baris teks yang aman untuk dipisah.',
       );
     }
 
