@@ -6,7 +6,7 @@ import { formatPPKSTimestamp } from '../lib/ppksData';
 import { publicAssetUrl } from '../lib/publicAssets';
 import { backupAssessmentViaArchiveWorker, deleteCentralDriveFile, downloadAssessmentArchiveViaArchiveWorker } from '../lib/googleDriveBackup';
 import { getIntegratedAssessmentBackupMetadata, saveIntegratedAssessmentBackupMetadata } from '../lib/firebase';
-import { printPreparedAssessmentWebView, printPdfFromDevice, savePdfToDevice } from '../lib/printing';
+import { printPdfBlob, printPreparedAssessmentWebView, printPdfFromDevice, savePdfToDevice } from '../lib/printing';
 import { createOfficialAssessmentPdf } from '../lib/assessmentPdf';
 import { OFFICIAL_ASSESSMENT_PDF_SECTION_COUNT } from '../lib/assessmentPagePlan';
 import { getAssessmentControlMismatchIndex } from '../lib/a4Layout';
@@ -1075,11 +1075,12 @@ export const FromAsesmenTerintegrasiView: React.FC<FromAsesmenTerintegrasiViewPr
 
       try {
         if (localCopy?.destination === 'app-private-storage' && localCopy.uri) {
-          // Print the persisted PDF file, not a temporary Blob URL/WebView download.
+          // Android prints the exact PDF file that was stored in private app storage.
           await printPdfFromDevice(localCopy.uri, archive.fileName);
         } else {
-          if (!archive.printRootId) throw new Error('Halaman A4 sementara tidak tersedia untuk pencetakan.');
-          await printPreparedAssessmentWebView(archive.fileName, archive.printRootId);
+          // PWA/iOS also print the canonical generated PDF instead of reflowing
+          // the assessment DOM into a second, potentially different document.
+          await printPdfBlob(archive.pdf, archive.fileName);
         }
         setStatusMessage({
           type: 'success',
