@@ -106,10 +106,21 @@ test('assessment page remains one page when its content fits', () => {
   );
 });
 
+test('a single oversized answer continues at measured text-line boundaries', () => {
+  assert.deepEqual(
+    splitAssessmentPageAtRows(2200, 1000, [2200, 480, 960, 1440, 1920]),
+    [
+      { top: 0, bottom: 960 },
+      { top: 960, bottom: 1920 },
+      { top: 1920, bottom: 2200 },
+    ],
+  );
+});
+
 test('assessment pagination refuses to cut through an oversized question row', () => {
   assert.throws(
     () => splitAssessmentPageAtRows(2200, 1000, [1500]),
-    /Satu baris jawaban lebih tinggi/,
+    /Konten halaman asesmen melebihi satu halaman A4/,
   );
 });
 
