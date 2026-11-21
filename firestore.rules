@@ -372,6 +372,21 @@ service cloud.firestore {
         && data.updatedByUid == request.auth.uid;
     }
 
+    // Pendamping write access to event/visit history is bound to the
+    // server-managed PPKS assignment, not merely a client-supplied assignedToUid.
+    function isPpksAssignedToCurrentPendamping(ppksId) {
+      let statusPath = /databases/$(database)/documents/ppksServiceStatus/$(ppksId);
+      return hasRole('pendamping')
+        && exists(statusPath)
+        && get(statusPath).data.assignedToUid == request.auth.uid;
+    }
+
+    function canCreateAssignedServiceRecord(ppksId, assignedToUid) {
+      return canWritePpks()
+        || (isPpksAssignedToCurrentPendamping(ppksId)
+          && assignedToUid == request.auth.uid);
+    }
+
     match /ppksServiceStatus/{ppksId} {
       allow read: if canWritePpks()
         || (hasRole('pendamping') && resource.data.assignedToUid == request.auth.uid);
@@ -410,7 +425,7 @@ service cloud.firestore {
         && request.resource.data.createdByUid == request.auth.uid
         && request.resource.data.assignedToUid is string
         && request.resource.data.assignedToUid.size() <= 128
-        && (canWritePpks() || request.resource.data.assignedToUid == request.auth.uid)
+        && canCreateAssignedServiceRecord(request.resource.data.ppksId, request.resource.data.assignedToUid)
         && request.resource.data.createdAt == request.time;
       allow update, delete: if false;
     }
@@ -454,7 +469,7 @@ service cloud.firestore {
         && request.resource.data.assignedToUid.size() <= 128
         && request.resource.data.createdByUid == request.auth.uid
         && request.resource.data.createdAt == request.time
-        && (canWritePpks() || request.resource.data.assignedToUid == request.auth.uid);
+        && canCreateAssignedServiceRecord(request.resource.data.ppksId, request.resource.data.assignedToUid);
       allow update, delete: if false;
     }
 

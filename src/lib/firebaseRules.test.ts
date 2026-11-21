@@ -368,6 +368,33 @@ test('Status layanan PPKS dan riwayat aktivitas dibatasi role staf serta riwayat
   await assertFails(updateDoc(event, { status: 'dibutuhkan' }));
   await assertFails(deleteDoc(event));
 
+  // A pendamping may append an event only for a PPKS whose authoritative
+  // service-status document assigns that PPKS to the same UID.
+  await assertSucceeds(setDoc(doc(assignedPendamping, 'ppksServiceEvents', 'event-assigned'), {
+    id: 'event-assigned',
+    ppksId: 'ppks-demo',
+    eventType: 'nutrition-assistance',
+    status: 'dalam-proses',
+    serviceDate: '',
+    followUpAt: '',
+    followUpReason: '',
+    createdByUid: PENDAMPING_UID,
+    assignedToUid: PENDAMPING_UID,
+    createdAt: serverTimestamp(),
+  }));
+  await assertFails(setDoc(doc(assignedPendamping, 'ppksServiceEvents', 'event-unassigned'), {
+    id: 'event-unassigned',
+    ppksId: 'ppks-not-assigned',
+    eventType: 'nutrition-assistance',
+    status: 'dalam-proses',
+    serviceDate: '',
+    followUpAt: '',
+    followUpReason: '',
+    createdByUid: PENDAMPING_UID,
+    assignedToUid: PENDAMPING_UID,
+    createdAt: serverTimestamp(),
+  }));
+
   const outsider = environment.authenticatedContext('outsider-001').firestore();
   await assertFails(getDoc(doc(outsider, 'ppksServiceStatus', 'ppks-demo')));
 
@@ -539,6 +566,17 @@ test('Profil anggota hanya dapat dibaca dan diubah oleh pemilik UID serta tidak 
 });
 
 test('field visit documents are scoped to the assigned pendamping and immutable', async () => {
+  await environment.withSecurityRulesDisabled(async (context) => {
+    const firestore = context.firestore();
+    await setDoc(doc(firestore, 'ppksServiceStatus', 'ppks-demo'), {
+      ppksId: 'ppks-demo',
+      assignedToUid: PENDAMPING_UID,
+    });
+    await setDoc(doc(firestore, 'ppksServiceStatus', 'ppks-assigned-elsewhere'), {
+      ppksId: 'ppks-assigned-elsewhere',
+      assignedToUid: 'pendamping-002',
+    });
+  });
   const own = environment.authenticatedContext(PENDAMPING_UID, { role: 'pendamping' }).firestore();
   const other = environment.authenticatedContext('pendamping-002', { role: 'pendamping' }).firestore();
   const record = {
@@ -557,6 +595,12 @@ test('field visit documents are scoped to the assigned pendamping and immutable'
   await assertFails(deleteDoc(visit));
   await assertFails(setDoc(doc(own, 'fieldVisits', 'visit-spoof'), {
     ...record, id: 'visit-spoof', assignedToUid: 'pendamping-002',
+  }));
+  await assertFails(setDoc(doc(own, 'fieldVisits', 'visit-unassigned'), {
+    ...record, id: 'visit-unassigned', ppksId: 'ppks-not-assigned',
+  }));
+  await assertFails(setDoc(doc(own, 'fieldVisits', 'visit-assigned-elsewhere'), {
+    ...record, id: 'visit-assigned-elsewhere', ppksId: 'ppks-assigned-elsewhere',
   }));
 });
 
